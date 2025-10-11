@@ -16,8 +16,6 @@ export const load: LayoutServerLoad = async ({ locals: { supabase, getSession } 
 		profile = data;
 	}
 
-	// 取得したセッション情報と、
-	// クライアント側でSupabaseを初期化するためのキーの両方を渡す
 	return {
 		session,
 		profile,
