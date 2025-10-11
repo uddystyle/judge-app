@@ -14,11 +14,21 @@
 
 		// Get the current session to retrieve the access token
 		const {
+			data: { user }
+		} = await supabase.auth.getUser();
+
+		if (!user) {
+			message = 'エラー: 認証されていません。';
+			loading = false;
+			return;
+		}
+
+		const {
 			data: { session }
 		} = await supabase.auth.getSession();
 
-		if (!session) {
-			message = 'エラー: 認証されていません。';
+		if (!session?.access_token) {
+			message = 'エラー：認証トークンが取得できませんでした。';
 			loading = false;
 			return;
 		}

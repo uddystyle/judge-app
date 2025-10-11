@@ -1,7 +1,16 @@
 <script lang="ts">
 	import NumericKeypad from '$lib/components/NumericKeypad.svelte';
+	import { userProfile, currentBib } from '$lib/stores';
+	import { get } from 'svelte/store';
+	import { page } from '$app/stores';
+	import type { SupabaseClient } from '@supabase/supabase-js';
+	import { getContext } from 'svelte';
+	import { goto } from '$app/navigation';
+
+	const supabase = getContext<SupabaseClient>('supabase');
 
 	let currentScore = ''; // 得点を保持する変数
+	let loading = false;
 
 	// NumericKeypadからの'input'イベントを処理する関数
 	function handleInput(event: CustomEvent<string>) {
@@ -18,14 +27,49 @@
 	}
 
 	// NumericKeypadからの'confirm'イベントを処理する関数
-	function handleConfirm() {
+	async function handleConfirm() {
 		const score = parseInt(currentScore, 10) || 0;
 		if (score < 0 || score > 99) {
 			alert('得点は0-99の範囲で入力してください');
 			return;
 		}
-		// ここで、実際の得点確定処理（API呼び出しなど）を行う
-		console.log(`得点が確定されました: ${score}点`);
+
+		loading = true;
+		const { id, discipline, level, event } = $page.params;
+
+		// get() を使ってストアから現在の値を取得
+		const bib = get(currentBib);
+		const profile = get(userProfile);
+
+		if (!bib) {
+			alert('ゼッケン番号がありません。前のページに戻って再入力してください。');
+			loading = false;
+			return;
+		}
+
+		const {
+			data: { user }
+		} = await supabase.auth.getUser();
+
+		const { error } = await supabase.from('results').upsert({
+			session_id: id,
+			bib: bib,
+			score: score,
+			// 氏名保存の解決策: profileストアのfull_nameを優先的に使用
+			judge_name: profile?.full_name || user?.email,
+			discipline: discipline,
+			level: level,
+			event_name: event
+		});
+
+		if (error) {
+			alert('得点の送信に失敗しました: ' + error.message);
+		} else {
+			goto(
+				`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${score}`
+			);
+		}
+		loading = false;
 	}
 </script>
 
