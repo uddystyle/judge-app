@@ -19,6 +19,7 @@
 	class:danger={variant === 'danger'}
 	{disabled}
 	on:click
+	{...$$restProps}
 >
 	<slot />
 </button>
