@@ -3,41 +3,31 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
 	import Header from '$lib/components/Header.svelte';
-	import { page } from '$app/stores';
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
-
-	// URLのパラメータ（[id]や[discipline]）を取得
-	$: ({ id, discipline } = $page.params);
-
-	// 級ボタンがクリックされたときに実行される関数
-	function selectLevel(level: string) {
-		// 次のページ（種目選択）へ移動
-		goto(`/session/${id}/${discipline}/${level}`);
-	}
 </script>
 
 <Header />
 
 <div class="container">
-	<div class="instruction">級を選択してください</div>
+	<div class="instruction">種目を選択してください</div>
 
 	<div class="list-keypad">
-		{#each data.levels as level}
-			<NavButton on:click={() => selectLevel(level)}>
-				{level}
+		{#each data.eventNames as eventName}
+			<NavButton on:click={() => console.log('Selected event:', eventName)}>
+				{eventName}
 			</NavButton>
 		{/each}
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => window.history.back()}>種別選択に戻る</NavButton>
+		<NavButton on:click={() => window.history.back()}>級選択に戻る</NavButton>
 	</div>
 </div>
 
 <style>
-	/* スタイル部分は変更ありません */
+	/* 以前のページからスタイルをコピー */
 	.container {
 		padding: 28px 20px;
 		text-align: center;
