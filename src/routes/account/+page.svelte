@@ -17,6 +17,11 @@
 	let loading = false;
 	let message = '';
 
+	let newPassword = '';
+	let confirmPassword = '';
+	let passwordLoading = false;
+	let passwordMessage = '';
+
 	// 「名前を更新」ボタンが押されたときの処理
 	async function handleUpdateName() {
 		if (!data.session) {
@@ -40,9 +45,37 @@
 		}
 		loading = false;
 	}
-</script>
 
-<Header />
+	async function handleUpdatePassword() {
+		// Basic validation
+		if (newPassword.length < 6) {
+			passwordMessage = 'エラー: パスワードは6文字以上で入力してください。';
+			return;
+		}
+		if (newPassword !== confirmPassword) {
+			passwordMessage = 'エラー: パスワードが一致しません。';
+			return;
+		}
+
+		passwordLoading = true;
+		passwordMessage = '';
+
+		// Update the user's password in Supabase Auth
+		const { error } = await supabase.auth.updateUser({
+			password: newPassword
+		});
+
+		if (error) {
+			passwordMessage = 'エラー: パスワードの更新に失敗しました。' + error.message;
+		} else {
+			passwordMessage = 'パスワードを更新しました。';
+			// Clear input fields on success
+			newPassword = '';
+			confirmPassword = '';
+		}
+		passwordLoading = false;
+	}
+</script>
 
 <div class="container">
 	<div class="instruction">アカウント設定</div>
@@ -62,7 +95,38 @@
 		{/if}
 	</div>
 
+	<hr class="divider" />
+
+	<div class="form-container">
+		<label for="account-password" class="form-label">新しいパスワード</label>
+		<input
+			type="password"
+			id="account-password"
+			placeholder="新しいパスワード (6文字以上)"
+			bind:value={newPassword}
+		/>
+		<input
+			type="password"
+			id="account-password-confirm"
+			placeholder="新しいパスワード (確認)"
+			bind:value={confirmPassword}
+		/>
+		<div class="nav-buttons" style="margin-top: 0;">
+			<NavButton variant="primary" on:click={handleUpdatePassword} disabled={passwordLoading}>
+				{passwordLoading ? '更新中...' : 'パスワードを更新'}
+			</NavButton>
+		</div>
+		{#if passwordMessage}
+			<p class="message">{passwordMessage}</p>
+		{/if}
+	</div>
+
 	<div class="nav-buttons">
+		<hr class="divider" />
+
+		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
+			アカウントを削除
+		</NavButton>
 		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
 	</div>
 </div>
@@ -105,5 +169,11 @@
 	.message {
 		text-align: center;
 		margin-top: 1rem;
+		color: var(--ios-red);
+	}
+	.divider {
+		border: none;
+		border: 1px solid var(--separator-gray);
+		margin: 24px 0;
 	}
 </style>
