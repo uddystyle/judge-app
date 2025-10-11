@@ -3,9 +3,17 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
 	import Header from '$lib/components/Header.svelte';
+	import { page } from '$app/stores';
 
-	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
+
+	// URLから必要なパラメータを取得
+	$: ({ id, discipline, level } = $page.params);
+
+	function selectEvent(eventName: string) {
+		// 次のページ（ゼッケン入力）へ移動
+		goto(`/session/${id}/${discipline}/${level}/${eventName}`);
+	}
 </script>
 
 <Header />
@@ -15,7 +23,7 @@
 
 	<div class="list-keypad">
 		{#each data.eventNames as eventName}
-			<NavButton on:click={() => console.log('Selected event:', eventName)}>
+			<NavButton on:click={() => selectEvent(eventName)}>
 				{eventName}
 			</NavButton>
 		{/each}
