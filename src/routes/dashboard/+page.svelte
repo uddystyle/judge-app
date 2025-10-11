@@ -2,7 +2,18 @@
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
+	import { getContext } from 'svelte';
+	import type { SupabaseClient } from '@supabase/supabase-js';
 
+	const supabase = getContext<SupabaseClient>('supabase');
+
+	async function handleLogout() {
+		// Supabaseからログアウトを実行
+		await supabase.auth.signOut();
+
+		// ログアウト後、ログインページへ移動
+		goto('/login');
+	}
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
 </script>
@@ -31,6 +42,7 @@
 		</NavButton>
 		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
 		<NavButton on:click={() => goto('/account')}>アカウント設定</NavButton>
+		<NavButton variant="danger" on:click={handleLogout}>ログアウト</NavButton>
 	</div>
 </div>
 
