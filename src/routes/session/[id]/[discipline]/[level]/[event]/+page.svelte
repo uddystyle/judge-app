@@ -4,6 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { currentBib as bibStore } from '$lib/stores';
 
 	let currentBib = '';
 
@@ -27,11 +28,15 @@
 			alert('ゼッケン番号は1～999の範囲で入力してください');
 			return;
 		}
+
+		bibStore.set(bib);
 		// 次のステップ（得点入力画面）へ移動
 		// 現在のURLの末尾に "/score" を追加して遷移
 		goto(`${$page.url.pathname}/score`);
 	}
 </script>
+
+<div class="numeric-display">{currentBib || '0'}</div>
 
 <Header />
 
