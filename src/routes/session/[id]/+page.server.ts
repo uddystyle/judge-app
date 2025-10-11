@@ -7,34 +7,32 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 		throw redirect(303, '/login');
 	}
 
-	// URLの[id]部分を取得
 	const sessionId = params.id;
 
-	// 選択されたセッションの詳細情報を取得
-	const { data: sessionDetails } = await supabase
+	// セッションの詳細情報を取得
+	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('*')
+		.select('*, created_by_profile:profiles(full_name)')
 		.eq('id', sessionId)
-		.single(); // 1件だけ取得
+		.single();
 
-	if (!sessionDetails) {
-		// もし存在しないセッションIDなら404エラーを表示
-		throw error(404, '検定が見つかりません');
+	if (sessionError) {
+		throw error(404, '検定が見つかりません。');
 	}
 
-	// 選択肢となる種別の一覧をeventsテーブルから取得 (重複を削除)
-	const { data: events, error: eventsError } = await supabase.from('events').select('discipline');
+	// 参加者の一覧をプロフィール情報と共に取得
+	const { data: participants, error: participantsError } = await supabase
+		.from('session_participants')
+		.select('user_id, profile:profiles(full_name)')
+		.eq('session_id', sessionId);
 
-	if (eventsError) {
-		throw error(500, '種別情報の取得に失敗しました');
+	if (participantsError) {
+		throw error(500, '参加者情報の取得に失敗しました。');
 	}
 
-	// disciplineの重複をなくして配列にする (例: ['プライズ', '級別'])
-	const disciplines = [...new Set(events.map((e) => e.discipline))];
-
-	// ページにセッション詳細と種別リストを渡す
 	return {
+		currentUserId: session.user.id,
 		sessionDetails,
-		disciplines
+		participants
 	};
 };
