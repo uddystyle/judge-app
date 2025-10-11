@@ -28,6 +28,9 @@
 					<div class="session-name">{session.name}</div>
 					<div class="join-code-wrapper">
 						<span class="join-code">コード: {session.join_code}</span>
+						<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
+							>詳細</a
+						>
 					</div>
 				</button>
 			{/each}
@@ -112,5 +115,20 @@
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
+	}
+	.details-btn {
+		background-color: var(--ios-blue);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		padding: 6px 10px;
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+		text-decoration: none;
+		margin-left: 4px;
+	}
+	.details-btn:active {
+		background-color: #0062cc;
 	}
 </style>
