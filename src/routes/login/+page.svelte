@@ -32,7 +32,6 @@
 	}
 </script>
 
-<!-- ↓ ここから下が欠落しています ↓ -->
 <div class="container">
 	<div class="instruction">ログイン</div>
 
