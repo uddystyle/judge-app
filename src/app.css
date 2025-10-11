@@ -1,0 +1,27 @@
+/* src/app.css */
+:root {
+    --ios-blue: #007aff;
+    --ios-red: #ff3b30;
+    --ios-green: #28a745;
+    --light-gray: #f5f5f7;
+    --separator-gray: #d2d2d7;
+    --primary-text: #1d1d1f;
+    --secondary-text: #6e6e73;
+    --keypad-bg: #e5e5ea;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--light-gray);
+    color: var(--primary-text);
+    touch-action: manipulation;
+    line-height: 1.5;
+}

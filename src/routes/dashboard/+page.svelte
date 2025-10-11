@@ -1,0 +1,104 @@
+<script lang="ts">
+	import type { PageData } from './$types';
+	import NavButton from '$lib/components/NavButton.svelte';
+	import { goto } from '$app/navigation';
+
+	// `+page.server.ts`のload関数から返されたデータを受け取る
+	export let data: PageData;
+</script>
+
+<div class="container">
+	<div class="instruction">検定を選択</div>
+
+	<div class="list-keypad">
+		{#if data.sessions && data.sessions.length > 0}
+			{#each data.sessions as session}
+				<button class="key select-item" on:click={() => goto(`/session/${session.id}`)}>
+					<div class="session-name">{session.name}</div>
+					<div class="join-code-wrapper">
+						<span class="join-code">コード: {session.join_code}</span>
+					</div>
+				</button>
+			{/each}
+		{:else}
+			<p style="color: var(--secondary-text);">参加中の検定はありません。</p>
+		{/if}
+	</div>
+
+	<div class="nav-buttons">
+		<NavButton variant="primary" on:click={() => goto('/session/create')}>
+			新しい検定を作成
+		</NavButton>
+		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
+		<NavButton on:click={() => goto('/account')}>アカウント設定</NavButton>
+	</div>
+</div>
+
+<style>
+	.container {
+		padding: 28px 20px;
+		text-align: center;
+	}
+	.instruction {
+		font-size: 24px;
+		font-weight: 700;
+		color: var(--primary-text);
+		margin-bottom: 28px;
+		line-height: 1.3;
+	}
+	.list-keypad {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		max-width: 100%;
+	}
+	.key.select-item {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+		padding: 16px;
+		gap: 8px;
+		height: auto;
+		min-height: 70px;
+		background: white;
+		color: var(--ios-blue);
+		border-radius: 12px;
+		width: 100%;
+		font-size: 17px;
+		font-weight: 600;
+		text-align: center;
+		border: 1px solid rgba(0, 0, 0, 0.04);
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+	.key.select-item:active {
+		background-color: var(--light-gray);
+	}
+	.session-name {
+		font-size: 18px;
+		font-weight: 600;
+		text-align: left;
+		color: var(--primary-text);
+	}
+	.join-code-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.join-code {
+		font-size: 14px;
+		font-weight: 400;
+		color: var(--secondary-text);
+		background-color: #e8e8ed;
+		padding: 4px 8px;
+		border-radius: 6px;
+	}
+	.nav-buttons {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		margin-top: 28px;
+	}
+</style>
