@@ -67,5 +67,40 @@ export const actions: Actions = {
 		}
 
 		return { success: true, message: '検定名を更新しました。' };
+	},
+
+	appointChief: async ({ request, params, locals: { supabase, getSession } }) => {
+		const session = await getSession();
+		if (!session) {
+			throw redirect(303, '/login');
+		}
+
+		// フォームから任命するユーザーのIDを取得
+		const formData = await request.formData();
+		const userIdToAppoint = formData.get('userId') as string;
+
+		// データベースを更新
+		const { data: currentSession, error: fetchError } = await supabase
+			.from('sessions')
+			.select('chief_judge_id')
+			.eq('id', params.id)
+			.single();
+
+		if (fetchError) {
+			return fail(500, { error: '現在のセッション情報の取得に失敗しました。' });
+		}
+
+		const newChiefId = currentSession?.chief_judge_id === userIdToAppoint ? null : userIdToAppoint;
+
+		const { error: appointError } = await supabase
+			.from('sessions')
+			.update({ chief_judge_id: newChiefId })
+			.eq('id', params.id);
+
+		if (appointError) {
+			return fail(500, { error: '主任の任命/解除に失敗しました。' });
+		}
+
+		return { success: true };
 	}
 };

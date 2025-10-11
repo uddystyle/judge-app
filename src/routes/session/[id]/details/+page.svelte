@@ -47,6 +47,23 @@
 								<span class="chief-badge">(主任)</span>
 							{/if}
 						</span>
+
+						{#if data.currentUserId === data.sessionDetails.created_by}
+							<form method="POST" action="?/appointChief" use:enhance>
+								<input type="hidden" name="userId" value={p.user_id} />
+								<button
+									type="submit"
+									class="appoint-btn"
+									class:danger={data.sessionDetails.chief_judge_id === p.user_id}
+								>
+									{#if data.sessionDetails.chief_judge_id === p.user_id}
+										主任を解除
+									{:else}
+										主任に任命
+									{/if}
+								</button>
+							</form>
+						{/if}
 					</div>
 				{/each}
 			{:else}
@@ -133,5 +150,22 @@
 	}
 	.message.success {
 		color: var(--ios-green);
+	}
+	.appoint-btn {
+		background-color: var(--keypad-bg);
+		color: var(--primary-text);
+		border: none;
+		border-radius: 8px;
+		padding: 6px 12px;
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+	.appoint-btn:disabled {
+		background-color: var(--ios-blue);
+		color: white;
+		cursor: default;
+		opacity: 0.7;
 	}
 </style>
