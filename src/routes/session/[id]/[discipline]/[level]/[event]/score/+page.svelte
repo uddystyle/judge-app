@@ -5,8 +5,9 @@
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
-	import { currentBib } from '$lib/stores';
 	import { goto } from '$app/navigation';
+	import { currentBib, userProfile } from '$lib/stores';
+	import { get } from 'svelte/store';
 
 	// レイアウトから共有されたSupabaseクライアントを受け取る
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -36,10 +37,9 @@
 		loading = true;
 		// URLからパラメータを取得
 		const { id, discipline, level, event } = $page.params;
-		// ゼッケン番号はURLに含まれていないため、ここでは仮の値を入れます
 
-		// ストアからゼッケン番号を取得 ($currentBib で値にアクセス)
 		const bib = $currentBib;
+		const profile = get(userProfile);
 
 		if (!bib) {
 			alert('ゼッケン番号がありません。前のページに戻って再入力してください。');
@@ -48,14 +48,14 @@
 		}
 
 		const {
-			data: { session }
-		} = await supabase.auth.getSession();
+			data: { user }
+		} = await supabase.auth.getUser();
 
 		const { error } = await supabase.from('results').upsert({
 			session_id: id,
 			bib: bib,
 			score: score,
-			judge_name: session?.user?.email,
+			judge_name: profile?.full_name || user?.email,
 			discipline: discipline,
 			level: level,
 			event_name: event

@@ -3,6 +3,7 @@
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import { onMount } from 'svelte';
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
@@ -30,6 +31,16 @@
 			loading = false;
 		}
 	}
+
+	onMount(async () => {
+		const {
+			data: { user }
+		} = await supabase.auth.getUser();
+
+		if (user) {
+			goto('/dashboard', { replaceState: true });
+		}
+	});
 </script>
 
 <div class="container">

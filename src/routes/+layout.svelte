@@ -6,6 +6,7 @@
 	import '../app.css';
 
 	export let data: LayoutData;
+	$: ({ session } = data);
 
 	// サーバーから渡されたURLとキーを使って、ブラウザ用のSupabaseクライアントを作成
 	const supabase = createBrowserClient(data.supabaseUrl, data.supabaseAnonKey);
@@ -18,9 +19,9 @@
 	onMount(() => {
 		const {
 			data: { subscription }
-		} = supabase.auth.onAuthStateChange((event, session) => {
+		} = supabase.auth.onAuthStateChange((event, newSession) => {
 			// この処理がブラウザでのみ実行されることを保証
-			if (isBrowser() && session?.expires_at !== data.session?.expires_at) {
+			if (newSession?.expires_at !== session?.expires_at) {
 				// サーバー側のセッション情報と異なっていたら、全データを再読み込み
 				invalidateAll();
 			}
