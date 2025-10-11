@@ -5,21 +5,23 @@
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 
-	// This `form` variable will hold the data returned from the server action
+	// サーバーアクションから返されるデータ（エラーメッセージなど）を保持
 	export let form: ActionData;
 </script>
 
 <div class="container">
-	<div class="instruction">新しい検定を作成</div>
+	<div class="instruction">参加コードで合流</div>
 
-	<form method="POST" action="?/create" use:enhance>
+	<form method="POST" action="?/join" use:enhance>
 		<div class="form-container">
 			<input
 				type="text"
-				name="sessionName"
-				id="session-name-input"
-				placeholder="検定名 (例: 2025冬期検定)"
-				value={form?.sessionName ?? ''}
+				name="joinCode"
+				id="join-code-input"
+				placeholder="6桁の参加コード"
+				maxlength="6"
+				style="text-transform: uppercase;"
+				value={form?.joinCode ?? ''}
 			/>
 
 			{#if form?.error}
@@ -27,7 +29,7 @@
 			{/if}
 
 			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">作成</NavButton>
+				<NavButton variant="primary" type="submit">参加</NavButton>
 			</div>
 		</div>
 	</form>
