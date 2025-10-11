@@ -5,8 +5,14 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { currentBib as bibStore } from '$lib/stores';
+	import { onMount } from 'svelte';
 
 	let currentBib = '';
+
+	onMount(() => {
+		currentBib = '';
+		bibStore.set(null);
+	});
 
 	// キーパッドから数字が入力されたときの処理
 	function handleInput(event: CustomEvent<string>) {

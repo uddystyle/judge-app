@@ -2,13 +2,16 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { currentBib as bibStore } from '$lib/stores';
 
 	$: bib = $page.url.searchParams.get('bib');
 	$: score = $page.url.searchParams.get('score');
 
 	function handleNextSkier() {
-		// TODO: 次の滑走者へ移る処理を実装
-		console.log('次の滑走者へ');
+		bibStore.set(null);
+		const bibInputPath = $page.url.pathname.replace('/score/complete', '');
+		goto(bibInputPath);
 	}
 </script>
 
