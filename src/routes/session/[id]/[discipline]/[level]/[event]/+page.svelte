@@ -42,8 +42,6 @@
 	}
 </script>
 
-<div class="numeric-display">{currentBib || '0'}</div>
-
 <Header />
 
 <div class="container">

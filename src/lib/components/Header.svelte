@@ -1,14 +1,15 @@
 <script lang="ts">
-	import { currentUser, currentSession } from '$lib/stores';
+	import { currentUser, currentSession, userProfile } from '$lib/stores';
 
 	$: user = $currentUser;
 	$: session = $currentSession;
+	$: profile = $userProfile;
 </script>
 
 <div class="header">
 	<p id="header-main-text">
-		{#if user}
-			ようこそ, {user.email}
+		{#if profile?.full_name}
+			ようこそ, {profile.full_name}
 		{:else}
 			ようこそ
 		{/if}
