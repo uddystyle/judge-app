@@ -17,21 +17,20 @@
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
 
-	function copyJoinCode(event: MouseEvent, code: string) {
+	// どのセッションコードがコピーされたかを追跡
+	let copiedSessionId: string | null = null;
+
+	function copyJoinCode(event: MouseEvent, code: string, sessionId: string) {
 		// イベントが親要素に伝播してページ遷移が起きるのを防ぐ
 		event.stopPropagation();
 
 		navigator.clipboard.writeText(code).then(
 			() => {
-				const target = event.currentTarget as HTMLElement;
-				if (target) {
-					const originalText = target.textContent; // ボタンの元のテキスト
-					target.textContent = 'コピーしました!';
-					// 1.5秒後にもとのテキストに戻す
-					setTimeout(() => {
-						target.textContent = originalText;
-					}, 1500);
-				}
+				copiedSessionId = sessionId;
+				// 1.5秒後にもとに戻す
+				setTimeout(() => {
+					copiedSessionId = null;
+				}, 1500);
 			},
 			(err) => {
 				console.error('コピーに失敗しました:', err);
@@ -52,9 +51,14 @@
 					<div class="join-code-wrapper">
 						<button
 							class="join-code"
-							on:click={(e) => copyJoinCode(e, session.join_code)}
-							>コード: {session.join_code}</button
+							on:click={(e) => copyJoinCode(e, session.join_code, session.id)}
 						>
+							{#if copiedSessionId === session.id}
+								copied.
+							{:else}
+								コード: {session.join_code}
+							{/if}
+						</button>
 						<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
 							>詳細</a
 						>
