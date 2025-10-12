@@ -134,6 +134,17 @@
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
 	</div>
+
+	{#if data.currentUserId === data.sessionDetails.created_by}
+		<div class="nav-buttons">
+			<NavButton
+				variant="danger"
+				on:click={() => goto(`/session/${data.sessionDetails.id}/details/delete`)}
+			>
+				この検定を削除
+			</NavButton>
+		</div>
+	{/if}
 </div>
 
 <style>

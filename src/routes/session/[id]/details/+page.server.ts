@@ -150,5 +150,40 @@ export const actions: Actions = {
 		}
 
 		return { settingsSuccess: '設定を更新しました。' };
+	},
+
+	deleteSession: async ({ params, locals: { supabase, getSession } }) => {
+		const session = await getSession();
+		if (!session) {
+			throw redirect(303, '/login');
+		}
+
+		const sessionId = params.id;
+
+		// First, verify that the current user is the creator of the session
+		const { data: sessionData } = await supabase
+			.from('sessions')
+			.select('created_by')
+			.eq('id', sessionId)
+			.single();
+
+		if (sessionData?.created_by !== session.user.id) {
+			return fail(403, { error: 'この検定を削除する権限がありません。' });
+		}
+
+		// Delete related data in the correct order to respect database constraints
+		await supabase.from('results').delete().eq('session_id', sessionId);
+		await supabase.from('session_participants').delete().eq('session_id', sessionId);
+		await supabase.from('scoring_prompts').delete().eq('session_id', sessionId);
+
+		// Finally, delete the session itself
+		const { error: deleteError } = await supabase.from('sessions').delete().eq('id', sessionId);
+
+		if (deleteError) {
+			return fail(500, { error: '検定の削除に失敗しました。' });
+		}
+
+		// If successful, redirect to the dashboard
+		throw redirect(303, '/dashboard');
 	}
 };
