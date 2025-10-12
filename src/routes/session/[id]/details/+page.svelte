@@ -9,6 +9,10 @@
 	export let form: ActionData;
 
 	$: sessionName = data.sessionDetails.name;
+	$: participantCount = data.participants?.length || 0;
+
+	let isMultiJudge = data.sessionDetails.is_multi_judge;
+	let requiredJudges = data.sessionDetails.required_judges;
 </script>
 
 <div class="container">
@@ -75,6 +79,58 @@
 		</div>
 	</div>
 
+	<hr class="divider" />
+
+	<form method="POST" action="?/updateSettings" use:enhance>
+		<div class="settings-section">
+			<h3 class="settings-title">採点ルール設定</h3>
+			<div class="setting-item">
+				<label for="multi-judge-toggle" class="form-label">複数審判モード</label>
+				<div class="toggle-switch">
+					<input
+						type="checkbox"
+						id="multi-judge-toggle"
+						name="isMultiJudge"
+						bind:checked={isMultiJudge}
+						value={isMultiJudge}
+					/>
+					<label for="multi-judge-toggle"></label>
+				</div>
+			</div>
+
+			{#if isMultiJudge}
+				<div class="setting-item">
+					<label for="required-judges-input" class="form-label">
+						必須審判員数
+						<span class="helper-text">(現在: {participantCount}人)</span>
+					</label>
+					<input
+						type="number"
+						id="required-judges-input"
+						name="requiredJudges"
+						bind:value={requiredJudges}
+						min="1"
+						max={participantCount}
+						class="short-input"
+					/>
+				</div>
+			{/if}
+
+			{#if form?.settingsError}
+				<p class="message">{form.settingsError}</p>
+			{/if}
+			{#if form?.settingsSuccess}
+				<p class="message success">{form.settingsSuccess}</p>
+			{/if}
+
+			<div class="nav-buttons">
+				<NavButton variant="primary" type="submit">ルールを保存</NavButton>
+			</div>
+		</div>
+	</form>
+
+	<hr class="divider" />
+
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
 	</div>
@@ -103,6 +159,12 @@
 		margin-bottom: 0.5rem;
 		display: block;
 		text-align: left;
+	}
+	.helper-text {
+		font-size: 14px;
+		font-weight: 400;
+		color: var(--secondary-text);
+		margin-left: 8px;
 	}
 	input {
 		width: 100%;
@@ -171,4 +233,51 @@
 		cursor: default;
 		opacity: 0.7;
 	}
+	.settings-section { text-align: left; }
+	.setting-item {
+		display: flex;
+		justify-content: space-between;
+		align-items-center;
+		margin-bottom: 16px;
+		background: white;
+		padding: 12px 16px;
+		border-radius: 12px;
+	}
+	.short-input {
+		width: 70px;
+		padding: 10px !important;
+		text-align: center;
+	}
+	.toggle-switch {
+		position: relative;
+		display: inline-block;
+		width: 51px;
+		height: 31px;
+	}
+	.toggle-switch input { opacity: 0; width: 0; height: 0; }
+	.toggle-switch label {
+		position: absolute;
+		cursor: pointer;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: var(--keypad-bg);
+		transition: 0.4s;
+		border-radius: 34px;
+	}
+	.toggle-switch label:before {
+		position: absolute;
+		content: "";
+		height: 27px;
+		width: 27px;
+		left: 2px;
+		bottom: 2px;
+		background-color: white;
+		transition: 0.4s;
+		border-radius: 50%;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+	}
+	.toggle-switch input:checked + label { background-color: var(--ios-green); }
+	.toggle-switch input:checked + label:before { transform: translateX(20px); }
 </style>

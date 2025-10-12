@@ -102,5 +102,53 @@ export const actions: Actions = {
 		}
 
 		return { success: true };
+	},
+
+	updateSettings: async ({ request, params, locals: { supabase, getSession } }) => {
+		const session = await getSession();
+		if (!session) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const isMultiJudge = formData.get('isMultiJudge') === 'true';
+		const requiredJudges = Number(formData.get('requiredJudges'));
+
+		// Validate requiredJudges
+		if (isMultiJudge && (!requiredJudges || requiredJudges < 1)) {
+			return fail(400, { settingsError: '必須審判員数を正しく入力してください。' });
+		}
+
+		// Check participant count if multi-judge mode is enabled
+		if (isMultiJudge) {
+			const { count, error: countError } = await supabase
+				.from('session_participants')
+				.select('*', { count: 'exact', head: true })
+				.eq('session_id', params.id);
+
+			if (countError) {
+				return fail(500, { settingsError: '参加者数の確認に失敗しました。' });
+			}
+
+			if (requiredJudges > (count || 0)) {
+				return fail(400, {
+					settingsError: `必須審判員数は参加者数（${count}人）以下にしてください。`
+				});
+			}
+		}
+
+		const { error: updateError } = await supabase
+			.from('sessions')
+			.update({
+				is_multi_judge: isMultiJudge,
+				required_judges: isMultiJudge ? requiredJudges : null
+			})
+			.eq('id', params.id);
+
+		if (updateError) {
+			return fail(500, { settingsError: '設定の更新に失敗しました。' });
+		}
+
+		return { settingsSuccess: '設定を更新しました。' };
 	}
 };
