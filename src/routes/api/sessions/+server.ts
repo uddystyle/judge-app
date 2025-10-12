@@ -1,19 +1,29 @@
 // src/routes/api/sessions/+server.ts
 import { createClient } from '@supabase/supabase-js';
-import { json } from '@sveltejs/kit';
-
-// Vercelの環境変数から読み込む
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabaseAdmin = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
+import { json, error as svelteError } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 
 // 6桁のランダムな参加コードを生成するヘルパー関数
 const generateJoinCode = () => {
-	// ... (元のコードと同じ) ...
+	const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+	let code = '';
+	for (let i = 0; i < 6; i++) {
+		code += chars.charAt(Math.floor(Math.random() * chars.length));
+	}
+	return code;
 };
 
 export async function POST({ request }) {
+	// Initialize Supabase client inside the request handler
+	const supabaseUrl = env.PUBLIC_SUPABASE_URL || env.SUPABASE_URL;
+	const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+	if (!supabaseUrl || !serviceRoleKey) {
+		throw svelteError(500, 'サーバー設定エラー: Supabase環境変数が設定されていません。');
+	}
+
+	const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
 	const { sessionName, userToken } = await request.json();
 
 	if (!sessionName || !userToken) {

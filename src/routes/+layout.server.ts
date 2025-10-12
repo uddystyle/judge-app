@@ -1,4 +1,4 @@
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals: { supabase, getSession } }) => {
@@ -19,7 +19,7 @@ export const load: LayoutServerLoad = async ({ locals: { supabase, getSession } 
 	return {
 		session,
 		profile,
-		supabaseUrl: PUBLIC_SUPABASE_URL,
-		supabaseAnonKey: PUBLIC_SUPABASE_ANON_KEY
+		supabaseUrl: env.PUBLIC_SUPABASE_URL,
+		supabaseAnonKey: env.PUBLIC_SUPABASE_ANON_KEY
 	};
 };
