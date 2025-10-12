@@ -4,6 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
+	import * as XLSX from 'xlsx';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -13,6 +14,47 @@
 
 	let isMultiJudge = data.sessionDetails.is_multi_judge;
 	let requiredJudges = data.sessionDetails.required_judges;
+
+	let exportLoading = false;
+
+	async function handleExport() {
+		exportLoading = true;
+		try {
+			// 1. Fetch data from our new server endpoint
+			const response = await fetch(`/api/export/${data.sessionDetails.id}`);
+			const jsonData = await response.json();
+
+			if (!response.ok || !jsonData.results || jsonData.results.length === 0) {
+				alert('エクスポートするデータがありません。');
+				return;
+			}
+
+			// 2. Prepare the data for the Excel sheet
+			const exportData = jsonData.results.map((item: any) => ({
+				採点日時: new Date(item.created_at).toLocaleString('ja-JP'),
+				ゼッケン: item.bib,
+				得点: item.score,
+				種別: item.discipline,
+				級: item.level,
+				種目: item.event_name,
+				検定員: item.judge_name
+			}));
+
+			// 3. Create the Excel file in the browser
+			const worksheet = XLSX.utils.json_to_sheet(exportData);
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(workbook, worksheet, '採点結果');
+
+			// 4. Trigger the download
+			const fileName = `${data.sessionDetails.name}_採点結果.xlsx`;
+			XLSX.writeFile(workbook, fileName);
+		} catch (err) {
+			console.error('Export failed:', err);
+			alert('エクスポート処理中にエラーが発生しました。');
+		} finally {
+			exportLoading = false;
+		}
+	}
 </script>
 
 <div class="container">
@@ -49,7 +91,7 @@
 				{#each data.participants as p}
 					<div class="participant-item">
 						<span class="participant-name">
-							{p.profile.full_name}
+							{p.profiles?.full_name || 'プロフィール未設定'}
 							{#if data.sessionDetails.chief_judge_id === p.user_id}
 								<span class="chief-badge">(主任)</span>
 							{/if}
@@ -128,6 +170,16 @@
 			</div>
 		</div>
 	</form>
+	<hr class="divider" />
+
+	<div class="settings-section">
+		<h3 class="settings-title">データ管理</h3>
+		<div class="nav-buttons">
+			<NavButton on:click={handleExport} disabled={exportLoading}>
+				{exportLoading ? '準備中...' : '採点結果をエクスポート'}
+			</NavButton>
+		</div>
+	</div>
 
 	<hr class="divider" />
 

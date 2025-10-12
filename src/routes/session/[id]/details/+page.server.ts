@@ -25,14 +25,31 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 	}
 
 	// --- 参加者の一覧をプロフィール情報と共に取得 ---
-	const { data: participants, error: participantsError } = await supabase
+	// まず参加者のuser_idを取得
+	const { data: participantIds, error: participantsError } = await supabase
 		.from('session_participants')
-		.select('user_id, profile:profiles(full_name)')
+		.select('user_id')
 		.eq('session_id', sessionId);
 
 	if (participantsError) {
 		throw error(500, '参加者情報の取得に失敗しました。');
 	}
+
+	// 各参加者のプロフィール情報を個別に取得してマージ
+	const participants = await Promise.all(
+		(participantIds || []).map(async (p) => {
+			const { data: profile } = await supabase
+				.from('profiles')
+				.select('full_name')
+				.eq('id', p.user_id)
+				.single();
+
+			return {
+				user_id: p.user_id,
+				profiles: profile
+			};
+		})
+	);
 
 	return {
 		currentUserId: session.user.id,
