@@ -296,11 +296,13 @@
 		cursor: default;
 		opacity: 0.7;
 	}
-	.settings-section { text-align: left; }
+	.settings-section {
+		text-align: left;
+	}
 	.setting-item {
 		display: flex;
 		justify-content: space-between;
-		align-items-center;
+		align-items: center;
 		margin-bottom: 16px;
 		background: white;
 		padding: 12px 16px;
@@ -317,7 +319,11 @@
 		width: 51px;
 		height: 31px;
 	}
-	.toggle-switch input { opacity: 0; width: 0; height: 0; }
+	.toggle-switch input {
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
 	.toggle-switch label {
 		position: absolute;
 		cursor: pointer;
@@ -331,7 +337,7 @@
 	}
 	.toggle-switch label:before {
 		position: absolute;
-		content: "";
+		content: '';
 		height: 27px;
 		width: 27px;
 		left: 2px;
@@ -339,8 +345,12 @@
 		background-color: white;
 		transition: 0.4s;
 		border-radius: 50%;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
-	.toggle-switch input:checked + label { background-color: var(--ios-green); }
-	.toggle-switch input:checked + label:before { transform: translateX(20px); }
+	.toggle-switch input:checked + label {
+		background-color: var(--ios-green);
+	}
+	.toggle-switch input:checked + label:before {
+		transform: translateX(20px);
+	}
 </style>

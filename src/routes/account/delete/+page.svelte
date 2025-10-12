@@ -12,22 +12,26 @@
 		loading = true;
 		message = '';
 
-		// Get the current session to retrieve the access token
+		// Get and verify the current user, then get session for token
 		const {
-			data: { user }
+			data: { user },
+			error: userError
 		} = await supabase.auth.getUser();
 
-		if (!user) {
+		if (userError || !user) {
 			message = 'エラー: 認証されていません。';
 			loading = false;
 			return;
 		}
 
+		// After verifying the user exists, get the session token
+		// This is safe because we've already verified the user above
 		const {
-			data: { session }
+			data: { session },
+			error: sessionError
 		} = await supabase.auth.getSession();
 
-		if (!session?.access_token) {
+		if (sessionError || !session?.access_token) {
 			message = 'エラー：認証トークンが取得できませんでした。';
 			loading = false;
 			return;
