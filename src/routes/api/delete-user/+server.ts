@@ -1,11 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
 import { json, error as svelteError } from '@sveltejs/kit';
-import { PUBLIC_SUPABASE_URL } from '$env/static/public';
-import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 
 export async function POST({ request }) {
 	// Initialize the Supabase Admin Client
-	const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+	const supabaseUrl = env.PUBLIC_SUPABASE_URL || env.SUPABASE_URL;
+	const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+	if (!supabaseUrl || !serviceRoleKey) {
+		throw svelteError(500, 'サーバー設定エラー: Supabase環境変数が設定されていません。');
+	}
+
+	const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
 	const { userToken } = await request.json();
 	if (!userToken) {
