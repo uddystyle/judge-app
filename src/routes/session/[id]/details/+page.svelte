@@ -26,7 +26,10 @@
 		<div class="form-container">
 			<label for="session-name" class="form-label">検定名</label>
 			<input type="text" id="session-name" name="sessionName" bind:value={sessionName} />
-			<NavButton variant="primary" type="submit">名前を更新</NavButton>
+
+			<div class="nav-buttons">
+				<NavButton variant="primary" type="submit">名前を更新</NavButton>
+			</div>
 
 			{#if form?.message}
 				<p class="message" class:success={form?.success}>{form.message}</p>

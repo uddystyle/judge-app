@@ -16,6 +16,29 @@
 	}
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
+
+	function copyJoinCode(event: MouseEvent, code: string) {
+		// イベントが親要素に伝播してページ遷移が起きるのを防ぐ
+		event.stopPropagation();
+
+		navigator.clipboard.writeText(code).then(
+			() => {
+				const target = event.currentTarget as HTMLElement;
+				if (target) {
+					const originalText = target.textContent; // ボタンの元のテキスト
+					target.textContent = 'コピーしました!';
+					// 1.5秒後にもとのテキストに戻す
+					setTimeout(() => {
+						target.textContent = originalText;
+					}, 1500);
+				}
+			},
+			(err) => {
+				console.error('コピーに失敗しました:', err);
+				alert('コピーに失敗しました。');
+			}
+		);
+	}
 </script>
 
 <div class="container">
@@ -24,15 +47,19 @@
 	<div class="list-keypad">
 		{#if data.sessions && data.sessions.length > 0}
 			{#each data.sessions as session}
-				<button class="key select-item" on:click={() => goto(`/session/${session.id}`)}>
+				<div class="key select-item" on:click={() => goto(`/session/${session.id}`)} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}>
 					<div class="session-name">{session.name}</div>
 					<div class="join-code-wrapper">
-						<span class="join-code">コード: {session.join_code}</span>
+						<button
+							class="join-code"
+							on:click={(e) => copyJoinCode(e, session.join_code)}
+							>コード: {session.join_code}</button
+						>
 						<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
 							>詳細</a
 						>
 					</div>
-				</button>
+				</div>
 			{/each}
 		{:else}
 			<p style="color: var(--secondary-text);">参加中の検定はありません。</p>
@@ -109,6 +136,12 @@
 		background-color: #e8e8ed;
 		padding: 4px 8px;
 		border-radius: 6px;
+		border: none;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+	.join-code:active {
+		background-color: #d1d1d6;
 	}
 	.nav-buttons {
 		display: flex;

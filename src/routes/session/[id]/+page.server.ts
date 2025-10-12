@@ -12,7 +12,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 	// セッションの詳細情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('*, created_by_profile:profiles(full_name)')
+		.select('*')
 		.eq('id', sessionId)
 		.single();
 
@@ -20,19 +20,16 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 		throw error(404, '検定が見つかりません。');
 	}
 
-	// 参加者の一覧をプロフィール情報と共に取得
-	const { data: participants, error: participantsError } = await supabase
-		.from('session_participants')
-		.select('user_id, profile:profiles(full_name)')
-		.eq('session_id', sessionId);
+	const { data: events, error: eventsError } = await supabase.from('events').select('discipline');
 
-	if (participantsError) {
-		throw error(500, '参加者情報の取得に失敗しました。');
+	if (eventsError) {
+		throw error(500, '種別情報の取得に失敗しました。');
 	}
 
+	const disciplines = [...new Set(events.map((e) => e.discipline))];
+
 	return {
-		currentUserId: session.user.id,
-		sessionDetails,
-		participants
+		disciplines,
+		sessionDetails
 	};
 };
