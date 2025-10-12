@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 import { json, error as svelteError } from '@sveltejs/kit';
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_SERVICE_ROLE_KEY } from '$env/static/public';
+import { PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '$env/static/public';
 
 export async function POST({ request }) {
 	// Initialize the Supabase Admin Client
-	const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL!, PUBLIC_SUPABASE_SERVICE_ROLE_KEY!);
+	const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
 	const { userToken } = await request.json();
 	if (!userToken) {
