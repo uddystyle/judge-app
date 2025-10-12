@@ -46,7 +46,13 @@
 	<div class="list-keypad">
 		{#if data.sessions && data.sessions.length > 0}
 			{#each data.sessions as session}
-				<div class="key select-item" on:click={() => goto(`/session/${session.id}`)} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}>
+				<div
+					class="key select-item"
+					on:click={() => goto(`/session/${session.id}`)}
+					role="button"
+					tabindex="0"
+					on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}
+				>
 					<div class="session-name">{session.name}</div>
 					<div class="join-code-wrapper">
 						<button
@@ -54,7 +60,7 @@
 							on:click={(e) => copyJoinCode(e, session.join_code, session.id)}
 						>
 							{#if copiedSessionId === session.id}
-								copied.
+								コピーしました
 							{:else}
 								コード: {session.join_code}
 							{/if}
