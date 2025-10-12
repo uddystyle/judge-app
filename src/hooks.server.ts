@@ -3,7 +3,20 @@ import { createServerClient } from '@supabase/ssr';
 import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
-	event.locals.supabase = createServerClient(env.PUBLIC_SUPABASE_URL!, env.PUBLIC_SUPABASE_ANON_KEY!, {
+	const supabaseUrl = env.PUBLIC_SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
+	const supabaseAnonKey = env.PUBLIC_SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY;
+
+	if (!supabaseUrl || !supabaseAnonKey) {
+		console.error('Missing Supabase environment variables:', {
+			hasUrl: !!supabaseUrl,
+			hasKey: !!supabaseAnonKey,
+			envKeys: Object.keys(env),
+			processEnvKeys: Object.keys(process.env).filter(k => k.includes('SUPABASE'))
+		});
+		throw new Error('Supabase environment variables are not configured. Please check your Vercel environment settings.');
+	}
+
+	event.locals.supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
 		cookies: {
 			getAll: () => event.cookies.getAll(),
 			setAll: (cookiesToSet) => {
