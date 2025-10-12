@@ -7,7 +7,7 @@
 	import { userProfile } from '$lib/stores';
 
 	export let data: LayoutData;
-	$: ({ session, profile } = data);
+	$: ({ profile } = data);
 
 	$: if (profile) {
 		userProfile.set(profile);
@@ -24,10 +24,10 @@
 	onMount(() => {
 		const {
 			data: { subscription }
-		} = supabase.auth.onAuthStateChange((event, newSession) => {
-			// この処理がブラウザでのみ実行されることを保証
-			if (newSession?.expires_at !== session?.expires_at) {
-				// サーバー側のセッション情報と異なっていたら、全データを再読み込み
+		} = supabase.auth.onAuthStateChange((event, _session) => {
+			// 認証状態が変更されたら、サーバー側のデータを再読み込みして同期する
+			// onAuthStateChangeから返されるsessionパラメータは使用しない（セキュリティ警告を回避）
+			if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT') {
 				invalidateAll();
 			}
 		});

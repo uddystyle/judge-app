@@ -4,28 +4,44 @@ import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
-		cookies: event.cookies
+		cookies: {
+			getAll: () => event.cookies.getAll(),
+			setAll: (cookiesToSet) => {
+				cookiesToSet.forEach(({ name, value, options }) => {
+					event.cookies.set(name, value, { ...options, path: options.path ?? '/' });
+				});
+			}
+		}
 	});
 
 	event.locals.getSession = async () => {
-		// 1. まず、ブラウザのクッキーからセッション情報を読み取る
+		// Supabase公式推奨パターン: safeGetSession()と同じロジック
+		// getUser()でSupabase Authサーバーに問い合わせてJWTを検証
+		const {
+			data: { user },
+			error
+		} = await event.locals.supabase.auth.getUser();
+
+		// エラーまたはユーザーが存在しない場合はnullを返す
+		if (error || !user) {
+			return null;
+		}
+
+		// ユーザーが検証された後、セッション情報を取得
 		const {
 			data: { session }
 		} = await event.locals.supabase.auth.getSession();
 
-		// 2. もしセッションが存在する場合、そのユーザーが本物かサーバーに問い合わせて検証する
-		if (session) {
-			const {
-				data: { user }
-			} = await event.locals.supabase.auth.getUser();
-			// もし検証の結果ユーザーが存在しなければ、そのセッションは無効とみなす
-			if (!user) {
-				return null;
-			}
+		if (!session) {
+			return null;
 		}
 
-		// 検証済みのセッション、またはnullを返す
-		return session;
+		// 検証済みのユーザーオブジェクトでsession.userを上書きして返す
+		// これにより、session.userにアクセスしても警告が出なくなる
+		return {
+			...session,
+			user
+		};
 	};
 
 	return resolve(event, {
