@@ -28,7 +28,6 @@ export const actions: Actions = {
 			return fail(404, { joinCode, error: '無効な参加コードです。' });
 		}
 
-		// session_participantsテーブルに参加者としてユーザーを追加
 		const { error: joinError } = await supabase.from('session_participants').insert({
 			session_id: sessionData.id,
 			user_id: session.user.id
@@ -37,9 +36,10 @@ export const actions: Actions = {
 		// 23505はunique_violationエラー（既にメンバーである場合）。
 		// このエラーは無視して成功とみなす。それ以外のエラーは失敗として処理。
 		if (joinError && joinError.code !== '23505') {
+			console.error('Failed to join session:', joinError);
 			return fail(500, {
 				joinCode,
-				error: 'サーバーエラー: 検定への参加に失敗しました。'
+				error: `サーバーエラー: 検定への参加に失敗しました。 (${joinError.message || joinError.code})`
 			});
 		}
 
