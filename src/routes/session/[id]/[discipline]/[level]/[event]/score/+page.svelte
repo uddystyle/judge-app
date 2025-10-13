@@ -6,7 +6,7 @@
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { goto } from '$app/navigation';
-	import { currentBib, userProfile } from '$lib/stores';
+	import { currentBib, userProfile, currentSession } from '$lib/stores';
 	import { get } from 'svelte/store';
 
 	// レイアウトから共有されたSupabaseクライアントを受け取る
@@ -40,6 +40,7 @@
 
 		const bib = $currentBib;
 		const profile = get(userProfile);
+		const sessionDetails = get(currentSession);
 
 		if (!bib) {
 			alert('ゼッケン番号がありません。前のページに戻って再入力してください。');
@@ -64,9 +65,13 @@
 		if (error) {
 			alert('得点の送信に失敗しました: ' + error.message);
 		} else {
-			goto(
-				`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${score}`
-			);
+			if (sessionDetails?.is_multi_judge) {
+				goto(`/session/${id}/${discipline}/${level}/${event}/score/status?bib=${bib}`);
+			} else {
+				goto(
+					`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${score}`
+				);
+			}
 		}
 		loading = false;
 	}
