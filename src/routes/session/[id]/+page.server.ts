@@ -1,9 +1,13 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, getSession } }) => {
-	const session = await getSession();
-	if (!session) {
+export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+	const {
+		data: { user },
+		error: userError
+	} = await supabase.auth.getUser();
+
+	if (userError || !user) {
 		throw redirect(303, '/login');
 	}
 
@@ -20,16 +24,29 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 		throw error(404, '検定が見つかりません。');
 	}
 
-	const { data: events, error: eventsError } = await supabase.from('events').select('discipline');
+	// ログイン中のユーザーが主任検定員かどうかを判定
+	const isChief = user.id === sessionDetails.chief_judge_id;
 
-	if (eventsError) {
-		throw error(500, '種別情報の取得に失敗しました。');
+	// もし主任検定員なら、種別選択に必要なデータを取得
+	if (isChief) {
+		const { data: events, error: eventsError } = await supabase.from('events').select('discipline');
+
+		if (eventsError) {
+			throw error(500, '種別情報の取得に失敗しました。');
+		}
+
+		const disciplines = [...new Set(events.map((e) => e.discipline))];
+
+		return {
+			isChief,
+			sessionDetails,
+			disciplines
+		};
 	}
 
-	const disciplines = [...new Set(events.map((e) => e.discipline))];
-
+	// 一般の検定員の場合は、待機画面を表示するための情報だけを渡す
 	return {
-		disciplines,
+		isChief,
 		sessionDetails
 	};
 };

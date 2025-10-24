@@ -3,9 +3,13 @@ import type { Actions } from './$types';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
-	join: async ({ request, locals: { supabase, getSession } }) => {
-		const session = await getSession();
-		if (!session) {
+	join: async ({ request, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -30,7 +34,7 @@ export const actions: Actions = {
 
 		const { error: joinError } = await supabase.from('session_participants').insert({
 			session_id: sessionData.id,
-			user_id: session.user.id
+			user_id: user.id
 		});
 
 		// 23505はunique_violationエラー（既にメンバーである場合）。

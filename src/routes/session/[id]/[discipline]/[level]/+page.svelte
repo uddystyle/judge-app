@@ -30,7 +30,7 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => window.history.back()}>級選択に戻る</NavButton>
+		<NavButton on:click={() => goto(`/session/${id}/${discipline}`)}>級選択に戻る</NavButton>
 	</div>
 </div>
 

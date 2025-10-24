@@ -13,9 +13,13 @@ const generateJoinCode = () => {
 
 export const actions: Actions = {
 	// This `create` function will be called when the form is submitted
-	create: async ({ request, locals: { supabase, getSession } }) => {
-		const session = await getSession();
-		if (!session) {
+	create: async ({ request, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -34,8 +38,9 @@ export const actions: Actions = {
 			.from('sessions')
 			.insert({
 				name: sessionName,
-				created_by: session.user.id,
-				join_code: joinCode
+				created_by: user.id,
+				join_code: joinCode,
+				is_active: true
 			})
 			.select()
 			.single();
@@ -50,7 +55,7 @@ export const actions: Actions = {
 		// Automatically add the creator as a participant
 		const { error: participantError } = await supabase.from('session_participants').insert({
 			session_id: sessionData.id,
-			user_id: session.user.id
+			user_id: user.id
 		});
 
 		if (participantError) {

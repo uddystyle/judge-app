@@ -52,15 +52,22 @@
 			data: { user }
 		} = await supabase.auth.getUser();
 
-		const { error } = await supabase.from('results').upsert({
-			session_id: id,
-			bib: bib,
-			score: score,
-			judge_name: profile?.full_name || user?.email,
-			discipline: discipline,
-			level: level,
-			event_name: event
-		});
+		const { error } = await supabase.from('results').upsert(
+			{
+				session_id: id,
+				bib: bib,
+				score: score,
+				judge_name: profile?.full_name || user?.email,
+				discipline: discipline,
+				level: level,
+				event_name: event
+			},
+			{
+				// このオプションが重要です。
+				// どの列の組み合わせが重複しているかをデータベースに教えます。
+				onConflict: 'session_id, bib, discipline, level, event_name, judge_name'
+			}
+		);
 
 		if (error) {
 			alert('得点の送信に失敗しました: ' + error.message);
@@ -87,7 +94,7 @@
 	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} />
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => window.history.back()}>ゼッケン入力を修正</NavButton>
+		<NavButton on:click={() => goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}`)}>ゼッケン入力を修正</NavButton>
 	</div>
 </div>
 

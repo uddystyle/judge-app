@@ -1,10 +1,14 @@
 import { json, redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-export const GET: RequestHandler = async ({ params, locals: { supabase, getSession } }) => {
-	const session = await getSession();
+export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
+	const {
+		data: { user },
+		error: userError
+	} = await supabase.auth.getUser();
+
 	// Only logged-in users can export data
-	if (!session) {
+	if (userError || !user) {
 		throw redirect(303, '/login');
 	}
 

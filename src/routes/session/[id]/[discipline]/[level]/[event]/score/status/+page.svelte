@@ -5,36 +5,110 @@
 	import Header from '$lib/components/Header.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { enhance } from '$app/forms';
+	import { supabase } from '$lib/supabaseClient';
+	import { goto } from '$app/navigation';
 
 	export let data: PageData;
 	let scoreStatus: any = { scores: [], requiredJudges: 1 };
 	let pollingInterval: any;
+	let realtimeChannel: any;
 
-	const { id, discipline, level, event } = $page.params;
-	// Get the bib number from the URL query parameters
-	const bib = $page.url.searchParams.get('bib');
+	let id: string = '';
+	let discipline: string = '';
+	let level: string = '';
+	let event: string = '';
+	let bib: string | null = null;
+
+	let isChief = false;
+	$: isChief = data.user?.id === data.sessionDetails?.chief_judge_id;
 
 	async function fetchStatus() {
-		const response = await fetch(
-			`/api/score-status/${id}/${bib}?discipline=${discipline}&level=${level}&event=${event}`
-		);
+		if (!bib) {
+			console.error('❌ Bib number is missing');
+			return;
+		}
+
+		const url = `/api/score-status/${id}/${bib}?discipline=${encodeURIComponent(discipline || '')}&level=${encodeURIComponent(level || '')}&event=${encodeURIComponent(event || '')}`;
+
+		const response = await fetch(url);
+
 		if (response.ok) {
 			scoreStatus = await response.json();
-			console.log('✅ サーバーから取得したデータ:', scoreStatus);
+		} else {
+			const errorText = await response.text();
+			console.error('❌ API Error:', response.status, errorText);
 		}
 	}
 
 	onMount(() => {
+		// URLパラメータを取得
+		id = $page.params.id || '';
+		discipline = $page.params.discipline || '';
+		level = $page.params.level || '';
+		event = $page.params.event || '';
+		bib = $page.url.searchParams.get('bib');
+
 		fetchStatus();
 		pollingInterval = setInterval(fetchStatus, 3000); // Poll every 3 seconds
+
+		// dataから直接判定（リアクティブステートメントに依存しない）
+		const currentIsChief = data.user?.id === data.sessionDetails?.chief_judge_id;
+
+		// 一般検定員の場合、active_prompt_idがクリアされたら待機画面に遷移
+		if (!currentIsChief) {
+			console.log('[一般検定員/status] リアルタイムリスナーをセットアップ中...', { id });
+			realtimeChannel = supabase
+				.channel(`session-finalize-${id}`)
+				.on(
+					'postgres_changes',
+					{
+						event: 'UPDATE',
+						schema: 'public',
+						table: 'sessions',
+						filter: `id=eq.${id}`
+					},
+					async (payload) => {
+						console.log('[一般検定員/status] セッション更新を検知:', payload);
+						const isActive = payload.new.is_active;
+						console.log('[一般検定員/status] is_active:', isActive);
+
+						// セッションが終了した場合、ダッシュボードに遷移
+						if (isActive === false) {
+							console.log('[一般検定員/status] 検定終了を検知。ダッシュボードに遷移します。');
+							goto('/dashboard');
+							return;
+						}
+
+						// active_prompt_idがnullになったら、採点が確定された
+						if (payload.new.active_prompt_id === null && payload.old.active_prompt_id !== null) {
+							// 一般検定員は待機画面に戻る（次のゼッケン番号を待つ）
+							goto(`/session/${id}`);
+						}
+					}
+				)
+				.subscribe((status) => {
+					console.log('[一般検定員/status] Realtimeチャンネルの状態:', status);
+					if (status === 'SUBSCRIBED') {
+						console.log('[一般検定員/status] ✅ リアルタイム接続成功');
+					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+						console.error('[一般検定員/status] ❌ 接続エラー - 再接続を試みます');
+						setTimeout(() => {
+							if (realtimeChannel) {
+								supabase.removeChannel(realtimeChannel);
+							}
+							window.location.reload();
+						}, 2000);
+					}
+				});
+		}
 	});
 
 	onDestroy(() => {
 		clearInterval(pollingInterval); // Stop polling when leaving the page
+		if (realtimeChannel) {
+			supabase.removeChannel(realtimeChannel);
+		}
 	});
-
-	let isChief = false;
-	$: isChief = data.session?.user.id === scoreStatus?.chiefJudgeId;
 
 	let canSubmit = false;
 	$: canSubmit = (scoreStatus?.scores?.length || 0) >= (scoreStatus?.requiredJudges || 1);
@@ -105,9 +179,18 @@
 					>{scoreStatus.scores?.length || 0} / {scoreStatus.requiredJudges || 1} 人</strong
 				>
 			</p>
-			<form method="POST" action="/session/{id}/details?/finalizeScore" use:enhance>
+			<form
+				method="POST"
+				action="?/finalizeScore"
+				use:enhance
+			>
+				<input type="hidden" name="bib" value={bib} />
 				<div class="nav-buttons">
-					<NavButton variant="primary" type="submit" disabled={!canSubmit}>
+					<NavButton
+						variant="primary"
+						type="submit"
+						disabled={!canSubmit}
+					>
 						{canSubmit
 							? 'この内容で送信する'
 							: `(${scoreStatus.requiredJudges || 1}人の採点が必要です)`}

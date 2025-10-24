@@ -52,7 +52,6 @@ export const actions: Actions = {
 		}
 
 		// Profile is now automatically created by database trigger
-		console.log('User created successfully:', authData.user.id);
 
 		// --- Success ---
 		// On success, redirect the user to a page that tells them to check their email.

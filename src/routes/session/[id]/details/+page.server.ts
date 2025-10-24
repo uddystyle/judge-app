@@ -1,9 +1,13 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase, getSession } }) => {
-	const session = await getSession();
-	if (!session) {
+export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+	const {
+		data: { user },
+		error: userError
+	} = await supabase.auth.getUser();
+
+	if (userError || !user) {
 		throw redirect(303, '/login');
 	}
 
@@ -52,7 +56,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 	);
 
 	return {
-		currentUserId: session.user.id,
+		currentUserId: user.id,
 		sessionDetails,
 		participants
 	};
@@ -60,9 +64,13 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, getSess
 
 // --- フォームアクション（名前の更新など） ---
 export const actions: Actions = {
-	updateName: async ({ request, params, locals: { supabase, getSession } }) => {
-		const session = await getSession();
-		if (!session) {
+	updateName: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -86,9 +94,13 @@ export const actions: Actions = {
 		return { success: true, message: '検定名を更新しました。' };
 	},
 
-	appointChief: async ({ request, params, locals: { supabase, getSession } }) => {
-		const session = await getSession();
-		if (!session) {
+	appointChief: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -121,9 +133,13 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
-	updateSettings: async ({ request, params, locals: { supabase, getSession } }) => {
-		const session = await getSession();
-		if (!session) {
+	updateSettings: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -169,9 +185,13 @@ export const actions: Actions = {
 		return { settingsSuccess: '設定を更新しました。' };
 	},
 
-	deleteSession: async ({ params, locals: { supabase, getSession } }) => {
-		const session = await getSession();
-		if (!session) {
+	deleteSession: async ({ params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -184,7 +204,7 @@ export const actions: Actions = {
 			.eq('id', sessionId)
 			.single();
 
-		if (sessionData?.created_by !== session.user.id) {
+		if (sessionData?.created_by !== user.id) {
 			return fail(403, { error: 'この検定を削除する権限がありません。' });
 		}
 

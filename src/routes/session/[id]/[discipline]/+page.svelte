@@ -32,7 +32,7 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => window.history.back()}>種別選択に戻る</NavButton>
+		<NavButton on:click={() => goto(`/session/${id}`)}>種別選択に戻る</NavButton>
 	</div>
 </div>
 

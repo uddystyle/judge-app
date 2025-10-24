@@ -21,7 +21,7 @@
 		<div class="nav-buttons">
 			<NavButton variant="danger" type="submit">はい、削除します</NavButton>
 
-			<NavButton on:click={() => window.history.back()} type="button">
+			<NavButton on:click={() => goto(`/session/${$page.params.id}/details`)} type="button">
 				いいえ、キャンセルします
 			</NavButton>
 		</div>

@@ -11,22 +11,24 @@
 </script>
 
 <div class="numeric-keypad">
-	<button class="numeric-key" on:click={() => dispatch('input', '7')}>7</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '8')}>8</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '9')}>9</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '4')}>4</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '5')}>5</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '6')}>6</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '1')}>1</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '2')}>2</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '3')}>3</button>
-	<button class="numeric-key" on:click={() => dispatch('input', '0')}>0</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '7')}>7</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '8')}>8</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '9')}>9</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '4')}>4</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '5')}>5</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '6')}>6</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '1')}>1</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '2')}>2</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '3')}>3</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '0')}>0</button>
 
-	<button class="numeric-key spacer" aria-label="spacer" tabindex="-1"></button>
+	<button type="button" class="numeric-key spacer" aria-label="spacer" tabindex="-1"></button>
 
-	<button class="numeric-key clear" on:click={() => dispatch('clear')}>C</button>
+	<button type="button" class="numeric-key clear" on:click={() => dispatch('clear')}>C</button>
 
-	<button class="numeric-key confirm" on:click={() => dispatch('confirm')}>確定</button>
+	<button type="button" class="numeric-key confirm" on:click={() => dispatch('confirm')}
+		>確定</button
+	>
 </div>
 
 <style>

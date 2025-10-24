@@ -24,7 +24,7 @@
 
 	// 「名前を更新」ボタンが押されたときの処理
 	async function handleUpdateName() {
-		if (!data.session) {
+		if (!data.user) {
 			message = 'エラー: ユーザー情報が見つかりません。';
 			return;
 		}
@@ -35,7 +35,7 @@
 		const { error } = await supabase
 			.from('profiles')
 			.update({ full_name: fullName })
-			.eq('id', data.session.user.id); // +layout.server.tsから渡されたセッション情報を使う
+			.eq('id', data.user.id); // +layout.server.tsから渡されたユーザー情報を使う
 
 		if (error) {
 			message = 'エラー: 名前の更新に失敗しました。' + error.message;

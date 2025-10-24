@@ -2,12 +2,18 @@
 	import NumericKeypad from '$lib/components/NumericKeypad.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
-	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
 	import { currentBib as bibStore } from '$lib/stores';
 	import { onMount } from 'svelte';
+	import type { ActionData } from './$types';
+	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 
+	export let form: ActionData;
 	let currentBib = '';
+	let formElement: HTMLFormElement;
+
+	$: ({ id, discipline, level } = $page.params);
 
 	onMount(() => {
 		currentBib = '';
@@ -27,18 +33,29 @@
 		currentBib = '';
 	}
 
-	// 確定ボタンが押されたときの処理
+	function beforeSubmit() {
+		const bib = parseInt(currentBib, 10) || 0;
+		if (bib < 1 || bib > 999) {
+			// SvelteKitのフォームが送信をキャンセルしてくれる
+			alert('ゼッケン番号は1～999の範囲で入力してください');
+			return false;
+		}
+		bibStore.set(bib);
+		return true;
+	}
+
 	function handleConfirm() {
 		const bib = parseInt(currentBib, 10) || 0;
 		if (bib < 1 || bib > 999) {
 			alert('ゼッケン番号は1～999の範囲で入力してください');
 			return;
 		}
-
 		bibStore.set(bib);
-		// 次のステップ（得点入力画面）へ移動
-		// 現在のURLの末尾に "/score" を追加して遷移
-		goto(`${$page.url.pathname}/score`);
+
+		// フォーム要素が存在すれば、送信をリクエストする
+		if (formElement) {
+			formElement.requestSubmit();
+		}
 	}
 </script>
 
@@ -46,13 +63,19 @@
 
 <div class="container">
 	<div class="instruction">ゼッケン番号を入力してください</div>
-
 	<div class="numeric-display">{currentBib || '0'}</div>
 
+	<form method="POST" action="?/setPrompt" use:enhance bind:this={formElement}>
+		<input type="hidden" name="bib" value={currentBib} />
+	</form>
+
 	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} />
+	{#if form?.error}
+		<p class="error-message">{form.error}</p>
+	{/if}
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => window.history.back()}>種目選択に戻る</NavButton>
+		<NavButton on:click={() => goto(`/session/${id}/${discipline}/${level}`)}>種目選択に戻る</NavButton>
 	</div>
 </div>
 
@@ -85,5 +108,9 @@
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
+	}
+	.error-message {
+		color: var(--ios-red);
+		margin-top: 1rem;
 	}
 </style>
