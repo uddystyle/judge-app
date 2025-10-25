@@ -137,28 +137,118 @@
 
 	.container {
 		padding: 28px 20px;
-		max-width: 800px;
+		max-width: 1400px;
 		margin: 0 auto;
 		min-height: 100vh;
 	}
 	.header-section {
 		text-align: center;
-		margin-bottom: 28px;
+		margin-bottom: 40px;
 	}
 	.title {
-		font-size: 28px;
+		font-size: 32px;
 		font-weight: 700;
-		margin-bottom: 8px;
+		margin-bottom: 12px;
 		color: #1d1d1f;
 	}
 	.subtitle {
-		font-size: 18px;
+		font-size: 20px;
 		color: #6e6e73;
-		margin-bottom: 4px;
+		margin-bottom: 8px;
 	}
 	.auto-update {
-		font-size: 13px;
+		font-size: 14px;
 		color: #86868b;
+	}
+
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+		}
+		.header-section {
+			margin-bottom: 60px;
+		}
+		.title {
+			font-size: 48px;
+		}
+		.subtitle {
+			font-size: 28px;
+		}
+		.auto-update {
+			font-size: 16px;
+		}
+		.tabs {
+			gap: 12px;
+			margin-bottom: 40px;
+			justify-content: center;
+			flex-wrap: wrap;
+		}
+		.tab {
+			padding: 14px 28px;
+			font-size: 18px;
+			border-radius: 10px;
+		}
+		.tab:hover {
+			background: #f5f5f7;
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+		}
+		.tab.active:hover {
+			background: #0071e3;
+			transform: translateY(-2px);
+		}
+		.ranking-container {
+			border-radius: 16px;
+			margin-bottom: 40px;
+			box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+		}
+		.event-title {
+			padding: 18px 24px;
+			font-size: 20px;
+		}
+		.ranking-header {
+			grid-template-columns: 140px 1fr 180px;
+			padding: 16px 24px;
+			font-size: 16px;
+		}
+		.ranking-row {
+			grid-template-columns: 140px 1fr 180px;
+			padding: 20px 24px;
+		}
+		.ranking-row:hover {
+			background: #f9f9f9;
+		}
+		.ranking-row.top3:hover {
+			background: #fffadc;
+		}
+		.rank-col {
+			font-size: 24px;
+		}
+		.bib-col {
+			font-size: 24px;
+		}
+		.score-col {
+			font-size: 28px;
+		}
+		.no-data {
+			padding: 60px 40px;
+			font-size: 18px;
+		}
+		.refresh-section {
+			margin-top: 40px;
+		}
+		.refresh-btn {
+			padding: 16px 32px;
+			font-size: 18px;
+			border-radius: 10px;
+		}
+		.refresh-btn:hover {
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+			transform: translateY(-2px);
+		}
+		.refresh-btn:active {
+			transform: translateY(-1px) scale(0.98);
+		}
 	}
 
 	.tabs {
