@@ -41,7 +41,7 @@
 </script>
 
 <div class="container">
-	<div class="instruction">検定を選択</div>
+	<div class="instruction">検定・大会を選択</div>
 
 	<div class="list-keypad">
 		{#if data.sessions && data.sessions.length > 0}
@@ -53,7 +53,14 @@
 					tabindex="0"
 					on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}
 				>
-					<div class="session-name">{session.name}</div>
+					<div class="session-name">
+						{session.name}
+						{#if session.is_tournament_mode}
+							<span class="mode-badge tournament">大会</span>
+						{:else}
+							<span class="mode-badge">検定</span>
+						{/if}
+					</div>
 					<div class="join-code-wrapper">
 						<button
 							class="join-code"
@@ -72,13 +79,13 @@
 				</div>
 			{/each}
 		{:else}
-			<p style="color: var(--secondary-text);">参加中の検定はありません。</p>
+			<p style="color: var(--secondary-text);">参加中の検定・大会はありません。</p>
 		{/if}
 	</div>
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={() => goto('/session/create')}>
-			新しい検定を作成
+			新しい検定・大会を作成
 		</NavButton>
 		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
 		<NavButton on:click={() => goto('/account')}>アカウント設定</NavButton>
@@ -131,8 +138,22 @@
 	.session-name {
 		font-size: 18px;
 		font-weight: 600;
-		text-align: left;
+		text-align: center;
 		color: var(--primary-text);
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.mode-badge {
+		font-size: 11px;
+		font-weight: 600;
+		color: white;
+		background: var(--ios-blue);
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+	.mode-badge.tournament {
+		background: var(--ios-green);
 	}
 	.join-code-wrapper {
 		display: flex;

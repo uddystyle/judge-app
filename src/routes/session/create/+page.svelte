@@ -7,10 +7,12 @@
 
 	// This `form` variable will hold the data returned from the server action
 	export let form: ActionData;
+
+	let selectedMode: 'kentei' | 'tournament' = 'kentei';
 </script>
 
 <div class="container">
-	<div class="instruction">新しい検定を作成</div>
+	<div class="instruction">新しいセッションを作成</div>
 
 	<form method="POST" action="?/create" use:enhance>
 		<div class="form-container">
@@ -18,9 +20,39 @@
 				type="text"
 				name="sessionName"
 				id="session-name-input"
-				placeholder="検定名 (例: 2025冬期検定)"
+				placeholder="セッション名 (例: 2025冬期検定)"
 				value={form?.sessionName ?? ''}
 			/>
+
+			<div class="mode-selection">
+				<h3>モード選択</h3>
+
+				<label class="mode-option" class:selected={selectedMode === 'kentei'}>
+					<input
+						type="radio"
+						name="mode"
+						value="kentei"
+						bind:group={selectedMode}
+					/>
+					<div class="mode-content">
+						<div class="mode-title">検定モード</div>
+						<div class="mode-description">既定の種目で検定を実施</div>
+					</div>
+				</label>
+
+				<label class="mode-option" class:selected={selectedMode === 'tournament'}>
+					<input
+						type="radio"
+						name="mode"
+						value="tournament"
+						bind:group={selectedMode}
+					/>
+					<div class="mode-content">
+						<div class="mode-title">大会モード</div>
+						<div class="mode-description">カスタム種目・採点方式・スコアボード</div>
+					</div>
+				</label>
+			</div>
 
 			{#if form?.error}
 				<p class="error-message">{form.error}</p>
@@ -70,5 +102,56 @@
 	.error-message {
 		color: var(--ios-red);
 		font-size: 14px;
+	}
+	.mode-selection {
+		margin: 20px 0;
+	}
+	.mode-selection h3 {
+		font-size: 16px;
+		font-weight: 600;
+		margin-bottom: 12px;
+		text-align: left;
+		color: var(--primary-text);
+	}
+	.mode-option {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 16px;
+		border: 2px solid var(--separator-gray);
+		border-radius: 12px;
+		margin-bottom: 12px;
+		cursor: pointer;
+		transition: all 0.2s;
+		background: white;
+	}
+	.mode-option:hover {
+		border-color: var(--ios-blue);
+		background: #f8f9fa;
+	}
+	.mode-option.selected {
+		border-color: var(--ios-blue);
+		background: #e8f4ff;
+	}
+	.mode-option input[type="radio"] {
+		margin-top: 2px;
+		width: 20px;
+		height: 20px;
+		cursor: pointer;
+	}
+	.mode-content {
+		flex: 1;
+		text-align: left;
+	}
+	.mode-title {
+		font-size: 17px;
+		font-weight: 600;
+		color: var(--primary-text);
+		margin-bottom: 4px;
+	}
+	.mode-description {
+		font-size: 14px;
+		color: var(--secondary-text);
+		line-height: 1.4;
 	}
 </style>

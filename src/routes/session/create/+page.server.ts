@@ -25,13 +25,15 @@ export const actions: Actions = {
 
 		const formData = await request.formData();
 		const sessionName = formData.get('sessionName') as string;
+		const mode = formData.get('mode') as string;
 
 		// Basic validation
 		if (!sessionName || sessionName.trim().length === 0) {
-			return fail(400, { sessionName, error: '検定名を入力してください。' });
+			return fail(400, { sessionName, error: 'セッション名を入力してください。' });
 		}
 
 		const joinCode = generateJoinCode();
+		const isTournamentMode = mode === 'tournament';
 
 		// Insert the new session into the 'sessions' table
 		const { data: sessionData, error: sessionError } = await supabase
@@ -39,8 +41,12 @@ export const actions: Actions = {
 			.insert({
 				name: sessionName,
 				created_by: user.id,
+				chief_judge_id: user.id, // 作成者を主任検定員に設定
 				join_code: joinCode,
-				is_active: true
+				is_active: true,
+				is_tournament_mode: isTournamentMode,
+				score_calculation: isTournamentMode ? 'sum' : 'average',
+				exclude_extremes: false
 			})
 			.select()
 			.single();
@@ -63,11 +69,15 @@ export const actions: Actions = {
 			// (e.g., delete the session that was just created).
 			return fail(500, {
 				sessionName,
-				error: 'サーバーエラー: 検定への参加に失敗しました。'
+				error: 'サーバーエラー: セッションへの参加に失敗しました。'
 			});
 		}
 
-		// If successful, redirect the user back to the dashboard
-		throw redirect(303, '/dashboard');
+		// 大会モードの場合は設定ページへ、検定モードはダッシュボードへ
+		if (isTournamentMode) {
+			throw redirect(303, `/session/${sessionData.id}/tournament-setup`);
+		} else {
+			throw redirect(303, '/dashboard');
+		}
 	}
 };

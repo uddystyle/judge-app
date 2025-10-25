@@ -15,6 +15,11 @@
 	let isMultiJudge = data.sessionDetails.is_multi_judge;
 	let requiredJudges = data.sessionDetails.required_judges;
 
+	// 大会モード用の採点方式
+	let selectedMethod: '3judges' | '5judges' = data.sessionDetails.exclude_extremes
+		? '5judges'
+		: '3judges';
+
 	let exportLoading = false;
 
 	async function handleExport() {
@@ -123,58 +128,133 @@
 
 	<hr class="divider" />
 
-	<form method="POST" action="?/updateSettings" use:enhance>
+	{#if data.sessionDetails.is_tournament_mode}
+		<!-- 大会モード: 採点方法設定 -->
 		<div class="settings-section">
-			<h3 class="settings-title">採点ルール設定</h3>
-			<div class="setting-item">
-				<label for="multi-judge-toggle" class="form-label">複数審判モード</label>
-				<div class="toggle-switch">
-					<input
-						type="checkbox"
-						id="multi-judge-toggle"
-						name="isMultiJudge"
-						bind:checked={isMultiJudge}
-						value={isMultiJudge}
-					/>
-					<label for="multi-judge-toggle"></label>
-				</div>
-			</div>
+			<h3 class="settings-title">採点方法設定</h3>
 
-			{#if isMultiJudge}
-				<div class="setting-item">
-					<label for="required-judges-input" class="form-label">
-						必須審判員数
-						<span class="helper-text">(現在: {participantCount}人)</span>
+			{#if form?.tournamentSettingsSuccess}
+				<div class="success-message">{form.tournamentSettingsSuccess}</div>
+			{/if}
+
+			{#if form?.tournamentSettingsError}
+				<div class="error-message">{form.tournamentSettingsError}</div>
+			{/if}
+
+			<form
+				method="POST"
+				action="?/updateTournamentSettings"
+				use:enhance={() => {
+					return async ({ update }) => {
+						await update({ reset: false });
+					};
+				}}
+			>
+				<div class="scoring-options">
+					<!-- 3審3採 -->
+					<label class="scoring-option" class:selected={selectedMethod === '3judges'}>
+						<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} />
+						<div class="option-content">
+							<div class="option-header">
+								<span class="option-title">3審3採</span>
+							</div>
+							<div class="option-description">3人の検定員の点数の合計</div>
+							<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
+						</div>
 					</label>
-					<input
-						type="number"
-						id="required-judges-input"
-						name="requiredJudges"
-						bind:value={requiredJudges}
-						min="1"
-						max={participantCount}
-						class="short-input"
-					/>
+
+					<!-- 5審3採 -->
+					<label class="scoring-option" class:selected={selectedMethod === '5judges'}>
+						<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} />
+						<div class="option-content">
+							<div class="option-header">
+								<span class="option-title">5審3採</span>
+							</div>
+							<div class="option-description">
+								5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
+							</div>
+							<div class="option-example">
+								例: 8.5 + 8.0 + <span class="excluded">9.0</span> + 8.5 +
+								<span class="excluded">7.5</span> = 25.0点
+							</div>
+						</div>
+					</label>
 				</div>
-			{/if}
 
-			{#if form?.settingsError}
-				<p class="message">{form.settingsError}</p>
-			{/if}
-			{#if form?.settingsSuccess}
-				<p class="message success">{form.settingsSuccess}</p>
-			{/if}
-
-			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">ルールを保存</NavButton>
-			</div>
+				<div class="form-actions">
+					<button type="submit" class="save-btn">採点方法を保存</button>
+				</div>
+			</form>
 		</div>
-	</form>
-	<hr class="divider" />
+		<hr class="divider" />
+	{:else}
+		<!-- 検定モード: 従来の採点ルール設定 -->
+		<form
+			method="POST"
+			action="?/updateSettings"
+			use:enhance={() => {
+				return async ({ update }) => {
+					await update({ reset: false });
+				};
+			}}
+		>
+			<div class="settings-section">
+				<h3 class="settings-title">採点ルール設定</h3>
+				<div class="setting-item">
+					<label for="multi-judge-toggle" class="form-label">複数審判モード</label>
+					<div class="toggle-switch">
+						<input
+							type="checkbox"
+							id="multi-judge-toggle"
+							name="isMultiJudge"
+							bind:checked={isMultiJudge}
+							value={isMultiJudge}
+						/>
+						<label for="multi-judge-toggle"></label>
+					</div>
+				</div>
+
+				{#if isMultiJudge}
+					<div class="setting-item">
+						<label for="required-judges-input" class="form-label">
+							必須審判員数
+							<span class="helper-text">(現在: {participantCount}人)</span>
+						</label>
+						<input
+							type="number"
+							id="required-judges-input"
+							name="requiredJudges"
+							bind:value={requiredJudges}
+							min="1"
+							max={participantCount}
+							class="short-input"
+						/>
+					</div>
+				{/if}
+
+				{#if form?.settingsError}
+					<p class="message">{form.settingsError}</p>
+				{/if}
+				{#if form?.settingsSuccess}
+					<p class="message success">{form.settingsSuccess}</p>
+				{/if}
+
+				<div class="nav-buttons">
+					<NavButton variant="primary" type="submit">ルールを保存</NavButton>
+				</div>
+			</div>
+		</form>
+		<hr class="divider" />
+	{/if}
 
 	<div class="settings-section">
 		<h3 class="settings-title">データ管理</h3>
 		<div class="nav-buttons">
+			{#if data.sessionDetails.is_tournament_mode}
+				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}>
+					スコアボードを表示
+				</NavButton>
+			{/if}
 			<NavButton on:click={handleExport} disabled={exportLoading}>
 				{exportLoading ? '準備中...' : '採点結果をエクスポート'}
 			</NavButton>
@@ -184,7 +264,9 @@
 	<hr class="divider" />
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>
+			{data.sessionDetails.is_tournament_mode ? '大会選択に戻る' : '検定選択に戻る'}
+		</NavButton>
 	</div>
 
 	{#if data.currentUserId === data.sessionDetails.created_by}
@@ -193,7 +275,7 @@
 				variant="danger"
 				on:click={() => goto(`/session/${data.sessionDetails.id}/details/delete`)}
 			>
-				この検定を削除
+				この{data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除
 			</NavButton>
 		</div>
 	{/if}
@@ -352,5 +434,117 @@
 	}
 	.toggle-switch input:checked + label:before {
 		transform: translateX(20px);
+	}
+
+	/* 採点方式設定（大会モード） */
+	.success-message {
+		background: #e6f6e8;
+		border: 1px solid var(--ios-green);
+		color: #1e5c2e;
+		padding: 12px;
+		border-radius: 8px;
+		margin-bottom: 20px;
+		text-align: center;
+	}
+	.error-message {
+		background: #ffe6e6;
+		border: 1px solid var(--ios-red);
+		color: var(--ios-red);
+		padding: 12px;
+		border-radius: 8px;
+		margin-bottom: 20px;
+		text-align: center;
+	}
+
+	.scoring-options {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		margin-bottom: 24px;
+	}
+	.scoring-option {
+		background: white;
+		border: 2px solid var(--separator-gray);
+		border-radius: 12px;
+		padding: 20px;
+		cursor: pointer;
+		transition: all 0.2s;
+		position: relative;
+	}
+	.scoring-option input[type='radio'] {
+		position: absolute;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.scoring-option.selected {
+		border-color: var(--ios-blue);
+		background: #f0f8ff;
+	}
+	.scoring-option:hover {
+		border-color: var(--ios-blue);
+	}
+	.option-content {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.option-header {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 4px;
+	}
+	.option-title {
+		font-size: 20px;
+		font-weight: 600;
+		color: var(--primary-text);
+	}
+	.option-badge {
+		font-size: 12px;
+		font-weight: 500;
+		color: white;
+		background: var(--ios-blue);
+		padding: 2px 8px;
+		border-radius: 4px;
+	}
+	.option-badge.advanced {
+		background: var(--ios-green);
+	}
+	.option-description {
+		font-size: 15px;
+		color: var(--secondary-text);
+		line-height: 1.5;
+	}
+	.option-example {
+		font-size: 14px;
+		color: var(--secondary-text);
+		font-family: 'SF Mono', Monaco, monospace;
+		background: #f8f9fa;
+		padding: 8px 12px;
+		border-radius: 6px;
+		margin-top: 4px;
+	}
+	.excluded {
+		text-decoration: line-through;
+		color: var(--ios-red);
+	}
+
+	.form-actions {
+		margin-bottom: 12px;
+	}
+	.save-btn {
+		width: 100%;
+		background: var(--ios-blue);
+		color: white;
+		padding: 14px;
+		border: none;
+		border-radius: 8px;
+		font-size: 16px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.2s;
+	}
+	.save-btn:active {
+		opacity: 0.7;
 	}
 </style>

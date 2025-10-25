@@ -3,7 +3,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { page } from '$app/stores';
-	import { getContext } from 'svelte';
+	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { goto } from '$app/navigation';
 	import { currentBib, userProfile, currentSession } from '$lib/stores';
@@ -11,6 +11,9 @@
 
 	// レイアウトから共有されたSupabaseクライアントを受け取る
 	const supabase = getContext<SupabaseClient>('supabase');
+	let realtimeChannel: any;
+	let pollingInterval: any;
+	let previousIsActive: boolean | null = null;
 
 	let currentScore = '';
 	let loading = false;
@@ -82,6 +85,72 @@
 		}
 		loading = false;
 	}
+
+	// セッション終了を監視
+	onMount(() => {
+		const sessionId = $page.params.id;
+		console.log('[採点画面] リアルタイムリスナーをセットアップ中...', { sessionId });
+
+		realtimeChannel = supabase
+			.channel(`session-end-score-${sessionId}`)
+			.on(
+				'postgres_changes',
+				{
+					event: 'UPDATE',
+					schema: 'public',
+					table: 'sessions',
+					filter: `id=eq.${sessionId}`
+				},
+				async (payload) => {
+					console.log('[採点画面] セッション更新を検知:', payload);
+					const isActive = payload.new.is_active;
+					console.log('[採点画面] is_active:', isActive);
+
+					// セッションが終了した場合、待機画面（終了画面）に遷移
+					if (isActive === false) {
+						console.log('[採点画面] 検定/大会終了を検知。終了画面に遷移します。');
+						goto(`/session/${sessionId}?ended=true`);
+					}
+				}
+			)
+			.subscribe((status) => {
+				console.log('[採点画面] Realtimeチャンネルの状態:', status);
+				if (status === 'SUBSCRIBED') {
+					console.log('[採点画面] ✅ リアルタイム接続成功');
+
+					// ポーリング追加
+					pollingInterval = setInterval(async () => {
+						const { data: sessionData, error } = await supabase
+							.from('sessions')
+							.select('is_active')
+							.eq('id', sessionId)
+							.single();
+
+						if (!error && sessionData) {
+							const isActive = sessionData.is_active;
+							if (previousIsActive === null) {
+								previousIsActive = isActive;
+								return;
+							}
+							if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
+								console.log('[採点画面] ✅ 検定終了を検知（ポーリング）');
+								goto(`/session/${sessionId}?ended=true`);
+							}
+							previousIsActive = isActive;
+						}
+					}, 3000);
+				}
+			});
+	});
+
+	onDestroy(() => {
+		if (realtimeChannel) {
+			supabase.removeChannel(realtimeChannel);
+		}
+		if (pollingInterval) {
+			clearInterval(pollingInterval);
+		}
+	});
 </script>
 
 <Header />

@@ -3,7 +3,6 @@
 	import Header from '$lib/components/Header.svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { currentBib as bibStore } from '$lib/stores';
 	import type { PageData } from './$types';
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
@@ -12,15 +11,15 @@
 	export let data: PageData;
 
 	let endSessionForm: HTMLFormElement;
-	let changeEventForm: HTMLFormElement;
 	let realtimeChannel: any;
-	let pollingInterval: any;
-	let previousIsActive: boolean | null = null;
+
+	$: sessionId = $page.params.id;
+	$: eventId = $page.params.eventId;
+	$: sessionName = data.sessionDetails.name;
+	$: eventName = data.customEvent.event_name;
 
 	function handleNextSkier() {
-		bibStore.set(null);
-		const bibInputPath = $page.url.pathname.replace('/score/complete', '');
-		goto(bibInputPath);
+		goto(`/session/${sessionId}/tournament-events/${eventId}/score`);
 	}
 
 	function handleEndSession() {
@@ -30,17 +29,9 @@
 		}
 	}
 
-	function handleChangeEvent() {
-		// フォームを送信
-		if (changeEventForm) {
-			changeEventForm.requestSubmit();
-		}
-	}
-
 	onMount(() => {
 		// 一般検定員の場合、セッション終了を監視
 		if (!data.isChief) {
-			const sessionId = $page.params.id;
 			console.log('[一般検定員/complete] リアルタイムリスナーをセットアップ中...', { sessionId });
 			realtimeChannel = supabase
 				.channel(`session-end-${sessionId}`)
@@ -55,18 +46,11 @@
 					async (payload) => {
 						console.log('[一般検定員/complete] セッション更新を検知:', payload);
 						const isActive = payload.new.is_active;
-						const activePromptId = payload.new.active_prompt_id;
-						console.log('[一般検定員/complete] is_active:', isActive, 'active_prompt_id:', activePromptId);
-
-						// セッションが終了した場合、待機画面（終了画面）に遷移
+						console.log('[一般検定員/complete] is_active:', isActive);
+						// セッションが終了した場合、ダッシュボードに遷移
 						if (isActive === false) {
-							console.log('[一般検定員/complete] 検定/大会終了を検知。終了画面に遷移します。');
-							goto(`/session/${sessionId}?ended=true`);
-						}
-						// active_prompt_idがクリアされた場合、待機画面に遷移（種目変更）
-						else if (activePromptId === null && payload.old.active_prompt_id !== null) {
-							console.log('[一般検定員/complete] 種目変更を検知。待機画面に遷移します。');
-							goto(`/session/${sessionId}`);
+							console.log('[一般検定員/complete] 検定終了を検知。ダッシュボードに遷移します。');
+							goto('/dashboard');
 						}
 					}
 				)
@@ -74,35 +58,6 @@
 					console.log('[一般検定員/complete] Realtimeチャンネルの状態:', status);
 					if (status === 'SUBSCRIBED') {
 						console.log('[一般検定員/complete] ✅ リアルタイム接続成功');
-
-						// Realtimeのバックアップとして、3秒ごとにポーリング
-						pollingInterval = setInterval(async () => {
-							const { data: sessionData, error } = await supabase
-								.from('sessions')
-								.select('is_active, active_prompt_id')
-								.eq('id', sessionId)
-								.single();
-
-							if (!error && sessionData) {
-								const isActive = sessionData.is_active;
-
-								// 初回のポーリング
-								if (previousIsActive === null) {
-									previousIsActive = isActive;
-									return;
-								}
-
-								// 状態が変化した場合のみ処理
-								if (previousIsActive !== isActive) {
-									// 終了した場合（true -> false）
-									if (isActive === false && previousIsActive === true) {
-										console.log('[一般検定員/complete] ✅ 検定終了を検知（ポーリング）');
-										goto(`/session/${sessionId}?ended=true`);
-									}
-									previousIsActive = isActive;
-								}
-							}
-						}, 3000);
 					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 						console.error('[一般検定員/complete] ❌ 接続エラー - 再接続を試みます');
 						setTimeout(() => {
@@ -120,22 +75,31 @@
 		if (realtimeChannel) {
 			supabase.removeChannel(realtimeChannel);
 		}
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
-		}
 	});
 </script>
 
 <Header />
 
 <div class="container">
+	<div class="session-info">
+		<div class="session-name">{sessionName}</div>
+		<div class="event-name">{eventName}</div>
+	</div>
+
 	<div class="instruction">送信完了</div>
+
 	<div class="status">
 		データが正常に送信されました<br />
 		<strong>ゼッケン{data.bib}番</strong>
 	</div>
 
-	{#if data.isMultiJudge && data.scores.length > 1}
+	<div class="scoring-info">
+		<div class="scoring-badge" class:advanced={data.excludeExtremes}>
+			{data.excludeExtremes ? '5審3採' : '3審3採'}
+		</div>
+	</div>
+
+	{#if data.scores && data.scores.length > 1}
 		<div class="scores-container">
 			<h3 class="scores-title">各検定員の得点</h3>
 			<div class="scores-list">
@@ -146,42 +110,28 @@
 					</div>
 				{/each}
 			</div>
-			<div class="average-score">
-				<strong>
-					{#if data.isTournamentMode}
-						{data.averageScore}点
-					{:else}
-						平均点: {data.averageScore}点
-					{/if}
-				</strong>
+			<div class="total-score">
+				<strong>合計点: {data.totalScore}点</strong>
 			</div>
 		</div>
 	{:else}
 		<div class="single-score">
-			<strong>得点: {data.averageScore}点</strong>
+			<strong>得点: {data.totalScore}点</strong>
 		</div>
 	{/if}
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextSkier}>次の滑走者</NavButton>
-		<NavButton>結果を共有</NavButton>
-		{#if data.isChief && data.isTournamentMode}
-			<NavButton on:click={handleChangeEvent}>種目を変更</NavButton>
-		{/if}
 		{#if data.isChief}
-			<NavButton on:click={handleEndSession}>
-				{data.isTournamentMode ? '大会を終了' : '検定を終了'}
-			</NavButton>
+			<NavButton on:click={handleEndSession}>検定を終了</NavButton>
 		{/if}
 	</div>
 
 	<!-- 非表示のフォーム -->
-	<form bind:this={endSessionForm} method="POST" action="?/endSession" use:enhance style="display: none;">
-	</form>
 	<form
-		bind:this={changeEventForm}
+		bind:this={endSessionForm}
 		method="POST"
-		action="?/changeEvent"
+		action="?/endSession"
 		use:enhance
 		style="display: none;"
 	></form>
@@ -192,11 +142,29 @@
 		padding: 28px 20px;
 		text-align: center;
 	}
+
+	.session-info {
+		margin-bottom: 20px;
+	}
+
+	.session-name {
+		font-size: 14px;
+		color: var(--secondary-text);
+		margin-bottom: 4px;
+	}
+
+	.event-name {
+		font-size: 20px;
+		font-weight: 600;
+		color: var(--primary-text);
+	}
+
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
 		margin-bottom: 28px;
 	}
+
 	.status {
 		padding: 15px;
 		border-radius: 12px;
@@ -209,23 +177,45 @@
 		color: #1e5c2e;
 		line-height: 1.6;
 	}
+
+	.scoring-info {
+		margin-bottom: 20px;
+	}
+
+	.scoring-badge {
+		display: inline-block;
+		background: var(--ios-blue);
+		color: white;
+		padding: 6px 16px;
+		border-radius: 20px;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.scoring-badge.advanced {
+		background: var(--ios-green);
+	}
+
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
 	}
+
 	.scores-container {
 		max-width: 400px;
 		margin: 20px auto;
 		text-align: left;
 	}
+
 	.scores-title {
 		font-size: 17px;
 		font-weight: 600;
 		margin-bottom: 12px;
 		text-align: center;
 	}
+
 	.scores-list {
 		background: white;
 		border-radius: 12px;
@@ -233,6 +223,7 @@
 		margin-bottom: 16px;
 		border: 1px solid var(--separator-gray);
 	}
+
 	.score-item {
 		display: flex;
 		justify-content: space-between;
@@ -240,19 +231,23 @@
 		padding: 12px 0;
 		border-bottom: 1px solid var(--separator-gray);
 	}
+
 	.score-item:last-child {
 		border-bottom: none;
 	}
+
 	.judge-name {
 		font-weight: 500;
 		color: var(--primary-text);
 	}
+
 	.score-value {
 		font-size: 18px;
 		font-weight: 600;
 		color: var(--ios-blue);
 	}
-	.average-score {
+
+	.total-score {
 		text-align: center;
 		font-size: 20px;
 		color: var(--ios-green);
@@ -261,6 +256,7 @@
 		border-radius: 12px;
 		border: 1px solid var(--ios-green);
 	}
+
 	.single-score {
 		text-align: center;
 		font-size: 20px;

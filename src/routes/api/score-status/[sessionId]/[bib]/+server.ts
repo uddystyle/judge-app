@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ params, url, locals: { supabase } })
 	// Get the session's settings
 	const { data: sessionData, error: sessionError } = await supabase
 		.from('sessions')
-		.select('active_prompt_id, is_active, required_judges, chief_judge_id')
+		.select('active_prompt_id, is_active, required_judges, chief_judge_id, is_tournament_mode, exclude_extremes')
 		.eq('id', sessionId)
 		.single();
 
@@ -45,10 +45,16 @@ export const GET: RequestHandler = async ({ params, url, locals: { supabase } })
 		throw error(500, 'Failed to fetch session status.');
 	}
 
+	// 大会モードの場合は exclude_extremes に基づいて必要な検定員数を決定
+	let requiredJudges = sessionData.required_judges;
+	if (sessionData.is_tournament_mode) {
+		requiredJudges = sessionData.exclude_extremes ? 5 : 3;
+	}
+
 	return json({
 		scores: scores,
 		isActive: sessionData.is_active,
-		requiredJudges: sessionData.required_judges,
+		requiredJudges: requiredJudges,
 		chiefJudgeId: sessionData.chief_judge_id
 	});
 };

@@ -7,11 +7,15 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
+	import { currentBib, userProfile } from '$lib/stores';
+	import { get } from 'svelte/store';
 
 	export let data: PageData;
 	let scoreStatus: any = { scores: [], requiredJudges: 1 };
-	let pollingInterval: any;
 	let realtimeChannel: any;
+	let pollingInterval: any;
+	let sessionPollingInterval: any;
+	let previousIsActive: boolean | null = null;
 
 	let id: string = '';
 	let discipline: string = '';
@@ -54,6 +58,28 @@
 		// dataから直接判定（リアクティブステートメントに依存しない）
 		const currentIsChief = data.user?.id === data.sessionDetails?.chief_judge_id;
 
+		// セッション終了検知用のポーリング（主任・一般共通）
+		sessionPollingInterval = setInterval(async () => {
+			const { data: sessionData, error } = await supabase
+				.from('sessions')
+				.select('is_active')
+				.eq('id', id)
+				.single();
+
+			if (!error && sessionData) {
+				const isActive = sessionData.is_active;
+				if (previousIsActive === null) {
+					previousIsActive = isActive;
+					return;
+				}
+				if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
+					console.log('[status] ✅ 検定終了を検知（ポーリング）');
+					goto(`/session/${id}?ended=true`);
+				}
+				previousIsActive = isActive;
+			}
+		}, 3000);
+
 		// 一般検定員の場合、active_prompt_idがクリアされたら待機画面に遷移
 		if (!currentIsChief) {
 			console.log('[一般検定員/status] リアルタイムリスナーをセットアップ中...', { id });
@@ -72,10 +98,10 @@
 						const isActive = payload.new.is_active;
 						console.log('[一般検定員/status] is_active:', isActive);
 
-						// セッションが終了した場合、ダッシュボードに遷移
+						// セッションが終了した場合、待機画面（終了画面）に遷移
 						if (isActive === false) {
-							console.log('[一般検定員/status] 検定終了を検知。ダッシュボードに遷移します。');
-							goto('/dashboard');
+							console.log('[一般検定員/status] 検定終了を検知。終了画面に遷移します。');
+							goto(`/session/${id}?ended=true`);
 							return;
 						}
 
@@ -104,7 +130,8 @@
 	});
 
 	onDestroy(() => {
-		clearInterval(pollingInterval); // Stop polling when leaving the page
+		clearInterval(pollingInterval); // Stop polling for score status
+		clearInterval(sessionPollingInterval); // Stop polling for session end
 		if (realtimeChannel) {
 			supabase.removeChannel(realtimeChannel);
 		}
@@ -112,6 +139,33 @@
 
 	let canSubmit = false;
 	$: canSubmit = (scoreStatus?.scores?.length || 0) >= (scoreStatus?.requiredJudges || 1);
+
+	// 一般検定員：自分の得点が削除されたら採点画面に遷移
+	let previousMyScore: any = null;
+	let hasInitialized = false;
+	$: {
+		if (!isChief && scoreStatus?.scores) {
+			const profile = get(userProfile);
+			const currentUserName = profile?.full_name || data.user?.email || '';
+			const myScore = scoreStatus.scores.find((s: any) => s.judge_name === currentUserName);
+
+			// 初回ロード時は自分の得点を記録
+			if (!hasInitialized) {
+				previousMyScore = myScore;
+				hasInitialized = true;
+				console.log('[一般検定員/status] 初期化:', { currentUserName, myScore });
+			}
+			// 前回は自分の得点があったが、今回はない場合 = 修正要求された
+			else if (previousMyScore && !myScore) {
+				console.log('[一般検定員/status] 修正要求を検知。採点画面に遷移します。');
+				// ゼッケン番号をストアに保存してから遷移
+				currentBib.set(parseInt(bib || '0'));
+				goto(`/session/${id}/${discipline}/${level}/${event}/score`);
+			}
+
+			previousMyScore = myScore;
+		}
+	}
 </script>
 
 <Header />
@@ -162,8 +216,34 @@
 			{#if scoreStatus.scores && scoreStatus.scores.length > 0}
 				{#each scoreStatus.scores as s}
 					<div class="participant-item">
-						<span class="participant-name">{s.judge_name}</span>
-						<span class="score-value">{s.score} 点</span>
+						<div class="participant-info">
+							<span class="participant-name">{s.judge_name}</span>
+							<span class="score-value">{s.score} 点</span>
+						</div>
+						{#if isChief}
+							<form
+								method="POST"
+								action="?/requestCorrection"
+								use:enhance={({ formData }) => {
+									return async ({ result, update }) => {
+										await update({ reset: false });
+										// 自分自身の修正の場合は採点画面に遷移
+										const profile = get(userProfile);
+										const currentUserName = profile?.full_name || data.user?.email || '';
+										const judgeName = formData.get('judgeName');
+										if (result.type === 'success' && judgeName === currentUserName) {
+											currentBib.set(parseInt(bib || '0'));
+											goto(`/session/${id}/${discipline}/${level}/${event}/score`);
+										}
+									};
+								}}
+								style="display: inline;"
+							>
+								<input type="hidden" name="bib" value={bib} />
+								<input type="hidden" name="judgeName" value={s.judge_name} />
+								<button type="submit" class="correction-btn">修正</button>
+							</form>
+						{/if}
 					</div>
 				{/each}
 			{:else}
@@ -244,6 +324,12 @@
 	.participant-item:last-child {
 		border-bottom: none;
 	}
+	.participant-info {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex: 1;
+	}
 	.participant-name {
 		font-weight: 500;
 	}
@@ -251,6 +337,22 @@
 		font-size: 18px;
 		font-weight: 600;
 		color: var(--ios-blue);
+		margin-left: auto;
+	}
+	.correction-btn {
+		background: var(--ios-orange);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		padding: 6px 12px;
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: opacity 0.2s;
+		margin-left: 16px;
+	}
+	.correction-btn:active {
+		opacity: 0.7;
 	}
 	.status-message {
 		color: var(--secondary-text);

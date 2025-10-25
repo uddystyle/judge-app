@@ -133,6 +133,34 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
+	updateTournamentSettings: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const scoringMethod = formData.get('scoringMethod') as string;
+		const excludeExtremes = scoringMethod === '5judges';
+
+		const { error: updateError } = await supabase
+			.from('sessions')
+			.update({
+				exclude_extremes: excludeExtremes
+			})
+			.eq('id', params.id);
+
+		if (updateError) {
+			return fail(500, { tournamentSettingsError: '設定の更新に失敗しました。' });
+		}
+
+		return { tournamentSettingsSuccess: '採点方法を更新しました。' };
+	},
+
 	updateSettings: async ({ request, params, locals: { supabase } }) => {
 		const {
 			data: { user },
