@@ -3,13 +3,13 @@
 </script>
 
 <svelte:head>
-	<title>JudgeApp - スキー・スノーボード検定・大会採点アプリ</title>
+	<title>TENTO - スキー・スノーボード検定・大会採点アプリ</title>
 </svelte:head>
 
 <div class="page">
 	<div class="hero">
 		<div class="hero-content">
-			<h1 class="title">JudgeApp</h1>
+			<h1 class="title">TENTO</h1>
 			<p class="subtitle">スキー・スノーボード検定・大会のための採点管理システム</p>
 			<p class="description">
 				リアルタイムで複数の検定員が協力して採点を行える、<br />
@@ -254,11 +254,6 @@
 	.feature-card:hover {
 		transform: translateY(-4px);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-	}
-
-	.feature-icon {
-		font-size: 48px;
-		margin-bottom: 20px;
 	}
 
 	.feature-title {
