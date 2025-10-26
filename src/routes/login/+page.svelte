@@ -77,43 +77,58 @@
 
 <style>
 	.container {
-		padding: 28px 20px;
+		padding: 60px 20px;
 		text-align: center;
-		max-width: 400px;
+		max-width: 440px;
 		margin: 0 auto;
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
 	}
 	.instruction {
-		font-size: 24px;
+		font-size: 32px;
 		font-weight: 700;
-		color: var(--primary-text);
-		margin-bottom: 28px;
+		color: var(--text-primary);
+		margin-bottom: 40px;
 	}
 	.form-container {
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
+		gap: 16px;
+		background: var(--bg-white);
+		padding: 32px;
+		border-radius: 20px;
+		border: 2px solid var(--border-light);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 	}
 	.input-field {
-		padding: 15px;
+		padding: 16px;
 		font-size: 17px;
-		border: 1px solid var(--separator-gray);
+		border: 2px solid var(--border-light);
 		border-radius: 12px;
-		background: white;
-		color: var(--primary-text);
+		background: var(--bg-white);
+		color: var(--text-primary);
+		transition: all 0.2s;
 	}
 	.input-field:focus {
 		outline: none;
-		border-color: var(--ios-blue);
+		border-color: var(--primary-orange);
+		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.error-message {
 		color: var(--ios-red);
 		font-size: 14px;
 		margin: 0;
+		padding: 12px;
+		background: #fff5f5;
+		border-radius: 8px;
+		border: 1px solid #ffdddd;
 	}
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
-		gap: 14px;
-		margin-top: 14px;
+		gap: 12px;
+		margin-top: 8px;
 	}
 </style>

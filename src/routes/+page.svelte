@@ -4,6 +4,12 @@
 
 <svelte:head>
 	<title>TENTO - スキー・スノーボード検定・大会採点アプリ</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+		rel="stylesheet"
+	/>
 </svelte:head>
 
 <div class="page">
@@ -133,7 +139,7 @@
 <style>
 	:global(body) {
 		margin: 0;
-		background: #f5f5f7;
+		background: #f5f1e8;
 	}
 
 	.page {
@@ -141,35 +147,64 @@
 	}
 
 	.hero {
-		background: linear-gradient(135deg, #0071e3 0%, #0051a8 100%);
-		color: white;
+		background: #fefaf5;
+		color: #2d2d2d;
 		padding: 80px 20px;
 		text-align: center;
+		position: relative;
+		overflow: hidden;
+	}
+
+	.hero::before {
+		content: '';
+		position: absolute;
+		top: -50%;
+		right: -10%;
+		width: 500px;
+		height: 500px;
+		background: rgba(255, 140, 66, 0.08);
+		border-radius: 50%;
+		filter: blur(60px);
+	}
+
+	.hero::after {
+		content: '';
+		position: absolute;
+		bottom: -30%;
+		left: -5%;
+		width: 400px;
+		height: 400px;
+		background: rgba(255, 107, 53, 0.06);
+		border-radius: 50%;
+		filter: blur(50px);
 	}
 
 	.hero-content {
 		max-width: 800px;
 		margin: 0 auto;
+		position: relative;
+		z-index: 1;
 	}
 
 	.title {
+		font-family: 'M PLUS Rounded 1c', sans-serif;
 		font-size: 48px;
-		font-weight: 700;
+		font-weight: 800;
 		margin-bottom: 16px;
-		letter-spacing: -0.02em;
+		letter-spacing: 0.05em;
 	}
 
 	.subtitle {
 		font-size: 24px;
 		font-weight: 500;
 		margin-bottom: 20px;
-		opacity: 0.95;
+		color: #5d5d5d;
 	}
 
 	.description {
 		font-size: 18px;
 		line-height: 1.6;
-		opacity: 0.9;
+		color: #6e6e73;
 		margin-bottom: 40px;
 	}
 
@@ -193,24 +228,26 @@
 
 	.btn-primary {
 		background: white;
-		color: #0071e3;
+		color: #ff6b35;
+		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 	}
 
 	.btn-primary:hover {
-		background: #f5f5f7;
+		background: #fffbf7;
 		transform: translateY(-2px);
-		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 8px 25px rgba(255, 107, 53, 0.3);
 	}
 
 	.btn-secondary {
-		background: rgba(255, 255, 255, 0.2);
-		color: white;
-		border: 1px solid white;
+		background: transparent;
+		color: #ff6b35;
+		border: 2px solid #ff6b35;
 	}
 
 	.btn-secondary:hover {
-		background: rgba(255, 255, 255, 0.3);
+		background: #fff5f0;
 		transform: translateY(-2px);
+		box-shadow: 0 4px 15px rgba(255, 107, 53, 0.2);
 	}
 
 	.btn-large {
@@ -226,15 +263,30 @@
 
 	.features {
 		padding: 80px 20px;
-		background: white;
+		background: #f5f1e8;
 	}
 
 	.section-title {
+		font-family: 'M PLUS Rounded 1c', sans-serif;
 		font-size: 36px;
 		font-weight: 700;
 		text-align: center;
 		margin-bottom: 60px;
 		color: #1d1d1f;
+		position: relative;
+		padding-bottom: 16px;
+	}
+
+	.section-title::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 60px;
+		height: 4px;
+		background: linear-gradient(90deg, #ff6b35 0%, #ff8c42 100%);
+		border-radius: 2px;
 	}
 
 	.feature-grid {
@@ -244,16 +296,19 @@
 	}
 
 	.feature-card {
-		background: #f5f5f7;
-		border-radius: 16px;
-		padding: 32px;
+		background: white;
+		border: 2px solid #f0e6d8;
+		border-radius: 20px;
+		padding: 36px;
 		text-align: center;
 		transition: all 0.3s;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 	}
 
 	.feature-card:hover {
-		transform: translateY(-4px);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+		transform: translateY(-6px);
+		box-shadow: 0 12px 32px rgba(255, 107, 53, 0.15);
+		border-color: #ff6b35;
 	}
 
 	.feature-title {
@@ -271,7 +326,7 @@
 
 	.how-it-works {
 		padding: 80px 20px;
-		background: #f5f5f7;
+		background: #fefaf5;
 	}
 
 	.steps {
@@ -290,7 +345,7 @@
 		flex-shrink: 0;
 		width: 56px;
 		height: 56px;
-		background: #0071e3;
+		background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
 		color: white;
 		border-radius: 50%;
 		display: flex;
@@ -298,6 +353,7 @@
 		justify-content: center;
 		font-size: 24px;
 		font-weight: 700;
+		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
 	}
 
 	.step-content {
@@ -319,11 +375,12 @@
 
 	.cta-section {
 		padding: 80px 20px;
-		background: white;
+		background: #f5f1e8;
 		text-align: center;
 	}
 
 	.cta-title {
+		font-family: 'M PLUS Rounded 1c', sans-serif;
 		font-size: 36px;
 		font-weight: 700;
 		margin-bottom: 16px;
@@ -342,7 +399,7 @@
 		}
 
 		.title {
-			font-size: 64px;
+			font-size: 72px;
 		}
 
 		.subtitle {

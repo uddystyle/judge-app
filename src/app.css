@@ -1,13 +1,33 @@
 /* src/app.css */
 :root {
+    /* Primary colors - Orange accent */
+    --primary-orange: #ff6b35;
+    --primary-orange-light: #ff8c42;
+    --primary-orange-hover: #fffbf7;
+
+    /* Background colors - Beige base */
+    --bg-cream: #fefaf5;
+    --bg-beige: #f5f1e8;
+    --bg-white: #ffffff;
+
+    /* Border colors */
+    --border-light: #f0e6d8;
+    --border-gray: #d2d2d7;
+
+    /* Text colors */
+    --text-primary: #2d2d2d;
+    --text-secondary: #5d5d5d;
+    --text-muted: #6e6e73;
+
+    /* Legacy iOS colors (for backward compatibility) */
     --ios-blue: #007aff;
     --ios-red: #ff3b30;
     --ios-green: #28a745;
-    --ios-orange: #ff9500;
-    --light-gray: #f5f5f7;
-    --separator-gray: #d2d2d7;
-    --primary-text: #1d1d1f;
-    --secondary-text: #6e6e73;
+    --ios-orange: var(--primary-orange);
+    --light-gray: var(--bg-beige);
+    --separator-gray: var(--border-gray);
+    --primary-text: var(--text-primary);
+    --secondary-text: var(--text-muted);
     --keypad-bg: #e5e5ea;
 }
 
@@ -21,8 +41,8 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, sans-serif;
-    background-color: var(--light-gray);
-    color: var(--primary-text);
+    background-color: var(--bg-beige);
+    color: var(--text-primary);
     touch-action: manipulation;
     line-height: 1.5;
 }

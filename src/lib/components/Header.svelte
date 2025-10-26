@@ -23,21 +23,23 @@
 
 <style>
 	.header {
-		background: rgba(255, 255, 255, 0.8);
+		background: var(--bg-cream);
 		backdrop-filter: blur(10px);
-		color: var(--primary-text);
+		color: var(--text-primary);
 		padding: 12px 20px;
 		text-align: center;
-		border-bottom: 1px solid var(--separator-gray);
+		border-bottom: 2px solid var(--border-light);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 	}
 	.header p {
 		margin: 0;
 		font-size: 17px;
 		font-weight: 600;
+		color: var(--text-primary);
 	}
 	.info-display {
 		font-size: 12px;
-		color: var(--secondary-text);
+		color: var(--text-secondary);
 		margin-top: 4px;
 	}
 </style>
