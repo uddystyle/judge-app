@@ -73,4 +73,27 @@
 		color: var(--ios-red);
 		font-size: 14px;
 	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 600px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.form-container input {
+			padding: 18px;
+			font-size: 20px;
+			letter-spacing: 0.1em;
+		}
+		.error-message {
+			font-size: 16px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
+	}
 </style>

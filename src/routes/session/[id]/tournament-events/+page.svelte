@@ -4,12 +4,22 @@
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
+	import { onMount } from 'svelte';
 
 	export let data: PageData;
 
 	$: sessionId = $page.params.id;
 	$: sessionName = data.sessionDetails.name;
 	$: customEvents = data.customEvents;
+
+	onMount(() => {
+		// 大会モードでは級がないので、種別以降をクリア
+		currentDiscipline.set(null);
+		currentLevel.set(null);
+		currentEvent.set(null);
+		currentBib.set(null);
+	});
 
 	function selectEvent(event: any) {
 		// 既存の採点フローを使用（discipline='大会', level='共通'）

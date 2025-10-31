@@ -13,21 +13,21 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 
 	const { id: sessionId } = params;
 
-	// 得点入力ページへのアクセスの場合は権限チェックをスキップ
-	// （一般検定員も得点入力ページにはアクセスできる必要がある）
-	if (url.pathname.includes('/score')) {
-		return {};
-	}
-
 	// セッション情報を取得して、主任検定員かどうかを確認
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('chief_judge_id')
+		.select('chief_judge_id, is_tournament_mode')
 		.eq('id', sessionId)
 		.single();
 
 	if (sessionError) {
 		throw error(404, '検定が見つかりません。');
+	}
+
+	// 得点入力ページへのアクセスの場合は権限チェックをスキップ
+	// （一般検定員も得点入力ページにはアクセスできる必要がある）
+	if (url.pathname.includes('/score')) {
+		return { isTournamentMode: sessionDetails.is_tournament_mode };
 	}
 
 	// 一般検定員の場合、セッション詳細ページ（待機画面）にリダイレクト
@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		throw redirect(303, `/session/${sessionId}`);
 	}
 
-	return {};
+	return { isTournamentMode: sessionDetails.is_tournament_mode };
 };
 
 export const actions: Actions = {
@@ -72,7 +72,8 @@ export const actions: Actions = {
 			.single();
 
 		if (promptError) {
-			return fail(500, { error: '採点指示の作成に失敗しました: ' + promptError.message });
+			console.error('Failed to create scoring prompt:', promptError);
+			return fail(500, { error: '採点指示の作成に失敗しました。' });
 		}
 
 		// 2. sessionsテーブルのactive_prompt_idを、今作成した指示のIDに更新
@@ -84,7 +85,8 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (sessionUpdateError) {
-			return fail(500, { error: 'セッションの更新に失敗しました: ' + sessionUpdateError.message });
+			console.error('Failed to update session:', sessionUpdateError);
+			return fail(500, { error: 'セッションの更新に失敗しました。' });
 		}
 
 		// 成功したら、主任検定員自身も得点入力ページへ移動

@@ -75,6 +75,14 @@
 		}
 		passwordLoading = false;
 	}
+
+	async function handleLogout() {
+		// Supabaseからログアウトを実行
+		await supabase.auth.signOut();
+
+		// ログアウト後、ログインページへ移動
+		goto('/login');
+	}
 </script>
 
 <div class="container">
@@ -124,10 +132,11 @@
 	<div class="nav-buttons">
 		<hr class="divider" />
 
+		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
+		<NavButton variant="danger" on:click={handleLogout}>ログアウト</NavButton>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
 			アカウントを削除
 		</NavButton>
-		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
 	</div>
 </div>
 
@@ -175,5 +184,30 @@
 		border: none;
 		border: 1px solid var(--separator-gray);
 		margin: 24px 0;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 600px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.form-label {
+			font-size: 18px;
+		}
+		.form-container input {
+			padding: 18px;
+			font-size: 18px;
+		}
+		.message {
+			font-size: 16px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
 	}
 </style>

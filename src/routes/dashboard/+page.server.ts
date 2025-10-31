@@ -20,8 +20,18 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	if (error) {
 		console.error('Error fetching sessions:', error);
-		return { sessions: [] };
+		return { sessions: [], profile: null };
 	}
 
-	return { sessions: sessions.map((item: any) => item.sessions) };
+	// ユーザーのプロフィール情報を取得
+	const { data: profile } = await supabase
+		.from('profiles')
+		.select('full_name')
+		.eq('id', user.id)
+		.single();
+
+	return {
+		sessions: sessions.map((item: any) => item.sessions),
+		profile
+	};
 };

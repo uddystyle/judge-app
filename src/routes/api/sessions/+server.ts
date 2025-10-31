@@ -52,7 +52,8 @@ export async function POST({ request }) {
 		.single();
 
 	if (sessionError) {
-		return json({ error: sessionError.message }, { status: 500 });
+		console.error('Failed to create session:', sessionError);
+		return json({ error: 'セッションの作成に失敗しました。' }, { status: 500 });
 	}
 
 	// 作成者を自動的に参加者として追加

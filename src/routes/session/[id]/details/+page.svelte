@@ -251,7 +251,10 @@
 		<h3 class="settings-title">データ管理</h3>
 		<div class="nav-buttons">
 			{#if data.sessionDetails.is_tournament_mode}
-				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}>
+				<NavButton
+					variant="primary"
+					on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}
+				>
 					スコアボードを表示
 				</NavButton>
 			{/if}
@@ -546,5 +549,59 @@
 	}
 	.save-btn:active {
 		opacity: 0.7;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 900px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.form-label,
+		.settings-title {
+			font-size: 20px;
+		}
+		input {
+			padding: 16px;
+			font-size: 18px;
+		}
+		.participants-container {
+			padding: 16px 24px;
+		}
+		.participant-item {
+			padding: 16px 0;
+		}
+		.participant-name {
+			font-size: 18px;
+		}
+		.appoint-btn {
+			padding: 8px 16px;
+			font-size: 16px;
+		}
+		.scoring-option {
+			padding: 24px;
+		}
+		.option-title {
+			font-size: 22px;
+		}
+		.option-description {
+			font-size: 16px;
+		}
+		.nav-buttons {
+			display: grid;
+			grid-template-columns: repeat(2, 1fr);
+			gap: 16px;
+		}
+	}
+
+	/* PC対応: デスクトップ */
+	@media (min-width: 1024px) {
+		.container {
+			max-width: 1000px;
+		}
 	}
 </style>

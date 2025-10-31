@@ -164,7 +164,6 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextSkier}>次の滑走者</NavButton>
-		<NavButton>結果を共有</NavButton>
 		{#if data.isChief && data.isTournamentMode}
 			<NavButton on:click={handleChangeEvent}>種目を変更</NavButton>
 		{/if}
@@ -191,21 +190,24 @@
 	.container {
 		padding: 28px 20px;
 		text-align: center;
+		max-width: 600px;
+		margin: 0 auto;
 	}
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
+		color: var(--text-primary);
 		margin-bottom: 28px;
 	}
 	.status {
-		padding: 15px;
+		padding: 20px;
 		border-radius: 12px;
 		margin: 20px auto;
 		text-align: center;
-		font-size: 15px;
-		max-width: 340px;
+		font-size: 16px;
+		max-width: 400px;
 		background: #e6f6e8;
-		border: 1px solid var(--ios-green);
+		border: 2px solid var(--ios-green);
 		color: #1e5c2e;
 		line-height: 1.6;
 	}
@@ -216,22 +218,24 @@
 		margin-top: 28px;
 	}
 	.scores-container {
-		max-width: 400px;
+		max-width: 500px;
 		margin: 20px auto;
 		text-align: left;
 	}
 	.scores-title {
-		font-size: 17px;
+		font-size: 18px;
 		font-weight: 600;
 		margin-bottom: 12px;
 		text-align: center;
+		color: var(--text-primary);
 	}
 	.scores-list {
-		background: white;
+		background: var(--bg-white);
 		border-radius: 12px;
 		padding: 8px 16px;
 		margin-bottom: 16px;
-		border: 1px solid var(--separator-gray);
+		border: 2px solid var(--border-light);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 	}
 	.score-item {
 		display: flex;
@@ -245,26 +249,72 @@
 	}
 	.judge-name {
 		font-weight: 500;
-		color: var(--primary-text);
+		color: var(--text-primary);
 	}
 	.score-value {
 		font-size: 18px;
 		font-weight: 600;
-		color: var(--ios-blue);
+		color: var(--primary-orange);
 	}
 	.average-score {
 		text-align: center;
 		font-size: 20px;
 		color: var(--ios-green);
-		padding: 12px;
+		padding: 16px;
 		background: #e6f6e8;
 		border-radius: 12px;
-		border: 1px solid var(--ios-green);
+		border: 2px solid var(--ios-green);
 	}
 	.single-score {
 		text-align: center;
-		font-size: 20px;
-		color: var(--ios-blue);
+		font-size: 24px;
+		font-weight: 700;
+		color: var(--primary-orange);
 		margin: 20px 0;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 800px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.status {
+			padding: 24px;
+			font-size: 18px;
+			max-width: 500px;
+		}
+		.scores-container {
+			max-width: 600px;
+		}
+		.scores-title {
+			font-size: 22px;
+		}
+		.scores-list {
+			padding: 12px 24px;
+		}
+		.score-item {
+			padding: 16px 0;
+		}
+		.judge-name {
+			font-size: 18px;
+		}
+		.score-value {
+			font-size: 22px;
+		}
+		.average-score {
+			font-size: 24px;
+			padding: 20px;
+		}
+		.single-score {
+			font-size: 32px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
 	}
 </style>

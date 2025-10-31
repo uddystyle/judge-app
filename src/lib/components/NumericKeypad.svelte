@@ -41,33 +41,49 @@
 		margin: 24px auto;
 	}
 	.numeric-key {
-		background: #ffffff;
-		border: none;
+		background: var(--bg-white);
+		border: 2px solid var(--border-light);
 		border-radius: 18px;
 		font-size: 32px;
-		font-weight: 500;
+		font-weight: 600;
 		height: 80px;
 		cursor: pointer;
 		transition: all 0.2s;
-		color: var(--primary-text);
+		color: var(--text-primary);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 	}
+	.numeric-key:hover {
+		border-color: var(--primary-orange);
+		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2);
+		transform: translateY(-2px);
+	}
 	.numeric-key:active {
-		transform: translateY(1px);
-		background: #f0f0f0;
+		transform: translateY(0);
+		background: var(--bg-beige);
 		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 	}
 	.numeric-key.confirm {
-		background: var(--ios-green);
+		background: linear-gradient(135deg, var(--primary-orange) 0%, var(--primary-orange-light) 100%);
 		color: white;
 		grid-column: span 3;
+		border: none;
+		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+	}
+	.numeric-key.confirm:hover {
+		box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4);
+		transform: translateY(-2px);
 	}
 	.numeric-key.confirm:active {
-		background: #24993e;
+		background: linear-gradient(135deg, #e65a2f 0%, #ff7b42 100%);
+		transform: translateY(0);
 	}
 	.numeric-key.clear {
 		background: var(--ios-red);
 		color: white;
+		border: none;
+	}
+	.numeric-key.clear:hover {
+		box-shadow: 0 4px 12px rgba(234, 67, 53, 0.3);
 	}
 	.numeric-key.clear:active {
 		background: #d93025;
@@ -82,5 +98,26 @@
 	.numeric-key.spacer:active {
 		background: transparent;
 		transform: none;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.numeric-keypad {
+			gap: 20px;
+			margin: 32px auto;
+		}
+		.numeric-key {
+			height: 100px;
+			font-size: 40px;
+			border-radius: 20px;
+		}
+	}
+
+	/* PC対応: デスクトップ */
+	@media (min-width: 1024px) {
+		.numeric-key {
+			height: 120px;
+			font-size: 48px;
+		}
 	}
 </style>

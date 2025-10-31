@@ -88,7 +88,8 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (updateError) {
-			return fail(500, { error: '更新に失敗しました: ' + updateError.message });
+			console.error('Failed to update session name:', updateError);
+			return fail(500, { error: '更新に失敗しました。' });
 		}
 
 		return { success: true, message: '検定名を更新しました。' };

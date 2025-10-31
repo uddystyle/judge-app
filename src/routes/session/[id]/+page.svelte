@@ -1,12 +1,11 @@
 <script lang="ts">
-	import { currentSession, currentBib } from '$lib/stores';
+	import { currentSession, currentBib, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { enhance } from '$app/forms';
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
@@ -28,15 +27,21 @@
 	onMount(async () => {
 		currentSession.set(data.sessionDetails);
 
+		// セッション選択画面に戻ったので、種目情報をクリア
+		currentDiscipline.set(null);
+		currentLevel.set(null);
+		currentEvent.set(null);
+		currentBib.set(null);
+
 		// URLパラメータで終了フラグをチェック（リアルタイムで終了した場合のみ）
 		const urlParams = new URLSearchParams(window.location.search);
 		if (urlParams.get('ended') === 'true') {
 			console.log('[DEBUG] URLパラメータで終了フラグを検知（リアルタイム終了）');
 			isSessionEnded = true;
 		}
-		// 注: isSessionActive: false の場合でも、初期ロード時は終了画面ではなく
-		// 準備画面（一般検定員）または種別選択画面（主任検定員）を表示する。
-		// これにより、終了後に再アクセスした場合でも再開可能。
+		// 注: セッションが終了していても（is_active: false）、ダッシュボードから
+		// 再度アクセスした場合は準備画面を表示する。終了画面は「ended=true」パラメータがある場合か、
+		// リアルタイムで終了を検知した場合のみ表示する。
 
 		// デバッグ: セッション情報を確認
 		console.log('[DEBUG] セッション情報:', data.sessionDetails);
@@ -101,10 +106,8 @@
 						if (notificationType === 'session_ended') {
 							console.log('[一般検定員] ✅ 終了通知を検知。終了画面に遷移します。');
 							isSessionEnded = true;
-						} else if (notificationType === 'session_restarted') {
-							console.log('[一般検定員] ✅ 再開通知を検知。準備画面を表示します。');
-							isSessionEnded = false;
 						}
+						// 注: session_restarted通知は削除された再開機能用なので処理しない
 					}
 				}
 			}, 2000); // 2秒ごとにポーリング
@@ -127,10 +130,8 @@
 						if (notificationType === 'session_ended') {
 							console.log('[一般検定員/waiting] ✅ 終了通知を受信。終了画面に遷移します。');
 							isSessionEnded = true;
-						} else if (notificationType === 'session_restarted') {
-							console.log('[一般検定員/waiting] ✅ 再開通知を受信。準備画面を表示します。');
-							isSessionEnded = false;
 						}
+						// 注: session_restarted通知は削除された再開機能用なので処理しない
 					}
 				)
 				.subscribe((status) => {
@@ -163,10 +164,9 @@
 						console.log('[一般検定員/waiting] payload.old:', payload.old);
 						console.log('[一般検定員/waiting] 現在の isSessionEnded:', isSessionEnded);
 
-						// セッションが再開された場合、準備画面を表示
-						if (isActive === true && isSessionEnded) {
-							console.log('[一般検定員/waiting] 検定再開を検知。準備画面を表示します。');
-							isSessionEnded = false;
+						// 既に終了画面を表示している場合は、状態変更を行わない
+						if (isSessionEnded) {
+							console.log('[一般検定員/waiting] 終了画面表示中のため、状態変更をスキップ');
 							return;
 						}
 
@@ -179,8 +179,6 @@
 							console.log('[一般検定員/waiting] isSessionEnded を true に設定完了:', isSessionEnded);
 							return;
 						}
-
-						console.log('[一般検定員/waiting] ⚠️ 終了条件に一致しませんでした');
 
 						// 新しい採点指示IDがセットされたら
 						if (newPromptId) {
@@ -224,6 +222,14 @@
 						// Realtimeのバックアップとして、3秒ごとにポーリングでis_activeをチェック
 						pollingInterval = setInterval(async () => {
 							console.log('[一般検定員/polling] セッション状態をポーリング中...');
+							console.log('[一般検定員/polling] 現在の isSessionEnded:', isSessionEnded);
+
+							// 既に終了画面を表示している場合はポーリングを継続するが、状態変更は行わない
+							if (isSessionEnded) {
+								console.log('[一般検定員/polling] 終了画面表示中のため、状態変更をスキップ');
+								return;
+							}
+
 							const { data: sessionData, error } = await supabase
 								.from('sessions')
 								.select('is_active')
@@ -234,7 +240,6 @@
 								const isActive = sessionData.is_active;
 								console.log('[一般検定員/polling] is_active:', isActive);
 								console.log('[一般検定員/polling] previousIsActive:', previousIsActive);
-								console.log('[一般検定員/polling] 現在の isSessionEnded:', isSessionEnded);
 
 								// 初回のポーリング時は前回の状態を記録するだけ
 								if (previousIsActive === null) {
@@ -247,17 +252,12 @@
 								if (previousIsActive !== isActive) {
 									console.log('[一般検定員/polling] 状態変化を検知:', previousIsActive, '->', isActive);
 
-									// 再開された場合（false -> true）
-									if (isActive === true && previousIsActive === false) {
-										console.log('[一般検定員/polling] ✅ 検定再開を検知（ポーリング）');
-										isSessionEnded = false;
-									}
-
 									// 終了した場合（true -> false）
 									if (isActive === false && previousIsActive === true) {
 										console.log('[一般検定員/polling] ✅ 検定終了を検知（ポーリング）');
 										isSessionEnded = true;
 									}
+									// 注: 再開機能は削除されたため、false -> true の処理は行わない
 
 									previousIsActive = isActive;
 								}
@@ -335,14 +335,6 @@
 	function goToTournamentSetup() {
 		goto(`/session/${data.sessionDetails.id}/tournament-setup`);
 	}
-
-	let restartForm: HTMLFormElement;
-
-	function handleRestartSession() {
-		if (restartForm) {
-			restartForm.requestSubmit();
-		}
-	}
 </script>
 
 <Header />
@@ -354,13 +346,6 @@
 		<div class="end-message">
 			<p>この{data.isTournamentMode ? '大会' : '検定'}は終了しました。</p>
 		</div>
-		{#if data.isChief}
-			<div class="nav-buttons">
-				<NavButton variant="primary" on:click={handleRestartSession}>
-					{data.isTournamentMode ? '大会を再開' : '検定を再開'}
-				</NavButton>
-			</div>
-		{/if}
 	{:else if data.isChief}
 		{#if data.isTournamentMode}
 			<!-- 大会モード: 種目選択へ -->
@@ -412,19 +397,19 @@
 			{data.isTournamentMode ? '大会選択に戻る' : '検定選択に戻る'}
 		</NavButton>
 	</div>
-
-	<!-- 非表示のフォーム -->
-	<form bind:this={restartForm} method="POST" action="?/restartSession" use:enhance style="display: none;"></form>
 </div>
 
 <style>
 	.container {
 		padding: 28px 20px;
 		text-align: center;
+		max-width: 800px;
+		margin: 0 auto;
 	}
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
+		color: var(--text-primary);
 		margin-bottom: 28px;
 	}
 	.list-keypad {
@@ -439,31 +424,35 @@
 		margin-top: 28px;
 	}
 	.tournament-info {
-		margin: 24px 0;
-		color: var(--secondary-text);
+		margin: 24px auto;
+		color: var(--text-secondary);
 		line-height: 1.6;
+		max-width: 600px;
 	}
 	.wait-message {
-		margin: 24px 0;
-		color: var(--secondary-text);
+		margin: 24px auto;
+		color: var(--text-secondary);
 		line-height: 1.6;
+		max-width: 600px;
 	}
 	.end-message {
-		margin: 24px 0;
-		padding: 20px;
-		background: #f8f9fa;
+		margin: 24px auto;
+		padding: 24px;
+		background: var(--bg-white);
 		border-radius: 12px;
-		border: 1px solid var(--separator-gray);
-		color: var(--primary-text);
+		border: 2px solid var(--border-light);
+		color: var(--text-primary);
 		line-height: 1.6;
 		font-size: 16px;
+		max-width: 600px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 	}
 	.loading {
 		display: inline-block;
 		width: 20px;
 		height: 20px;
 		border: 2px solid rgba(0, 0, 0, 0.1);
-		border-top-color: var(--primary-text);
+		border-top-color: var(--primary-orange);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 		margin-top: 20px;
@@ -471,6 +460,47 @@
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
+		}
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 600px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.list-keypad {
+			gap: 16px;
+		}
+		.tournament-info {
+			font-size: 18px;
+			margin: 32px auto;
+		}
+		.wait-message {
+			font-size: 18px;
+			margin: 32px auto;
+		}
+		.end-message {
+			font-size: 18px;
+			padding: 32px;
+			margin: 32px auto;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
+	}
+
+	/* PC対応: デスクトップ */
+	@media (min-width: 1024px) {
+		.instruction {
+			font-size: 42px;
+		}
+		.list-keypad {
+			gap: 20px;
 		}
 	}
 </style>

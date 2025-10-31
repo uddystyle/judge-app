@@ -154,4 +154,36 @@
 		color: var(--secondary-text);
 		line-height: 1.4;
 	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 600px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.form-container input {
+			padding: 18px;
+			font-size: 18px;
+		}
+		.mode-selection h3 {
+			font-size: 20px;
+			margin-bottom: 16px;
+		}
+		.mode-option {
+			padding: 20px;
+		}
+		.mode-title {
+			font-size: 20px;
+		}
+		.mode-description {
+			font-size: 16px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
+	}
 </style>
