@@ -40,63 +40,80 @@
 	}
 </script>
 
+<svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+		rel="stylesheet"
+	/>
+</svelte:head>
+
 <div class="container">
 	<div class="header-bar">
-		<div class="instruction">参加するセッションを選択</div>
+		<div class="title-section">
+			<h1 class="app-title">TENTO</h1>
+			<p class="app-subtitle">スキー・スノーボード検定・大会のための採点管理システム</p>
+		</div>
 		<button class="account-button" on:click={() => goto('/account')}>
 			{data.profile?.full_name || 'アカウント'}
 		</button>
 	</div>
 
-	<div class="list-keypad">
-		{#if data.sessions && data.sessions.length > 0}
-			{#each data.sessions as session}
-				<div
-					class="key select-item"
-					on:click={() => goto(`/session/${session.id}`)}
-					role="button"
-					tabindex="0"
-					on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}
-				>
-					<div class="session-name">
-						{session.name}
-						{#if session.mode === 'tournament'}
-							<span class="mode-badge tournament">大会</span>
-						{:else if session.mode === 'training'}
-							<span class="mode-badge training">研修</span>
-						{:else}
-							<span class="mode-badge">検定</span>
-						{/if}
-					</div>
-					<div class="join-code-wrapper">
-						<div class="join-code-display">
-							<span class="join-code-label">コード:</span>
-							<span class="join-code-value">{session.join_code}</span>
-						</div>
-						<button
-							class="copy-btn"
-							on:click={(e) => copyJoinCode(e, session.join_code, session.id)}
-						>
-							{#if copiedSessionId === session.id}
-								✓ コピー済
+	<div class="section">
+		<h2 class="section-title">参加中のセッション</h2>
+		<div class="list-keypad">
+			{#if data.sessions && data.sessions.length > 0}
+				{#each data.sessions as session}
+					<div
+						class="key select-item"
+						on:click={() => goto(`/session/${session.id}`)}
+						role="button"
+						tabindex="0"
+						on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}
+					>
+						<div class="session-name">
+							{session.name}
+							{#if session.mode === 'tournament'}
+								<span class="mode-badge tournament">大会</span>
+							{:else if session.mode === 'training'}
+								<span class="mode-badge training">研修</span>
 							{:else}
-								COPY
+								<span class="mode-badge">検定</span>
 							{/if}
-						</button>
-						<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
-							>詳細</a
-						>
+						</div>
+						<div class="join-code-wrapper">
+							<div class="join-code-display">
+								<span class="join-code-label">コード:</span>
+								<span class="join-code-value">{session.join_code}</span>
+							</div>
+							<button
+								class="copy-btn"
+								on:click={(e) => copyJoinCode(e, session.join_code, session.id)}
+							>
+								{#if copiedSessionId === session.id}
+									✓ コピー済
+								{:else}
+									COPY
+								{/if}
+							</button>
+							<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
+								>詳細</a
+							>
+						</div>
 					</div>
-				</div>
-			{/each}
-		{:else}
-			<p style="color: var(--secondary-text);">参加中の検定・大会・研修はありません。</p>
-		{/if}
+				{/each}
+			{:else}
+				<p style="color: var(--secondary-text);">参加中の検定・大会・研修はありません。</p>
+			{/if}
+		</div>
 	</div>
+
+	<hr class="divider" />
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={() => goto('/session/create')}>
-			新しい検定・大会・研修を作成
+			新しいセッションを作成
 		</NavButton>
 		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
 	</div>
@@ -116,13 +133,25 @@
 		margin-bottom: 28px;
 		gap: 16px;
 	}
-	.instruction {
-		font-size: 24px;
-		font-weight: 700;
-		color: var(--text-primary);
-		line-height: 1.3;
+	.title-section {
 		flex: 1;
 		text-align: left;
+	}
+	.app-title {
+		font-family: 'M PLUS Rounded 1c', sans-serif;
+		font-size: 28px;
+		font-weight: 800;
+		color: #2d2d2d;
+		line-height: 1.2;
+		margin: 0 0 8px 0;
+		letter-spacing: 0.05em;
+	}
+	.app-subtitle {
+		font-size: 13px;
+		font-weight: 500;
+		color: #5d5d5d;
+		margin: 0;
+		line-height: 1.4;
 	}
 	.account-button {
 		background: var(--bg-white);
@@ -149,7 +178,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
-		max-width: 100%;
+		max-width: 800px;
+		margin: 0 auto;
 	}
 	.key.select-item {
 		display: flex;
@@ -254,11 +284,32 @@
 		background-color: #004bb5;
 		transform: scale(0.95);
 	}
+
+	/* セクション区切り */
+	.section {
+		margin-bottom: 32px;
+		text-align: center;
+	}
+	.section-title {
+		font-size: 18px;
+		font-weight: 600;
+		color: var(--primary-text);
+		margin-bottom: 16px;
+		text-align: center;
+	}
+	.divider {
+		border: none;
+		border-top: 1px solid var(--separator-gray);
+		margin: 48px auto;
+		max-width: 800px;
+	}
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		margin-top: 28px;
+		max-width: 500px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 	.details-btn {
 		background-color: var(--primary-orange);
@@ -287,8 +338,11 @@
 		.header-bar {
 			margin-bottom: 40px;
 		}
-		.instruction {
+		.app-title {
 			font-size: 36px;
+		}
+		.app-subtitle {
+			font-size: 15px;
 		}
 		.account-button {
 			font-size: 16px;
@@ -307,18 +361,21 @@
 		.session-name {
 			font-size: 20px;
 		}
-		.nav-buttons {
-			display: grid;
-			grid-template-columns: repeat(2, 1fr);
-			gap: 16px;
-			margin-top: 40px;
+		.section-title {
+			font-size: 20px;
+		}
+		.divider {
+			margin: 56px auto;
 		}
 	}
 
 	/* PC対応: デスクトップ */
 	@media (min-width: 1024px) {
-		.instruction {
+		.app-title {
 			font-size: 42px;
+		}
+		.app-subtitle {
+			font-size: 16px;
 		}
 		.account-button {
 			font-size: 18px;
@@ -327,12 +384,17 @@
 		.list-keypad {
 			grid-template-columns: repeat(3, 1fr);
 			gap: 24px;
+			max-width: 1000px;
 		}
 		.key.select-item {
 			min-height: 140px;
 		}
-		.nav-buttons {
-			grid-template-columns: repeat(2, 1fr);
+		.section-title {
+			font-size: 24px;
+		}
+		.divider {
+			margin: 64px auto;
+			max-width: 1000px;
 		}
 	}
 </style>
