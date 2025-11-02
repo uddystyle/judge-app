@@ -66,35 +66,49 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	// 得点情報を取得
 	let scores: any[] = [];
-	let averageScore = score ? parseFloat(score) : 0;
+	let displayScore = score ? parseFloat(score) : 0;
 
 	if (isTrainingMode) {
 		// 研修モードの場合、training_scoresから取得
-		const { data: trainingScores } = await supabase
-			.from('training_scores')
-			.select(`
-				*,
-				judge:judge_id (
-					full_name
-				)
-			`)
-			.eq('event_id', eventId)
-			.eq('athlete_id', (await supabase
-				.from('participants')
-				.select('id')
-				.eq('session_id', sessionId)
-				.eq('bib_number', parseInt(bib))
-				.single()).data?.id || '');
+		const participantResult = await supabase
+			.from('participants')
+			.select('id')
+			.eq('session_id', sessionId)
+			.eq('bib_number', parseInt(bib))
+			.single();
 
-		if (trainingScores) {
-			scores = trainingScores.map((s: any) => ({
-				judge_name: s.judge?.full_name || '不明',
-				score: s.score
-			}));
+		const participantId = participantResult.data?.id;
 
-			if (scores.length > 0) {
-				const sum = scores.reduce((acc, s) => acc + parseFloat(s.score), 0);
-				averageScore = parseFloat((sum / scores.length).toFixed(2));
+		if (participantId) {
+			const { data: trainingScores } = await supabase
+				.from('training_scores')
+				.select('*')
+				.eq('event_id', eventId)
+				.eq('athlete_id', participantId);
+
+			if (trainingScores) {
+				// judge_idからprofilesテーブルを使って名前を取得
+				const scoresWithNames = await Promise.all(
+					trainingScores.map(async (s: any) => {
+						const { data: profile } = await supabase
+							.from('profiles')
+							.select('full_name')
+							.eq('id', s.judge_id)
+							.single();
+
+						return {
+							judge_name: profile?.full_name || '不明',
+							score: s.score
+						};
+					})
+				);
+
+				scores = scoresWithNames;
+
+				if (scores.length > 0) {
+					const sum = scores.reduce((acc, s) => acc + parseFloat(s.score), 0);
+					displayScore = parseFloat((sum / scores.length).toFixed(2));
+				}
 			}
 		}
 	} else {
@@ -114,18 +128,18 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				score: s.score
 			}));
 
-			if (scores.length > 0) {
-				// 大会モードの平均計算（3審3採 / 5審3採対応）
+			// 大会モード: URLパラメータでスコアが渡されている場合はそれを使用（主任検定員が確定した合計点）
+			// URLパラメータがない場合のみデータベースから計算（一般検定員の場合など）
+			if (!score && scores.length > 0) {
+				// 合計点を計算（3審3採 / 5審3採対応）
 				const sortedScores = [...scores].map(s => parseFloat(s.score)).sort((a, b) => a - b);
 				if (sessionDetails.exclude_extremes && sortedScores.length >= 5) {
-					// 5審3採: 最高点と最低点を除外
+					// 5審3採: 最高点と最低点を除外した3人の合計
 					const middleScores = sortedScores.slice(1, -1);
-					const sum = middleScores.reduce((acc, s) => acc + s, 0);
-					averageScore = parseFloat((sum / middleScores.length).toFixed(2));
+					displayScore = parseFloat(middleScores.reduce((acc, s) => acc + s, 0).toFixed(2));
 				} else {
-					// 3審3採: 単純平均
-					const sum = sortedScores.reduce((acc, s) => acc + s, 0);
-					averageScore = parseFloat((sum / sortedScores.length).toFixed(2));
+					// 3審3採: 全員の合計
+					displayScore = parseFloat(sortedScores.reduce((acc, s) => acc + s, 0).toFixed(2));
 				}
 			}
 		}
@@ -136,7 +150,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		sessionDetails,
 		eventInfo,
 		scores,
-		averageScore,
+		displayScore,
 		isChief,
 		isMultiJudge,
 		isTrainingMode
@@ -145,8 +159,54 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 export const actions: Actions = {
 	endSession: async ({ params, locals: { supabase } }) => {
-		const { id: sessionId } = params;
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
 
+		if (userError || !user) {
+			return { success: false, error: '認証が必要です。' };
+		}
+
+		const { id: sessionId, modeType } = params;
+
+		// セッション情報を取得して権限確認
+		const { data: sessionDetails, error: sessionError } = await supabase
+			.from('sessions')
+			.select('chief_judge_id, is_multi_judge, mode')
+			.eq('id', sessionId)
+			.single();
+
+		if (sessionError) {
+			console.error('Error fetching session:', sessionError);
+			return { success: false, error: '検定が見つかりません。' };
+		}
+
+		const isChief = user.id === sessionDetails.chief_judge_id;
+		const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
+
+		// 研修モードの場合、training_sessionsからis_multi_judgeを取得
+		let isMultiJudge = false;
+		if (isTrainingMode) {
+			const { data: trainingSession } = await supabase
+				.from('training_sessions')
+				.select('is_multi_judge')
+				.eq('session_id', sessionId)
+				.maybeSingle();
+			isMultiJudge = trainingSession?.is_multi_judge || false;
+		} else if (modeType === 'tournament') {
+			// 大会モードは常に複数検定員モードON
+			isMultiJudge = true;
+		} else {
+			isMultiJudge = sessionDetails.is_multi_judge || false;
+		}
+
+		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
+		if (!isChief && isMultiJudge) {
+			return { success: false, error: 'セッションを終了する権限がありません。' };
+		}
+
+		// セッションを非アクティブにし、active_prompt_idをクリア
 		const { error } = await supabase
 			.from('sessions')
 			.update({ is_active: false, active_prompt_id: null })
@@ -157,11 +217,55 @@ export const actions: Actions = {
 			return { success: false };
 		}
 
-		throw redirect(303, '/dashboard');
+		// 主任検定員かつ複数検定員モードの場合は終了通知を挿入
+		if (isChief && isMultiJudge) {
+			console.log('[主任検定員] 終了通知を挿入中...', { session_id: sessionId, modeType, isMultiJudge });
+			const { error: notificationError } = await supabase
+				.from('session_notifications')
+				.insert({
+					session_id: sessionId,
+					notification_type: 'session_ended'
+				});
+
+			if (notificationError) {
+				console.error('[主任検定員] ❌ 終了通知の挿入に失敗:', notificationError);
+			}
+		}
+
+		// セッション詳細画面（終了画面）にリダイレクト
+		throw redirect(303, `/session/${sessionId}?ended=true`);
 	},
 
 	changeEvent: async ({ params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			return { success: false, error: '認証が必要です。' };
+		}
+
 		const { id: sessionId, modeType } = params;
+
+		// セッション情報を取得して権限確認
+		const { data: sessionDetails, error: sessionError } = await supabase
+			.from('sessions')
+			.select('chief_judge_id, is_multi_judge')
+			.eq('id', sessionId)
+			.single();
+
+		if (sessionError) {
+			console.error('Error fetching session:', sessionError);
+			return { success: false, error: '検定が見つかりません。' };
+		}
+
+		const isChief = user.id === sessionDetails.chief_judge_id;
+
+		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
+		if (!isChief && sessionDetails.is_multi_judge) {
+			return { success: false, error: '種目を変更する権限がありません。' };
+		}
 
 		// active_prompt_idをクリア
 		const { error } = await supabase

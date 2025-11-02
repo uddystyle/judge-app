@@ -16,6 +16,8 @@
 
 	$: ({ id, discipline, level, event } = $page.params);
 	$: isTournamentMode = data.isTournamentMode;
+	$: isMultiJudge = data.isMultiJudge;
+	$: isChief = data.isChief;
 
 	onMount(() => {
 		currentBib = '';
@@ -58,7 +60,13 @@
 		}
 		bibStore.set(bib);
 
-		// フォーム要素が存在すれば、送信をリクエストする
+		// 複数検定員モードOFFの場合は、直接採点画面に遷移
+		if (!isMultiJudge) {
+			goto(`/session/${id}/${discipline}/${level}/${event}/score?bib=${bib}`);
+			return;
+		}
+
+		// 複数検定員モードONで主任検定員の場合は、採点指示を送信
 		if (formElement) {
 			formElement.requestSubmit();
 		}

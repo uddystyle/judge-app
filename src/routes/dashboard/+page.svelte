@@ -275,6 +275,8 @@
 		cursor: pointer;
 		transition: all 0.2s;
 		white-space: nowrap;
+		min-width: 85px;
+		text-align: center;
 	}
 	.copy-btn:hover {
 		background-color: #0051d5;
@@ -355,11 +357,39 @@
 			gap: 20px;
 		}
 		.key.select-item {
-			min-height: 120px;
-			padding: 24px;
+			min-height: 180px;
+			padding: 32px;
+			gap: 16px;
 		}
 		.session-name {
-			font-size: 20px;
+			font-size: 22px;
+			margin-bottom: 8px;
+		}
+		.join-code-wrapper {
+			flex-wrap: nowrap;
+			gap: 16px;
+			width: 100%;
+		}
+		.join-code-display {
+			padding: 10px 20px;
+			flex-shrink: 0;
+		}
+		.join-code-label {
+			font-size: 13px;
+		}
+		.join-code-value {
+			font-size: 15px;
+		}
+		.copy-btn {
+			font-size: 13px;
+			padding: 8px 16px;
+			min-width: 100px;
+			flex-shrink: 0;
+		}
+		.details-btn {
+			font-size: 13px;
+			padding: 8px 16px;
+			white-space: nowrap;
 		}
 		.section-title {
 			font-size: 20px;

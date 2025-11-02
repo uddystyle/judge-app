@@ -49,13 +49,8 @@
 
 	// フォーム送信後の処理
 	$: if (form?.success && form?.bibNumber && form?.participantId) {
-		if (isTrainingMode) {
-			// 研修モード: 直接得点入力画面へ
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}`);
-		} else {
-			// 大会モード: 採点状況確認画面へ
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}`);
-		}
+		// ゼッケン番号入力後は常に得点入力画面へ
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}`);
 	}
 
 	// モードに応じた戻り先
@@ -165,13 +160,18 @@
 	}
 
 	.numeric-display {
-		font-size: 48px;
+		font-size: 64px;
 		font-weight: 700;
-		min-height: 80px;
+		color: var(--primary-orange);
+		min-height: 100px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		margin-bottom: 28px;
+		background: var(--bg-white);
+		border-radius: 16px;
+		border: 3px solid var(--border-light);
+		margin-bottom: 24px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 	}
 
 	.nav-buttons {
@@ -179,5 +179,27 @@
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 800px;
+			margin: 0 auto;
+		}
+		.instruction {
+			font-size: 32px;
+			margin-bottom: 40px;
+		}
+		.numeric-display {
+			font-size: 96px;
+			min-height: 140px;
+			border-radius: 20px;
+			margin-bottom: 32px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
 	}
 </style>

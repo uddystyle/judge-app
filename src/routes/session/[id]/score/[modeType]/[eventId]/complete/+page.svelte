@@ -153,16 +153,16 @@
 			<div class="average-score">
 				<strong>
 					{#if data.isTrainingMode}
-						平均点: {data.averageScore}点
+						平均点: {data.displayScore}点
 					{:else}
-						{data.averageScore}点
+						合計点: {data.displayScore}点
 					{/if}
 				</strong>
 			</div>
 		</div>
 	{:else}
 		<div class="single-score">
-			<strong>得点: {data.averageScore}点</strong>
+			<strong>得点: {data.displayScore}点</strong>
 		</div>
 	{/if}
 
@@ -171,7 +171,7 @@
 		{#if data.isChief || !data.isMultiJudge}
 			<NavButton on:click={handleChangeEvent}>種目を変更</NavButton>
 			<NavButton on:click={handleEndSession}>
-				{data.isTrainingMode ? '研修を終了' : '大会を終了'}
+				セッションを終了する
 			</NavButton>
 		{/if}
 	</div>

@@ -70,10 +70,10 @@ export const actions: Actions = {
 
 		const { id } = params;
 
-		// セッションの主任検定員かどうか確認
+		// セッション情報を取得して権限確認
 		const { data: session, error: sessionError } = await supabase
 			.from('sessions')
-			.select('chief_judge_id, is_tournament_mode')
+			.select('chief_judge_id, is_tournament_mode, is_multi_judge')
 			.eq('id', id)
 			.single();
 
@@ -81,8 +81,11 @@ export const actions: Actions = {
 			return fail(404, { error: '検定が見つかりません。' });
 		}
 
-		if (session.chief_judge_id !== user.id) {
-			return fail(403, { error: '主任検定員のみが種目を変更できます。' });
+		const isChief = session.chief_judge_id === user.id;
+
+		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
+		if (!isChief && session.is_multi_judge) {
+			return fail(403, { error: '種目を変更する権限がありません。' });
 		}
 
 		// active_prompt_idをクリア（一般検定員を待機画面に戻す）
@@ -115,10 +118,10 @@ export const actions: Actions = {
 
 		const { id } = params;
 
-		// セッションの主任検定員かどうか確認
+		// セッション情報を取得して権限確認
 		const { data: session, error: sessionError } = await supabase
 			.from('sessions')
-			.select('chief_judge_id')
+			.select('chief_judge_id, is_multi_judge')
 			.eq('id', id)
 			.single();
 
@@ -126,8 +129,11 @@ export const actions: Actions = {
 			return fail(404, { error: '検定が見つかりません。' });
 		}
 
-		if (session.chief_judge_id !== user.id) {
-			return fail(403, { error: '主任検定員のみが検定を終了できます。' });
+		const isChief = session.chief_judge_id === user.id;
+
+		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
+		if (!isChief && session.is_multi_judge) {
+			return fail(403, { error: 'セッションを終了する権限がありません。' });
 		}
 
 		// セッションを非アクティブにし、active_prompt_idをクリア
@@ -140,21 +146,23 @@ export const actions: Actions = {
 			return fail(500, { error: '検定の終了に失敗しました。' });
 		}
 
-		// 一般検定員への終了通知を挿入
-		console.log('[主任検定員] 終了通知を挿入中...', { session_id: id });
-		const { data: notificationData, error: notificationError } = await supabase
-			.from('session_notifications')
-			.insert({
-				session_id: id,
-				notification_type: 'session_ended'
-			})
-			.select();
+		// 主任検定員かつ複数検定員モードの場合は終了通知を挿入
+		if (isChief && session.is_multi_judge) {
+			console.log('[主任検定員] 終了通知を挿入中...', { session_id: id });
+			const { data: notificationData, error: notificationError } = await supabase
+				.from('session_notifications')
+				.insert({
+					session_id: id,
+					notification_type: 'session_ended'
+				})
+				.select();
 
-		if (notificationError) {
-			console.error('[主任検定員] ❌ 終了通知の挿入に失敗:', notificationError);
-			// 通知の失敗はエラーにしない（セッションは終了済み）
-		} else {
-			console.log('[主任検定員] ✅ 終了通知を挿入しました:', notificationData);
+			if (notificationError) {
+				console.error('[主任検定員] ❌ 終了通知の挿入に失敗:', notificationError);
+				// 通知の失敗はエラーにしない（セッションは終了済み）
+			} else {
+				console.log('[主任検定員] ✅ 終了通知を挿入しました:', notificationData);
+			}
 		}
 
 		// 成功したら待機画面（終了画面）にリダイレクト

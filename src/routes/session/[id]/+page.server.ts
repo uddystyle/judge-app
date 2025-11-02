@@ -101,6 +101,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			isChief,
 			sessionDetails,
 			isTournamentMode: true,
+			isTrainingMode: false,
 			hasEvents: (eventsCount || 0) > 0,
 			isSessionActive: sessionDetails.is_active
 		};
@@ -121,15 +122,38 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			sessionDetails,
 			disciplines,
 			isTournamentMode: false,
+			isTrainingMode: false,
 			isSessionActive: sessionDetails.is_active
 		};
 	}
 
-	// 一般の検定員の場合は、待機画面を表示するための情報だけを渡す
+	// 一般の検定員の場合
+	// 検定モードで複数検定員OFFの場合は、種別選択ができるようにdisciplinesを渡す
+	if (!sessionDetails.is_tournament_mode && !sessionDetails.is_multi_judge) {
+		const { data: events, error: eventsError } = await supabase.from('events').select('discipline');
+
+		if (eventsError) {
+			throw error(500, '種別情報の取得に失敗しました。');
+		}
+
+		const disciplines = [...new Set(events.map((e) => e.discipline))];
+
+		return {
+			isChief,
+			sessionDetails,
+			disciplines,
+			isTournamentMode: false,
+			isTrainingMode: false,
+			isSessionActive: sessionDetails.is_active
+		};
+	}
+
+	// その他の一般検定員の場合は、待機画面を表示するための情報だけを渡す
 	return {
 		isChief,
 		sessionDetails,
 		isTournamentMode: sessionDetails.is_tournament_mode,
+		isTrainingMode: false,
 		isSessionActive: sessionDetails.is_active
 	};
 };

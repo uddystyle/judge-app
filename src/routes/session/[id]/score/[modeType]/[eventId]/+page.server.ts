@@ -24,6 +24,27 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(404, '検定が見つかりません。');
 	}
 
+	const isChief = user.id === sessionDetails.chief_judge_id;
+
+	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
+	let isMultiJudge = false;
+	if (modeType === 'training') {
+		const { data: trainingSession } = await supabase
+			.from('training_sessions')
+			.select('is_multi_judge')
+			.eq('session_id', sessionId)
+			.maybeSingle();
+		isMultiJudge = trainingSession?.is_multi_judge || false;
+	} else if (modeType === 'tournament') {
+		// 大会モードは常に複数検定員モードON
+		isMultiJudge = true;
+	}
+
+	// 複数検定員モードONの場合、主任検定員のみアクセス可能
+	if (isMultiJudge && !isChief) {
+		throw redirect(303, `/session/${sessionId}`);
+	}
+
 	// モードに応じて種目情報を取得
 	let eventInfo: any = null;
 	let isTrainingMode = false;
@@ -71,11 +92,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			.maybeSingle();
 		trainingSession = data;
 	}
-
-	const isChief = user.id === sessionDetails.chief_judge_id;
-	const isMultiJudge = isTrainingMode
-		? (trainingSession?.is_multi_judge || false)
-		: (sessionDetails.is_multi_judge || false);
 
 	return {
 		sessionDetails,
@@ -145,31 +161,62 @@ export const actions: Actions = {
 			participantId = newParticipant.id;
 		}
 
-		// 大会モードで採点指示を作成（研修モードでは不要）
-		if (modeType === 'tournament') {
-			const { data: customEvent } = await supabase
-				.from('custom_events')
-				.select('*')
-				.eq('id', eventId)
-				.single();
+		// 大会モードまたは研修モードで採点指示を作成
+		if (modeType === 'tournament' || modeType === 'training') {
+			let discipline = '';
+			let level = '';
+			let event_name = '';
 
-			if (customEvent) {
+			if (modeType === 'tournament') {
+				const { data: customEvent } = await supabase
+					.from('custom_events')
+					.select('*')
+					.eq('id', eventId)
+					.single();
+
+				if (customEvent) {
+					discipline = customEvent.discipline || '';
+					level = customEvent.level || '';
+					event_name = customEvent.event_name;
+				}
+			} else if (modeType === 'training') {
+				const { data: trainingEvent } = await supabase
+					.from('training_events')
+					.select('*')
+					.eq('id', eventId)
+					.single();
+
+				if (trainingEvent) {
+					discipline = '';
+					level = '';
+					event_name = trainingEvent.name;
+				}
+			}
+
+			if (event_name) {
+				// scoring_prompts に採点指示を作成
+				// event_id と mode を保存するために、discipline または level カラムを活用
+				// discipline に mode (tournament/training) を、level に eventId を文字列として保存
 				const { data: prompt, error: promptError } = await supabase
 					.from('scoring_prompts')
 					.insert({
 						session_id: sessionId,
-						discipline: customEvent.discipline,
-						level: customEvent.level,
-						event_name: customEvent.event_name,
+						discipline: modeType, // 'tournament' または 'training'
+						level: eventId.toString(), // event_id を文字列として保存
+						event_name: event_name,
 						bib_number: bibNumber
 					})
 					.select()
 					.single();
 
 				if (!promptError && prompt) {
+					// セッションをアクティブにし、active_prompt_idを設定
 					await supabase
 						.from('sessions')
-						.update({ active_prompt_id: prompt.id })
+						.update({
+							active_prompt_id: prompt.id,
+							is_active: true  // セッションを再度アクティブにする
+						})
 						.eq('id', sessionId);
 				}
 			}

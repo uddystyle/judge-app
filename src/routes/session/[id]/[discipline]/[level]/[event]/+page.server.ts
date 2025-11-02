@@ -16,7 +16,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	// セッション情報を取得して、主任検定員かどうかを確認
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('chief_judge_id, is_tournament_mode')
+		.select('chief_judge_id, is_tournament_mode, is_multi_judge')
 		.eq('id', sessionId)
 		.single();
 
@@ -30,13 +30,18 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		return { isTournamentMode: sessionDetails.is_tournament_mode };
 	}
 
-	// 一般検定員の場合、セッション詳細ページ（待機画面）にリダイレクト
+	// 一般検定員の場合、複数検定員モードONならセッション詳細ページ（待機画面）にリダイレクト
+	// 複数検定員モードOFFの場合は、一般検定員もアクセス可能
 	const isChief = user.id === sessionDetails.chief_judge_id;
-	if (!isChief) {
+	if (!isChief && sessionDetails.is_multi_judge) {
 		throw redirect(303, `/session/${sessionId}`);
 	}
 
-	return { isTournamentMode: sessionDetails.is_tournament_mode };
+	return {
+		isTournamentMode: sessionDetails.is_tournament_mode,
+		isMultiJudge: sessionDetails.is_multi_judge,
+		isChief
+	};
 };
 
 export const actions: Actions = {

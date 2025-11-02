@@ -20,7 +20,7 @@
 	$: bibNumber = data.bibNumber;
 	$: participantId = data.participantId;
 	$: minScore = data.eventInfo.min_score || 0;
-	$: maxScore = data.eventInfo.max_score || 10;
+	$: maxScore = data.eventInfo.max_score || 100;
 	$: precision = data.eventInfo.score_precision || 1;
 
 	let currentScore = '';
@@ -37,21 +37,9 @@
 	// キーパッドから数字が入力されたときの処理
 	function handleInput(event: CustomEvent<string>) {
 		const num = event.detail;
-		// 小数点の処理
-		if (precision < 1) {
-			// 小数点を含む入力を許可
-			if (num === '.' && !currentScore.includes('.')) {
-				currentScore = currentScore || '0' + '.';
-			} else if (num !== '.' && currentScore.length < 4) {
-				currentScore = currentScore === '0' && num !== '0' && !currentScore.includes('.')
-					? num
-					: currentScore + num;
-			}
-		} else {
-			// 整数のみ
-			if (currentScore.length < 2) {
-				currentScore = currentScore === '0' && num !== '0' ? num : currentScore + num;
-			}
+		// 整数のみ（最大3桁: 0-100）
+		if (currentScore.length < 3) {
+			currentScore = currentScore === '0' && num !== '0' ? num : currentScore + num;
 		}
 	}
 
@@ -67,22 +55,10 @@
 			return;
 		}
 
-		// 精度チェック
-		if (precision === 1) {
-			if (!Number.isInteger(score)) {
-				alert('得点は整数で入力してください');
-				return;
-			}
-		} else if (precision === 0.5) {
-			if (score % 0.5 !== 0) {
-				alert('得点は0.5点刻みで入力してください');
-				return;
-			}
-		} else if (precision === 0.1) {
-			if (Math.round(score * 10) / 10 !== score) {
-				alert('得点は0.1点刻みで入力してください');
-				return;
-			}
+		// 整数チェック
+		if (!Number.isInteger(score)) {
+			alert('得点は整数で入力してください');
+			return;
 		}
 
 		loading = true;
@@ -95,7 +71,12 @@
 
 	// フォーム送信後の処理
 	$: if (form?.success && form?.score !== undefined && form?.bibNumber) {
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}`);
+		// 複数検定員モードがONの場合はstatus画面へ、OFFの場合はcomplete画面へ
+		if (data.isMultiJudge) {
+			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}`);
+		} else {
+			goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}`);
+		}
 	}
 
 	// ゼッケン入力に戻る処理
@@ -128,11 +109,13 @@
 		<input type="hidden" name="bibNumber" value={bibNumber} />
 	</form>
 
-	<div class="nav-buttons">
-		<NavButton on:click={handleBackToBib}>
-			ゼッケン番号入力に戻る
-		</NavButton>
-	</div>
+	{#if !data.isMultiJudge || data.isChief}
+		<div class="nav-buttons">
+			<NavButton on:click={handleBackToBib}>
+				ゼッケン番号入力に戻る
+			</NavButton>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -152,19 +135,18 @@
 	}
 
 	.numeric-display {
-		font-size: 72px;
+		font-size: 64px;
 		font-weight: 700;
-		min-height: 120px;
+		color: var(--primary-orange);
+		min-height: 100px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		margin-bottom: 28px;
-		color: var(--primary-orange);
-		background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
-		border: 3px solid var(--primary-orange);
+		background: var(--bg-white);
 		border-radius: 16px;
-		padding: 20px;
-		box-shadow: 0 4px 12px rgba(255, 152, 0, 0.15);
+		border: 3px solid var(--border-light);
+		margin-bottom: 24px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 	}
 
 	.nav-buttons {
@@ -172,6 +154,24 @@
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 800px;
+			margin: 0 auto;
+		}
+		.numeric-display {
+			font-size: 96px;
+			min-height: 140px;
+			border-radius: 20px;
+			margin-bottom: 32px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
 	}
 </style>
 

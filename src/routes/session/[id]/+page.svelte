@@ -38,11 +38,24 @@
 		currentEvent.set(null);
 		currentBib.set(null);
 
-		// URLパラメータで終了フラグをチェック（リアルタイムで終了した場合のみ）
+		// セッションの実際の状態を確認
+		const isActuallyActive = data.sessionDetails?.is_active;
+
+		// URLパラメータで終了フラグをチェック
 		const urlParams = new URLSearchParams(window.location.search);
-		if (urlParams.get('ended') === 'true') {
+		const hasEndedParam = urlParams.get('ended') === 'true';
+
+		// セッションが実際にアクティブな場合は、終了画面を表示しない
+		if (isActuallyActive && hasEndedParam) {
+			console.log('[DEBUG] セッションはアクティブなので、URLパラメータを削除して準備画面を表示');
+			// URLからended=trueを削除
+			window.history.replaceState({}, '', `/session/${data.sessionDetails.id}`);
+			isSessionEnded = false;
+		} else if (hasEndedParam) {
 			console.log('[DEBUG] URLパラメータで終了フラグを検知（リアルタイム終了）');
 			isSessionEnded = true;
+		} else {
+			isSessionEnded = false;
 		}
 		// 注: セッションが終了していても（is_active: false）、ダッシュボードから
 		// 再度アクセスした場合は準備画面を表示する。終了画面は「ended=true」パラメータがある場合か、
@@ -205,16 +218,41 @@
 							if (promptData) {
 								// ストアにゼッケン番号を保存
 								currentBib.set(promptData.bib_number);
-								console.log('[一般検定員] 採点画面に遷移します:', {
-									sessionId,
-									discipline: promptData.discipline,
-									level: promptData.level,
-									event: promptData.event_name
-								});
-								// 採点画面へ移動（大会モード・検定モード共通）
-								goto(
-									`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
-								);
+
+								// discipline カラムの値でモードを判定
+								const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
+
+								if (mode === 'tournament' || mode === 'training') {
+									// 大会・研修モード: participantId を取得
+									const { data: participant } = await supabase
+										.from('participants')
+										.select('id')
+										.eq('session_id', sessionId)
+										.eq('bib_number', promptData.bib_number)
+										.maybeSingle();
+
+									if (participant) {
+										const eventId = promptData.level; // level カラムに eventId を保存している
+										if (mode === 'tournament') {
+											console.log('[一般検定員/大会] 採点画面に遷移:', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+										} else {
+											console.log('[一般検定員/研修] 採点画面に遷移:', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+										}
+									}
+								} else {
+									// 検定モード: /session/[id]/[discipline]/[level]/[event]/score
+									console.log('[一般検定員/検定] 採点画面に遷移:', {
+										sessionId,
+										discipline: promptData.discipline,
+										level: promptData.level,
+										event: promptData.event_name
+									});
+									goto(
+										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+									);
+								}
 							}
 						}
 					}
@@ -283,9 +321,35 @@
 							if (!error && promptData) {
 								console.log('[一般検定員] 採点指示データ取得成功。採点画面に遷移します:', promptData);
 								currentBib.set(promptData.bib_number);
-								goto(
-									`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
-								);
+
+								// discipline カラムの値でモードを判定
+								const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
+
+								if (mode === 'tournament' || mode === 'training') {
+									// 大会・研修モード: participantId を取得
+									const { data: participant } = await supabase
+										.from('participants')
+										.select('id')
+										.eq('session_id', sessionId)
+										.eq('bib_number', promptData.bib_number)
+										.maybeSingle();
+
+									if (participant) {
+										const eventId = promptData.level; // level カラムに eventId を保存している
+										if (mode === 'tournament') {
+											console.log('[一般検定員/大会] 採点画面に遷移(既存):', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+										} else {
+											console.log('[一般検定員/研修] 採点画面に遷移(既存):', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+										}
+									}
+								} else {
+									// 検定モード
+									goto(
+										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+									);
+								}
 							}
 						}
 					} else if (status === 'CHANNEL_ERROR') {
@@ -421,7 +485,7 @@
 	{:else}
 		<!-- 一般検定員の準備画面 -->
 		{#if data.isTrainingMode && !data.trainingSession?.is_multi_judge}
-			<!-- 自由採点モード: 準備中表示は不要 -->
+			<!-- 研修モードで複数検定員OFF: 自由採点モード -->
 			<div class="instruction">自由採点モード</div>
 			<div class="wait-message">
 				<p>種目選択画面から採点を開始できます。</p>
@@ -431,8 +495,8 @@
 					</NavButton>
 				</div>
 			</div>
-		{:else if !data.isTrainingMode && !data.sessionDetails.is_multi_judge}
-			<!-- 大会モードで複数検定員OFF: 準備中表示は不要 -->
+		{:else if data.isTournamentMode && !data.sessionDetails.is_multi_judge}
+			<!-- 大会モードで複数検定員OFF: 自由採点モード -->
 			<div class="instruction">自由採点モード</div>
 			<div class="wait-message">
 				<p>種目選択画面から採点を開始できます。</p>
@@ -441,6 +505,16 @@
 						種目選択へ進む
 					</NavButton>
 				</div>
+			</div>
+		{:else if !data.isTrainingMode && !data.isTournamentMode && !data.sessionDetails.is_multi_judge && data.disciplines}
+			<!-- 検定モードで複数検定員OFF: 自由採点モード（種別選択） -->
+			<div class="instruction">種別を選択してください</div>
+			<div class="list-keypad">
+				{#each data.disciplines as discipline}
+					<NavButton on:click={() => selectDiscipline(discipline)}>
+						{discipline}
+					</NavButton>
+				{/each}
 			</div>
 		{:else}
 			<!-- 複数検定員モード: 準備中表示 -->

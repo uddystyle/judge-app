@@ -68,13 +68,33 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		.eq('id', participantId)
 		.single();
 
+	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
+	let isMultiJudge = false;
+	if (isTrainingMode) {
+		const { data: trainingSession } = await supabase
+			.from('training_sessions')
+			.select('is_multi_judge')
+			.eq('session_id', sessionId)
+			.maybeSingle();
+		isMultiJudge = trainingSession?.is_multi_judge || false;
+	} else if (modeType === 'tournament') {
+		// 大会モードは常に複数検定員モードON
+		isMultiJudge = true;
+	} else {
+		isMultiJudge = sessionDetails.is_multi_judge || false;
+	}
+
+	const isChief = user.id === sessionDetails.chief_judge_id;
+
 	return {
 		sessionDetails,
 		eventInfo,
 		participant,
 		bibNumber: parseInt(bibNumber),
 		participantId,
-		isTrainingMode
+		isTrainingMode,
+		isMultiJudge,
+		isChief
 	};
 };
 

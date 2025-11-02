@@ -123,7 +123,7 @@
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextSkier}>次の滑走者</NavButton>
 		{#if data.isChief}
-			<NavButton on:click={handleEndSession}>検定を終了</NavButton>
+			<NavButton on:click={handleEndSession}>セッションを終了する</NavButton>
 		{/if}
 	</div>
 
