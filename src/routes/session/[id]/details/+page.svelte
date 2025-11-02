@@ -22,6 +22,28 @@
 
 	let exportLoading = false;
 
+	// 種目管理用の変数
+	let eventName = '';
+	let editingEventId: number | null = null;
+	let editEventName = '';
+
+	function startEditEvent(event: any) {
+		editingEventId = event.id;
+		editEventName = data.isTrainingMode ? event.name : event.event_name;
+	}
+
+	function cancelEditEvent() {
+		editingEventId = null;
+		editEventName = '';
+	}
+
+	function clearEventForm() {
+		eventName = '';
+	}
+
+	// 研修モード設定
+	let isMultiJudgeTraining = data.trainingSession?.is_multi_judge || false;
+
 	async function handleExport() {
 		exportLoading = true;
 		try {
@@ -65,28 +87,40 @@
 <div class="container">
 	<div class="instruction">{data.sessionDetails.name} の詳細</div>
 
-	<form
-		method="POST"
-		action="?/updateName"
-		use:enhance={() => {
-			return async ({ update }) => {
-				await update({ reset: false });
-			};
-		}}
-	>
-		<div class="form-container">
-			<label for="session-name" class="form-label">検定名</label>
-			<input type="text" id="session-name" name="sessionName" bind:value={sessionName} />
+	<div class="settings-section">
+		<h3 class="settings-title">
+			{data.isTrainingMode ? '研修名' : data.isTournamentMode ? '大会名' : '検定名'}
+		</h3>
 
-			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">名前を更新</NavButton>
-			</div>
+		{#if data.currentUserId === data.sessionDetails.chief_judge_id}
+			<!-- 主任検定員のみ編集可能 -->
+			<form
+				method="POST"
+				action="?/updateName"
+				use:enhance={() => {
+					return async ({ update }) => {
+						await update({ reset: false });
+					};
+				}}
+			>
+				<div class="form-container">
+					<input type="text" id="session-name" name="sessionName" bind:value={sessionName} class="name-input" />
 
-			{#if form?.message}
-				<p class="message" class:success={form?.success}>{form.message}</p>
-			{/if}
-		</div>
-	</form>
+					<div class="nav-buttons">
+						<NavButton variant="primary" type="submit">名前を更新</NavButton>
+					</div>
+
+					{#if form?.message}
+						<p class="message" class:success={form?.success}>{form.message}</p>
+					{/if}
+				</div>
+			</form>
+		{:else}
+			<!-- 一般検定員: 表示のみ -->
+			<div class="readonly-value session-name-readonly">{sessionName}</div>
+			<p class="readonly-notice">※ 名前の変更は主任検定員のみ可能です</p>
+		{/if}
+	</div>
 	<hr class="divider" />
 
 	<div class="settings-section">
@@ -128,6 +162,120 @@
 
 	<hr class="divider" />
 
+	<!-- 種目管理セクション（大会・研修モードのみ） -->
+	{#if data.isTournamentMode || data.isTrainingMode}
+		<div class="settings-section">
+			<h3 class="settings-title">種目管理</h3>
+
+			{#if form?.eventSuccess}
+				<div class="success-message">{form.eventSuccess}</div>
+			{/if}
+
+			{#if form?.eventError}
+				<div class="error-message">{form.eventError}</div>
+			{/if}
+
+			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
+				<!-- 主任検定員のみ編集可能 -->
+				<!-- 登録済み種目一覧 -->
+				{#if data.events && data.events.length > 0}
+					<div class="events-list">
+						{#each data.events as event, index}
+							<div class="event-item">
+								{#if editingEventId === event.id}
+									<!-- 編集モード -->
+									<form method="POST" action="?/updateEvent" use:enhance class="edit-form">
+										<input type="hidden" name="eventId" value={event.id} />
+										<input type="hidden" name="isTraining" value={data.isTrainingMode} />
+										<input
+											type="text"
+											name="eventName"
+											bind:value={editEventName}
+											placeholder="種目名"
+											class="edit-input"
+											required
+										/>
+										<div class="edit-actions">
+											<button type="submit" class="save-btn-small">保存</button>
+											<button type="button" class="cancel-btn-small" on:click={cancelEditEvent}>
+												キャンセル
+											</button>
+										</div>
+									</form>
+								{:else}
+									<!-- 表示モード -->
+									<div class="event-info">
+										<span class="event-number">{index + 1}.</span>
+										<span class="event-text">
+											{data.isTrainingMode ? event.name : event.event_name}
+										</span>
+									</div>
+									<div class="event-actions">
+										<button class="edit-btn-small" on:click={() => startEditEvent(event)}>
+											編集
+										</button>
+										<form method="POST" action="?/deleteEvent" use:enhance style="display: inline;">
+											<input type="hidden" name="eventId" value={event.id} />
+											<input type="hidden" name="isTraining" value={data.isTrainingMode} />
+											<button
+												type="submit"
+												class="delete-btn-small"
+												on:click={(e) => {
+													if (!confirm('この種目を削除しますか？')) {
+														e.preventDefault();
+													}
+												}}
+											>
+												削除
+											</button>
+										</form>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="empty-message">種目が登録されていません</p>
+				{/if}
+
+				<!-- 新しい種目を追加 -->
+				<form method="POST" action="?/addEvent" use:enhance on:submit={clearEventForm}>
+					<div class="add-event-form">
+						<input
+							type="text"
+							name="eventName"
+							bind:value={eventName}
+							placeholder="種目名を入力"
+							required
+						/>
+						<button type="submit" class="add-event-btn">追加</button>
+					</div>
+				</form>
+			{:else}
+				<!-- 一般検定員: 表示のみ -->
+				{#if data.events && data.events.length > 0}
+					<div class="events-list readonly">
+						{#each data.events as event, index}
+							<div class="event-item readonly">
+								<div class="event-info">
+									<span class="event-number">{index + 1}.</span>
+									<span class="event-text">
+										{data.isTrainingMode ? event.name : event.event_name}
+									</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="empty-message">種目が登録されていません</p>
+				{/if}
+				<p class="readonly-notice">※ 種目の追加・編集・削除は主任検定員のみ可能です</p>
+			{/if}
+		</div>
+
+		<hr class="divider" />
+	{/if}
+
 	{#if data.sessionDetails.is_tournament_mode}
 		<!-- 大会モード: 採点方法設定 -->
 		<div class="settings-section">
@@ -141,80 +289,182 @@
 				<div class="error-message">{form.tournamentSettingsError}</div>
 			{/if}
 
-			<form
-				method="POST"
-				action="?/updateTournamentSettings"
-				use:enhance={() => {
-					return async ({ update }) => {
-						await update({ reset: false });
-					};
-				}}
-			>
-				<div class="scoring-options">
-					<!-- 3審3採 -->
-					<label class="scoring-option" class:selected={selectedMethod === '3judges'}>
-						<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} />
-						<div class="option-content">
-							<div class="option-header">
-								<span class="option-title">3審3採</span>
+			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
+				<!-- 主任検定員のみ編集可能 -->
+				<form
+					method="POST"
+					action="?/updateTournamentSettings"
+					use:enhance={() => {
+						return async ({ update }) => {
+							await update({ reset: false });
+						};
+					}}
+				>
+					<div class="scoring-options">
+						<!-- 3審3採 -->
+						<label class="scoring-option" class:selected={selectedMethod === '3judges'}>
+							<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} />
+							<div class="option-content">
+								<div class="option-header">
+									<span class="option-title">3審3採</span>
+								</div>
+								<div class="option-description">3人の検定員の点数の合計</div>
+								<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
 							</div>
-							<div class="option-description">3人の検定員の点数の合計</div>
-							<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
-						</div>
-					</label>
+						</label>
 
-					<!-- 5審3採 -->
-					<label class="scoring-option" class:selected={selectedMethod === '5judges'}>
-						<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} />
-						<div class="option-content">
-							<div class="option-header">
-								<span class="option-title">5審3採</span>
+						<!-- 5審3採 -->
+						<label class="scoring-option" class:selected={selectedMethod === '5judges'}>
+							<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} />
+							<div class="option-content">
+								<div class="option-header">
+									<span class="option-title">5審3採</span>
+								</div>
+								<div class="option-description">
+									5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
+								</div>
+								<div class="option-example">
+									例: 8.5 + 8.0 + <span class="excluded">9.0</span> + 8.5 +
+									<span class="excluded">7.5</span> = 25.0点
+								</div>
 							</div>
-							<div class="option-description">
+						</label>
+					</div>
+
+					<div class="form-actions">
+						<button type="submit" class="save-btn">採点方法を保存</button>
+					</div>
+				</form>
+			{:else}
+				<!-- 一般検定員: 表示のみ -->
+				<div class="readonly-scoring-method">
+					<div class="method-display">
+						<div class="method-title">
+							{selectedMethod === '5judges' ? '5審3採' : '3審3採'}
+						</div>
+						<div class="method-description">
+							{#if selectedMethod === '5judges'}
 								5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
-							</div>
-							<div class="option-example">
-								例: 8.5 + 8.0 + <span class="excluded">9.0</span> + 8.5 +
-								<span class="excluded">7.5</span> = 25.0点
-							</div>
+							{:else}
+								3人の検定員の点数の合計
+							{/if}
 						</div>
-					</label>
+					</div>
+				</div>
+				<p class="readonly-notice">※ 採点方法の変更は主任検定員のみ可能です</p>
+			{/if}
+		</div>
+		<hr class="divider" />
+	{:else if data.isTrainingMode}
+		<!-- 研修モード: 複数検定員モード設定 -->
+		<div class="settings-section">
+			<h3 class="settings-title">研修モード設定</h3>
+
+			{#if form?.trainingSettingsSuccess}
+				<div class="success-message">{form.trainingSettingsSuccess}</div>
+			{/if}
+
+			{#if form?.trainingSettingsError}
+				<div class="error-message">{form.trainingSettingsError}</div>
+			{/if}
+
+			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
+				<!-- 主任検定員のみ編集可能 -->
+				<form
+					method="POST"
+					action="?/updateTrainingSettings"
+					use:enhance={() => {
+						return async ({ update }) => {
+							await update({ reset: false });
+						};
+					}}
+				>
+					<div class="setting-item">
+						<label for="multi-judge-toggle-training" class="form-label">複数検定員モード</label>
+						<div class="toggle-switch">
+							<input
+								type="checkbox"
+								id="multi-judge-toggle-training"
+								name="isMultiJudge"
+								bind:checked={isMultiJudgeTraining}
+								value={isMultiJudgeTraining}
+							/>
+							<label for="multi-judge-toggle-training"></label>
+						</div>
+					</div>
+
+					<div class="info-box">
+						{#if isMultiJudgeTraining}
+							<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+						{:else}
+							<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+						{/if}
+					</div>
+
+					<div class="form-actions">
+						<button type="submit" class="save-btn">設定を保存</button>
+					</div>
+				</form>
+			{:else}
+				<!-- 一般検定員: 表示のみ -->
+				<div class="setting-item">
+					<label class="form-label">複数検定員モード</label>
+					<div class="readonly-value">
+						{isMultiJudgeTraining ? 'ON' : 'OFF'}
+					</div>
 				</div>
 
-				<div class="form-actions">
-					<button type="submit" class="save-btn">採点方法を保存</button>
+				<div class="info-box">
+					{#if isMultiJudgeTraining}
+						<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+					{:else}
+						<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+					{/if}
 				</div>
-			</form>
+
+				<p class="readonly-notice">※ 設定の変更は主任検定員のみ可能です</p>
+			{/if}
 		</div>
 		<hr class="divider" />
 	{:else}
 		<!-- 検定モード: 従来の採点ルール設定 -->
-		<form
-			method="POST"
-			action="?/updateSettings"
-			use:enhance={() => {
-				return async ({ update }) => {
-					await update({ reset: false });
-				};
-			}}
-		>
-			<div class="settings-section">
-				<h3 class="settings-title">採点ルール設定</h3>
-				<div class="setting-item">
-					<label for="multi-judge-toggle" class="form-label">複数審判モード</label>
-					<div class="toggle-switch">
-						<input
-							type="checkbox"
-							id="multi-judge-toggle"
-							name="isMultiJudge"
-							bind:checked={isMultiJudge}
-							value={isMultiJudge}
-						/>
-						<label for="multi-judge-toggle"></label>
-					</div>
-				</div>
+		<div class="settings-section">
+			<h3 class="settings-title">採点ルール設定</h3>
 
-				{#if isMultiJudge}
+			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
+				<!-- 主任検定員のみ編集可能 -->
+				<form
+					method="POST"
+					action="?/updateSettings"
+					use:enhance={() => {
+						return async ({ update }) => {
+							await update({ reset: false });
+						};
+					}}
+				>
+					<div class="setting-item">
+						<label for="multi-judge-toggle" class="form-label">複数審判モード</label>
+						<div class="toggle-switch">
+							<input
+								type="checkbox"
+								id="multi-judge-toggle"
+								name="isMultiJudge"
+								bind:checked={isMultiJudge}
+								value={isMultiJudge}
+							/>
+							<label for="multi-judge-toggle"></label>
+						</div>
+					</div>
+
+					<div class="info-box">
+						{#if isMultiJudge}
+							<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+						{:else}
+							<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+						{/if}
+					</div>
+
+					{#if isMultiJudge}
 					<div class="setting-item">
 						<label for="required-judges-input" class="form-label">
 							必須審判員数
@@ -232,18 +482,75 @@
 					</div>
 				{/if}
 
-				{#if form?.settingsError}
-					<p class="message">{form.settingsError}</p>
-				{/if}
-				{#if form?.settingsSuccess}
-					<p class="message success">{form.settingsSuccess}</p>
+					{#if form?.settingsError}
+						<p class="message">{form.settingsError}</p>
+					{/if}
+					{#if form?.settingsSuccess}
+						<p class="message success">{form.settingsSuccess}</p>
+					{/if}
+
+					<div class="nav-buttons">
+						<NavButton variant="primary" type="submit">ルールを保存</NavButton>
+					</div>
+				</form>
+			{:else}
+				<!-- 一般検定員: 表示のみ -->
+				<div class="setting-item">
+					<label class="form-label">複数審判モード</label>
+					<div class="readonly-value">
+						{isMultiJudge ? 'ON' : 'OFF'}
+					</div>
+				</div>
+
+				<div class="info-box">
+					{#if isMultiJudge}
+						<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+					{:else}
+						<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+					{/if}
+				</div>
+
+				{#if isMultiJudge}
+					<div class="setting-item">
+						<label class="form-label">必須審判員数</label>
+						<div class="readonly-value">{requiredJudges}人</div>
+					</div>
 				{/if}
 
-				<div class="nav-buttons">
-					<NavButton variant="primary" type="submit">ルールを保存</NavButton>
+				<p class="readonly-notice">※ 設定の変更は主任検定員のみ可能です</p>
+			{/if}
+		</div>
+		<hr class="divider" />
+	{/if}
+
+	<!-- 研修モード: スコアボード表示 -->
+	{#if data.isTrainingMode && data.trainingScores && data.trainingScores.length > 0}
+		<div class="settings-section">
+			<h3 class="settings-title">採点結果</h3>
+			<div class="scoreboard">
+				<div class="scoreboard-header">
+					<div class="col-event">種目</div>
+					<div class="col-athlete">選手</div>
+					<div class="col-judge">検定員</div>
+					<div class="col-score">得点</div>
 				</div>
+				{#each data.trainingScores as score}
+					<div class="scoreboard-row">
+						<div class="col-event">{score.training_events?.name || '-'}</div>
+						<div class="col-athlete">
+							#{score.athlete?.bib_number || '-'}
+							{#if score.athlete?.profiles?.full_name}
+								<span class="athlete-name">{score.athlete.profiles.full_name}</span>
+							{/if}
+						</div>
+						<div class="col-judge">
+							{score.judge?.full_name || '-'}
+						</div>
+						<div class="col-score">{score.score}点</div>
+					</div>
+				{/each}
 			</div>
-		</form>
+		</div>
 		<hr class="divider" />
 	{/if}
 
@@ -551,6 +858,151 @@
 		opacity: 0.7;
 	}
 
+	/* 種目管理のスタイル */
+	.events-list {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin-bottom: 16px;
+	}
+	.events-list.readonly {
+		gap: 8px;
+	}
+	.event-item {
+		background: white;
+		border: 1px solid var(--separator-gray);
+		border-radius: 8px;
+		padding: 12px;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+	.event-item.readonly {
+		border: 2px solid var(--separator-gray);
+		background: var(--bg-white);
+	}
+	.event-info {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: 1;
+	}
+	.event-number {
+		font-weight: 600;
+		color: var(--secondary-text);
+		min-width: 24px;
+	}
+	.event-text {
+		color: var(--primary-text);
+		font-size: 16px;
+	}
+	.event-actions {
+		display: flex;
+		gap: 8px;
+	}
+	.edit-btn-small,
+	.delete-btn-small,
+	.save-btn-small,
+	.cancel-btn-small {
+		padding: 6px 12px;
+		border-radius: 6px;
+		border: none;
+		font-size: 14px;
+		cursor: pointer;
+		transition: opacity 0.2s;
+		font-weight: 500;
+	}
+	.edit-btn-small {
+		background: var(--ios-blue);
+		color: white;
+	}
+	.delete-btn-small {
+		background: var(--ios-red);
+		color: white;
+	}
+	.save-btn-small {
+		background: var(--ios-green);
+		color: white;
+	}
+	.cancel-btn-small {
+		background: var(--light-gray);
+		color: var(--primary-text);
+	}
+	.edit-btn-small:active,
+	.delete-btn-small:active,
+	.save-btn-small:active,
+	.cancel-btn-small:active {
+		opacity: 0.7;
+	}
+	.edit-form {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.edit-input {
+		padding: 8px !important;
+		font-size: 14px !important;
+		border-radius: 6px !important;
+	}
+	.edit-actions {
+		display: flex;
+		gap: 8px;
+	}
+	.add-event-form {
+		display: flex;
+		gap: 8px;
+		margin-top: 16px;
+	}
+	.add-event-form input {
+		flex: 1;
+		padding: 10px;
+		border: 1px solid var(--separator-gray);
+		border-radius: 8px;
+		font-size: 14px;
+	}
+	.add-event-btn {
+		background: var(--ios-blue);
+		color: white;
+		padding: 10px 20px;
+		border: none;
+		border-radius: 8px;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.2s;
+		white-space: nowrap;
+	}
+	.add-event-btn:active {
+		opacity: 0.7;
+	}
+	.empty-message {
+		text-align: center;
+		color: var(--secondary-text);
+		padding: 20px;
+		font-size: 14px;
+		background: #f8f9fa;
+		border-radius: 8px;
+		margin-bottom: 16px;
+	}
+	.info-box {
+		background: #f0f8ff;
+		border: 1px solid var(--ios-blue);
+		border-radius: 8px;
+		padding: 12px 16px;
+		margin: 16px 0;
+		text-align: left;
+	}
+	.info-box p {
+		margin: 0;
+		font-size: 14px;
+		line-height: 1.5;
+		color: var(--primary-text);
+	}
+	.info-box strong {
+		color: var(--ios-blue);
+	}
+
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
 		.container {
@@ -602,6 +1054,137 @@
 	@media (min-width: 1024px) {
 		.container {
 			max-width: 1000px;
+		}
+	}
+
+	/* 研修モード スコアボード */
+	.scoreboard {
+		background: white;
+		border-radius: 12px;
+		overflow: hidden;
+		border: 1px solid var(--separator-gray);
+	}
+
+	.scoreboard-header,
+	.scoreboard-row {
+		display: grid;
+		grid-template-columns: 2fr 2fr 2fr 1fr;
+		gap: 8px;
+		padding: 12px;
+		font-size: 14px;
+	}
+
+	.scoreboard-header {
+		background: #f5f5f5;
+		font-weight: 600;
+		border-bottom: 2px solid var(--separator-gray);
+	}
+
+	.scoreboard-row {
+		border-bottom: 1px solid #f0f0f0;
+	}
+
+	.scoreboard-row:last-child {
+		border-bottom: none;
+	}
+
+	.col-event,
+	.col-athlete,
+	.col-judge,
+	.col-score {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.col-score {
+		text-align: right;
+		font-weight: 600;
+		color: #ff9800;
+	}
+
+	.athlete-name {
+		display: block;
+		font-size: 12px;
+		color: #666;
+		margin-top: 2px;
+	}
+
+	/* 一般検定員向けの表示のみスタイル */
+	.readonly-value {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--primary-text);
+		padding: 8px 0;
+	}
+
+	.session-name-readonly {
+		font-size: 20px;
+		padding: 12px;
+		background: var(--bg-white);
+		border: 2px solid var(--separator-gray);
+		border-radius: 8px;
+		margin-bottom: 8px;
+	}
+
+	.readonly-notice {
+		font-size: 14px;
+		color: #666;
+		font-style: italic;
+		margin-top: 12px;
+		text-align: center;
+	}
+
+	.name-input {
+		width: 100%;
+		padding: 12px;
+		font-size: 16px;
+		border: 2px solid var(--separator-gray);
+		border-radius: 8px;
+		margin-bottom: 12px;
+	}
+
+	.name-input:focus {
+		outline: none;
+		border-color: var(--ios-blue);
+	}
+
+	/* 採点方法の読み取り専用表示 */
+	.readonly-scoring-method {
+		background: var(--bg-white);
+		border: 2px solid var(--separator-gray);
+		border-radius: 12px;
+		padding: 20px;
+		margin-bottom: 12px;
+	}
+
+	.method-display {
+		text-align: center;
+	}
+
+	.method-title {
+		font-size: 24px;
+		font-weight: 600;
+		color: var(--primary-text);
+		margin-bottom: 12px;
+	}
+
+	.method-description {
+		font-size: 15px;
+		color: var(--secondary-text);
+		line-height: 1.5;
+	}
+
+	@media (max-width: 768px) {
+		.scoreboard-header,
+		.scoreboard-row {
+			font-size: 12px;
+			padding: 10px;
+			gap: 6px;
+		}
+
+		.athlete-name {
+			font-size: 11px;
 		}
 	}
 </style>

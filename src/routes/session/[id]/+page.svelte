@@ -1,14 +1,16 @@
 <script lang="ts">
 	import { currentSession, currentBib, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
-	import type { PageData } from './$types';
+	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { supabase } from '$lib/supabaseClient';
+	import { enhance } from '$app/forms';
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
+	export let form: ActionData;
 	let realtimeChannel: any;
 	let notificationChannel: any;
 	let pollingInterval: any;
@@ -17,6 +19,9 @@
 	let lastNotificationId: number | null = null; // 最後に確認した通知ID
 	// URLパラメータで終了フラグをチェック
 	let isSessionEnded = false;
+
+	// 研修モード用の変数
+	let selectedUserId: string = '';
 
 	// デバッグ: isSessionEndedの変更を監視
 	$: {
@@ -342,10 +347,41 @@
 <div class="container">
 	{#if isSessionEnded}
 		<!-- 終了画面（主任・一般共通） -->
-		<div class="instruction">{data.isTournamentMode ? '大会終了' : '検定終了'}</div>
+		<div class="instruction">{data.isTournamentMode ? '大会終了' : data.isTrainingMode ? '研修終了' : '検定終了'}</div>
 		<div class="end-message">
-			<p>この{data.isTournamentMode ? '大会' : '検定'}は終了しました。</p>
+			<p>この{data.isTournamentMode ? '大会' : data.isTrainingMode ? '研修' : '検定'}は終了しました。</p>
 		</div>
+	{:else if data.isChief && data.isTrainingMode}
+		<!-- 研修モード: 主任検定員の画面 -->
+		{#if data.hasEvents}
+			<div class="instruction">研修モード</div>
+			<div class="tournament-info">
+				{#if data.trainingSession?.is_multi_judge}
+					<p>種目選択画面に進んでください</p>
+					<p class="info-text">主任検定員が採点指示を出します</p>
+				{:else}
+					<p>各検定員が自由に採点できます</p>
+					<p class="info-text">種目選択画面から開始してください</p>
+				{/if}
+			</div>
+			<div class="list-keypad">
+				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-events`)}>
+					種目選択へ進む
+				</NavButton>
+				<NavButton on:click={() => goto(`/session/${data.sessionDetails.id}/training-setup`)}>研修設定を変更</NavButton>
+			</div>
+		{:else}
+			<div class="instruction">研修設定が必要です</div>
+			<div class="tournament-info">
+				<p>種目が登録されていません。</p>
+				<p>先に種目を設定してください。</p>
+			</div>
+			<div class="list-keypad">
+				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-setup`)}>
+					研修設定へ進む
+				</NavButton>
+			</div>
+		{/if}
 	{:else if data.isChief}
 		{#if data.isTournamentMode}
 			<!-- 大会モード: 種目選択へ -->
@@ -385,16 +421,41 @@
 		{/if}
 	{:else}
 		<!-- 一般検定員の準備画面 -->
-		<div class="instruction">準備中…</div>
-		<div class="wait-message">
-			<p>主任検定員が採点の準備をしています。</p>
-			<p>しばらくお待ちください。</p>
-		</div>
-		<div class="loading"></div>
+		{#if data.isTrainingMode && !data.trainingSession?.is_multi_judge}
+			<!-- 自由採点モード: 準備中表示は不要 -->
+			<div class="instruction">自由採点モード</div>
+			<div class="wait-message">
+				<p>種目選択画面から採点を開始できます。</p>
+				<div class="nav-buttons">
+					<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-events`)}>
+						種目選択へ進む
+					</NavButton>
+				</div>
+			</div>
+		{:else if !data.isTrainingMode && !data.sessionDetails.is_multi_judge}
+			<!-- 大会モードで複数検定員OFF: 準備中表示は不要 -->
+			<div class="instruction">自由採点モード</div>
+			<div class="wait-message">
+				<p>種目選択画面から採点を開始できます。</p>
+				<div class="nav-buttons">
+					<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/tournament-events`)}>
+						種目選択へ進む
+					</NavButton>
+				</div>
+			</div>
+		{:else}
+			<!-- 複数検定員モード: 準備中表示 -->
+			<div class="instruction">準備中…</div>
+			<div class="wait-message">
+				<p>主任検定員が採点の準備をしています。</p>
+				<p>しばらくお待ちください。</p>
+				<div class="loading"></div>
+			</div>
+		{/if}
 	{/if}
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>
-			{data.isTournamentMode ? '大会選択に戻る' : '検定選択に戻る'}
+			{data.isTournamentMode ? '大会選択に戻る' : data.isTrainingMode ? '研修選択に戻る' : '検定選択に戻る'}
 		</NavButton>
 	</div>
 </div>
@@ -461,6 +522,108 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* 研修モードのスタイル */
+	.training-info {
+		background: var(--bg-white);
+		border: 2px solid var(--border-light);
+		border-radius: 12px;
+		padding: 20px;
+		margin-bottom: 20px;
+		text-align: center;
+	}
+	.training-info h3 {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--text-secondary);
+		margin-bottom: 12px;
+	}
+	.join-code {
+		font-size: 32px;
+		font-weight: 700;
+		color: var(--primary-orange);
+		letter-spacing: 4px;
+		margin: 8px 0;
+		font-family: 'Courier New', monospace;
+	}
+	.info-text {
+		font-size: 14px;
+		color: var(--text-secondary);
+		margin-top: 8px;
+	}
+	.training-section {
+		background: var(--bg-white);
+		border: 1px solid var(--border-light);
+		border-radius: 12px;
+		padding: 20px;
+		margin-bottom: 20px;
+	}
+	.training-section h3 {
+		font-size: 18px;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin-bottom: 16px;
+	}
+	.participants-list {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.participant-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 12px 16px;
+		background: #f8f9fa;
+		border-radius: 8px;
+		border: 1px solid var(--border-light);
+	}
+	.participant-name {
+		font-size: 16px;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+	.badge {
+		padding: 4px 12px;
+		border-radius: 12px;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.chief-badge {
+		background: var(--primary-orange);
+		color: white;
+	}
+	.empty-message {
+		text-align: center;
+		color: var(--text-secondary);
+		padding: 20px;
+		font-size: 14px;
+	}
+	.chief-select {
+		width: 100%;
+		padding: 12px;
+		font-size: 16px;
+		border: 1px solid var(--border-light);
+		border-radius: 8px;
+		margin-bottom: 12px;
+		background: white;
+	}
+	.error-message {
+		color: var(--ios-red);
+		font-size: 14px;
+		margin-bottom: 12px;
+		padding: 8px 12px;
+		background: #fee;
+		border-radius: 6px;
+	}
+	.success-message {
+		color: var(--ios-green);
+		font-size: 14px;
+		margin-bottom: 12px;
+		padding: 8px 12px;
+		background: #efe;
+		border-radius: 6px;
 	}
 
 	/* PC対応: タブレット以上 */

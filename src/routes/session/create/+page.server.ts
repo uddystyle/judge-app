@@ -52,6 +52,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const sessionName = (formData.get('sessionName') as string)?.trim();
 		const mode = formData.get('mode') as string;
+		const maxJudgesStr = formData.get('maxJudges') as string;
 
 		// Basic validation
 		if (!sessionName) {
@@ -62,6 +63,14 @@ export const actions: Actions = {
 			return fail(400, {
 				sessionName,
 				error: 'セッション名は100文字以内にしてください。'
+			});
+		}
+
+		// Validate mode
+		if (mode && !['kentei', 'tournament', 'training'].includes(mode)) {
+			return fail(400, {
+				sessionName,
+				error: '無効なモードが選択されました。'
 			});
 		}
 
@@ -78,6 +87,17 @@ export const actions: Actions = {
 		}
 
 		const isTournamentMode = mode === 'tournament';
+		const isTrainingMode = mode === 'training';
+
+		// Determine session mode for database
+		let sessionMode: 'certification' | 'tournament' | 'training';
+		if (isTrainingMode) {
+			sessionMode = 'training';
+		} else if (isTournamentMode) {
+			sessionMode = 'tournament';
+		} else {
+			sessionMode = 'certification';
+		}
 
 		// Insert the new session into the 'sessions' table
 		const { data: sessionData, error: sessionError } = await supabase
@@ -88,7 +108,8 @@ export const actions: Actions = {
 				chief_judge_id: user.id, // 作成者を主任検定員に設定
 				join_code: joinCode,
 				is_active: true,
-				is_tournament_mode: isTournamentMode,
+				mode: sessionMode,
+				is_tournament_mode: isTournamentMode, // 後方互換性のため保持
 				score_calculation: isTournamentMode ? 'sum' : 'average',
 				exclude_extremes: false
 			})
@@ -119,10 +140,44 @@ export const actions: Actions = {
 			});
 		}
 
-		// 大会モードの場合は設定ページへ、検定モードはダッシュボードへ
-		if (isTournamentMode) {
+		// 研修モードの場合、training_sessions レコードを作成
+		if (isTrainingMode) {
+			const maxJudges = maxJudgesStr ? parseInt(maxJudgesStr, 10) : 100;
+
+			// Validate maxJudges
+			if (isNaN(maxJudges) || maxJudges < 1 || maxJudges > 100) {
+				return fail(400, {
+					sessionName,
+					error: '最大検定員数は1〜100の範囲で指定してください。'
+				});
+			}
+
+			const { error: trainingError } = await supabase.from('training_sessions').insert({
+				session_id: sessionData.id,
+				max_judges: maxJudges,
+				show_individual_scores: true,
+				show_score_comparison: true,
+				show_deviation_analysis: false
+			});
+
+			if (trainingError) {
+				console.error('Failed to create training session:', trainingError);
+				return fail(500, {
+					sessionName,
+					error: 'サーバーエラー: 研修モード設定の作成に失敗しました。'
+				});
+			}
+		}
+
+		// モードに応じてリダイレクト先を決定
+		if (isTrainingMode) {
+			// 研修モードは研修設定ページへ
+			throw redirect(303, `/session/${sessionData.id}/training-setup`);
+		} else if (isTournamentMode) {
+			// 大会モードは大会設定ページへ
 			throw redirect(303, `/session/${sessionData.id}/tournament-setup`);
 		} else {
+			// 検定モードはダッシュボードへ
 			throw redirect(303, '/dashboard');
 		}
 	}

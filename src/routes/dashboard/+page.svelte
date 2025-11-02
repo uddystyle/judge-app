@@ -42,7 +42,7 @@
 
 <div class="container">
 	<div class="header-bar">
-		<div class="instruction">検定・大会を選択</div>
+		<div class="instruction">参加するセッションを選択</div>
 		<button class="account-button" on:click={() => goto('/account')}>
 			{data.profile?.full_name || 'アカウント'}
 		</button>
@@ -60,21 +60,27 @@
 				>
 					<div class="session-name">
 						{session.name}
-						{#if session.is_tournament_mode}
+						{#if session.mode === 'tournament'}
 							<span class="mode-badge tournament">大会</span>
+						{:else if session.mode === 'training'}
+							<span class="mode-badge training">研修</span>
 						{:else}
 							<span class="mode-badge">検定</span>
 						{/if}
 					</div>
 					<div class="join-code-wrapper">
+						<div class="join-code-display">
+							<span class="join-code-label">コード:</span>
+							<span class="join-code-value">{session.join_code}</span>
+						</div>
 						<button
-							class="join-code"
+							class="copy-btn"
 							on:click={(e) => copyJoinCode(e, session.join_code, session.id)}
 						>
 							{#if copiedSessionId === session.id}
-								コピーしました
+								✓ コピー済
 							{:else}
-								コード: {session.join_code}
+								COPY
 							{/if}
 						</button>
 						<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
@@ -84,13 +90,13 @@
 				</div>
 			{/each}
 		{:else}
-			<p style="color: var(--secondary-text);">参加中の検定・大会はありません。</p>
+			<p style="color: var(--secondary-text);">参加中の検定・大会・研修はありません。</p>
 		{/if}
 	</div>
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={() => goto('/session/create')}>
-			新しい検定・大会を作成
+			新しい検定・大会・研修を作成
 		</NavButton>
 		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
 	</div>
@@ -197,6 +203,9 @@
 	.mode-badge.tournament {
 		background: var(--ios-green);
 	}
+	.mode-badge.training {
+		background: var(--primary-orange);
+	}
 	.join-code-wrapper {
 		display: flex;
 		align-items: center;
@@ -204,22 +213,46 @@
 		flex-wrap: wrap;
 		justify-content: center;
 	}
-	.join-code {
-		font-size: 14px;
-		font-weight: 400;
-		color: var(--text-secondary);
+	.join-code-display {
+		display: flex;
+		align-items: center;
+		gap: 4px;
 		background-color: var(--bg-beige);
-		padding: 6px 10px;
+		padding: 6px 12px;
 		border-radius: 8px;
 		border: 1px solid var(--border-light);
+	}
+	.join-code-label {
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--text-secondary);
+	}
+	.join-code-value {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--text-primary);
+		font-family: 'Courier New', monospace;
+		letter-spacing: 1px;
+	}
+	.copy-btn {
+		font-size: 12px;
+		font-weight: 600;
+		color: white;
+		background-color: var(--ios-blue);
+		padding: 6px 12px;
+		border-radius: 8px;
+		border: none;
 		cursor: pointer;
 		transition: all 0.2s;
+		white-space: nowrap;
 	}
-	.join-code:hover {
-		background-color: var(--border-light);
+	.copy-btn:hover {
+		background-color: #0051d5;
+		box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 	}
-	.join-code:active {
-		background-color: #d1d1d6;
+	.copy-btn:active {
+		background-color: #004bb5;
+		transform: scale(0.95);
 	}
 	.nav-buttons {
 		display: flex;

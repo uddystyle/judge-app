@@ -15,7 +15,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	// ログインユーザーが参加しているセッションの情報を取得（終了済みも含む）
 	const { data: sessions, error } = await supabase
 		.from('session_participants')
-		.select('sessions!inner (id, name, session_date, join_code, is_active, is_tournament_mode)')
+		.select('sessions!inner (id, name, session_date, join_code, is_active, is_tournament_mode, mode)')
 		.eq('user_id', user.id);
 
 	if (error) {

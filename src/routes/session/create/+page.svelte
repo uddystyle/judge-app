@@ -8,7 +8,8 @@
 	// This `form` variable will hold the data returned from the server action
 	export let form: ActionData;
 
-	let selectedMode: 'kentei' | 'tournament' = 'kentei';
+	let selectedMode: 'kentei' | 'tournament' | 'training' = 'kentei';
+	let maxJudges = 100; // 研修モードのデフォルト最大検定員数
 </script>
 
 <div class="container">
@@ -52,7 +53,41 @@
 						<div class="mode-description">カスタム種目・採点方式・スコアボード</div>
 					</div>
 				</label>
+
+				<label class="mode-option" class:selected={selectedMode === 'training'}>
+					<input
+						type="radio"
+						name="mode"
+						value="training"
+						bind:group={selectedMode}
+					/>
+					<div class="mode-content">
+						<div class="mode-title">研修モード</div>
+						<div class="mode-description">最大100名の検定員・個別採点表示</div>
+					</div>
+				</label>
 			</div>
+
+			{#if selectedMode === 'training'}
+				<div class="training-settings">
+					<h4>研修モード設定</h4>
+					<div class="setting-item">
+						<label for="max-judges">最大検定員数（1〜100）</label>
+						<input
+							type="number"
+							id="max-judges"
+							name="maxJudges"
+							min="1"
+							max="100"
+							bind:value={maxJudges}
+						/>
+					</div>
+					<p class="info-text">
+						研修モードでは、検定員ごとの採点を個別に表示します。<br />
+						3審3採・5審3採のような集計は行いません。
+					</p>
+				</div>
+			{/if}
 
 			{#if form?.error}
 				<p class="error-message">{form.error}</p>
@@ -153,6 +188,46 @@
 		font-size: 14px;
 		color: var(--secondary-text);
 		line-height: 1.4;
+	}
+	.training-settings {
+		background: #f8f9fa;
+		border: 1px solid var(--separator-gray);
+		border-radius: 12px;
+		padding: 16px;
+		text-align: left;
+		margin-top: 12px;
+	}
+	.training-settings h4 {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--primary-text);
+		margin-bottom: 12px;
+	}
+	.setting-item {
+		margin-bottom: 12px;
+	}
+	.setting-item label {
+		display: block;
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--primary-text);
+		margin-bottom: 6px;
+	}
+	.setting-item input[type="number"] {
+		width: 100%;
+		background: white;
+		border: 1px solid var(--separator-gray);
+		border-radius: 8px;
+		padding: 10px;
+		font-size: 16px;
+	}
+	.info-text {
+		font-size: 13px;
+		color: var(--secondary-text);
+		line-height: 1.5;
+		margin: 0;
+		padding-top: 8px;
+		border-top: 1px solid var(--separator-gray);
 	}
 
 	/* PC対応: タブレット以上 */

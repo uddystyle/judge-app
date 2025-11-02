@@ -22,8 +22,8 @@
 	});
 
 	function selectEvent(event: any) {
-		// 既存の採点フローを使用（discipline='大会', level='共通'）
-		goto(`/session/${sessionId}/${event.discipline}/${event.level}/${event.event_name}`);
+		// 統一された採点画面へ遷移
+		goto(`/session/${sessionId}/score/tournament/${event.id}`);
 	}
 </script>
 

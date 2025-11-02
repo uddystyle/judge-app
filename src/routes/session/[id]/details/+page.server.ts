@@ -55,10 +55,89 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		})
 	);
 
+	// --- モードに応じて種目を取得 ---
+	let events: any[] = [];
+	let trainingSession = null;
+	let trainingScores: any[] = [];
+
+	if (sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament') {
+		// 大会モード: custom_events
+		const { data: customEvents, error: eventsError } = await supabase
+			.from('custom_events')
+			.select('*')
+			.eq('session_id', sessionId)
+			.order('display_order', { ascending: true });
+
+		if (!eventsError) {
+			events = customEvents || [];
+		}
+	} else if (sessionDetails.mode === 'training') {
+		// 研修モード: training_events
+		const { data: trainingEvents, error: eventsError } = await supabase
+			.from('training_events')
+			.select('*')
+			.eq('session_id', sessionId)
+			.order('order_index', { ascending: true });
+
+		if (!eventsError) {
+			events = trainingEvents || [];
+		}
+
+		// 研修セッション情報を取得
+		const { data: trainingSessionData } = await supabase
+			.from('training_sessions')
+			.select('*')
+			.eq('session_id', sessionId)
+			.maybeSingle();
+
+		trainingSession = trainingSessionData;
+
+		// 研修モードの採点結果を取得
+		const { data: scores } = await supabase
+			.from('training_scores')
+			.select(
+				`
+				*,
+				training_events!inner(session_id, name),
+				athlete:athlete_id(bib_number, user_id, profiles:user_id(full_name))
+			`
+			)
+			.eq('training_events.session_id', sessionId)
+			.order('created_at', { ascending: false });
+
+		// 検定員の情報を個別に取得してマージ
+		if (scores && scores.length > 0) {
+			const scoresWithJudges = await Promise.all(
+				scores.map(async (score) => {
+					const { data: judgeProfile } = await supabase
+						.from('profiles')
+						.select('full_name')
+						.eq('id', score.judge_id)
+						.single();
+
+					return {
+						...score,
+						judge: {
+							full_name: judgeProfile?.full_name || '不明'
+						}
+					};
+				})
+			);
+			trainingScores = scoresWithJudges;
+		} else {
+			trainingScores = [];
+		}
+	}
+
 	return {
 		currentUserId: user.id,
 		sessionDetails,
-		participants
+		participants,
+		events,
+		trainingSession,
+		trainingScores,
+		isTournamentMode: sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament',
+		isTrainingMode: sessionDetails.mode === 'training'
 	};
 };
 
@@ -132,6 +211,33 @@ export const actions: Actions = {
 		}
 
 		return { success: true };
+	},
+
+	updateTrainingSettings: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const isMultiJudge = formData.get('isMultiJudge') === 'true';
+
+		const { error: updateError } = await supabase
+			.from('training_sessions')
+			.update({
+				is_multi_judge: isMultiJudge
+			})
+			.eq('session_id', params.id);
+
+		if (updateError) {
+			return fail(500, { trainingSettingsError: '設定の更新に失敗しました。' });
+		}
+
+		return { trainingSettingsSuccess: '研修設定を更新しました。' };
 	},
 
 	updateTournamentSettings: async ({ request, params, locals: { supabase } }) => {
@@ -212,6 +318,184 @@ export const actions: Actions = {
 		}
 
 		return { settingsSuccess: '設定を更新しました。' };
+	},
+
+	// 種目を追加（大会・研修共通）
+	addEvent: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			return fail(401, { eventError: '認証が必要です。' });
+		}
+
+		const formData = await request.formData();
+		const eventName = formData.get('eventName') as string;
+
+		if (!eventName || !eventName.trim()) {
+			return fail(400, { eventError: '種目名を入力してください。' });
+		}
+
+		// セッション情報を取得してモードを確認
+		const { data: session } = await supabase
+			.from('sessions')
+			.select('mode, is_tournament_mode')
+			.eq('id', params.id)
+			.single();
+
+		if (!session) {
+			return fail(404, { eventError: 'セッションが見つかりません。' });
+		}
+
+		const isTournament = session.is_tournament_mode || session.mode === 'tournament';
+		const isTraining = session.mode === 'training';
+
+		if (isTournament) {
+			// 大会モード: custom_events
+			const { data: maxOrderData } = await supabase
+				.from('custom_events')
+				.select('display_order')
+				.eq('session_id', params.id)
+				.order('display_order', { ascending: false })
+				.limit(1)
+				.single();
+
+			const nextOrder = (maxOrderData?.display_order || 0) + 1;
+
+			const { error: insertError } = await supabase.from('custom_events').insert({
+				session_id: params.id,
+				discipline: '大会',
+				level: '共通',
+				event_name: eventName.trim(),
+				display_order: nextOrder
+			});
+
+			if (insertError) {
+				return fail(500, { eventError: '種目の追加に失敗しました。' });
+			}
+		} else if (isTraining) {
+			// 研修モード: training_events
+			const { data: maxOrderData } = await supabase
+				.from('training_events')
+				.select('order_index')
+				.eq('session_id', params.id)
+				.order('order_index', { ascending: false })
+				.limit(1)
+				.single();
+
+			const nextOrder = (maxOrderData?.order_index || 0) + 1;
+
+			const { error: insertError } = await supabase.from('training_events').insert({
+				session_id: params.id,
+				name: eventName.trim(),
+				order_index: nextOrder,
+				min_score: 0,
+				max_score: 100,
+				score_precision: 1,
+				status: 'pending'
+			});
+
+			if (insertError) {
+				return fail(500, { eventError: '種目の追加に失敗しました。' });
+			}
+		}
+
+		return { eventSuccess: '種目を追加しました。' };
+	},
+
+	// 種目を更新（大会・研修共通）
+	updateEvent: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			return fail(401, { eventError: '認証が必要です。' });
+		}
+
+		const formData = await request.formData();
+		const eventId = formData.get('eventId') as string;
+		const eventName = formData.get('eventName') as string;
+		const isTraining = formData.get('isTraining') === 'true';
+
+		if (!eventName || !eventName.trim()) {
+			return fail(400, { eventError: '種目名を入力してください。' });
+		}
+
+		if (isTraining) {
+			// 研修モード: training_events
+			const { error: updateError } = await supabase
+				.from('training_events')
+				.update({ name: eventName.trim() })
+				.eq('id', eventId)
+				.eq('session_id', params.id);
+
+			if (updateError) {
+				return fail(500, { eventError: '種目の更新に失敗しました。' });
+			}
+		} else {
+			// 大会モード: custom_events
+			const { error: updateError } = await supabase
+				.from('custom_events')
+				.update({ event_name: eventName.trim() })
+				.eq('id', eventId)
+				.eq('session_id', params.id);
+
+			if (updateError) {
+				return fail(500, { eventError: '種目の更新に失敗しました。' });
+			}
+		}
+
+		return { eventSuccess: '種目を更新しました。' };
+	},
+
+	// 種目を削除（大会・研修共通）
+	deleteEvent: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			return fail(401, { eventError: '認証が必要です。' });
+		}
+
+		const formData = await request.formData();
+		const eventId = formData.get('eventId') as string;
+		const isTraining = formData.get('isTraining') === 'true';
+
+		if (!eventId) {
+			return fail(400, { eventError: '種目IDが指定されていません。' });
+		}
+
+		if (isTraining) {
+			// 研修モード: training_events
+			const { error: deleteError } = await supabase
+				.from('training_events')
+				.delete()
+				.eq('id', eventId)
+				.eq('session_id', params.id);
+
+			if (deleteError) {
+				return fail(500, { eventError: '種目の削除に失敗しました。' });
+			}
+		} else {
+			// 大会モード: custom_events
+			const { error: deleteError } = await supabase
+				.from('custom_events')
+				.delete()
+				.eq('id', eventId)
+				.eq('session_id', params.id);
+
+			if (deleteError) {
+				return fail(500, { eventError: '種目の削除に失敗しました。' });
+			}
+		}
+
+		return { eventSuccess: '種目を削除しました。' };
 	},
 
 	deleteSession: async ({ params, locals: { supabase } }) => {
