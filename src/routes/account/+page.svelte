@@ -132,7 +132,7 @@
 	<div class="nav-buttons">
 		<hr class="divider" />
 
-		<NavButton on:click={() => goto('/dashboard')}>検定選択に戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>セッション選択画面に戻る</NavButton>
 		<NavButton variant="danger" on:click={handleLogout}>ログアウト</NavButton>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
 			アカウントを削除

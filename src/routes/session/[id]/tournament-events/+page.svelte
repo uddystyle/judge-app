@@ -50,7 +50,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="secondary" on:click={() => goto('/dashboard')}>
-			ダッシュボードに戻る
+			セッション選択画面に戻る
 		</NavButton>
 	</div>
 </div>

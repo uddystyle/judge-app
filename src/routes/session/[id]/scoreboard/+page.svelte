@@ -154,7 +154,7 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={refreshData}>最新データを取得</NavButton>
-		<NavButton on:click={() => goto('/dashboard')}>大会選択に戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>セッション選択画面に戻る</NavButton>
 	</div>
 </div>
 

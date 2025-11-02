@@ -575,7 +575,7 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>
-			{data.sessionDetails.is_tournament_mode ? '大会選択に戻る' : '検定選択に戻る'}
+			セッション選択画面に戻る
 		</NavButton>
 	</div>
 

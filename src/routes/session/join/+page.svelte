@@ -35,7 +35,7 @@
 	</form>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/dashboard')}>戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>セッション選択画面に戻る</NavButton>
 	</div>
 </div>
 

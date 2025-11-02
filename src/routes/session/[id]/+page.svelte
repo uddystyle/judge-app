@@ -368,7 +368,6 @@
 				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-events`)}>
 					種目選択へ進む
 				</NavButton>
-				<NavButton on:click={() => goto(`/session/${data.sessionDetails.id}/training-setup`)}>研修設定を変更</NavButton>
 			</div>
 		{:else}
 			<div class="instruction">研修設定が必要です</div>
@@ -455,7 +454,7 @@
 	{/if}
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>
-			{data.isTournamentMode ? '大会選択に戻る' : data.isTrainingMode ? '研修選択に戻る' : '検定選択に戻る'}
+			セッション選択画面に戻る
 		</NavButton>
 	</div>
 </div>
