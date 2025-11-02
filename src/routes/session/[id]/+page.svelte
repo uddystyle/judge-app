@@ -12,11 +12,8 @@
 	export let data: PageData;
 	export let form: ActionData;
 	let realtimeChannel: any;
-	let notificationChannel: any;
 	let pollingInterval: any;
-	let notificationPollingInterval: any;
-	let previousIsActive: boolean | null = null; // ポーリングで前回の状態を記憶
-	let lastNotificationId: number | null = null; // 最後に確認した通知ID
+	let previousStatus: string | null = null; // ポーリングで前回の状態を記憶
 	// URLパラメータで終了フラグをチェック
 	let isSessionEnded = false;
 
@@ -38,20 +35,11 @@
 		currentEvent.set(null);
 		currentBib.set(null);
 
-		// セッションの実際の状態を確認
-		const isActuallyActive = data.sessionDetails?.is_active;
-
 		// URLパラメータで終了フラグをチェック
 		const urlParams = new URLSearchParams(window.location.search);
 		const hasEndedParam = urlParams.get('ended') === 'true';
 
-		// セッションが実際にアクティブな場合は、終了画面を表示しない
-		if (isActuallyActive && hasEndedParam) {
-			console.log('[DEBUG] セッションはアクティブなので、URLパラメータを削除して準備画面を表示');
-			// URLからended=trueを削除
-			window.history.replaceState({}, '', `/session/${data.sessionDetails.id}`);
-			isSessionEnded = false;
-		} else if (hasEndedParam) {
+		if (hasEndedParam) {
 			console.log('[DEBUG] URLパラメータで終了フラグを検知（リアルタイム終了）');
 			isSessionEnded = true;
 		} else {
@@ -76,94 +64,15 @@
 			.single();
 		console.log('[DEBUG] セッション読み取りテスト:', { sessionTest, sessionError });
 
+		// 一般検定員の場合、status変化を監視
 		if (!data.isChief) {
 			const sessionId = data.sessionDetails.id;
-			console.log('[一般検定員] リアルタイムリスナーをセットアップ中...', { sessionId });
+			console.log('[一般検定員] status監視をセットアップ中...', { sessionId });
 
-			// 通知テーブルの監視（INSERTイベントのみ）
-			const notificationChannelName = `session-notifications-${sessionId}-${Date.now()}`;
-			console.log('[一般検定員] 通知チャンネル名:', notificationChannelName);
-
-			// デバッグ: 既存の通知を確認
-			const { data: existingNotifications, error: notifError } = await supabase
-				.from('session_notifications')
-				.select('*')
-				.eq('session_id', sessionId)
-				.order('created_at', { ascending: false })
-				.limit(5);
-			console.log('[一般検定員] 既存の通知:', existingNotifications, 'エラー:', notifError);
-
-			// 最新の通知IDを記録
-			if (existingNotifications && existingNotifications.length > 0) {
-				lastNotificationId = existingNotifications[0].id;
-				console.log('[一般検定員] 最後の通知ID:', lastNotificationId);
-			}
-
-			// 通知テーブルをポーリング（Realtimeの代替）
-			notificationPollingInterval = setInterval(async () => {
-				console.log('[一般検定員] 通知をポーリング中...', { lastNotificationId });
-				const { data: newNotifications, error } = await supabase
-					.from('session_notifications')
-					.select('*')
-					.eq('session_id', sessionId)
-					.order('created_at', { ascending: false })
-					.limit(1);
-
-				if (!error && newNotifications && newNotifications.length > 0) {
-					const latestNotification = newNotifications[0];
-					console.log('[一般検定員] 最新の通知:', latestNotification);
-
-					// 新しい通知が見つかった場合
-					if (lastNotificationId === null || latestNotification.id > lastNotificationId) {
-						console.log('[一般検定員] 🔔 新しい通知を検知:', latestNotification);
-						lastNotificationId = latestNotification.id;
-
-						const notificationType = latestNotification.notification_type;
-						console.log('[一般検定員] 通知タイプ:', notificationType);
-
-						if (notificationType === 'session_ended') {
-							console.log('[一般検定員] ✅ 終了通知を検知。終了画面に遷移します。');
-							isSessionEnded = true;
-						}
-						// 注: session_restarted通知は削除された再開機能用なので処理しない
-					}
-				}
-			}, 2000); // 2秒ごとにポーリング
-
-			notificationChannel = supabase
-				.channel(notificationChannelName)
-				.on(
-					'postgres_changes',
-					{
-						event: 'INSERT',
-						schema: 'public',
-						table: 'session_notifications',
-						filter: `session_id=eq.${sessionId}`
-					},
-					async (payload) => {
-						console.log('[一般検定員/waiting] 🔔 通知を受信:', payload);
-						const notificationType = payload.new.notification_type;
-						console.log('[一般検定員/waiting] 通知タイプ:', notificationType);
-
-						if (notificationType === 'session_ended') {
-							console.log('[一般検定員/waiting] ✅ 終了通知を受信。終了画面に遷移します。');
-							isSessionEnded = true;
-						}
-						// 注: session_restarted通知は削除された再開機能用なので処理しない
-					}
-				)
-				.subscribe((status) => {
-					console.log('[一般検定員] 通知チャンネルの状態:', status);
-					if (status === 'SUBSCRIBED') {
-						console.log('[一般検定員] ✅ 通知リアルタイム接続成功');
-					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-						console.error('[一般検定員] ❌ 通知チャンネル接続エラー');
-					}
-				});
-
-			// 'sessions'テーブルの、このセッションIDの行に対するUPDATEのみを監視
-			const channelName = `session-updates-${sessionId}-${Date.now()}`;
+			// Realtimeで sessions.status の変更を監視
+			const channelName = `session-status-${sessionId}-${Date.now()}`;
 			console.log('[一般検定員] チャンネル名:', channelName);
+
 			realtimeChannel = supabase
 				.channel(channelName)
 				.on(
@@ -175,31 +84,29 @@
 						filter: `id=eq.${sessionId}`
 					},
 					async (payload) => {
-						console.log('[一般検定員/waiting] セッション更新を検知:', payload);
+						console.log('[一般検定員/realtime] セッション更新を検知:', payload);
+						const newStatus = payload.new.status;
 						const newPromptId = payload.new.active_prompt_id;
-						const isActive = payload.new.is_active;
-						console.log('[一般検定員/waiting] is_active:', isActive);
-						console.log('[一般検定員/waiting] payload.old:', payload.old);
-						console.log('[一般検定員/waiting] 現在の isSessionEnded:', isSessionEnded);
+
+						console.log('[一般検定員/realtime] status:', newStatus);
+						console.log('[一般検定員/realtime] active_prompt_id:', newPromptId);
 
 						// 既に終了画面を表示している場合は、状態変更を行わない
 						if (isSessionEnded) {
-							console.log('[一般検定員/waiting] 終了画面表示中のため、状態変更をスキップ');
+							console.log('[一般検定員/realtime] 終了画面表示中のため、状態変更をスキップ');
 							return;
 						}
 
-						// セッションが終了した場合、検定終了画面を表示
-						if (isActive === false && !isSessionEnded) {
-							console.log('[一般検定員/waiting] ✅ 検定終了を検知。検定終了画面を表示します。');
-							console.log('[一般検定員/waiting] 条件確認: isActive === false:', isActive === false);
-							console.log('[一般検定員/waiting] 条件確認: !isSessionEnded:', !isSessionEnded);
+						// セッションが終了した場合、検定終了画面に遷移
+						if (newStatus === 'ended') {
+							console.log('[一般検定員/realtime] ✅ セッション終了を検知。終了画面に遷移します。');
 							isSessionEnded = true;
-							console.log('[一般検定員/waiting] isSessionEnded を true に設定完了:', isSessionEnded);
+							goto(`/session/${sessionId}?ended=true`);
 							return;
 						}
 
 						// 新しい採点指示IDがセットされたら
-						if (newPromptId) {
+						if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
 							console.log('[一般検定員] 新しい採点指示を検知:', newPromptId);
 							// 新しい指示の詳細をscoring_promptsテーブルから取得
 							const { data: promptData, error } = await supabase
@@ -262,10 +169,9 @@
 					if (status === 'SUBSCRIBED') {
 						console.log('[一般検定員] ✅ リアルタイム接続成功');
 
-						// Realtimeのバックアップとして、3秒ごとにポーリングでis_activeをチェック
+						// Realtimeのバックアップとして、2秒ごとにポーリングでstatusとactive_prompt_idをチェック
 						pollingInterval = setInterval(async () => {
 							console.log('[一般検定員/polling] セッション状態をポーリング中...');
-							console.log('[一般検定員/polling] 現在の isSessionEnded:', isSessionEnded);
 
 							// 既に終了画面を表示している場合はポーリングを継続するが、状態変更は行わない
 							if (isSessionEnded) {
@@ -275,37 +181,52 @@
 
 							const { data: sessionData, error } = await supabase
 								.from('sessions')
-								.select('is_active')
+								.select('status, active_prompt_id')
 								.eq('id', sessionId)
 								.single();
 
 							if (!error && sessionData) {
-								const isActive = sessionData.is_active;
-								console.log('[一般検定員/polling] is_active:', isActive);
-								console.log('[一般検定員/polling] previousIsActive:', previousIsActive);
+								const currentStatus = sessionData.status;
+								console.log('[一般検定員/polling] status:', currentStatus, '前回:', previousStatus);
 
-								// 初回のポーリング時は前回の状態を記録するだけ
-								if (previousIsActive === null) {
+								// 初回のポーリング時
+								if (previousStatus === null) {
 									console.log('[一般検定員/polling] 初回ポーリング - 状態を記録');
-									previousIsActive = isActive;
+									previousStatus = currentStatus;
+
+									// 初回から既に ended の場合は終了画面に遷移
+									if (currentStatus === 'ended') {
+										console.log('[一般検定員/polling] ✅ セッションは既に終了しています。終了画面に遷移します。');
+										isSessionEnded = true;
+										try {
+											const targetUrl = `/session/${sessionId}?ended=true`;
+											console.log('[一般検定員/polling] 遷移先URL:', targetUrl);
+											await goto(targetUrl);
+											console.log('[一般検定員/polling] goto完了');
+										} catch (error) {
+											console.error('[一般検定員/polling] ❌ goto失敗:', error);
+										}
+									}
 									return;
 								}
 
-								// 状態が変化した場合のみ処理
-								if (previousIsActive !== isActive) {
-									console.log('[一般検定員/polling] 状態変化を検知:', previousIsActive, '->', isActive);
-
-									// 終了した場合（true -> false）
-									if (isActive === false && previousIsActive === true) {
-										console.log('[一般検定員/polling] ✅ 検定終了を検知（ポーリング）');
-										isSessionEnded = true;
+								// statusが 'ended' に変化した場合
+								if (previousStatus !== 'ended' && currentStatus === 'ended') {
+									console.log('[一般検定員/polling] ✅ セッション終了を検知。終了画面に遷移します。');
+									isSessionEnded = true;
+									try {
+										const targetUrl = `/session/${sessionId}?ended=true`;
+										console.log('[一般検定員/polling] 遷移先URL:', targetUrl);
+										await goto(targetUrl);
+										console.log('[一般検定員/polling] goto完了');
+									} catch (error) {
+										console.error('[一般検定員/polling] ❌ goto失敗:', error);
 									}
-									// 注: 再開機能は削除されたため、false -> true の処理は行わない
-
-									previousIsActive = isActive;
 								}
+
+								previousStatus = currentStatus;
 							}
-						}, 3000);
+						}, 2000);
 
 						// 接続成功後、ページロード時に既にactive_prompt_idが設定されているかチェック
 						const currentPromptId = data.sessionDetails.active_prompt_id;
@@ -381,14 +302,8 @@
 		if (realtimeChannel) {
 			supabase.removeChannel(realtimeChannel);
 		}
-		if (notificationChannel) {
-			supabase.removeChannel(notificationChannel);
-		}
 		if (pollingInterval) {
 			clearInterval(pollingInterval);
-		}
-		if (notificationPollingInterval) {
-			clearInterval(notificationPollingInterval);
 		}
 	});
 

@@ -33,7 +33,7 @@ export const actions: Actions = {
 		// 参加コードに一致するセッションをデータベースから検索
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
-			.select('id, is_active')
+			.select('id, is_accepting_participants')
 			.eq('join_code', joinCode)
 			.single();
 
@@ -41,9 +41,9 @@ export const actions: Actions = {
 			return fail(404, { joinCode, error: '無効な参加コードです。' });
 		}
 
-		// セッションがアクティブかチェック
-		if (!sessionData.is_active) {
-			return fail(400, { joinCode, error: 'このセッションは終了しています。' });
+		// セッションが参加受付中かチェック
+		if (!sessionData.is_accepting_participants) {
+			return fail(400, { joinCode, error: 'このセッションは参加受付を終了しています。' });
 		}
 
 		const { error: joinError } = await supabase.from('session_participants').insert({

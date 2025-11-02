@@ -2,7 +2,7 @@
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
-	import { getContext } from 'svelte';
+	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -38,6 +38,63 @@
 			}
 		);
 	}
+
+	// リアルタイム更新用
+	let realtimeChannel: any;
+
+	onMount(() => {
+		// セッションの削除を検知するリアルタイムリスナー
+		realtimeChannel = supabase
+			.channel('dashboard-sessions')
+			.on(
+				'postgres_changes',
+				{
+					event: 'DELETE',
+					schema: 'public',
+					table: 'sessions'
+				},
+				(payload) => {
+					console.log('[ダッシュボード] セッション削除を検知:', payload);
+					// 削除されたセッションをリストから除外
+					data.sessions = data.sessions.filter((s) => s.id !== payload.old.id);
+				}
+			)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'session_participants',
+					filter: `user_id=eq.${data.profile?.id}`
+				},
+				async (payload) => {
+					console.log('[ダッシュボード] セッション参加を検知:', payload);
+					// 新しく参加したセッションの情報を取得
+					const { data: newSession } = await supabase
+						.from('sessions')
+						.select('*')
+						.eq('id', payload.new.session_id)
+						.single();
+
+					if (newSession) {
+						// リストに追加（重複チェック）
+						const exists = data.sessions.some((s) => s.id === newSession.id);
+						if (!exists) {
+							data.sessions = [...data.sessions, newSession];
+						}
+					}
+				}
+			)
+			.subscribe((status) => {
+				console.log('[ダッシュボード] Realtimeチャンネルの状態:', status);
+			});
+	});
+
+	onDestroy(() => {
+		if (realtimeChannel) {
+			supabase.removeChannel(realtimeChannel);
+		}
+	});
 </script>
 
 <svelte:head>
@@ -296,7 +353,7 @@
 		font-size: 18px;
 		font-weight: 600;
 		color: var(--primary-text);
-		margin-bottom: 16px;
+		margin-bottom: 32px;
 		text-align: center;
 	}
 	.divider {

@@ -211,11 +211,13 @@ export const actions: Actions = {
 
 				if (!promptError && prompt) {
 					// セッションをアクティブにし、active_prompt_idを設定
+					// status を 'active' に戻すことで、ended 状態から再開可能
 					await supabase
 						.from('sessions')
 						.update({
 							active_prompt_id: prompt.id,
-							is_active: true  // セッションを再度アクティブにする
+							is_active: true,
+							status: 'active'  // セッションを再開（ended → active）
 						})
 						.eq('id', sessionId);
 				}

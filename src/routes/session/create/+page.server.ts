@@ -108,6 +108,8 @@ export const actions: Actions = {
 				chief_judge_id: user.id, // 作成者を主任検定員に設定
 				join_code: joinCode,
 				is_active: true,
+				is_accepting_participants: true, // 参加受付を開始
+				status: 'active', // セッション状態を進行中に設定
 				mode: sessionMode,
 				is_tournament_mode: isTournamentMode, // 後方互換性のため保持
 				score_calculation: isTournamentMode ? 'sum' : 'average',
