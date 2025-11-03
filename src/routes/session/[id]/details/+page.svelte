@@ -72,9 +72,31 @@
 			const workbook = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(workbook, worksheet, '採点結果');
 
-			// 4. Trigger the download
 			const fileName = `${data.sessionDetails.name}_採点結果.xlsx`;
-			XLSX.writeFile(workbook, fileName);
+
+			// 4. モバイル環境かどうかを判定（Web Share API対応 & 画面幅768px未満）
+			const isMobile = window.innerWidth < 768;
+			const canShare = navigator.share !== undefined;
+
+			if (isMobile && canShare) {
+				// モバイル環境: Web Share APIで共有
+				const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+				const blob = new Blob([excelBuffer], {
+					type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+				});
+				const file = new File([blob], fileName, {
+					type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+				});
+
+				await navigator.share({
+					title: '採点結果',
+					text: `${data.sessionDetails.name}の採点結果`,
+					files: [file]
+				});
+			} else {
+				// PC環境: ダウンロード
+				XLSX.writeFile(workbook, fileName);
+			}
 		} catch (err) {
 			console.error('Export failed:', err);
 			alert('エクスポート処理中にエラーが発生しました。');
