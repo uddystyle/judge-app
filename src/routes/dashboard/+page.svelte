@@ -235,8 +235,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
-		max-width: 800px;
-		margin: 0 auto;
+		max-width: 600px;
+		margin-left: auto;
+		margin-right: auto;
+		width: 100%;
 	}
 	.key.select-item {
 		display: flex;
@@ -251,6 +253,7 @@
 		color: var(--ios-blue);
 		border-radius: 12px;
 		width: 100%;
+		max-width: 100%;
 		font-size: 17px;
 		font-weight: 600;
 		text-align: center;
@@ -360,7 +363,7 @@
 		border: none;
 		border-top: 1px solid var(--separator-gray);
 		margin: 48px auto;
-		max-width: 800px;
+		max-width: 600px;
 	}
 	.nav-buttons {
 		display: flex;
@@ -409,8 +412,6 @@
 			border-radius: 24px;
 		}
 		.list-keypad {
-			display: grid;
-			grid-template-columns: repeat(2, 1fr);
 			gap: 20px;
 		}
 		.key.select-item {
@@ -469,9 +470,8 @@
 			padding: 12px 24px;
 		}
 		.list-keypad {
-			grid-template-columns: repeat(3, 1fr);
 			gap: 24px;
-			max-width: 1000px;
+			max-width: 600px;
 		}
 		.key.select-item {
 			min-height: 140px;
@@ -481,7 +481,7 @@
 		}
 		.divider {
 			margin: 64px auto;
-			max-width: 1000px;
+			max-width: 600px;
 		}
 	}
 </style>

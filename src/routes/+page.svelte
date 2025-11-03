@@ -51,6 +51,13 @@
 				</div>
 
 				<div class="feature-card">
+					<h3 class="feature-title">研修モード</h3>
+					<p class="feature-description">
+						検定員の研修に最適。複数の検定員が同じ演技を採点し、採点基準のばらつきを確認・改善できます。
+					</p>
+				</div>
+
+				<div class="feature-card">
 					<h3 class="feature-title">複数検定員対応</h3>
 					<p class="feature-description">
 						3審3採や5審3採など、複数の検定員による採点をリアルタイムで同期。主任検定員が最終確認を行えます。
@@ -61,13 +68,6 @@
 					<h3 class="feature-title">モバイル対応</h3>
 					<p class="feature-description">
 						スマートフォンやタブレットから快適に操作可能。現場での採点作業に最適化されたUIです。
-					</p>
-				</div>
-
-				<div class="feature-card">
-					<h3 class="feature-title">リアルタイム同期</h3>
-					<p class="feature-description">
-						全検定員の採点状況をリアルタイムで共有。待ち時間を削減し、スムーズな検定運営を実現します。
 					</p>
 				</div>
 
