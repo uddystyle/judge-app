@@ -164,8 +164,8 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextSkier}>次の滑走者</NavButton>
-		{#if (data.isChief || !data.isMultiJudge) && data.isTournamentMode}
-			<NavButton on:click={handleChangeEvent}>種目を変更</NavButton>
+		{#if data.isChief || !data.isMultiJudge}
+			<NavButton on:click={handleChangeEvent}>種目を変更する</NavButton>
 		{/if}
 		{#if data.isChief || !data.isMultiJudge}
 			<NavButton on:click={handleEndSession}>

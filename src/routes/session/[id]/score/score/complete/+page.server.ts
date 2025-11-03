@@ -100,10 +100,15 @@ export const actions: Actions = {
 			return { success: false, error: '主任検定員のみが終了できます。' };
 		}
 
-		// セッションを終了
+		// セッションを終了状態に更新
+		// status を 'ended' に設定し、is_active と active_prompt_id をクリア
 		const { error: updateError } = await supabase
 			.from('sessions')
-			.update({ is_active: false })
+			.update({
+				status: 'ended',
+				is_active: false,
+				active_prompt_id: null
+			})
 			.eq('id', sessionId);
 
 		if (updateError) {
@@ -111,7 +116,9 @@ export const actions: Actions = {
 			return { success: false, error: 'セッションの終了に失敗しました。' };
 		}
 
-		// ダッシュボードへリダイレクト
-		throw redirect(303, '/dashboard');
+		console.log('[主任検定員] ✅ セッションを終了しました', { sessionId });
+
+		// セッション詳細画面（終了画面）にリダイレクト
+		throw redirect(303, `/session/${sessionId}?ended=true`);
 	}
 };

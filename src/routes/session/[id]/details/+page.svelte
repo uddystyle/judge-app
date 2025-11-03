@@ -662,6 +662,9 @@
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
+		max-width: 600px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 	.message {
 		text-align: center;
@@ -1044,8 +1047,6 @@
 			font-size: 16px;
 		}
 		.nav-buttons {
-			display: grid;
-			grid-template-columns: repeat(2, 1fr);
 			gap: 16px;
 		}
 	}

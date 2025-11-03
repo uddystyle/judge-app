@@ -169,7 +169,7 @@
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextAthlete}>次の選手</NavButton>
 		{#if data.isChief || !data.isMultiJudge}
-			<NavButton on:click={handleChangeEvent}>種目を変更</NavButton>
+			<NavButton on:click={handleChangeEvent}>種目を変更する</NavButton>
 			<NavButton on:click={handleEndSession}>
 				セッションを終了する
 			</NavButton>

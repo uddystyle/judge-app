@@ -136,36 +136,25 @@ export const actions: Actions = {
 			return fail(403, { error: 'セッションを終了する権限がありません。' });
 		}
 
-		// セッションを非アクティブにし、active_prompt_idをクリア
+		// セッションを終了状態に更新
+		// status を 'ended' に設定し、is_active と active_prompt_id をクリア
 		const { error: updateError } = await supabase
 			.from('sessions')
-			.update({ is_active: false, active_prompt_id: null })
+			.update({
+				status: 'ended',
+				is_active: false,
+				active_prompt_id: null
+			})
 			.eq('id', id);
 
 		if (updateError) {
+			console.error('Error ending session:', updateError);
 			return fail(500, { error: '検定の終了に失敗しました。' });
 		}
 
-		// 主任検定員かつ複数検定員モードの場合は終了通知を挿入
-		if (isChief && session.is_multi_judge) {
-			console.log('[主任検定員] 終了通知を挿入中...', { session_id: id });
-			const { data: notificationData, error: notificationError } = await supabase
-				.from('session_notifications')
-				.insert({
-					session_id: id,
-					notification_type: 'session_ended'
-				})
-				.select();
+		console.log('[主任検定員] ✅ セッションを終了しました', { sessionId: id });
 
-			if (notificationError) {
-				console.error('[主任検定員] ❌ 終了通知の挿入に失敗:', notificationError);
-				// 通知の失敗はエラーにしない（セッションは終了済み）
-			} else {
-				console.log('[主任検定員] ✅ 終了通知を挿入しました:', notificationData);
-			}
-		}
-
-		// 成功したら待機画面（終了画面）にリダイレクト
+		// セッション詳細画面（終了画面）にリダイレクト
 		throw redirect(303, `/session/${id}?ended=true`);
 	}
 };
