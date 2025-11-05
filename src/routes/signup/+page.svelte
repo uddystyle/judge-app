@@ -2,10 +2,22 @@
 	import { enhance } from '$app/forms';
 	import type { ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 
 	export let form: ActionData;
 </script>
+
+<svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+		rel="stylesheet"
+	/>
+</svelte:head>
+
+<Header showAppName={true} pageUser={null} />
 
 <div class="container">
 	<div class="instruction">新規アカウント登録</div>
@@ -47,20 +59,18 @@
 	</form>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/login')}>ログイン画面に戻る</NavButton>
+		<NavButton on:click={() => goto('/login')}>ログイン画面</NavButton>
+		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
 	</div>
 </div>
 
 <style>
 	.container {
-		padding: 60px 20px;
+		padding: 50px 20px 60px;
 		text-align: center;
 		max-width: 440px;
 		margin: 0 auto;
-		min-height: 100vh;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
+		min-height: calc(100vh - 80px);
 	}
 	.instruction {
 		font-size: 32px;

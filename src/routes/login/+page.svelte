@@ -3,6 +3,7 @@
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Header from '$lib/components/Header.svelte';
 	import { onMount } from 'svelte';
 
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -43,6 +44,17 @@
 	});
 </script>
 
+<svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+		rel="stylesheet"
+	/>
+</svelte:head>
+
+<Header showAppName={true} pageUser={null} />
+
 <div class="container">
 	<div class="instruction">ログイン</div>
 
@@ -73,18 +85,19 @@
 			<NavButton on:click={() => goto('/signup')}>新規登録</NavButton>
 		</div>
 	</div>
+
+	<div class="nav-buttons" style="margin-top: 16px;">
+		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+	</div>
 </div>
 
 <style>
 	.container {
-		padding: 60px 20px;
+		padding: 50px 20px 60px;
 		text-align: center;
 		max-width: 440px;
 		margin: 0 auto;
-		min-height: 100vh;
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
+		min-height: calc(100vh - 80px);
 	}
 	.instruction {
 		font-size: 32px;

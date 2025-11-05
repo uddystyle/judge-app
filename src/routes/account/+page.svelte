@@ -168,7 +168,7 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} />
+<Header showAppName={true} pageUser={data.user} />
 
 <div class="container">
 	<div class="instruction">アカウント設定</div>

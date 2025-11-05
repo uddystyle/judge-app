@@ -4,6 +4,7 @@
 
 	// Props
 	export let showAppName = false; // 料金プランページなどで使用
+	export let pageUser: any = null; // ページから渡されるユーザー情報（料金ページなど）
 
 	$: user = $currentUser;
 	$: session = $currentSession;
@@ -42,13 +43,23 @@
 
 		return parts.length > 0 ? parts.join(' / ') : '未選択';
 	}
+
+	function handleAppNameClick() {
+		// pageUserかstoreのuserを使ってログイン状態を判定
+		const currentUser = pageUser || user;
+		if (currentUser) {
+			goto('/dashboard');
+		} else {
+			goto('/');
+		}
+	}
 </script>
 
 <div class="header">
 	<div class="header-content">
 		<div class="info-display">
 			{#if showAppName}
-				<button class="app-name-button" on:click={() => goto('/dashboard')}>
+				<button class="app-name-button" on:click={handleAppNameClick}>
 					TENTO
 				</button>
 			{:else}

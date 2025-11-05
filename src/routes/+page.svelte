@@ -125,6 +125,54 @@
 		</div>
 	</div>
 
+	<div class="pricing-section">
+		<div class="container">
+			<h2 class="section-title">料金プラン</h2>
+			<p class="pricing-intro">あなたのニーズに合わせたプランをお選びください</p>
+
+			<div class="pricing-grid">
+				<div class="pricing-card">
+					<h3 class="plan-name">フリー</h3>
+					<div class="plan-price">¥0<span class="price-unit">/月</span></div>
+					<ul class="plan-features">
+						<li>月間3セッションまで</li>
+						<li>選手数: 30名まで</li>
+						<li>検定モードのみ</li>
+					</ul>
+				</div>
+
+				<div class="pricing-card recommended">
+					<div class="recommended-badge">おすすめ</div>
+					<h3 class="plan-name">スタンダード</h3>
+					<div class="plan-price">¥980<span class="price-unit">/月</span></div>
+					<ul class="plan-features">
+						<li>月間無制限セッション</li>
+						<li>選手数: 100名まで</li>
+						<li>全モード利用可能</li>
+						<li>スコアボード公開</li>
+					</ul>
+				</div>
+
+				<div class="pricing-card">
+					<h3 class="plan-name">プロ</h3>
+					<div class="plan-price">¥2,980<span class="price-unit">/月</span></div>
+					<ul class="plan-features">
+						<li>月間無制限セッション</li>
+						<li>選手数・検定員数: 無制限</li>
+						<li>全モード利用可能</li>
+						<li>優先サポート</li>
+					</ul>
+				</div>
+			</div>
+
+			<div class="pricing-cta">
+				<button class="btn btn-secondary" on:click={() => goto('/pricing')}>
+					詳しい料金プランを見る
+				</button>
+			</div>
+		</div>
+	</div>
+
 	<div class="cta-section">
 		<div class="container">
 			<h2 class="cta-title">今すぐ始めましょう</h2>
@@ -373,6 +421,111 @@
 		color: #6e6e73;
 	}
 
+	.pricing-section {
+		padding: 80px 20px;
+		background: #f5f1e8;
+	}
+
+	.pricing-intro {
+		text-align: center;
+		font-size: 18px;
+		color: #6e6e73;
+		margin-bottom: 48px;
+	}
+
+	.pricing-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 24px;
+		max-width: 1000px;
+		margin: 0 auto 40px;
+	}
+
+	.pricing-card {
+		background: white;
+		border: 2px solid #f0e6d8;
+		border-radius: 20px;
+		padding: 32px 24px;
+		text-align: center;
+		transition: all 0.3s;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+		position: relative;
+	}
+
+	.pricing-card:hover {
+		transform: translateY(-6px);
+		box-shadow: 0 12px 32px rgba(255, 107, 53, 0.15);
+		border-color: #ff6b35;
+	}
+
+	.pricing-card.recommended {
+		border-color: #ff6b35;
+		box-shadow: 0 4px 16px rgba(255, 107, 53, 0.15);
+	}
+
+	.recommended-badge {
+		position: absolute;
+		top: -12px;
+		left: 50%;
+		transform: translateX(-50%);
+		background: linear-gradient(135deg, #ff6b35 0%, #ff8c42 100%);
+		color: white;
+		padding: 6px 16px;
+		border-radius: 20px;
+		font-size: 13px;
+		font-weight: 600;
+		box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+	}
+
+	.plan-name {
+		font-size: 24px;
+		font-weight: 700;
+		margin-bottom: 16px;
+		color: #1d1d1f;
+	}
+
+	.plan-price {
+		font-size: 42px;
+		font-weight: 700;
+		color: #ff6b35;
+		margin-bottom: 24px;
+	}
+
+	.price-unit {
+		font-size: 18px;
+		font-weight: 500;
+		color: #6e6e73;
+	}
+
+	.plan-features {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		text-align: left;
+	}
+
+	.plan-features li {
+		padding: 10px 0;
+		font-size: 15px;
+		color: #1d1d1f;
+		border-bottom: 1px solid #f0e6d8;
+	}
+
+	.plan-features li:last-child {
+		border-bottom: none;
+	}
+
+	.plan-features li::before {
+		content: '✓';
+		color: #ff6b35;
+		font-weight: bold;
+		margin-right: 8px;
+	}
+
+	.pricing-cta {
+		text-align: center;
+	}
+
 	.cta-section {
 		padding: 80px 20px;
 		background: #f5f1e8;
@@ -412,6 +565,7 @@
 
 		.features,
 		.how-it-works,
+		.pricing-section,
 		.cta-section {
 			padding: 100px 40px;
 		}
@@ -422,6 +576,14 @@
 
 		.feature-grid {
 			gap: 40px;
+		}
+
+		.pricing-grid {
+			gap: 32px;
+		}
+
+		.pricing-intro {
+			font-size: 20px;
 		}
 	}
 </style>

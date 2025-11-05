@@ -141,7 +141,7 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} />
+<Header showAppName={true} pageUser={data.user} />
 
 <div class="container">
 	<div class="header-section">
@@ -303,6 +303,19 @@
 				</tbody>
 			</table>
 		</div>
+	</div>
+
+	<!-- 戻るボタン -->
+	<div class="back-button-section">
+		{#if data.user}
+			<button class="back-btn" on:click={() => goto('/dashboard')}>
+				セッション画面に戻る
+			</button>
+		{:else}
+			<button class="back-btn" on:click={() => goto('/')}>
+				トップページに戻る
+			</button>
+		{/if}
 	</div>
 </div>
 
@@ -572,6 +585,28 @@
 
 	.comparison-table td:first-child {
 		font-weight: 600;
+	}
+
+	.back-button-section {
+		margin-top: 60px;
+		text-align: center;
+	}
+
+	.back-btn {
+		background: white;
+		color: var(--ios-blue);
+		border: 2px solid var(--ios-blue);
+		border-radius: 10px;
+		padding: 14px 32px;
+		font-size: 16px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.back-btn:hover {
+		background: var(--ios-blue);
+		color: white;
 	}
 
 	@media (max-width: 768px) {
