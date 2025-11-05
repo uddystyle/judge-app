@@ -22,6 +22,8 @@
 	let passwordLoading = false;
 	let passwordMessage = '';
 
+	let portalLoading = false;
+
 	// 「名前を更新」ボタンが押されたときの処理
 	async function handleUpdateName() {
 		if (!data.user) {
@@ -76,6 +78,36 @@
 		passwordLoading = false;
 	}
 
+	async function handleManageBilling() {
+		portalLoading = true;
+
+		try {
+			// Customer Portal Session作成APIを呼び出し
+			const response = await fetch('/api/stripe/create-portal-session', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					returnUrl: window.location.href
+				})
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				throw new Error(result.message || 'エラーが発生しました');
+			}
+
+			// Stripe Customer Portalページにリダイレクト
+			window.location.href = result.url;
+		} catch (err: any) {
+			console.error('Portal error:', err);
+			alert('エラーが発生しました。もう一度お試しください。');
+			portalLoading = false;
+		}
+	}
+
 	async function handleLogout() {
 		// Supabaseからログアウトを実行
 		await supabase.auth.signOut();
@@ -83,11 +115,125 @@
 		// ログアウト後、ログインページへ移動
 		goto('/login');
 	}
+
+	// プラン名の日本語表示
+	function getPlanName(planType: string): string {
+		switch (planType) {
+			case 'free':
+				return 'フリープラン';
+			case 'standard':
+				return 'スタンダードプラン';
+			case 'pro':
+				return 'プロプラン';
+			default:
+				return 'フリープラン';
+		}
+	}
+
+	// 請求間隔の日本語表示
+	function getBillingIntervalName(interval: string): string {
+		return interval === 'month' ? '月額' : '年額';
+	}
+
+	// 日付のフォーマット
+	function formatDate(dateString: string | null): string {
+		if (!dateString) return '-';
+		const date = new Date(dateString);
+		return date.toLocaleDateString('ja-JP');
+	}
+
+	// 使用率の計算
+	function getUsagePercentage(): number {
+		const limit = data.planLimits?.max_sessions_per_month || 3;
+		if (limit === -1) return 0; // 無制限の場合
+		const count = data.currentUsage?.sessions_count || 0;
+		return Math.min((count / limit) * 100, 100);
+	}
+
+	// 使用状況の表示テキスト
+	function getUsageText(): string {
+		const count = data.currentUsage?.sessions_count || 0;
+		const limit = data.planLimits?.max_sessions_per_month || 3;
+		if (limit === -1) return `${count} セッション`;
+		return `${count} / ${limit} セッション`;
+	}
 </script>
+
+<svelte:head>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+		rel="stylesheet"
+	/>
+</svelte:head>
+
+<Header showAppName={true} />
 
 <div class="container">
 	<div class="instruction">アカウント設定</div>
 
+	<!-- サブスクリプション情報セクション -->
+	<div class="subscription-section">
+		<h2 class="section-title">プラン・使用状況</h2>
+
+		<div class="subscription-card">
+			<div class="plan-info">
+				<div class="plan-name-row">
+					<span class="plan-name">{getPlanName(data.subscription.plan_type)}</span>
+					{#if data.subscription.plan_type !== 'free'}
+						<span class="billing-interval">
+							({getBillingIntervalName(data.subscription.billing_interval)})
+						</span>
+					{/if}
+				</div>
+
+				{#if data.subscription.plan_type !== 'free' && data.subscription.current_period_end}
+					<div class="renewal-date">
+						次回更新日: {formatDate(data.subscription.current_period_end)}
+					</div>
+				{/if}
+
+				{#if data.subscription.cancel_at_period_end}
+					<div class="cancel-notice">
+						このサブスクリプションは期間終了時にキャンセルされます
+					</div>
+				{/if}
+			</div>
+
+			<div class="usage-info">
+				<h3 class="usage-title">今月の使用状況</h3>
+				<div class="usage-bar-container">
+					<div class="usage-bar">
+						<div
+							class="usage-bar-fill"
+							style="width: {getUsagePercentage()}%"
+							class:warning={getUsagePercentage() > 80}
+						></div>
+					</div>
+					<div class="usage-text">{getUsageText()}</div>
+				</div>
+			</div>
+
+			<div class="subscription-actions">
+				{#if data.subscription.plan_type === 'free'}
+					<NavButton variant="primary" on:click={() => goto('/pricing')}>
+						プランをアップグレード
+					</NavButton>
+				{:else}
+					<NavButton on:click={handleManageBilling} disabled={portalLoading}>
+						{portalLoading ? '処理中...' : 'プラン・支払い方法を管理'}
+					</NavButton>
+				{/if}
+				<NavButton on:click={() => goto('/pricing')}>料金プランを見る</NavButton>
+			</div>
+		</div>
+	</div>
+
+	<hr class="divider" />
+
+	<!-- プロフィール情報セクション -->
+	<h2 class="section-title">プロフィール</h2>
 	<div class="form-container">
 		<label for="account-name" class="form-label">氏名</label>
 		<input type="text" id="account-name" placeholder="氏名" bind:value={fullName} />
@@ -144,13 +290,99 @@
 	.container {
 		padding: 28px 20px;
 		text-align: center;
-		max-width: 400px;
+		max-width: 600px;
 		margin: 0 auto;
 	}
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
 		margin-bottom: 28px;
+	}
+	.section-title {
+		font-size: 18px;
+		font-weight: 600;
+		margin-bottom: 16px;
+		text-align: left;
+		color: var(--primary-text);
+	}
+	.subscription-section {
+		margin-bottom: 24px;
+	}
+	.subscription-card {
+		background: white;
+		border: 2px solid var(--separator-gray);
+		border-radius: 16px;
+		padding: 24px;
+		text-align: left;
+	}
+	.plan-info {
+		margin-bottom: 24px;
+		padding-bottom: 24px;
+		border-bottom: 1px solid var(--separator-gray);
+	}
+	.plan-name-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+	.plan-name {
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--ios-blue);
+	}
+	.billing-interval {
+		font-size: 14px;
+		color: var(--secondary-text);
+	}
+	.renewal-date {
+		font-size: 14px;
+		color: var(--secondary-text);
+		margin-top: 8px;
+	}
+	.cancel-notice {
+		font-size: 14px;
+		color: var(--ios-red);
+		margin-top: 8px;
+		font-weight: 600;
+	}
+	.usage-info {
+		margin-bottom: 24px;
+	}
+	.usage-title {
+		font-size: 16px;
+		font-weight: 600;
+		margin-bottom: 12px;
+		color: var(--primary-text);
+	}
+	.usage-bar-container {
+		width: 100%;
+	}
+	.usage-bar {
+		width: 100%;
+		height: 8px;
+		background: #f0f0f0;
+		border-radius: 4px;
+		overflow: hidden;
+		margin-bottom: 8px;
+	}
+	.usage-bar-fill {
+		height: 100%;
+		background: var(--ios-blue);
+		transition: width 0.3s ease;
+	}
+	.usage-bar-fill.warning {
+		background: var(--primary-orange);
+	}
+	.usage-text {
+		font-size: 14px;
+		color: var(--primary-text);
+		font-weight: 600;
+	}
+	.subscription-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
 	}
 	.form-container {
 		display: flex;

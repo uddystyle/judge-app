@@ -90,7 +90,18 @@
 			{/if}
 
 			{#if form?.error}
-				<p class="error-message">{form.error}</p>
+				<div class="error-container">
+					<p class="error-message">{form.error}</p>
+					{#if form?.upgradeUrl}
+						<button
+							type="button"
+							class="upgrade-btn"
+							on:click={() => goto(form.upgradeUrl)}
+						>
+							プランをアップグレード
+						</button>
+					{/if}
+				</div>
 			{/if}
 
 			<div class="nav-buttons">
@@ -134,9 +145,31 @@
 		gap: 14px;
 		margin-top: 28px;
 	}
+	.error-container {
+		background: #fee;
+		border: 2px solid var(--ios-red);
+		border-radius: 12px;
+		padding: 16px;
+		text-align: center;
+	}
 	.error-message {
 		color: var(--ios-red);
 		font-size: 14px;
+		margin-bottom: 12px;
+	}
+	.upgrade-btn {
+		background: var(--ios-blue);
+		color: white;
+		padding: 12px 24px;
+		border: none;
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: opacity 0.2s;
+	}
+	.upgrade-btn:hover {
+		opacity: 0.85;
 	}
 	.mode-selection {
 		margin: 20px 0;

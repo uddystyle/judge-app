@@ -38,6 +38,7 @@
 		"@supabase/supabase-js": "^2.74.0",
 		"@types/cookie": "^0.6.0",
 		"@vercel/speed-insights": "^1.2.0",
+		"stripe": "^19.2.0",
 		"vercel": "^48.6.0",
 		"xlsx": "^0.18.5"
 	}

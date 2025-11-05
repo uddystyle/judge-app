@@ -2,6 +2,9 @@
 	import { currentUser, currentSession, userProfile, currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
 	import { goto } from '$app/navigation';
 
+	// Props
+	export let showAppName = false; // 料金プランページなどで使用
+
 	$: user = $currentUser;
 	$: session = $currentSession;
 	$: profile = $userProfile;
@@ -44,9 +47,15 @@
 <div class="header">
 	<div class="header-content">
 		<div class="info-display">
-			<span id="session-info">
-				{infoText}
-			</span>
+			{#if showAppName}
+				<button class="app-name-button" on:click={() => goto('/dashboard')}>
+					TENTO
+				</button>
+			{:else}
+				<span id="session-info">
+					{infoText}
+				</span>
+			{/if}
 		</div>
 		<button class="account-button" on:click={() => goto('/account')}>
 			{profile?.full_name || 'アカウント'}
@@ -78,6 +87,25 @@
 		flex: 1;
 		text-align: left;
 	}
+	.app-name-button {
+		background: transparent;
+		border: none;
+		font-size: 20px;
+		font-weight: 800;
+		font-family: 'M PLUS Rounded 1c', sans-serif;
+		color: #2d2d2d;
+		letter-spacing: 0.05em;
+		cursor: pointer;
+		padding: 0;
+		transition: all 0.2s;
+	}
+	.app-name-button:hover {
+		color: #ff6b35;
+		transform: scale(1.02);
+	}
+	.app-name-button:active {
+		transform: scale(0.98);
+	}
 	.account-button {
 		background: var(--bg-white);
 		color: var(--text-primary);
@@ -108,6 +136,9 @@
 		.info-display {
 			font-size: 16px;
 		}
+		.app-name-button {
+			font-size: 28px;
+		}
 		.account-button {
 			font-size: 16px;
 			padding: 10px 20px;
@@ -117,6 +148,9 @@
 
 	/* PC対応: デスクトップ */
 	@media (min-width: 1024px) {
+		.app-name-button {
+			font-size: 32px;
+		}
 		.account-button {
 			font-size: 18px;
 			padding: 12px 24px;

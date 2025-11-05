@@ -1,6 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+	checkCanCreateSession,
+	checkCanUseTournamentMode,
+	checkCanUseTrainingMode,
+	incrementSessionCount
+} from '$lib/server/subscriptionLimits';
 
 // Helper function to generate a unique 6-digit join code
 const generateUniqueJoinCode = async (supabase: SupabaseClient): Promise<string> => {
@@ -72,6 +78,44 @@ export const actions: Actions = {
 				sessionName,
 				error: '無効なモードが選択されました。'
 			});
+		}
+
+		// ============================================================
+		// サブスクリプション制限チェック
+		// ============================================================
+
+		// 1. セッション作成可否をチェック
+		const canCreateSession = await checkCanCreateSession(supabase, user.id);
+		if (!canCreateSession.allowed) {
+			return fail(403, {
+				sessionName,
+				error: canCreateSession.reason || 'セッションを作成できません。',
+				upgradeUrl: canCreateSession.upgradeUrl
+			});
+		}
+
+		// 2. 大会モード利用可否をチェック
+		if (mode === 'tournament') {
+			const canUseTournament = await checkCanUseTournamentMode(supabase, user.id);
+			if (!canUseTournament.allowed) {
+				return fail(403, {
+					sessionName,
+					error: canUseTournament.reason || '大会モードを利用できません。',
+					upgradeUrl: canUseTournament.upgradeUrl
+				});
+			}
+		}
+
+		// 3. 研修モード利用可否をチェック
+		if (mode === 'training') {
+			const canUseTraining = await checkCanUseTrainingMode(supabase, user.id);
+			if (!canUseTraining.allowed) {
+				return fail(403, {
+					sessionName,
+					error: canUseTraining.reason || '研修モードを利用できません。',
+					upgradeUrl: canUseTraining.upgradeUrl
+				});
+			}
 		}
 
 		// ユニークな参加コードを生成
@@ -170,6 +214,11 @@ export const actions: Actions = {
 				});
 			}
 		}
+
+		// ============================================================
+		// 使用量カウンターを更新
+		// ============================================================
+		await incrementSessionCount(supabase, user.id);
 
 		// モードに応じてリダイレクト先を決定
 		if (isTrainingMode) {
