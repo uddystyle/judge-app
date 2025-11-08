@@ -10,7 +10,7 @@
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
-	export let form: ActionData;
+	export const form: ActionData = undefined;
 	let realtimeChannel: any;
 	let pollingInterval: any;
 	let previousStatus: string | null = null; // ポーリングで前回の状態を記憶
@@ -512,106 +512,10 @@
 		}
 	}
 
-	/* 研修モードのスタイル */
-	.training-info {
-		background: var(--bg-white);
-		border: 2px solid var(--border-light);
-		border-radius: 12px;
-		padding: 20px;
-		margin-bottom: 20px;
-		text-align: center;
-	}
-	.training-info h3 {
-		font-size: 16px;
-		font-weight: 600;
-		color: var(--text-secondary);
-		margin-bottom: 12px;
-	}
-	.join-code {
-		font-size: 32px;
-		font-weight: 700;
-		color: var(--primary-orange);
-		letter-spacing: 4px;
-		margin: 8px 0;
-		font-family: 'Courier New', monospace;
-	}
 	.info-text {
 		font-size: 14px;
 		color: var(--text-secondary);
 		margin-top: 8px;
-	}
-	.training-section {
-		background: var(--bg-white);
-		border: 1px solid var(--border-light);
-		border-radius: 12px;
-		padding: 20px;
-		margin-bottom: 20px;
-	}
-	.training-section h3 {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin-bottom: 16px;
-	}
-	.participants-list {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-	.participant-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 12px 16px;
-		background: #f8f9fa;
-		border-radius: 8px;
-		border: 1px solid var(--border-light);
-	}
-	.participant-name {
-		font-size: 16px;
-		font-weight: 500;
-		color: var(--text-primary);
-	}
-	.badge {
-		padding: 4px 12px;
-		border-radius: 12px;
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.chief-badge {
-		background: var(--primary-orange);
-		color: white;
-	}
-	.empty-message {
-		text-align: center;
-		color: var(--text-secondary);
-		padding: 20px;
-		font-size: 14px;
-	}
-	.chief-select {
-		width: 100%;
-		padding: 12px;
-		font-size: 16px;
-		border: 1px solid var(--border-light);
-		border-radius: 8px;
-		margin-bottom: 12px;
-		background: white;
-	}
-	.error-message {
-		color: var(--ios-red);
-		font-size: 14px;
-		margin-bottom: 12px;
-		padding: 8px 12px;
-		background: #fee;
-		border-radius: 6px;
-	}
-	.success-message {
-		color: var(--ios-green);
-		font-size: 14px;
-		margin-bottom: 12px;
-		padding: 8px 12px;
-		background: #efe;
-		border-radius: 6px;
 	}
 
 	/* PC対応: タブレット以上 */

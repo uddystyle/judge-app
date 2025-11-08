@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.select('*')
 		.eq('user_id', user.id)
 		.eq('status', 'active')
-		.in('plan_type', ['basic', 'standard', 'enterprise'])
+		.in('plan_type', ['basic', 'standard', 'premium'])
 		.order('created_at', { ascending: false })
 		.limit(1)
 		.single();

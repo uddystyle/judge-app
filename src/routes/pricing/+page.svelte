@@ -354,15 +354,6 @@
 		margin-left: 6px;
 	}
 
-	.error-message {
-		background: #fee;
-		color: #c33;
-		padding: 12px 16px;
-		border-radius: 8px;
-		margin-bottom: 24px;
-		text-align: center;
-	}
-
 	.plans-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -477,40 +468,6 @@
 		padding: 10px 0;
 		font-size: 15px;
 		color: var(--secondary-text);
-	}
-
-	.upgrade-btn {
-		width: 100%;
-		padding: 14px;
-		border: none;
-		border-radius: 10px;
-		font-size: 16px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-		background: var(--ios-blue);
-		color: white;
-	}
-
-	.upgrade-btn:hover:not(:disabled) {
-		opacity: 0.85;
-	}
-
-	.upgrade-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.upgrade-btn.current {
-		background: var(--ios-green);
-	}
-
-	.upgrade-btn.downgrade {
-		background: var(--secondary-text);
-	}
-
-	.upgrade-btn.loading {
-		opacity: 0.7;
 	}
 
 	.comparison-section {

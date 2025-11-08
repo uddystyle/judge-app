@@ -30,6 +30,7 @@
 	let confirmPassword = '';
 	let passwordLoading = false;
 	let passwordMessage = '';
+	let portalLoading = false;
 
 	// 「名前を更新」ボタンが押されたときの処理
 	async function handleUpdateName() {
@@ -91,6 +92,35 @@
 
 		// ログアウト後、ログインページへ移動
 		goto('/login');
+	}
+
+	// Stripe Customer Portalを開く
+	async function openCustomerPortal(organizationId: string) {
+		portalLoading = true;
+		try {
+			const response = await fetch('/api/stripe/customer-portal', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					organizationId,
+					returnUrl: window.location.href
+				})
+			});
+
+			if (!response.ok) {
+				throw new Error('Customer Portalの作成に失敗しました');
+			}
+
+			const data = await response.json();
+			window.location.href = data.url;
+		} catch (error) {
+			console.error('Customer Portal Error:', error);
+			alert('プラン管理画面の表示に失敗しました。');
+		} finally {
+			portalLoading = false;
+		}
 	}
 
 	// プラン名の日本語表示
@@ -245,8 +275,16 @@
 						</NavButton>
 						{#if org.userRole === 'admin'}
 							{#if org.plan_type === 'free'}
-								<NavButton variant="primary" on:click={() => goto('/pricing')}>
+								<NavButton variant="primary" on:click={() => goto(`/organization/${org.id}/upgrade`)}>
 									プランをアップグレード
+								</NavButton>
+							{:else}
+								<NavButton
+									variant="primary"
+									on:click={() => openCustomerPortal(org.id)}
+									disabled={portalLoading}
+								>
+									{portalLoading ? '読み込み中...' : 'プランを管理'}
 								</NavButton>
 							{/if}
 						{/if}

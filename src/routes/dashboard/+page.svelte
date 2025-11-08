@@ -129,8 +129,11 @@
 			<h1 class="app-title">TENTO</h1>
 			<p class="app-subtitle">スキー・スノーボード検定・大会のための採点管理システム</p>
 		</div>
-		<button class="account-button" on:click={() => goto('/account')}>
-			{data.profile?.full_name || 'アカウント'}
+		<button class="account-button" class:has-organization={data.organizations && data.organizations.length > 0} on:click={() => goto('/account')}>
+			<span class="account-name">{data.profile?.full_name || 'アカウント'}</span>
+			{#if data.organizations && data.organizations.length > 0}
+				<span class="org-status">✓ 組織所属</span>
+			{/if}
 		</button>
 	</div>
 
@@ -185,45 +188,6 @@
 
 	<hr class="divider" />
 
-	<div class="section">
-		<h2 class="section-title">所属組織</h2>
-		<div class="list-keypad">
-			{#if data.organizations && data.organizations.length > 0}
-				{#each data.organizations as org}
-					<div
-						class="key select-item organization-item"
-						on:click={() => goto(`/organization/${org.id}`)}
-						role="button"
-						tabindex="0"
-						on:keydown={(e) => e.key === 'Enter' && goto(`/organization/${org.id}`)}
-					>
-						<div class="session-name">
-							{org.name}
-							{#if org.userRole === 'admin'}
-								<span class="mode-badge admin">管理者</span>
-							{:else}
-								<span class="mode-badge member">メンバー</span>
-							{/if}
-						</div>
-						<div class="organization-info">
-							<span class="plan-badge">{getPlanName(org.plan_type)}</span>
-							<span class="member-count"
-								>メンバー: {org.max_members === -1 ? '無制限' : `${org.max_members}名まで`}</span
-							>
-						</div>
-					</div>
-				{/each}
-			{:else}
-				<p style="color: var(--secondary-text);">所属組織はありません。</p>
-			{/if}
-		</div>
-		<div class="nav-buttons" style="margin-top: 20px;">
-			<NavButton on:click={() => goto('/onboarding/create-organization')}>組織を作成</NavButton>
-		</div>
-	</div>
-
-	<hr class="divider" />
-
 	<div class="nav-buttons">
 		{#if data.organizations && data.organizations.length > 0}
 			<NavButton variant="primary" on:click={() => goto('/session/create')}>
@@ -272,22 +236,49 @@
 		background: var(--bg-white);
 		color: var(--text-primary);
 		border: 2px solid var(--border-light);
-		border-radius: 20px;
-		padding: 8px 16px;
+		border-radius: 24px;
+		padding: 10px 18px;
 		font-size: 14px;
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.2s;
-		white-space: nowrap;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4px;
+		min-width: 140px;
+	}
+	.account-button.has-organization {
+		border-color: var(--primary-orange);
+		background: linear-gradient(135deg, #fff8f3 0%, #ffffff 100%);
 	}
 	.account-button:hover {
 		border-color: var(--primary-orange);
 		background: var(--primary-orange-hover);
 		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
+		transform: translateY(-1px);
 	}
 	.account-button:active {
-		transform: scale(0.98);
+		transform: scale(0.98) translateY(0);
+	}
+	.account-name {
+		display: block;
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+	.org-status {
+		font-size: 11px;
+		font-weight: 600;
+		padding: 3px 8px;
+		border-radius: 12px;
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		white-space: nowrap;
+		background: var(--primary-orange);
+		color: white;
 	}
 	.list-keypad {
 		display: flex;
@@ -449,36 +440,6 @@
 	.details-btn:active {
 		background-color: var(--primary-orange);
 	}
-	.organization-item {
-		background: linear-gradient(135deg, #ffffff 0%, #fffbf7 100%);
-	}
-	.organization-info {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		flex-wrap: wrap;
-		justify-content: center;
-		font-size: 14px;
-		color: var(--text-secondary);
-	}
-	.plan-badge {
-		background: var(--primary-orange);
-		color: white;
-		padding: 4px 10px;
-		border-radius: 6px;
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.member-count {
-		font-size: 13px;
-		color: var(--text-secondary);
-	}
-	.mode-badge.admin {
-		background: var(--primary-orange);
-	}
-	.mode-badge.member {
-		background: var(--ios-blue);
-	}
 
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
@@ -495,9 +456,15 @@
 			font-size: 15px;
 		}
 		.account-button {
+			padding: 12px 20px;
+			min-width: 160px;
+		}
+		.account-name {
 			font-size: 16px;
-			padding: 10px 20px;
-			border-radius: 24px;
+		}
+		.org-status {
+			font-size: 12px;
+			padding: 4px 10px;
 		}
 		.list-keypad {
 			gap: 20px;
@@ -554,8 +521,14 @@
 			font-size: 16px;
 		}
 		.account-button {
-			font-size: 18px;
-			padding: 12px 24px;
+			padding: 14px 24px;
+			min-width: 180px;
+		}
+		.account-name {
+			font-size: 17px;
+		}
+		.org-status {
+			font-size: 13px;
 		}
 		.list-keypad {
 			gap: 24px;

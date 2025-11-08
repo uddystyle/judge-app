@@ -6,11 +6,11 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// プランごとの検定員数制限
+// プランごとの組織メンバー数制限
 const MAX_MEMBERS: Record<string, number> = {
 	basic: 10,
 	standard: 30,
-	enterprise: -1 // 無制限
+	premium: 100
 };
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			return json({ error: '組織名を入力してください' }, { status: 400 });
 		}
 
-		if (!planType || !['basic', 'standard', 'enterprise'].includes(planType)) {
+		if (!planType || !['basic', 'standard', 'premium'].includes(planType)) {
 			return json({ error: '有効なプランを選択してください' }, { status: 400 });
 		}
 

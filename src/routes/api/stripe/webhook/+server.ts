@@ -1,10 +1,18 @@
 import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
-import { STRIPE_WEBHOOK_SECRET } from '$env/static/private';
+import {
+	STRIPE_WEBHOOK_SECRET,
+	SUPABASE_SERVICE_ROLE_KEY,
+	STRIPE_PRICE_BASIC_MONTH,
+	STRIPE_PRICE_BASIC_YEAR,
+	STRIPE_PRICE_STANDARD_MONTH,
+	STRIPE_PRICE_STANDARD_YEAR,
+	STRIPE_PRICE_PREMIUM_MONTH,
+	STRIPE_PRICE_PREMIUM_YEAR
+} from '$env/static/private';
 import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
-import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 
 // Service Role Keyを使用してSupabaseクライアントを作成（RLSをバイパス）
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -34,9 +42,12 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	// 3. イベントタイプに応じて処理
 	try {
+		console.log('[Webhook] 処理開始 - イベントタイプ:', event.type);
 		switch (event.type) {
 			case 'checkout.session.completed': {
 				const session = event.data.object as any;
+				console.log('[Webhook] checkout.session.completed - Session ID:', session.id);
+				console.log('[Webhook] Metadata:', session.metadata);
 				await handleCheckoutCompleted(session);
 				break;
 			}
@@ -105,7 +116,8 @@ async function handleCheckoutCompleted(session: any) {
 
 	// Stripe Subscriptionの詳細を取得
 	const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-	const planType = getPlanTypeFromPrice(subscription.items.data[0].price.id);
+	const priceId = subscription.items.data[0].price.id;
+	const planType = getPlanTypeFromPrice(priceId);
 	const billingInterval = subscription.items.data[0].price.recurring?.interval || 'month';
 
 	// 組織向けサブスクリプションの場合
@@ -148,75 +160,131 @@ async function handleOrganizationCheckout(
 	billingInterval: string
 ) {
 	const userId = session.metadata?.user_id;
+	const organizationId = session.metadata?.organization_id;
 	const organizationName = session.metadata?.organization_name;
 	const maxMembers = parseInt(session.metadata?.max_members || '10');
 	const customerId = session.customer;
 	const subscriptionId = subscription.id;
+	const isUpgrade = session.metadata?.is_upgrade === 'true';
 
 	if (!organizationName) {
 		console.error('[Webhook] organization_nameが見つかりません');
 		return;
 	}
 
-	console.log('[Webhook] 組織作成開始:', organizationName);
-
 	try {
-		// 1. 組織を作成
-		const { data: organization, error: orgError } = await supabaseAdmin
-			.from('organizations')
-			.insert({
-				name: organizationName,
-				plan_type: planType,
-				max_members: maxMembers,
+		// アップグレードの場合
+		if (isUpgrade && organizationId) {
+			console.log('[Webhook] 組織アップグレード開始:', organizationId);
+
+			// 1. 組織を更新
+			const { error: orgError } = await supabaseAdmin
+				.from('organizations')
+				.update({
+					plan_type: planType,
+					max_members: maxMembers,
+					stripe_subscription_id: subscriptionId,
+					stripe_customer_id: customerId
+				})
+				.eq('id', organizationId);
+
+			if (orgError) {
+				console.error('[Webhook] 組織更新エラー:', orgError);
+				throw orgError;
+			}
+
+			console.log('[Webhook] 組織更新成功:', organizationId);
+
+			// 2. subscriptionsテーブルに情報を保存（upsertを使用）
+			const { error: subError } = await supabaseAdmin
+				.from('subscriptions')
+				.upsert(
+					{
+						user_id: userId,
+						organization_id: organizationId,
+						stripe_customer_id: customerId,
+						stripe_subscription_id: subscriptionId,
+						plan_type: planType,
+						billing_interval: billingInterval,
+						status: subscription.status,
+						current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+						current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+						cancel_at_period_end: subscription.cancel_at_period_end
+					},
+					{
+						onConflict: 'stripe_customer_id',
+						ignoreDuplicates: false
+					}
+				);
+
+			if (subError) {
+				console.error('[Webhook] subscription作成エラー:', subError);
+				throw subError;
+			}
+
+			console.log('[Webhook] 組織アップグレード完了:', organizationId);
+		}
+		// 新規作成の場合
+		else {
+			console.log('[Webhook] 組織作成開始:', organizationName);
+
+			// 1. 組織を作成
+			const { data: organization, error: orgError } = await supabaseAdmin
+				.from('organizations')
+				.insert({
+					name: organizationName,
+					plan_type: planType,
+					max_members: maxMembers,
+					stripe_customer_id: customerId,
+					stripe_subscription_id: subscriptionId
+				})
+				.select()
+				.single();
+
+			if (orgError) {
+				console.error('[Webhook] 組織作成エラー:', orgError);
+				throw orgError;
+			}
+
+			console.log('[Webhook] 組織作成成功:', organization.id);
+
+			// 2. 作成者を管理者としてメンバーに追加
+			const { error: memberError } = await supabaseAdmin.from('organization_members').insert({
+				organization_id: organization.id,
+				user_id: userId,
+				role: 'admin'
+			});
+
+			if (memberError) {
+				console.error('[Webhook] メンバー追加エラー:', memberError);
+				throw memberError;
+			}
+
+			console.log('[Webhook] 管理者メンバー追加成功:', userId);
+
+			// 3. subscriptionsテーブルに組織情報を保存
+			const { error: subError } = await supabaseAdmin.from('subscriptions').insert({
+				user_id: userId,
+				organization_id: organization.id,
 				stripe_customer_id: customerId,
-				stripe_subscription_id: subscriptionId
-			})
-			.select()
-			.single();
+				stripe_subscription_id: subscriptionId,
+				plan_type: planType,
+				billing_interval: billingInterval,
+				status: subscription.status,
+				current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+				current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+				cancel_at_period_end: subscription.cancel_at_period_end
+			});
 
-		if (orgError) {
-			console.error('[Webhook] 組織作成エラー:', orgError);
-			throw orgError;
+			if (subError) {
+				console.error('[Webhook] subscription作成エラー:', subError);
+				throw subError;
+			}
+
+			console.log('[Webhook] 組織向けサブスクリプション作成完了:', organization.id);
 		}
-
-		console.log('[Webhook] 組織作成成功:', organization.id);
-
-		// 2. 作成者を管理者としてメンバーに追加
-		const { error: memberError } = await supabaseAdmin.from('organization_members').insert({
-			organization_id: organization.id,
-			user_id: userId,
-			role: 'admin'
-		});
-
-		if (memberError) {
-			console.error('[Webhook] メンバー追加エラー:', memberError);
-			throw memberError;
-		}
-
-		console.log('[Webhook] 管理者メンバー追加成功:', userId);
-
-		// 3. subscriptionsテーブルに組織情報を保存
-		const { error: subError } = await supabaseAdmin.from('subscriptions').insert({
-			user_id: userId,
-			organization_id: organization.id,
-			stripe_customer_id: customerId,
-			stripe_subscription_id: subscriptionId,
-			plan_type: planType,
-			billing_interval: billingInterval,
-			status: subscription.status,
-			current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-			current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-			cancel_at_period_end: subscription.cancel_at_period_end
-		});
-
-		if (subError) {
-			console.error('[Webhook] subscription作成エラー:', subError);
-			throw subError;
-		}
-
-		console.log('[Webhook] 組織向けサブスクリプション作成完了:', organization.id);
 	} catch (error) {
-		console.error('[Webhook] 組織作成処理でエラー:', error);
+		console.error('[Webhook] 組織処理でエラー:', error);
 		throw error;
 	}
 }
@@ -394,7 +462,7 @@ async function handlePaymentFailed(invoice: any) {
  */
 function getPlanTypeFromPrice(
 	priceId: string
-): 'free' | 'standard' | 'pro' | 'basic' | 'enterprise' {
+): 'free' | 'standard' | 'pro' | 'basic' | 'premium' {
 	// 個人向けプランのPrice IDマッピング
 	const STANDARD_PRICES = [
 		'price_1SPHtjIsuW568CJsdqnUsm9d', // 月額
@@ -407,28 +475,21 @@ function getPlanTypeFromPrice(
 	];
 
 	// 組織向けプランのPrice IDマッピング（環境変数から取得）
-	const BASIC_PRICES = [
-		process.env.STRIPE_PRICE_BASIC_MONTH,
-		process.env.STRIPE_PRICE_BASIC_YEAR
-	].filter(Boolean);
+	const BASIC_PRICES = [STRIPE_PRICE_BASIC_MONTH, STRIPE_PRICE_BASIC_YEAR].filter(Boolean);
 
-	const ORG_STANDARD_PRICES = [
-		process.env.STRIPE_PRICE_STANDARD_MONTH,
-		process.env.STRIPE_PRICE_STANDARD_YEAR
-	].filter(Boolean);
+	const ORG_STANDARD_PRICES = [STRIPE_PRICE_STANDARD_MONTH, STRIPE_PRICE_STANDARD_YEAR].filter(
+		Boolean
+	);
 
-	const ENTERPRISE_PRICES = [
-		process.env.STRIPE_PRICE_ENTERPRISE_MONTH,
-		process.env.STRIPE_PRICE_ENTERPRISE_YEAR
-	].filter(Boolean);
+	const PREMIUM_PRICES = [STRIPE_PRICE_PREMIUM_MONTH, STRIPE_PRICE_PREMIUM_YEAR].filter(Boolean);
 
 	// 組織向けプランのチェック（環境変数が設定されている場合）
 	if (BASIC_PRICES.includes(priceId)) {
 		return 'basic';
 	} else if (ORG_STANDARD_PRICES.includes(priceId)) {
 		return 'standard';
-	} else if (ENTERPRISE_PRICES.includes(priceId)) {
-		return 'enterprise';
+	} else if (PREMIUM_PRICES.includes(priceId)) {
+		return 'premium';
 	}
 	// 個人向けプランのチェック
 	else if (STANDARD_PRICES.includes(priceId)) {

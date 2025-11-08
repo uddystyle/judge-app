@@ -10,9 +10,9 @@
 	let loading = false;
 
 	const planNames: Record<string, string> = {
-		basic: 'ベーシック',
-		standard: 'スタンダード',
-		enterprise: 'エンタープライズ'
+		basic: 'Basic',
+		standard: 'Standard',
+		premium: 'Premium'
 	};
 
 	const roleNames: Record<string, string> = {

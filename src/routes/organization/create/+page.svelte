@@ -14,40 +14,43 @@
 	const existingPlanType = data.subscription?.plan_type as
 		| 'basic'
 		| 'standard'
-		| 'enterprise'
+		| 'premium'
 		| null;
 
 	let organizationName = '';
-	let selectedPlan: 'basic' | 'standard' | 'enterprise' | null = existingPlanType || null;
+	let selectedPlan: 'basic' | 'standard' | 'premium' | null = existingPlanType || null;
 	let billingInterval: 'month' | 'year' = 'month';
 	let loading = false;
 	let errorMessage = '';
 
 	const plans = {
 		basic: {
-			name: 'ベーシック',
+			name: 'Basic',
 			maxMembers: 10,
-			monthlyPrice: 5980,
-			yearlyPrice: 59800,
-			features: ['検定員10名まで', 'セッション無制限', '基本機能すべて利用可能']
+			maxJudges: 15,
+			monthlyPrice: 8800,
+			yearlyPrice: 88000,
+			features: ['組織メンバー10名まで', '検定員15名まで', 'セッション無制限', '基本機能すべて利用可能']
 		},
 		standard: {
-			name: 'スタンダード',
+			name: 'Standard',
 			maxMembers: 30,
-			monthlyPrice: 14800,
-			yearlyPrice: 148000,
-			features: ['検定員30名まで', 'セッション無制限', '基本機能すべて利用可能']
+			maxJudges: 50,
+			monthlyPrice: 24800,
+			yearlyPrice: 248000,
+			features: ['組織メンバー30名まで', '検定員50名まで', 'セッション無制限', '基本機能すべて利用可能']
 		},
-		enterprise: {
-			name: 'エンタープライズ',
-			maxMembers: -1,
-			monthlyPrice: 29800,
-			yearlyPrice: 298000,
-			features: ['検定員無制限', 'セッション無制限', '基本機能すべて利用可能']
+		premium: {
+			name: 'Premium',
+			maxMembers: 100,
+			maxJudges: 100,
+			monthlyPrice: 49800,
+			yearlyPrice: 498000,
+			features: ['組織メンバー100名まで', '検定員100名まで', 'セッション無制限', '基本機能すべて利用可能']
 		}
 	};
 
-	function getPrice(plan: 'basic' | 'standard' | 'enterprise') {
+	function getPrice(plan: 'basic' | 'standard' | 'premium') {
 		return billingInterval === 'month' ? plans[plan].monthlyPrice : plans[plan].yearlyPrice;
 	}
 
@@ -203,23 +206,19 @@
 						<button
 							class="plan-card"
 							class:selected={selectedPlan === planKey}
-							on:click={() => (selectedPlan = planKey as 'basic' | 'standard' | 'enterprise')}
+							on:click={() => (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
 							disabled={loading}
 						>
 							<div class="plan-header">
 								<h4 class="plan-name">{plan.name}</h4>
 								<div class="plan-price">
-									{formatPrice(getPrice(planKey as 'basic' | 'standard' | 'enterprise'))}
+									{formatPrice(getPrice(planKey as 'basic' | 'standard' | 'premium'))}
 									<span class="price-unit">/{billingInterval === 'month' ? '月' : '年'}</span>
 								</div>
 							</div>
 
 							<div class="plan-members">
-								{#if plan.maxMembers === -1}
-									検定員無制限
-								{:else}
-									検定員{plan.maxMembers}名まで
-								{/if}
+								組織メンバー{plan.maxMembers}名 / 検定員{plan.maxJudges}名まで
 							</div>
 
 							<ul class="plan-features">

@@ -14,9 +14,9 @@ const PRICE_IDS: Record<string, { month: string; year: string }> = {
 		month: env.STRIPE_PRICE_STANDARD_MONTH || 'price_standard_month_placeholder',
 		year: env.STRIPE_PRICE_STANDARD_YEAR || 'price_standard_year_placeholder'
 	},
-	enterprise: {
-		month: env.STRIPE_PRICE_ENTERPRISE_MONTH || 'price_enterprise_month_placeholder',
-		year: env.STRIPE_PRICE_ENTERPRISE_YEAR || 'price_enterprise_year_placeholder'
+	premium: {
+		month: env.STRIPE_PRICE_PREMIUM_MONTH || 'price_premium_month_placeholder',
+		year: env.STRIPE_PRICE_PREMIUM_YEAR || 'price_premium_year_placeholder'
 	}
 };
 
@@ -24,7 +24,7 @@ const PRICE_IDS: Record<string, { month: string; year: string }> = {
 const MAX_MEMBERS: Record<string, number> = {
 	basic: 10,
 	standard: 30,
-	enterprise: -1 // 無制限
+	premium: 100
 };
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
@@ -48,7 +48,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			throw error(400, '必須パラメータが不足しています。');
 		}
 
-		if (!['basic', 'standard', 'enterprise'].includes(planType)) {
+		if (!['basic', 'standard', 'premium'].includes(planType)) {
 			throw error(400, '無効なプランタイプです。');
 		}
 

@@ -1,11 +1,33 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+
+	// アンカーリンク付きで遷移する関数
+	async function navigateWithAnchor(path: string) {
+		// パスとアンカーを分離
+		const [basePath, anchor] = path.split('#');
+
+		// ページ遷移（トップページの場合、view=landingパラメータを追加してリダイレクトを回避）
+		const targetPath = basePath === '/' ? '/?view=landing' : basePath || '/';
+		await goto(targetPath);
+
+		// アンカーがある場合、少し待ってからスクロール
+		if (anchor && browser) {
+			setTimeout(() => {
+				const element = document.getElementById(anchor);
+				if (element) {
+					element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+				}
+			}, 100);
+		}
+	}
 </script>
 
 <footer class="footer">
 	<div class="footer-container">
 		<div class="footer-brand">
-			<button class="brand-name" on:click={() => goto('/')}>TENTO</button>
+			<button class="brand-name" on:click={() => goto('/?view=landing')}>TENTO</button>
 			<p class="brand-description">スキー・スノーボード検定・大会のための採点管理システム</p>
 		</div>
 
@@ -13,10 +35,10 @@
 			<div class="footer-column">
 				<h4 class="column-title">製品</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => goto('/#features')}>機能</button></li>
+					<li><button class="link-button" on:click={() => navigateWithAnchor('/#features')}>機能</button></li>
 					<li><button class="link-button" on:click={() => goto('/pricing')}>料金プラン</button></li>
 					<li>
-						<button class="link-button" on:click={() => goto('/#how-it-works')}>使い方</button>
+						<button class="link-button" on:click={() => navigateWithAnchor('/#how-it-works')}>使い方</button>
 					</li>
 				</ul>
 			</div>

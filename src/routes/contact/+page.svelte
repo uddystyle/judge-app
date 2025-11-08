@@ -41,13 +41,16 @@
 		</div>
 	{:else}
 		<div class="form-container">
-			<form method="POST" use:enhance={() => {
-				isSubmitting = true;
-				return async ({ update }) => {
-					await update();
-					isSubmitting = false;
-				};
-			}}>
+			<form
+				method="POST"
+				use:enhance={() => {
+					isSubmitting = true;
+					return async ({ update }) => {
+						await update();
+						isSubmitting = false;
+					};
+				}}
+			>
 				<div class="form-group">
 					<label for="name" class="label">お名前 <span class="required">*</span></label>
 					<input
@@ -112,7 +115,9 @@
 				</div>
 
 				<div class="form-group">
-					<label for="category" class="label">お問い合わせ種別 <span class="required">*</span></label>
+					<label for="category" class="label"
+						>お問い合わせ種別 <span class="required">*</span></label
+					>
 					<select
 						id="category"
 						name="category"
@@ -122,9 +127,13 @@
 					>
 						<option value="">選択してください</option>
 						<option value="general" selected={form?.category === 'general'}>一般的な質問</option>
-						<option value="technical" selected={form?.category === 'technical'}>技術的な問題</option>
-						<option value="billing" selected={form?.category === 'billing'}>料金・請求について</option>
-						<option value="feature" selected={form?.category === 'feature'}>機能に関する要望</option>
+						<option value="technical" selected={form?.category === 'technical'}>技術的な問題</option
+						>
+						<option value="billing" selected={form?.category === 'billing'}
+							>料金・請求について</option
+						>
+						<option value="feature" selected={form?.category === 'feature'}>機能に関する要望</option
+						>
 						<option value="other" selected={form?.category === 'other'}>その他</option>
 					</select>
 					{#if form?.errors?.category}
@@ -133,7 +142,8 @@
 				</div>
 
 				<div class="form-group">
-					<label for="message" class="label">お問い合わせ内容 <span class="required">*</span></label>
+					<label for="message" class="label">お問い合わせ内容 <span class="required">*</span></label
+					>
 					<textarea
 						id="message"
 						name="message"
@@ -141,8 +151,8 @@
 						class:error={form?.errors?.message}
 						rows="8"
 						required
-						placeholder="お問い合わせ内容を詳しくご記入ください"
-					>{form?.message || ''}</textarea>
+						placeholder="お問い合わせ内容を詳しくご記入ください">{form?.message || ''}</textarea
+					>
 					{#if form?.errors?.message}
 						<p class="error-text">{form.errors.message}</p>
 					{/if}
@@ -158,9 +168,7 @@
 					<button type="submit" class="submit-btn" disabled={isSubmitting}>
 						{isSubmitting ? '送信中...' : '送信する'}
 					</button>
-					<button type="button" class="cancel-btn" on:click={() => goto('/')}>
-						キャンセル
-					</button>
+					<button type="button" class="cancel-btn" on:click={() => goto('/')}> キャンセル </button>
 				</div>
 			</form>
 		</div>
@@ -169,13 +177,11 @@
 			<h2 class="info-title">その他のお問い合わせ方法</h2>
 			<div class="info-cards">
 				<div class="info-card">
-					<div class="info-icon">📧</div>
 					<h3>メールでのお問い合わせ</h3>
 					<p>support@tento-app.com</p>
 					<p class="info-note">営業時間: 平日 9:00-18:00</p>
 				</div>
 				<div class="info-card">
-					<div class="info-icon">📖</div>
 					<h3>よくある質問</h3>
 					<p>よくある質問ページで解決できる<br />場合があります</p>
 					<button class="info-link" on:click={() => goto('/faq')}>FAQを見る</button>
@@ -412,11 +418,6 @@
 	.info-card:hover {
 		border-color: var(--ios-blue);
 		box-shadow: 0 4px 16px rgba(0, 122, 255, 0.15);
-	}
-
-	.info-icon {
-		font-size: 48px;
-		margin-bottom: 16px;
 	}
 
 	.info-card h3 {

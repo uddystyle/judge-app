@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import Footer from '$lib/components/Footer.svelte';
+	import type { PageData } from './$types';
+
+	export let data: PageData;
 </script>
 
 <svelte:head>
@@ -24,10 +27,18 @@
 			</p>
 
 			<div class="cta-buttons">
-				<button class="btn btn-primary" on:click={() => goto('/signup')}>
-					新規登録して始める
-				</button>
-				<button class="btn btn-secondary" on:click={() => goto('/login')}>ログイン</button>
+				{#if data.user}
+					<!-- ログイン済みの場合 -->
+					<button class="btn btn-primary" on:click={() => goto('/dashboard')}>
+						ダッシュボードに戻る
+					</button>
+				{:else}
+					<!-- 未ログインの場合 -->
+					<button class="btn btn-primary" on:click={() => goto('/signup')}>
+						新規登録して始める
+					</button>
+					<button class="btn btn-secondary" on:click={() => goto('/login')}>ログイン</button>
+				{/if}
 			</div>
 		</div>
 	</div>
@@ -194,16 +205,19 @@
 		</div>
 	</div>
 
-	<div class="cta-section">
-		<div class="container">
-			<h2 class="cta-title">今すぐ始めましょう</h2>
-			<p class="cta-description">
-				無料でアカウントを作成して、組織を立ち上げ、<br />
-				スキー・スノーボード検定・大会の採点を効率化しませんか？
-			</p>
-			<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}> 無料で始める </button>
+	{#if !data.user}
+		<!-- 未ログインユーザーのみCTAセクションを表示 -->
+		<div class="cta-section">
+			<div class="container">
+				<h2 class="cta-title">今すぐ始めましょう</h2>
+				<p class="cta-description">
+					無料でアカウントを作成して、組織を立ち上げ、<br />
+					スキー・スノーボード検定・大会の採点を効率化しませんか？
+				</p>
+				<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}> 無料で始める </button>
+			</div>
 		</div>
-	</div>
+	{/if}
 </div>
 
 <Footer />
