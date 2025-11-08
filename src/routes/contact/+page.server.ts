@@ -3,12 +3,13 @@ import { fail } from '@sveltejs/kit';
 import { validateEmail, validateName, validateText } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ locals }) => {
-	const session = await locals.getSession();
-	const user = session?.user || null;
+	const { supabase } = locals;
+
+	// getUser()を使用してセキュアにユーザー情報を取得
+	const { data: { user } } = await supabase.auth.getUser();
 
 	let profile = null;
 	if (user) {
-		const { supabase } = locals;
 		const { data } = await supabase
 			.from('profiles')
 			.select('id, full_name, avatar_url')

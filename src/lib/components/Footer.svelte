@@ -5,7 +5,7 @@
 <footer class="footer">
 	<div class="footer-container">
 		<div class="footer-brand">
-			<h3 class="brand-name">TENTO</h3>
+			<button class="brand-name" on:click={() => goto('/')}>TENTO</button>
 			<p class="brand-description">スキー・スノーボード検定・大会のための採点管理システム</p>
 		</div>
 
@@ -73,6 +73,20 @@
 		color: #ff6b35;
 		margin-bottom: 12px;
 		letter-spacing: 0.05em;
+		background: transparent;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.brand-name:hover {
+		color: #ff8555;
+		transform: scale(1.02);
+	}
+
+	.brand-name:active {
+		transform: scale(0.98);
 	}
 
 	.brand-description {
@@ -159,6 +173,10 @@
 
 		.brand-name {
 			font-size: 36px;
+		}
+
+		.brand-name:hover {
+			color: #ff8555;
 		}
 
 		.brand-description {
