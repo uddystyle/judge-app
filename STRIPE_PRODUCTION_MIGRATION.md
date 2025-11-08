@@ -93,8 +93,8 @@
 1. **Developers** → **API keys** に移動
 2. **本番データを表示**モードになっていることを確認
 3. 以下のキーをコピー:
-   - **Publishable key** (pk_live_ で始まる)
-   - **Secret key** (sk_live_ で始まる) - **Reveal live key** をクリック
+   - **Publishable key** (pk*live* で始まる)
+   - **Secret key** (sk*live* で始まる) - **Reveal live key** をクリック
 
 ---
 
@@ -112,31 +112,31 @@
 
 #### APIキー
 
-| Variable Name | Value | Environment |
-|--------------|-------|-------------|
-| `PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_xxxxxxxxxxxxx` | Production |
-| `STRIPE_SECRET_KEY` | `sk_live_xxxxxxxxxxxxx` | Production |
+| Variable Name                   | Value                   | Environment |
+| ------------------------------- | ----------------------- | ----------- |
+| `PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_xxxxxxxxxxxxx` | Production  |
+| `STRIPE_SECRET_KEY`             | `sk_live_xxxxxxxxxxxxx` | Production  |
 
 #### Price IDs - Basic
 
-| Variable Name | Value | Environment |
-|--------------|-------|-------------|
-| `STRIPE_PRICE_BASIC_MONTH` | 手順2でコピーしたBasic月額のPrice ID | Production |
-| `STRIPE_PRICE_BASIC_YEAR` | 手順2でコピーしたBasic年額のPrice ID | Production |
+| Variable Name              | Value                                | Environment |
+| -------------------------- | ------------------------------------ | ----------- |
+| `STRIPE_PRICE_BASIC_MONTH` | 手順2でコピーしたBasic月額のPrice ID | Production  |
+| `STRIPE_PRICE_BASIC_YEAR`  | 手順2でコピーしたBasic年額のPrice ID | Production  |
 
 #### Price IDs - Standard
 
-| Variable Name | Value | Environment |
-|--------------|-------|-------------|
-| `STRIPE_PRICE_STANDARD_MONTH` | 手順2でコピーしたStandard月額のPrice ID | Production |
-| `STRIPE_PRICE_STANDARD_YEAR` | 手順2でコピーしたStandard年額のPrice ID | Production |
+| Variable Name                 | Value                                   | Environment |
+| ----------------------------- | --------------------------------------- | ----------- |
+| `STRIPE_PRICE_STANDARD_MONTH` | 手順2でコピーしたStandard月額のPrice ID | Production  |
+| `STRIPE_PRICE_STANDARD_YEAR`  | 手順2でコピーしたStandard年額のPrice ID | Production  |
 
 #### Price IDs - Premium
 
-| Variable Name | Value | Environment |
-|--------------|-------|-------------|
-| `STRIPE_PRICE_PREMIUM_MONTH` | 手順2でコピーしたPremium月額のPrice ID | Production |
-| `STRIPE_PRICE_PREMIUM_YEAR` | 手順2でコピーしたPremium年額のPrice ID | Production |
+| Variable Name                | Value                                  | Environment |
+| ---------------------------- | -------------------------------------- | ----------- |
+| `STRIPE_PRICE_PREMIUM_MONTH` | 手順2でコピーしたPremium月額のPrice ID | Production  |
+| `STRIPE_PRICE_PREMIUM_YEAR`  | 手順2でコピーしたPremium年額のPrice ID | Production  |
 
 ### 3. Webhook Secret（後で設定）
 
@@ -152,7 +152,6 @@ Webhook Secretは次のセクションで取得後に設定します。
 2. **本番データを表示**モードになっていることを確認
 3. **Add endpoint** をクリック
 4. 以下の情報を入力:
-
    - **Endpoint URL**: `https://tentoapp.com/api/stripe/webhook`
 
    - **Description**: `本番環境 - Stripe Webhook`
@@ -181,9 +180,9 @@ Webhook Secretは次のセクションで取得後に設定します。
 2. **Settings** → **Environment Variables** に移動
 3. 以下の環境変数を追加:
 
-| Variable Name | Value | Environment |
-|--------------|-------|-------------|
-| `STRIPE_WEBHOOK_SECRET` | `whsec_xxxxxxxxxxxxx` | Production |
+| Variable Name           | Value                 | Environment |
+| ----------------------- | --------------------- | ----------- |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_xxxxxxxxxxxxx` | Production  |
 
 ### 4. Vercelを再デプロイ
 
@@ -280,6 +279,7 @@ WHERE id = 'your-organization-id';
 ```
 
 確認項目:
+
 - `plan_type` が選択したプラン（basic/standard/premium）と一致
 - `max_members` が正しい値（10/30/100）
 - `stripe_customer_id` が設定されている
@@ -302,6 +302,7 @@ WHERE organization_id = 'your-organization-id';
 ```
 
 確認項目:
+
 - `plan_type` が正しい
 - `billing_interval` が正しい（month/year）
 - `status` が `active`
@@ -314,6 +315,7 @@ WHERE organization_id = 'your-organization-id';
 ### Webhookが動作しない
 
 #### 症状
+
 - 決済完了後、プランが更新されない
 - Stripeダッシュボードでエラーが表示される
 
@@ -331,9 +333,11 @@ WHERE organization_id = 'your-organization-id';
    - 最低限 `checkout.session.completed` が有効になっているか
 
 4. **Vercelログを確認**
+
    ```bash
    vercel logs --prod
    ```
+
    - Webhook受信時のログを確認
    - エラーメッセージがないか確認
 
@@ -345,6 +349,7 @@ WHERE organization_id = 'your-organization-id';
 ### プランが更新されない
 
 #### 症状
+
 - Webhookは成功しているがデータベースが更新されない
 
 #### 確認事項
@@ -354,9 +359,11 @@ WHERE organization_id = 'your-organization-id';
    - Stripeで作成した本番用Price IDと一致するか
 
 2. **ブラウザのコンソールログを確認**
+
    ```
    開発者ツール → Console
    ```
+
    - エラーメッセージがないか確認
 
 3. **Supabase RLS（Row Level Security）**
@@ -366,6 +373,7 @@ WHERE organization_id = 'your-organization-id';
 ### 決済が失敗する
 
 #### 症状
+
 - Stripeチェックアウトでエラーが発生
 
 #### 確認事項

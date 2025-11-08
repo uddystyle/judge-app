@@ -568,6 +568,8 @@
 
 	.pricing-cta {
 		text-align: center;
+		margin-top: 64px;
+		padding-top: 24px;
 	}
 
 	.cta-section {
