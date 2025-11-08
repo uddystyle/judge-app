@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -95,6 +96,22 @@
 			supabase.removeChannel(realtimeChannel);
 		}
 	});
+
+	// プラン名の表示
+	function getPlanName(planType: string): string {
+		switch (planType) {
+			case 'free':
+				return 'フリー';
+			case 'basic':
+				return 'Basic';
+			case 'standard':
+				return 'Standard';
+			case 'premium':
+				return 'Premium';
+			default:
+				return 'フリー';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -168,10 +185,51 @@
 
 	<hr class="divider" />
 
+	<div class="section">
+		<h2 class="section-title">所属組織</h2>
+		<div class="list-keypad">
+			{#if data.organizations && data.organizations.length > 0}
+				{#each data.organizations as org}
+					<div
+						class="key select-item organization-item"
+						on:click={() => goto(`/organization/${org.id}`)}
+						role="button"
+						tabindex="0"
+						on:keydown={(e) => e.key === 'Enter' && goto(`/organization/${org.id}`)}
+					>
+						<div class="session-name">
+							{org.name}
+							{#if org.userRole === 'admin'}
+								<span class="mode-badge admin">管理者</span>
+							{:else}
+								<span class="mode-badge member">メンバー</span>
+							{/if}
+						</div>
+						<div class="organization-info">
+							<span class="plan-badge">{getPlanName(org.plan_type)}</span>
+							<span class="member-count"
+								>メンバー: {org.max_members === -1 ? '無制限' : `${org.max_members}名まで`}</span
+							>
+						</div>
+					</div>
+				{/each}
+			{:else}
+				<p style="color: var(--secondary-text);">所属組織はありません。</p>
+			{/if}
+		</div>
+		<div class="nav-buttons" style="margin-top: 20px;">
+			<NavButton on:click={() => goto('/onboarding/create-organization')}>組織を作成</NavButton>
+		</div>
+	</div>
+
+	<hr class="divider" />
+
 	<div class="nav-buttons">
-		<NavButton variant="primary" on:click={() => goto('/session/create')}>
-			新しいセッションを作成
-		</NavButton>
+		{#if data.organizations && data.organizations.length > 0}
+			<NavButton variant="primary" on:click={() => goto('/session/create')}>
+				新しいセッションを作成
+			</NavButton>
+		{/if}
 		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
 	</div>
 </div>
@@ -391,6 +449,36 @@
 	.details-btn:active {
 		background-color: var(--primary-orange);
 	}
+	.organization-item {
+		background: linear-gradient(135deg, #ffffff 0%, #fffbf7 100%);
+	}
+	.organization-info {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+		justify-content: center;
+		font-size: 14px;
+		color: var(--text-secondary);
+	}
+	.plan-badge {
+		background: var(--primary-orange);
+		color: white;
+		padding: 4px 10px;
+		border-radius: 6px;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.member-count {
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
+	.mode-badge.admin {
+		background: var(--primary-orange);
+	}
+	.mode-badge.member {
+		background: var(--ios-blue);
+	}
 
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
@@ -485,3 +573,5 @@
 		}
 	}
 </style>
+
+<Footer />

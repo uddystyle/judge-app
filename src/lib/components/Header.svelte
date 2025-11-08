@@ -5,10 +5,11 @@
 	// Props
 	export let showAppName = false; // 料金プランページなどで使用
 	export let pageUser: any = null; // ページから渡されるユーザー情報（料金ページなど）
+	export let pageProfile: any = null; // ページから渡されるプロフィール情報
 
-	$: user = $currentUser;
+	$: user = pageUser || $currentUser;
 	$: session = $currentSession;
-	$: profile = $userProfile;
+	$: profile = pageProfile || $userProfile;
 	$: discipline = $currentDiscipline;
 	$: level = $currentLevel;
 	$: event = $currentEvent;

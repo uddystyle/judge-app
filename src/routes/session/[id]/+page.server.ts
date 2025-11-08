@@ -25,6 +25,35 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(404, '検定が見つかりません。');
 	}
 
+	// 組織セッションの場合、組織メンバーを自動的に参加者として追加
+	if (sessionDetails.organization_id) {
+		// ユーザーが組織メンバーかチェック
+		const { data: membership } = await supabase
+			.from('organization_members')
+			.select('id')
+			.eq('organization_id', sessionDetails.organization_id)
+			.eq('user_id', user.id)
+			.maybeSingle();
+
+		if (membership) {
+			// すでに参加者として登録されているかチェック
+			const { data: existingParticipant } = await supabase
+				.from('session_participants')
+				.select('id')
+				.eq('session_id', sessionId)
+				.eq('user_id', user.id)
+				.maybeSingle();
+
+			// 未登録の場合のみ追加
+			if (!existingParticipant) {
+				await supabase.from('session_participants').insert({
+					session_id: sessionId,
+					user_id: user.id
+				});
+			}
+		}
+	}
+
 	// ログイン中のユーザーが主任検定員かどうかを判定
 	const isChief = user.id === sessionDetails.chief_judge_id;
 

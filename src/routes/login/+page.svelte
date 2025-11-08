@@ -93,31 +93,31 @@
 
 <style>
 	.container {
-		padding: 50px 20px 60px;
+		padding: 28px 20px;
 		text-align: center;
 		max-width: 440px;
 		margin: 0 auto;
 		min-height: calc(100vh - 80px);
 	}
 	.instruction {
-		font-size: 32px;
+		font-size: 24px;
 		font-weight: 700;
 		color: var(--text-primary);
-		margin-bottom: 40px;
+		margin-bottom: 28px;
 	}
 	.form-container {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 		background: var(--bg-white);
-		padding: 32px;
-		border-radius: 20px;
+		padding: 24px;
+		border-radius: 16px;
 		border: 2px solid var(--border-light);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 	}
 	.input-field {
-		padding: 16px;
-		font-size: 17px;
+		padding: 15px;
+		font-size: 16px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
 		background: var(--bg-white);
@@ -143,5 +143,29 @@
 		flex-direction: column;
 		gap: 12px;
 		margin-top: 8px;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 500px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.form-container {
+			padding: 40px;
+			gap: 20px;
+		}
+		.input-field {
+			padding: 18px;
+			font-size: 18px;
+		}
+		.error-message {
+			font-size: 15px;
+			padding: 14px;
+		}
 	}
 </style>

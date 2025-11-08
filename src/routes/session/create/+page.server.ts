@@ -1,12 +1,55 @@
 import { fail, redirect } from '@sveltejs/kit';
-import type { Actions } from './$types';
+import type { Actions, PageServerLoad } from './$types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
 	checkCanCreateSession,
 	checkCanUseTournamentMode,
-	checkCanUseTrainingMode,
-	incrementSessionCount
-} from '$lib/server/subscriptionLimits';
+	checkCanUseTrainingMode
+} from '$lib/server/organizationLimits';
+import { validateSessionName, validateUUID } from '$lib/server/validation';
+
+export const load: PageServerLoad = async ({ locals }) => {
+	const {
+		data: { user },
+		error: userError
+	} = await locals.supabase.auth.getUser();
+
+	// 未ログインの場合はログインページへリダイレクト
+	if (userError || !user) {
+		throw redirect(303, '/login');
+	}
+
+	// ユーザーが所属するすべての組織を取得（複数組織対応）
+	const { data: memberships } = await locals.supabase
+		.from('organization_members')
+		.select(
+			`
+			role,
+			organizations (
+				id,
+				name,
+				plan_type
+			)
+		`
+		)
+		.eq('user_id', user.id);
+
+	// 組織に1つも所属していない場合は組織作成画面へリダイレクト
+	if (!memberships || memberships.length === 0) {
+		throw redirect(303, '/onboarding/create-organization');
+	}
+
+	// 組織配列を作成
+	const organizations = memberships.map((m: any) => ({
+		...m.organizations,
+		userRole: m.role
+	}));
+
+	return {
+		user,
+		organizations
+	};
+};
 
 // Helper function to generate a unique 6-digit join code
 const generateUniqueJoinCode = async (supabase: SupabaseClient): Promise<string> => {
@@ -56,24 +99,46 @@ export const actions: Actions = {
 		}
 
 		const formData = await request.formData();
-		const sessionName = (formData.get('sessionName') as string)?.trim();
+		const sessionNameRaw = formData.get('sessionName') as string;
 		const mode = formData.get('mode') as string;
 		const maxJudgesStr = formData.get('maxJudges') as string;
+		const organizationIdRaw = formData.get('organizationId') as string;
 
-		// Basic validation
-		if (!sessionName) {
-			return fail(400, { sessionName: '', error: 'セッション名を入力してください。' });
-		}
-
-		if (sessionName.length > 100) {
+		// 組織IDのバリデーション（SQLインジェクション対策）
+		const orgIdValidation = validateUUID(organizationIdRaw);
+		if (!orgIdValidation.valid) {
 			return fail(400, {
-				sessionName,
-				error: 'セッション名は100文字以内にしてください。'
+				sessionName: sessionNameRaw,
+				error: orgIdValidation.error || '組織を選択してください。'
 			});
 		}
+		const organizationId = organizationIdRaw;
 
-		// Validate mode
-		if (mode && !['kentei', 'tournament', 'training'].includes(mode)) {
+		// ユーザーがその組織に所属しているか確認
+		const { data: membership } = await supabase
+			.from('organization_members')
+			.select('organization_id')
+			.eq('user_id', user.id)
+			.eq('organization_id', organizationId)
+			.maybeSingle();
+
+		if (!membership) {
+			return fail(403, { error: '選択した組織に所属していません。' });
+		}
+
+		// セッション名のバリデーション（XSS対策を含む）
+		const nameValidation = validateSessionName(sessionNameRaw);
+		if (!nameValidation.valid) {
+			return fail(400, {
+				sessionName: sessionNameRaw || '',
+				error: nameValidation.error || 'セッション名が無効です。'
+			});
+		}
+		const sessionName = nameValidation.sanitized!;
+
+		// モードのバリデーション（SQLインジェクション対策）
+		const validModes = ['kentei', 'tournament', 'training'];
+		if (mode && !validModes.includes(mode)) {
 			return fail(400, {
 				sessionName,
 				error: '無効なモードが選択されました。'
@@ -81,11 +146,11 @@ export const actions: Actions = {
 		}
 
 		// ============================================================
-		// サブスクリプション制限チェック
+		// 組織ベースのプラン制限チェック
 		// ============================================================
 
-		// 1. セッション作成可否をチェック
-		const canCreateSession = await checkCanCreateSession(supabase, user.id);
+		// 1. セッション作成可否をチェック（組織ベース）
+		const canCreateSession = await checkCanCreateSession(supabase, organizationId);
 		if (!canCreateSession.allowed) {
 			return fail(403, {
 				sessionName,
@@ -94,9 +159,9 @@ export const actions: Actions = {
 			});
 		}
 
-		// 2. 大会モード利用可否をチェック
+		// 2. 大会モード利用可否をチェック（組織ベース）
 		if (mode === 'tournament') {
-			const canUseTournament = await checkCanUseTournamentMode(supabase, user.id);
+			const canUseTournament = await checkCanUseTournamentMode(supabase, organizationId);
 			if (!canUseTournament.allowed) {
 				return fail(403, {
 					sessionName,
@@ -106,9 +171,9 @@ export const actions: Actions = {
 			}
 		}
 
-		// 3. 研修モード利用可否をチェック
+		// 3. 研修モード利用可否をチェック（組織ベース）
 		if (mode === 'training') {
-			const canUseTraining = await checkCanUseTrainingMode(supabase, user.id);
+			const canUseTraining = await checkCanUseTrainingMode(supabase, organizationId);
 			if (!canUseTraining.allowed) {
 				return fail(403, {
 					sessionName,
@@ -144,7 +209,7 @@ export const actions: Actions = {
 		}
 
 		// Insert the new session into the 'sessions' table
-		const { data: sessionData, error: sessionError } = await supabase
+		const { data: sessionData, error: sessionError} = await supabase
 			.from('sessions')
 			.insert({
 				name: sessionName,
@@ -157,7 +222,8 @@ export const actions: Actions = {
 				mode: sessionMode,
 				is_tournament_mode: isTournamentMode, // 後方互換性のため保持
 				score_calculation: isTournamentMode ? 'sum' : 'average',
-				exclude_extremes: false
+				exclude_extremes: false,
+				organization_id: organizationId // フォームで選択された組織ID
 			})
 			.select()
 			.single();
@@ -214,11 +280,6 @@ export const actions: Actions = {
 				});
 			}
 		}
-
-		// ============================================================
-		// 使用量カウンターを更新
-		// ============================================================
-		await incrementSessionCount(supabase, user.id);
 
 		// モードに応じてリダイレクト先を決定
 		if (isTrainingMode) {

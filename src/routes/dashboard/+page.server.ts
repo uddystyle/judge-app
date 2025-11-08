@@ -12,26 +12,106 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		throw redirect(303, '/login');
 	}
 
-	// ログインユーザーが参加しているセッションの情報を取得（終了済みも含む）
-	const { data: sessions, error } = await supabase
-		.from('session_participants')
-		.select('sessions!inner (id, name, session_date, join_code, is_active, is_tournament_mode, mode)')
+	// ユーザーが所属するすべての組織を取得（複数組織対応）
+	const { data: memberships } = await supabase
+		.from('organization_members')
+		.select(
+			`
+			role,
+			organizations (
+				id,
+				name,
+				plan_type,
+				max_members,
+				created_at
+			)
+		`
+		)
 		.eq('user_id', user.id);
 
-	if (error) {
-		console.error('Error fetching sessions:', error);
-		return { sessions: [], profile: null };
+	// 組織IDを抽出
+	const organizationIds = memberships
+		? memberships
+				.map((m: any) => m.organizations?.id)
+				.filter((id: any) => id)
+		: [];
+
+	// セッションを並行して取得（2つのクエリを同時実行してN+1を回避）
+	const [orgSessionsResult, guestSessionsResult] = await Promise.all([
+		// 組織経由のセッション
+		organizationIds.length > 0
+			? supabase
+					.from('sessions')
+					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
+					.in('organization_id', organizationIds)
+					.order('created_at', { ascending: false })
+			: Promise.resolve({ data: [], error: null }),
+		// ゲスト参加のセッション
+		supabase
+			.from('session_participants')
+			.select(
+				`
+				session_id,
+				sessions (
+					id,
+					name,
+					session_date,
+					join_code,
+					is_active,
+					is_tournament_mode,
+					mode,
+					organization_id
+				)
+			`
+			)
+			.eq('user_id', user.id)
+	]);
+
+	if (orgSessionsResult.error) {
+		console.error('Error fetching org sessions:', orgSessionsResult.error);
 	}
+	if (guestSessionsResult.error) {
+		console.error('Error fetching guest sessions:', guestSessionsResult.error);
+	}
+
+	const orgSessions = orgSessionsResult.data || [];
+	const guestSessions = guestSessionsResult.data
+		? guestSessionsResult.data.map((p: any) => p.sessions).filter((s: any) => s)
+		: [];
+
+	// 重複を削除してマージ（組織経由のセッションを優先）
+	const sessionMap = new Map();
+
+	// 組織セッションを先に追加
+	orgSessions.forEach((s: any) => sessionMap.set(s.id, s));
+
+	// ゲストセッションを追加（重複はスキップ）
+	guestSessions.forEach((s: any) => {
+		if (!sessionMap.has(s.id)) {
+			sessionMap.set(s.id, s);
+		}
+	});
+
+	const sessions = Array.from(sessionMap.values());
 
 	// ユーザーのプロフィール情報を取得
 	const { data: profile } = await supabase
 		.from('profiles')
-		.select('full_name')
+		.select('full_name, id')
 		.eq('id', user.id)
 		.single();
 
+	// 組織配列を作成（UIが期待する形式）
+	const organizations = memberships
+		? memberships.map((m: any) => ({
+				...m.organizations,
+				userRole: m.role
+		  }))
+		: [];
+
 	return {
-		sessions: sessions.map((item: any) => item.sessions),
+		organizations,
+		sessions,
 		profile
 	};
 };

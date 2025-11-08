@@ -1,15 +1,17 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 
 	// This `form` variable will hold the data returned from the server action
 	export let form: ActionData;
+	export let data: PageData;
 
 	let selectedMode: 'kentei' | 'tournament' | 'training' = 'kentei';
 	let maxJudges = 100; // 研修モードのデフォルト最大検定員数
+	let selectedOrganization = data.organizations[0]?.id || ''; // デフォルトで最初の組織を選択
 </script>
 
 <div class="container">
@@ -24,6 +26,24 @@
 				placeholder="セッション名 (例: 2025冬期検定)"
 				value={form?.sessionName ?? ''}
 			/>
+
+			<!-- 組織選択（複数組織対応） -->
+			{#if data.organizations.length > 1}
+				<div class="organization-selection">
+					<h3>組織選択</h3>
+					<select name="organizationId" bind:value={selectedOrganization} class="org-select">
+						{#each data.organizations as org}
+							<option value={org.id}>{org.name}</option>
+						{/each}
+					</select>
+					<p class="help-text">
+						セッションを作成する組織を選択してください
+					</p>
+				</div>
+			{:else}
+				<!-- 組織が1つだけの場合は非表示のinputで送信 -->
+				<input type="hidden" name="organizationId" value={selectedOrganization} />
+			{/if}
 
 			<div class="mode-selection">
 				<h3>モード選択</h3>
@@ -261,6 +281,41 @@
 		margin: 0;
 		padding-top: 8px;
 		border-top: 1px solid var(--separator-gray);
+	}
+	.organization-selection {
+		background: var(--bg-beige);
+		border-radius: 12px;
+		padding: 16px;
+		text-align: left;
+	}
+	.organization-selection h3 {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--primary-text);
+		margin: 0 0 12px 0;
+	}
+	.org-select {
+		width: 100%;
+		background: white;
+		border: 2px solid var(--separator-gray);
+		border-radius: 12px;
+		padding: 12px;
+		font-size: 16px;
+		font-weight: 500;
+		color: var(--primary-text);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.org-select:focus {
+		outline: none;
+		border-color: var(--primary-orange);
+		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+	}
+	.help-text {
+		font-size: 13px;
+		color: var(--secondary-text);
+		margin: 8px 0 0 0;
+		line-height: 1.5;
 	}
 
 	/* PC対応: タブレット以上 */

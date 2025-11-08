@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import Footer from '$lib/components/Footer.svelte';
 </script>
 
 <svelte:head>
@@ -18,8 +19,8 @@
 			<h1 class="title">TENTO</h1>
 			<p class="subtitle">スキー・スノーボード検定・大会のための採点管理システム</p>
 			<p class="description">
-				リアルタイムで複数の検定員が協力して採点を行える、<br />
-				シンプルで使いやすいアプリケーションです。
+				組織単位で複数の検定員が協力してリアルタイムで採点を行える、<br />
+				シンプルで使いやすいクラウドアプリケーションです。
 			</p>
 
 			<div class="cta-buttons">
@@ -31,11 +32,18 @@
 		</div>
 	</div>
 
-	<div class="features">
+	<div class="features" id="features">
 		<div class="container">
 			<h2 class="section-title">主な機能</h2>
 
 			<div class="feature-grid">
+				<div class="feature-card">
+					<h3 class="feature-title">組織管理</h3>
+					<p class="feature-description">
+						スキークラブやスクールなど、組織単位で検定員を管理。メンバーを招待してチームで運営できます。
+					</p>
+				</div>
+
 				<div class="feature-card">
 					<h3 class="feature-title">検定モード</h3>
 					<p class="feature-description">
@@ -70,18 +78,11 @@
 						スマートフォンやタブレットから快適に操作可能。現場での採点作業に最適化されたUIです。
 					</p>
 				</div>
-
-				<div class="feature-card">
-					<h3 class="feature-title">結果の集計・エクスポート</h3>
-					<p class="feature-description">
-						採点結果を自動集計し、CSV形式でエクスポート可能。報告書作成もスムーズに行えます。
-					</p>
-				</div>
 			</div>
 		</div>
 	</div>
 
-	<div class="how-it-works">
+	<div class="how-it-works" id="how-it-works">
 		<div class="container">
 			<h2 class="section-title">使い方</h2>
 
@@ -89,25 +90,25 @@
 				<div class="step">
 					<div class="step-number">1</div>
 					<div class="step-content">
-						<h3 class="step-title">検定・大会を作成</h3>
-						<p class="step-description">セッションを作成し、参加コードを発行します。</p>
+						<h3 class="step-title">組織を作成</h3>
+						<p class="step-description">スキークラブやスクールなど、あなたの組織を作成します。個人での利用も可能です。</p>
 					</div>
 				</div>
 
 				<div class="step">
 					<div class="step-number">2</div>
 					<div class="step-content">
-						<h3 class="step-title">検定員が参加</h3>
-						<p class="step-description">他の検定員は参加コードを入力してセッションに参加します。</p>
+						<h3 class="step-title">セッションを作成</h3>
+						<p class="step-description">検定・大会・研修のセッションを作成し、参加コードを発行します。</p>
 					</div>
 				</div>
 
 				<div class="step">
 					<div class="step-number">3</div>
 					<div class="step-content">
-						<h3 class="step-title">リアルタイムで採点</h3>
+						<h3 class="step-title">検定員が参加して採点</h3>
 						<p class="step-description">
-							各検定員がそれぞれの端末から採点。結果は自動的に同期されます。
+							参加コードを共有し、各検定員がそれぞれの端末から採点。結果は自動的に同期されます。
 						</p>
 					</div>
 				</div>
@@ -117,7 +118,7 @@
 					<div class="step-content">
 						<h3 class="step-title">結果の確認・共有</h3>
 						<p class="step-description">
-							採点結果を確認し、エクスポート。大会モードではスコアボードを公開できます。
+							採点結果を自動集計、Excel形式でエクスポート。大会モードではスコアボードを公開できます。
 						</p>
 					</div>
 				</div>
@@ -128,38 +129,58 @@
 	<div class="pricing-section">
 		<div class="container">
 			<h2 class="section-title">料金プラン</h2>
-			<p class="pricing-intro">あなたのニーズに合わせたプランをお選びください</p>
+			<p class="pricing-intro">個人利用から組織利用まで、ニーズに合わせたプランをご用意</p>
 
 			<div class="pricing-grid">
 				<div class="pricing-card">
 					<h3 class="plan-name">フリー</h3>
+					<p class="plan-subtitle">個人利用</p>
 					<div class="plan-price">¥0<span class="price-unit">/月</span></div>
 					<ul class="plan-features">
-						<li>月間3セッションまで</li>
-						<li>選手数: 30名まで</li>
+						<li>組織メンバー: 1名</li>
+						<li>検定員: 3名まで</li>
+						<li>月間セッション: 3回まで</li>
 						<li>検定モードのみ</li>
+						<li>Excelエクスポート</li>
+					</ul>
+				</div>
+
+				<div class="pricing-card">
+					<h3 class="plan-name">Basic</h3>
+					<p class="plan-subtitle">小規模クラブ向け</p>
+					<div class="plan-price">¥8,800<span class="price-unit">/月</span></div>
+					<ul class="plan-features">
+						<li>組織メンバー: 10名まで</li>
+						<li>検定員: 15名まで</li>
+						<li>月間セッション: 無制限</li>
+						<li>大会モード・研修モード</li>
+						<li>Excelエクスポート</li>
 					</ul>
 				</div>
 
 				<div class="pricing-card recommended">
 					<div class="recommended-badge">おすすめ</div>
-					<h3 class="plan-name">スタンダード</h3>
-					<div class="plan-price">¥980<span class="price-unit">/月</span></div>
+					<h3 class="plan-name">Standard</h3>
+					<p class="plan-subtitle">中規模組織向け</p>
+					<div class="plan-price">¥24,800<span class="price-unit">/月</span></div>
 					<ul class="plan-features">
-						<li>月間無制限セッション</li>
-						<li>選手数: 100名まで</li>
-						<li>全モード利用可能</li>
-						<li>スコアボード公開</li>
+						<li>組織メンバー: 30名まで</li>
+						<li>検定員: 50名まで</li>
+						<li>月間セッション: 無制限</li>
+						<li>すべての機能</li>
+						<li>Excelエクスポート</li>
 					</ul>
 				</div>
 
 				<div class="pricing-card">
-					<h3 class="plan-name">プロ</h3>
-					<div class="plan-price">¥2,980<span class="price-unit">/月</span></div>
+					<h3 class="plan-name">Premium</h3>
+					<p class="plan-subtitle">大規模組織向け</p>
+					<div class="plan-price">¥49,800<span class="price-unit">/月</span></div>
 					<ul class="plan-features">
-						<li>月間無制限セッション</li>
-						<li>選手数・検定員数: 無制限</li>
-						<li>全モード利用可能</li>
+						<li>組織メンバー: 100名まで</li>
+						<li>検定員: 100名まで</li>
+						<li>月間セッション: 無制限</li>
+						<li>Excelエクスポート</li>
 						<li>優先サポート</li>
 					</ul>
 				</div>
@@ -177,12 +198,15 @@
 		<div class="container">
 			<h2 class="cta-title">今すぐ始めましょう</h2>
 			<p class="cta-description">
-				無料でアカウントを作成して、スキー・スノーボード検定・大会の採点を効率化しませんか？
+				無料でアカウントを作成して、組織を立ち上げ、<br />
+				スキー・スノーボード検定・大会の採点を効率化しませんか？
 			</p>
-			<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}> 新規登録 </button>
+			<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}> 無料で始める </button>
 		</div>
 	</div>
 </div>
+
+<Footer />
 
 <style>
 	:global(body) {
@@ -435,9 +459,9 @@
 
 	.pricing-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 		gap: 24px;
-		max-width: 1000px;
+		max-width: 1200px;
 		margin: 0 auto 40px;
 	}
 
@@ -480,8 +504,14 @@
 	.plan-name {
 		font-size: 24px;
 		font-weight: 700;
-		margin-bottom: 16px;
+		margin-bottom: 8px;
 		color: #1d1d1f;
+	}
+
+	.plan-subtitle {
+		font-size: 14px;
+		color: #6e6e73;
+		margin-bottom: 16px;
 	}
 
 	.plan-price {

@@ -98,11 +98,13 @@ export const actions: Actions = {
 			return fail(500, { error: 'セッションの更新に失敗しました。' });
 		}
 
-		// 大会モードの場合は種目選択画面へ、検定モードは種別選択画面へ
+		// 大会モードの場合は種目選択画面へ、検定モードも種目選択画面へ
 		if (session.is_tournament_mode) {
 			throw redirect(303, `/session/${id}/tournament-events`);
 		} else {
-			throw redirect(303, `/session/${id}`);
+			// 検定モード: 種目選択画面にリダイレクト
+			const { discipline, level } = params;
+			throw redirect(303, `/session/${id}/${discipline}/${level}`);
 		}
 	},
 

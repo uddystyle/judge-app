@@ -11,12 +11,20 @@
 	 * @type {boolean}
 	 */
 	export let disabled: boolean = false;
+
+	/**
+	 * ボタンのタイプを指定します。
+	 * デフォルトは 'button' (意図しないフォーム送信を防ぐため)
+	 * @type {'button' | 'submit' | 'reset'}
+	 */
+	export let type: 'button' | 'submit' | 'reset' = 'button';
 </script>
 
 <button
 	class="nav-btn"
 	class:primary={variant === 'primary'}
 	class:danger={variant === 'danger'}
+	{type}
 	{disabled}
 	on:click
 	{...$$restProps}

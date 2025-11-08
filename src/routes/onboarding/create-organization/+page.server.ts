@@ -1,0 +1,131 @@
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions, PageServerLoad } from './$types';
+import { validateOrganizationName } from '$lib/server/validation';
+
+export const load: PageServerLoad = async ({ locals: { supabase } }) => {
+	const {
+		data: { user },
+		error: userError
+	} = await supabase.auth.getUser();
+
+	if (userError || !user) {
+		throw redirect(303, '/login');
+	}
+
+	// 複数組織対応: 組織作成制限を削除
+	// ユーザーは複数の組織を作成・所属できる
+
+	// プラン一覧を取得
+	const { data: plans } = await supabase
+		.from('plan_limits')
+		.select('*')
+		.order('max_organization_members', { ascending: true });
+
+	// ユーザーのプロフィール情報を取得
+	const { data: profile } = await supabase
+		.from('profiles')
+		.select('full_name')
+		.eq('id', user.id)
+		.single();
+
+	return {
+		user,
+		profile,
+		plans: plans || []
+	};
+};
+
+export const actions: Actions = {
+	create: async ({ request, locals }) => {
+		const { supabase } = locals;
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const organizationNameRaw = formData.get('organizationName') as string;
+		const planType = (formData.get('planType') as string) || 'free';
+
+		// バリデーション（XSS対策を含む）
+		const validation = validateOrganizationName(organizationNameRaw);
+		if (!validation.valid) {
+			return fail(400, {
+				organizationName: organizationNameRaw || '',
+				error: validation.error || '組織名が無効です。'
+			});
+		}
+
+		const organizationName = validation.sanitized!;
+
+		// プランタイプのバリデーション（SQLインジェクション対策）
+		const validPlanTypes = ['free', 'basic', 'standard', 'premium'];
+		if (!validPlanTypes.includes(planType)) {
+			return fail(400, {
+				organizationName,
+				error: '無効なプランが選択されました。'
+			});
+		}
+
+		// 複数組織対応: 重複チェックを削除
+		// ユーザーは複数の組織を作成できる
+
+		// プラン情報を取得
+		const { data: planLimits, error: planError } = await supabase
+			.from('plan_limits')
+			.select('max_organization_members')
+			.eq('plan_type', planType)
+			.single();
+
+		if (planError || !planLimits) {
+			console.error('Failed to fetch plan limits:', planError);
+			return fail(400, {
+				organizationName,
+				error: '無効なプランが選択されました。'
+			});
+		}
+
+		// 組織を作成
+		const { data: organization, error: orgError } = await supabase
+			.from('organizations')
+			.insert({
+				name: organizationName,
+				plan_type: planType,
+				max_members: planLimits.max_organization_members
+			})
+			.select()
+			.single();
+
+		if (orgError) {
+			console.error('Failed to create organization:', orgError);
+			return fail(500, {
+				organizationName,
+				error: `サーバーエラー: 組織の作成に失敗しました。[${orgError.code}] ${orgError.message}`
+			});
+		}
+
+		// ユーザーを組織の管理者として追加
+		// 注意: RLSの無限再帰エラーを避けるため、管理者チェックポリシーは削除済み
+		// ユーザーは自分自身のみをメンバーとして追加できる
+		const { error: memberError } = await supabase.from('organization_members').insert({
+			organization_id: organization.id,
+			user_id: user.id,
+			role: 'admin'
+		});
+
+		if (memberError) {
+			console.error('Failed to add organization member:', memberError);
+			return fail(500, {
+				organizationName,
+				error: `サーバーエラー: 組織への参加に失敗しました。[${memberError.code}] ${memberError.message}`
+			});
+		}
+
+		// ダッシュボードへリダイレクト
+		throw redirect(303, '/dashboard');
+	}
+};

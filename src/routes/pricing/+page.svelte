@@ -1,124 +1,91 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
-	import {
-		PUBLIC_STRIPE_PRICE_STANDARD_MONTHLY,
-		PUBLIC_STRIPE_PRICE_STANDARD_YEARLY,
-		PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
-		PUBLIC_STRIPE_PRICE_PRO_YEARLY
-	} from '$env/static/public';
 
 	export let data: PageData;
 
 	let billingInterval: 'month' | 'year' = 'month';
-	let loading = false;
-	let errorMessage = '';
 
-	// プラン定義
+	// プラン定義（組織向け）
+	// 料金プランページは情報提供が目的のため、アクションボタンは配置しない
+	// 組織作成やプラン変更はダッシュボード/アカウントページから実行
 	const plans = [
 		{
 			id: 'free',
 			name: 'フリー',
+			subtitle: '個人利用',
 			monthlyPrice: 0,
 			yearlyPrice: 0,
+			maxMembers: '組織メンバー: 1名のみ',
 			features: [
-				'月間3セッションまで',
-				'選手数: 30名まで/セッション',
-				'検定員: 5名まで/セッション',
-				'基本的な採点機能',
+				'組織メンバー: 1名のみ',
+				'検定員: 3名まで',
+				'月間セッション: 3回まで',
+				'検定モードのみ',
 				'Excelエクスポート',
-				'検定モードのみ'
+				'メールサポート'
 			],
-			limitations: ['大会モード利用不可', '研修モード利用不可', 'スコアボード非公開'],
+			limitations: ['大会モード利用不可', '研修モード利用不可'],
 			color: 'gray'
 		},
 		{
-			id: 'standard',
-			name: 'スタンダード',
-			monthlyPrice: 980,
-			yearlyPrice: 9800,
-			priceIdMonthly: PUBLIC_STRIPE_PRICE_STANDARD_MONTHLY,
-			priceIdYearly: PUBLIC_STRIPE_PRICE_STANDARD_YEARLY,
+			id: 'basic',
+			name: 'Basic',
+			subtitle: '小規模クラブ向け',
+			monthlyPrice: 8800,
+			yearlyPrice: 88000,
+			maxMembers: '組織メンバー: 10名まで',
 			features: [
-				'月間無制限セッション',
-				'選手数: 100名まで/セッション',
-				'検定員: 20名まで/セッション',
-				'検定モード + 大会モード + 研修モード',
+				'組織メンバー: 10名まで',
+				'検定員: 15名まで',
+				'月間セッション: 無制限',
+				'大会モード・研修モード',
 				'スコアボード公開機能',
-				'メールサポート',
-				'データ保存期間: 1年'
+				'Excelエクスポート',
+				'メールサポート'
+			],
+			color: 'blue'
+		},
+		{
+			id: 'standard',
+			name: 'Standard',
+			subtitle: '中規模組織向け',
+			monthlyPrice: 24800,
+			yearlyPrice: 248000,
+			maxMembers: '組織メンバー: 30名まで',
+			features: [
+				'組織メンバー: 30名まで',
+				'検定員: 50名まで',
+				'月間セッション: 無制限',
+				'すべての機能',
+				'スコアボード公開機能',
+				'Excelエクスポート',
+				'メールサポート'
 			],
 			recommended: true,
 			color: 'blue'
 		},
 		{
-			id: 'pro',
-			name: 'プロ',
-			monthlyPrice: 2980,
-			yearlyPrice: 29800,
-			priceIdMonthly: PUBLIC_STRIPE_PRICE_PRO_MONTHLY,
-			priceIdYearly: PUBLIC_STRIPE_PRICE_PRO_YEARLY,
+			id: 'premium',
+			name: 'Premium',
+			subtitle: '大規模組織向け',
+			monthlyPrice: 49800,
+			yearlyPrice: 498000,
+			maxMembers: '組織メンバー: 100名まで',
 			features: [
-				'月間無制限セッション',
-				'選手数: 無制限',
-				'検定員: 無制限',
-				'全モード利用可能',
+				'組織メンバー: 100名まで',
+				'検定員: 100名まで',
+				'月間セッション: 無制限',
+				'すべての機能',
 				'スコアボード公開機能',
-				'優先メールサポート',
-				'データ保存期間: 無制限'
+				'Excelエクスポート',
+				'優先サポート'
 			],
 			color: 'orange'
 		}
 	];
-
-	// アップグレードボタンクリック
-	async function handleUpgrade(planId: string) {
-		if (!data.user) {
-			goto('/login');
-			return;
-		}
-
-		if (planId === 'free') {
-			return; // フリープランへのアップグレードはなし
-		}
-
-		loading = true;
-		errorMessage = '';
-
-		try {
-			const plan = plans.find((p) => p.id === planId);
-			if (!plan) return;
-
-			const priceId = billingInterval === 'month' ? plan.priceIdMonthly : plan.priceIdYearly;
-
-			// Checkout Session作成APIを呼び出し
-			const response = await fetch('/api/stripe/create-checkout-session', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					priceId,
-					successUrl: `${window.location.origin}/account?success=true`,
-					cancelUrl: `${window.location.origin}/pricing?canceled=true`
-				})
-			});
-
-			const result = await response.json();
-
-			if (!response.ok) {
-				throw new Error(result.message || 'エラーが発生しました');
-			}
-
-			// Stripe Checkoutページにリダイレクト
-			window.location.href = result.url;
-		} catch (err: any) {
-			console.error('Checkout error:', err);
-			errorMessage = err.message || 'エラーが発生しました。もう一度お試しください。';
-			loading = false;
-		}
-	}
 
 	// 価格表示
 	function formatPrice(price: number, interval: 'month' | 'year'): string {
@@ -141,7 +108,7 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
 	<div class="header-section">
@@ -168,22 +135,19 @@
 		</div>
 	</div>
 
-	{#if errorMessage}
-		<div class="error-message">{errorMessage}</div>
-	{/if}
-
 	<!-- プランカード -->
 	<div class="plans-grid">
 		{#each plans as plan}
-			<div class="plan-card" class:recommended={plan.recommended} class:current={data.currentPlan === plan.id}>
+			<div class="plan-card" class:recommended={plan.recommended} class:current={data.user && data.currentPlan === plan.id}>
 				{#if plan.recommended}
 					<div class="recommended-badge">おすすめ</div>
 				{/if}
-				{#if data.currentPlan === plan.id}
+				{#if data.user && data.currentPlan === plan.id}
 					<div class="current-badge">現在のプラン</div>
 				{/if}
 
 				<h2 class="plan-name">{plan.name}</h2>
+				<p class="plan-subtitle">{plan.subtitle}</p>
 
 				<div class="price-section">
 					<div class="price">
@@ -199,6 +163,8 @@
 					{/if}
 				</div>
 
+				<div class="max-members">{plan.maxMembers}</div>
+
 				<ul class="features-list">
 					{#each plan.features as feature}
 						<li class="feature">✓ {feature}</li>
@@ -209,25 +175,6 @@
 						{/each}
 					{/if}
 				</ul>
-
-				{#if plan.id === 'free'}
-					{#if data.currentPlan === 'free'}
-						<button class="upgrade-btn current" disabled>現在のプラン</button>
-					{:else}
-						<button class="upgrade-btn downgrade" disabled>ダウングレード</button>
-					{/if}
-				{:else if data.currentPlan === plan.id}
-					<button class="upgrade-btn current" disabled>現在のプラン</button>
-				{:else}
-					<button
-						class="upgrade-btn"
-						class:loading
-						on:click={() => handleUpgrade(plan.id)}
-						disabled={loading}
-					>
-						{loading ? '処理中...' : data.user ? 'アップグレード' : 'ログインして購入'}
-					</button>
-				{/if}
 			</div>
 		{/each}
 	</div>
@@ -241,31 +188,43 @@
 					<tr>
 						<th>機能</th>
 						<th>フリー</th>
-						<th>スタンダード</th>
-						<th>プロ</th>
+						<th>Basic</th>
+						<th>Standard</th>
+						<th>Premium</th>
 					</tr>
 				</thead>
 				<tbody>
 					<tr>
+						<td>月額料金</td>
+						<td>¥0</td>
+						<td>¥8,800</td>
+						<td>¥24,800</td>
+						<td>¥49,800</td>
+					</tr>
+					<tr>
+						<td>組織メンバー数</td>
+						<td>1名のみ</td>
+						<td>10名まで</td>
+						<td>30名まで</td>
+						<td>100名まで</td>
+					</tr>
+					<tr>
+						<td>検定員数（/セッション）</td>
+						<td>3名まで</td>
+						<td>15名まで</td>
+						<td>50名まで</td>
+						<td>100名まで</td>
+					</tr>
+					<tr>
 						<td>月間セッション数</td>
-						<td>3</td>
+						<td>3回まで</td>
 						<td>無制限</td>
 						<td>無制限</td>
-					</tr>
-					<tr>
-						<td>選手数/セッション</td>
-						<td>30名</td>
-						<td>100名</td>
-						<td>無制限</td>
-					</tr>
-					<tr>
-						<td>検定員数/セッション</td>
-						<td>5名</td>
-						<td>20名</td>
 						<td>無制限</td>
 					</tr>
 					<tr>
 						<td>検定モード</td>
+						<td>✓</td>
 						<td>✓</td>
 						<td>✓</td>
 						<td>✓</td>
@@ -275,30 +234,42 @@
 						<td>✗</td>
 						<td>✓</td>
 						<td>✓</td>
+						<td>✓</td>
 					</tr>
 					<tr>
 						<td>研修モード</td>
 						<td>✗</td>
 						<td>✓</td>
 						<td>✓</td>
+						<td>✓</td>
 					</tr>
 					<tr>
-						<td>スコアボード</td>
+						<td>スコアボード公開</td>
 						<td>✗</td>
+						<td>✓</td>
+						<td>✓</td>
+						<td>✓</td>
+					</tr>
+					<tr>
+						<td>Excelエクスポート</td>
+						<td>✓</td>
+						<td>✓</td>
 						<td>✓</td>
 						<td>✓</td>
 					</tr>
 					<tr>
 						<td>データ保存期間</td>
 						<td>3ヶ月</td>
-						<td>1年</td>
+						<td>12ヶ月</td>
+						<td>24ヶ月</td>
 						<td>無制限</td>
 					</tr>
 					<tr>
 						<td>サポート</td>
 						<td>メール</td>
 						<td>メール</td>
-						<td>優先メール</td>
+						<td>メール</td>
+						<td>優先サポート</td>
 					</tr>
 				</tbody>
 			</table>
@@ -318,6 +289,8 @@
 		{/if}
 	</div>
 </div>
+
+<Footer />
 
 <style>
 	.container {
@@ -392,9 +365,12 @@
 
 	.plans-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 		gap: 24px;
 		margin-bottom: 60px;
+		max-width: 1400px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 
 	.plan-card {
@@ -445,14 +421,31 @@
 	.plan-name {
 		font-size: 24px;
 		font-weight: 700;
-		margin-bottom: 16px;
+		margin-bottom: 8px;
 		color: var(--primary-text);
 	}
 
+	.plan-subtitle {
+		font-size: 14px;
+		color: var(--secondary-text);
+		margin-bottom: 16px;
+	}
+
 	.price-section {
-		margin-bottom: 24px;
+		margin-bottom: 16px;
 		border-bottom: 1px solid var(--separator-gray);
-		padding-bottom: 24px;
+		padding-bottom: 16px;
+	}
+
+	.max-members {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--ios-blue);
+		background: var(--bg-beige);
+		padding: 10px 16px;
+		border-radius: 8px;
+		text-align: center;
+		margin-bottom: 24px;
 	}
 
 	.price {
@@ -557,13 +550,14 @@
 
 	.comparison-table th:first-child,
 	.comparison-table td:first-child {
-		width: 25%;
+		width: 40%;
 	}
 
 	.comparison-table th:nth-child(2),
 	.comparison-table th:nth-child(3),
-	.comparison-table th:nth-child(4) {
-		width: 25%;
+	.comparison-table th:nth-child(4),
+	.comparison-table th:nth-child(5) {
+		width: 15%;
 		text-align: center;
 	}
 
@@ -575,7 +569,8 @@
 
 	.comparison-table td:nth-child(2),
 	.comparison-table td:nth-child(3),
-	.comparison-table td:nth-child(4) {
+	.comparison-table td:nth-child(4),
+	.comparison-table td:nth-child(5) {
 		text-align: center;
 	}
 
@@ -625,6 +620,14 @@
 		.comparison-table th,
 		.comparison-table td {
 			padding: 12px 8px;
+		}
+	}
+
+	/* PC対応: デスクトップ（1200px以上）*/
+	@media (min-width: 1200px) {
+		.plans-grid {
+			grid-template-columns: repeat(4, 1fr);
+			max-width: 1400px;
 		}
 	}
 </style>

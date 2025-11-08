@@ -51,7 +51,17 @@ export const actions: Actions = {
 			});
 		}
 
-		// Profile is now automatically created by database trigger
+		// プロフィールを作成（トリガーがないため手動で作成）
+		const { error: profileError } = await supabase.from('profiles').insert({
+			id: authData.user.id,
+			email: email,
+			full_name: fullName
+		});
+
+		if (profileError) {
+			console.error('Failed to create profile:', profileError);
+			// プロフィール作成に失敗してもサインアップは成功しているので、続行
+		}
 
 		// --- Success ---
 		// On success, redirect the user to a page that tells them to check their email.

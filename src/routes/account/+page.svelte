@@ -13,16 +13,23 @@
 	const supabase = getContext<SupabaseClient>('supabase');
 
 	// フォームの入力値を保持する変数 (初期値としてサーバーから取得した氏名を設定)
-	let fullName = data.profile?.full_name || '';
+	let fullName = '';
 	let loading = false;
 	let message = '';
+
+	// dataが変更されたときにfullNameを更新
+	$: {
+		if (data.profile) {
+			fullName = data.profile.full_name || '';
+		} else {
+			fullName = '';
+		}
+	}
 
 	let newPassword = '';
 	let confirmPassword = '';
 	let passwordLoading = false;
 	let passwordMessage = '';
-
-	let portalLoading = false;
 
 	// 「名前を更新」ボタンが押されたときの処理
 	async function handleUpdateName() {
@@ -37,7 +44,7 @@
 		const { error } = await supabase
 			.from('profiles')
 			.update({ full_name: fullName })
-			.eq('id', data.user.id); // +layout.server.tsから渡されたユーザー情報を使う
+			.eq('id', data.user.id);
 
 		if (error) {
 			message = 'エラー: 名前の更新に失敗しました。' + error.message;
@@ -78,36 +85,6 @@
 		passwordLoading = false;
 	}
 
-	async function handleManageBilling() {
-		portalLoading = true;
-
-		try {
-			// Customer Portal Session作成APIを呼び出し
-			const response = await fetch('/api/stripe/create-portal-session', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					returnUrl: window.location.href
-				})
-			});
-
-			const result = await response.json();
-
-			if (!response.ok) {
-				throw new Error(result.message || 'エラーが発生しました');
-			}
-
-			// Stripe Customer Portalページにリダイレクト
-			window.location.href = result.url;
-		} catch (err: any) {
-			console.error('Portal error:', err);
-			alert('エラーが発生しました。もう一度お試しください。');
-			portalLoading = false;
-		}
-	}
-
 	async function handleLogout() {
 		// Supabaseからログアウトを実行
 		await supabase.auth.signOut();
@@ -120,19 +97,32 @@
 	function getPlanName(planType: string): string {
 		switch (planType) {
 			case 'free':
-				return 'フリープラン';
+				return 'フリー';
+			case 'basic':
+				return 'Basic';
 			case 'standard':
-				return 'スタンダードプラン';
-			case 'pro':
-				return 'プロプラン';
+				return 'Standard';
+			case 'premium':
+				return 'Premium';
 			default:
-				return 'フリープラン';
+				return 'フリー';
 		}
 	}
 
-	// 請求間隔の日本語表示
-	function getBillingIntervalName(interval: string): string {
-		return interval === 'month' ? '月額' : '年額';
+	// プラン価格の表示
+	function getPlanPrice(planType: string): string {
+		switch (planType) {
+			case 'free':
+				return '無料';
+			case 'basic':
+				return '¥8,800/月';
+			case 'standard':
+				return '¥24,800/月';
+			case 'premium':
+				return '¥49,800/月';
+			default:
+				return '無料';
+		}
 	}
 
 	// 日付のフォーマット
@@ -143,19 +133,30 @@
 	}
 
 	// 使用率の計算
-	function getUsagePercentage(): number {
-		const limit = data.planLimits?.max_sessions_per_month || 3;
+	function getUsagePercentage(planLimits: any, currentUsage: any): number {
+		if (!planLimits || !currentUsage) return 0;
+		const limit = planLimits.max_sessions_per_month || 3;
 		if (limit === -1) return 0; // 無制限の場合
-		const count = data.currentUsage?.sessions_count || 0;
+		const count = currentUsage.sessions_count || 0;
 		return Math.min((count / limit) * 100, 100);
 	}
 
 	// 使用状況の表示テキスト
-	function getUsageText(): string {
-		const count = data.currentUsage?.sessions_count || 0;
-		const limit = data.planLimits?.max_sessions_per_month || 3;
+	function getUsageText(planLimits: any, currentUsage: any): string {
+		if (!planLimits || !currentUsage) return '-';
+		const count = currentUsage.sessions_count || 0;
+		const limit = planLimits.max_sessions_per_month || 3;
 		if (limit === -1) return `${count} セッション`;
 		return `${count} / ${limit} セッション`;
+	}
+
+	// メンバー使用状況の表示テキスト
+	function getMembersUsageText(planLimits: any, currentUsage: any): string {
+		if (!planLimits || !currentUsage) return '-';
+		const count = currentUsage.members_count || 0;
+		const limit = planLimits.max_organization_members || 1;
+		if (limit === -1) return `${count} 人`;
+		return `${count} / ${limit} 人`;
 	}
 </script>
 
@@ -168,75 +169,125 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
 	<div class="instruction">アカウント設定</div>
 
-	<!-- サブスクリプション情報セクション -->
+	<!-- 組織・プラン情報セクション -->
 	<div class="subscription-section">
-		<h2 class="section-title">プラン・使用状況</h2>
+		<h2 class="section-title">組織・プラン情報</h2>
 
-		<div class="subscription-card">
-			<div class="plan-info">
-				<div class="plan-name-row">
-					<span class="plan-name">{getPlanName(data.subscription.plan_type)}</span>
-					{#if data.subscription.plan_type !== 'free'}
-						<span class="billing-interval">
-							({getBillingIntervalName(data.subscription.billing_interval)})
-						</span>
-					{/if}
-				</div>
-
-				{#if data.subscription.plan_type !== 'free' && data.subscription.current_period_end}
-					<div class="renewal-date">
-						次回更新日: {formatDate(data.subscription.current_period_end)}
-					</div>
-				{/if}
-
-				{#if data.subscription.cancel_at_period_end}
-					<div class="cancel-notice">
-						このサブスクリプションは期間終了時にキャンセルされます
-					</div>
-				{/if}
-			</div>
-
-			<div class="usage-info">
-				<h3 class="usage-title">今月の使用状況</h3>
-				<div class="usage-bar-container">
-					<div class="usage-bar">
-						<div
-							class="usage-bar-fill"
-							style="width: {getUsagePercentage()}%"
-							class:warning={getUsagePercentage() > 80}
-						></div>
-					</div>
-					<div class="usage-text">{getUsageText()}</div>
+		{#if !data.organizations || data.organizations.length === 0}
+			<!-- 組織未作成の場合 -->
+			<div class="no-organization-card">
+				<div class="warning-icon">⚠️</div>
+				<h3 class="warning-title">組織が作成されていません</h3>
+				<p class="warning-message">
+					TENTOでは、すべてのセッションは組織に属します。<br />
+					まずは組織を作成してください。
+				</p>
+				<div class="subscription-actions">
+					<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
+						組織を作成する
+					</NavButton>
 				</div>
 			</div>
+		{:else}
+			<!-- 複数組織を表示 -->
+			{#each data.organizations as org}
+				<div class="subscription-card">
+					<div class="organization-info">
+						<h3 class="org-name">{org.name}</h3>
+						<div class="org-details">
+							<span class="org-role" class:admin={org.userRole === 'admin'}>
+								{org.userRole === 'admin' ? '管理者' : 'メンバー'}
+							</span>
+							<span class="org-date">作成日: {formatDate(org.created_at)}</span>
+						</div>
+					</div>
 
-			<div class="subscription-actions">
-				{#if data.subscription.plan_type === 'free'}
-					<NavButton variant="primary" on:click={() => goto('/pricing')}>
-						プランをアップグレード
-					</NavButton>
-				{:else}
-					<NavButton on:click={handleManageBilling} disabled={portalLoading}>
-						{portalLoading ? '処理中...' : 'プラン・支払い方法を管理'}
-					</NavButton>
-				{/if}
-				<NavButton on:click={() => goto('/pricing')}>料金プランを見る</NavButton>
+					<div class="plan-info">
+						<div class="plan-name-row">
+							<span class="plan-name">{getPlanName(org.plan_type)}プラン</span>
+							<span class="plan-price">{getPlanPrice(org.plan_type)}</span>
+						</div>
+					</div>
+
+					<div class="usage-info">
+						<h3 class="usage-title">今月の使用状況</h3>
+
+						<div class="usage-item">
+							<span class="usage-label">セッション作成:</span>
+							<div class="usage-bar-container">
+								<div class="usage-bar">
+									<div
+										class="usage-bar-fill"
+										style="width: {getUsagePercentage(org.planLimits, org.currentUsage)}%"
+										class:warning={getUsagePercentage(org.planLimits, org.currentUsage) > 80}
+									></div>
+								</div>
+								<div class="usage-text">{getUsageText(org.planLimits, org.currentUsage)}</div>
+							</div>
+						</div>
+
+						<div class="usage-item">
+							<span class="usage-label">組織メンバー:</span>
+							<div class="usage-text-only">
+								{getMembersUsageText(org.planLimits, org.currentUsage)}
+							</div>
+						</div>
+					</div>
+
+					<div class="subscription-actions">
+						<NavButton on:click={() => goto(`/organization/${org.id}`)}>
+							組織詳細を見る
+						</NavButton>
+						{#if org.userRole === 'admin'}
+							{#if org.plan_type === 'free'}
+								<NavButton variant="primary" on:click={() => goto('/pricing')}>
+									プランをアップグレード
+								</NavButton>
+							{/if}
+						{/if}
+					</div>
+				</div>
+			{/each}
+
+			<!-- 新しい組織を作成 -->
+			<div class="create-org-card">
+				<p class="create-org-text">複数の組織を作成・管理できます</p>
+				<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
+					新しい組織を作成
+				</NavButton>
 			</div>
-		</div>
+		{/if}
 	</div>
 
-	<hr class="divider" />
+	<!-- アカウント情報セクション -->
+	<h2 class="section-title">アカウント情報</h2>
+	<div class="info-card">
+		<div class="info-row">
+			<span class="info-label">メールアドレス</span>
+			<span class="info-value">{data.user?.email || '-'}</span>
+		</div>
+	</div>
 
 	<!-- プロフィール情報セクション -->
 	<h2 class="section-title">プロフィール</h2>
 	<div class="form-container">
-		<label for="account-name" class="form-label">氏名</label>
-		<input type="text" id="account-name" placeholder="氏名" bind:value={fullName} />
+		<label for="account-name" class="form-label">
+			氏名
+			{#if data.profile?.full_name}
+				<span class="current-value">（現在: {data.profile.full_name}）</span>
+			{/if}
+		</label>
+		<input
+			type="text"
+			id="account-name"
+			placeholder="氏名を入力してください"
+			bind:value={fullName}
+		/>
 
 		<div class="nav-buttons" style="margin-top: 0;">
 			<NavButton variant="primary" on:click={handleUpdateName} disabled={loading}>
@@ -248,8 +299,6 @@
 			<p class="message">{message}</p>
 		{/if}
 	</div>
-
-	<hr class="divider" />
 
 	<div class="form-container">
 		<label for="account-password" class="form-label">新しいパスワード</label>
@@ -278,7 +327,7 @@
 	<div class="nav-buttons">
 		<hr class="divider" />
 
-		<NavButton on:click={() => goto('/dashboard')}>セッション選択画面に戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>ダッシュボードに戻る</NavButton>
 		<NavButton variant="danger" on:click={handleLogout}>ログアウト</NavButton>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
 			アカウントを削除
@@ -302,11 +351,15 @@
 		font-size: 18px;
 		font-weight: 600;
 		margin-bottom: 16px;
+		margin-top: 40px;
 		text-align: left;
 		color: var(--primary-text);
 	}
 	.subscription-section {
 		margin-bottom: 24px;
+	}
+	.subscription-section .section-title {
+		margin-top: 0;
 	}
 	.subscription-card {
 		background: white;
@@ -314,6 +367,63 @@
 		border-radius: 16px;
 		padding: 24px;
 		text-align: left;
+		margin-bottom: 16px;
+	}
+	.no-organization-card {
+		background: #fff8e1;
+		border: 2px solid #ff9800;
+		border-radius: 16px;
+		padding: 32px 24px;
+		text-align: center;
+	}
+	.warning-icon {
+		font-size: 48px;
+		margin-bottom: 16px;
+	}
+	.warning-title {
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--primary-text);
+		margin-bottom: 12px;
+	}
+	.warning-message {
+		font-size: 15px;
+		color: var(--secondary-text);
+		line-height: 1.6;
+		margin-bottom: 24px;
+	}
+	.organization-info {
+		margin-bottom: 20px;
+		padding-bottom: 20px;
+		border-bottom: 1px solid var(--separator-gray);
+	}
+	.org-name {
+		font-size: 22px;
+		font-weight: 700;
+		color: var(--primary-text);
+		margin-bottom: 8px;
+	}
+	.org-details {
+		display: flex;
+		gap: 16px;
+		font-size: 14px;
+		color: var(--secondary-text);
+		flex-wrap: wrap;
+	}
+	.org-role {
+		padding: 4px 12px;
+		background: var(--ios-blue);
+		color: white;
+		border-radius: 12px;
+		font-weight: 600;
+		font-size: 13px;
+	}
+	.org-role.admin {
+		background: var(--primary-orange);
+	}
+	.org-date {
+		display: flex;
+		align-items: center;
 	}
 	.plan-info {
 		margin-bottom: 24px;
@@ -331,20 +441,10 @@
 		font-weight: 700;
 		color: var(--ios-blue);
 	}
-	.billing-interval {
-		font-size: 14px;
-		color: var(--secondary-text);
-	}
-	.renewal-date {
-		font-size: 14px;
-		color: var(--secondary-text);
-		margin-top: 8px;
-	}
-	.cancel-notice {
-		font-size: 14px;
-		color: var(--ios-red);
-		margin-top: 8px;
+	.plan-price {
+		font-size: 16px;
 		font-weight: 600;
+		color: var(--primary-orange);
 	}
 	.usage-info {
 		margin-bottom: 24px;
@@ -379,20 +479,80 @@
 		color: var(--primary-text);
 		font-weight: 600;
 	}
+	.usage-item {
+		margin-bottom: 16px;
+	}
+	.usage-label {
+		display: block;
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--primary-text);
+		margin-bottom: 8px;
+	}
+	.usage-text-only {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--ios-blue);
+	}
 	.subscription-actions {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+	}
+	.create-org-card {
+		background: var(--bg-beige);
+		border: 2px dashed var(--separator-gray);
+		border-radius: 16px;
+		padding: 24px;
+		text-align: center;
+	}
+	.create-org-text {
+		font-size: 14px;
+		color: var(--text-secondary);
+		margin-bottom: 16px;
+	}
+	.info-card {
+		background: white;
+		border: 2px solid var(--separator-gray);
+		border-radius: 16px;
+		padding: 20px;
+		text-align: left;
+		margin-bottom: 24px;
+	}
+	.info-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 16px;
+		flex-wrap: wrap;
+	}
+	.info-label {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--text-secondary);
+	}
+	.info-value {
+		font-size: 15px;
+		font-weight: 500;
+		color: var(--text-primary);
+		word-break: break-all;
 	}
 	.form-container {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
 		text-align: left;
+		margin-top: 20px;
 	}
 	.form-label {
 		font-size: 15px;
 		font-weight: 500;
+	}
+	.current-value {
+		font-size: 13px;
+		font-weight: 400;
+		color: var(--text-secondary);
+		margin-left: 8px;
 	}
 	.form-container input {
 		background: #fff;
@@ -428,8 +588,17 @@
 			font-size: 36px;
 			margin-bottom: 40px;
 		}
+		.section-title {
+			margin-top: 48px;
+		}
+		.subscription-section .section-title {
+			margin-top: 0;
+		}
 		.form-label {
 			font-size: 18px;
+		}
+		.current-value {
+			font-size: 15px;
 		}
 		.form-container input {
 			padding: 18px;

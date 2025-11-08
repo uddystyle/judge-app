@@ -118,4 +118,28 @@
 		border-radius: 8px;
 		border: 1px solid #ffdddd;
 	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 500px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.form-container {
+			padding: 40px;
+			gap: 20px;
+		}
+		.form-container input {
+			padding: 18px;
+			font-size: 18px;
+		}
+		.error-message {
+			font-size: 15px;
+			padding: 14px;
+		}
+	}
 </style>

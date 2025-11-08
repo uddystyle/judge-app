@@ -1,10 +1,12 @@
 import { env } from '$env/dynamic/public';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
 	const supabaseAnonKey = env.PUBLIC_SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY;
+	const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 	if (!supabaseUrl || !supabaseAnonKey) {
 		console.error('Missing Supabase environment variables:', {
@@ -26,6 +28,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 			}
 		}
 	});
+
+	// サービスロールクライアント（RLSをバイパス）を作成
+	// 組織作成時の最初のメンバー追加など、特別な操作に使用
+	if (supabaseServiceKey) {
+		event.locals.supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+			auth: {
+				autoRefreshToken: false,
+				persistSession: false
+			}
+		});
+	}
 
 	event.locals.getSession = async () => {
 		// Supabase公式推奨パターン: safeGetSession()と同じロジック

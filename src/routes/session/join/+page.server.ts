@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
+import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
@@ -44,6 +45,16 @@ export const actions: Actions = {
 		// セッションが参加受付中かチェック
 		if (!sessionData.is_accepting_participants) {
 			return fail(400, { joinCode, error: 'このセッションは参加受付を終了しています。' });
+		}
+
+		// 検定員数制限チェック
+		const judgeCheck = await checkCanAddJudgeToSession(supabase, sessionData.id);
+		if (!judgeCheck.allowed) {
+			return fail(403, {
+				joinCode,
+				error: judgeCheck.reason || 'セッションの検定員数上限に達しています。',
+				upgradeUrl: judgeCheck.upgradeUrl
+			});
 		}
 
 		const { error: joinError } = await supabase.from('session_participants').insert({

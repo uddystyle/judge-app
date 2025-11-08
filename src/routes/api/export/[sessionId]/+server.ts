@@ -83,28 +83,32 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 			return json({ error: '研修モードの結果取得に失敗しました。' }, { status: 500 });
 		}
 
-		// 検定員名を個別に取得してマージ
+		// 検定員名を一括取得してマージ（N+1クエリを回避）
 		if (trainingScores && trainingScores.length > 0) {
-			const scoresWithJudges = await Promise.all(
-				trainingScores.map(async (score) => {
-					const { data: judgeProfile } = await supabase
-						.from('profiles')
-						.select('full_name')
-						.eq('id', score.judge_id)
-						.single();
+			// ユニークな検定員IDを抽出
+			const judgeIds = [...new Set(trainingScores.map(score => score.judge_id))];
 
-					return {
-						created_at: score.created_at,
-						bib: score.athlete?.bib_number || '',
-						score: score.score,
-						discipline: '研修',
-						level: '',
-						event_name: score.training_events?.name || '',
-						judge_name: judgeProfile?.full_name || '不明'
-					};
-				})
+			// 検定員名を一括取得
+			const { data: judgeProfiles } = await supabase
+				.from('profiles')
+				.select('id, full_name')
+				.in('id', judgeIds);
+
+			// 検定員IDから名前へのマップを作成
+			const judgeMap = new Map(
+				(judgeProfiles || []).map(profile => [profile.id, profile.full_name])
 			);
-			exportData = scoresWithJudges;
+
+			// スコアデータに検定員名をマージ
+			exportData = trainingScores.map(score => ({
+				created_at: score.created_at,
+				bib: score.athlete?.bib_number || '',
+				score: score.score,
+				discipline: '研修',
+				level: '',
+				event_name: score.training_events?.name || '',
+				judge_name: judgeMap.get(score.judge_id) || '不明'
+			}));
 		}
 	} else {
 		// 検定モード・大会モード: resultsから取得

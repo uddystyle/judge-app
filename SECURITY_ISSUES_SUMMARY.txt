@@ -1,0 +1,153 @@
+JUDGE APP - SECURITY & PERFORMANCE ANALYSIS
+Generated: November 8, 2025
+===========================================
+
+CRITICAL ISSUES (Fix Immediately)
+==================================
+
+1. EXPOSED SECRETS IN .env FILE
+   Location: .env (all lines)
+   Severity: CRITICAL
+   Issue: .env file with Stripe keys and Supabase service role keys is committed to Git
+   Action: 
+     - IMMEDIATELY rotate Stripe keys and Supabase service role key
+     - Add .env to .gitignore
+     - Remove from Git history using: git filter-branch or BFG Repo-Cleaner
+   Impact: Attacker can bypass all RLS and charge accounts
+
+2. N+1 QUERY PROBLEMS (6 Locations)
+   Severity: CRITICAL
+   Impact: 100x database load for sessions with many records
+   
+   Files affected:
+   - /src/routes/session/[id]/details/+page.server.ts (lines 43-56, 109-126)
+   - /src/routes/api/export/[sessionId]/+server.ts (lines 87-107)
+   - /src/routes/session/[id]/score/[modeType]/[eventId]/complete/+page.server.ts (lines 91-104)
+   - /src/routes/account/+page.server.ts (lines 76-111)
+
+   Pattern: Fetching records then looping to fetch related data
+   Solution: Use Supabase JOINs in single query
+
+3. MISSING AUTHORIZATION CHECKS
+   Severity: CRITICAL
+   Issue: Some endpoints rely only on RLS, no explicit permission checks
+   Files: 
+   - /src/routes/session/[id]/details/+page.server.ts
+   - /src/routes/api/invitations/create/+server.ts
+   Solution: Add explicit checks before sensitive operations
+
+
+HIGH PRIORITY ISSUES (Next Sprint)
+==================================
+
+4. LARGE DATA LOADS WITHOUT PAGINATION
+   Files:
+   - /src/routes/session/[id]/details/+page.server.ts (training_events, custom_events)
+   - /src/routes/api/export/[sessionId]/+server.ts (results)
+   Severity: HIGH
+   Impact: Could load millions of records, memory exhaustion
+   Solution: Add .limit() and pagination
+
+5. WEAK PASSWORD REQUIREMENTS
+   File: /src/routes/signup/+page.server.ts (lines 18-20)
+   Severity: HIGH
+   Issue: Only requires 6 characters minimum
+   Solution: Increase to 12 characters, require mixed case and numbers
+
+6. NO RATE LIMITING
+   Files:
+   - /src/routes/api/organization/create/+server.ts
+   - /src/routes/api/invitations/create/+server.ts
+   - /src/routes/api/sessions/+server.ts
+   Severity: HIGH
+   Impact: DOS vulnerability - unlimited invitations/sessions
+   Solution: Implement rate limiting middleware
+
+7. INEFFICIENT COUNT QUERIES
+   File: /src/lib/server/organizationLimits.ts (lines 61-68)
+   Severity: HIGH
+   Issue: Using count: 'exact' scans entire table
+   Solution: Use count: 'planned' or maintain summary table
+
+8. INEFFICIENT ORGANIZATION DATA LOADING
+   File: /src/routes/account/+page.server.ts (lines 76-111)
+   Severity: HIGH
+   Issue: 3 queries per organization (planLimits, sessions count, members count)
+   Solution: Single query with JOINs and aggregates
+
+
+MEDIUM PRIORITY ISSUES
+======================
+
+9. EMAIL VALIDATION MISSING
+   File: /src/routes/signup/+page.server.ts (lines 15-17)
+   Solution: Add email format validation
+
+10. NO FIELD LENGTH LIMITS
+    File: /src/routes/api/organization/create/+server.ts
+    Solution: Add maximum length checks
+
+11. PROFILE LOOKUPS ON EVERY PAGE
+    File: /src/routes/+layout.server.ts (lines 14-19)
+    Solution: Cache in localStorage or session
+
+12. INCOMPLETE WEBHOOK ERROR HANDLING
+    File: /src/routes/api/stripe/webhook/+server.ts (lines 218-221)
+    Solution: Implement transactions or idempotency keys
+
+13. NO UNIQUE CONSTRAINT ON JOIN CODE
+    Solution: CREATE UNIQUE INDEX idx_sessions_join_code
+
+14. MISSING DATABASE INDEXES
+    Add indexes on:
+    - sessions.organization_id
+    - session_participants.session_id
+    - organization_members.organization_id
+    - training_scores.session_id
+    - results.session_id
+
+15. SCORE CALCULATIONS IN LOAD FUNCTION
+    File: /src/routes/session/[id]/score/[modeType]/[eventId]/complete/+page.server.ts
+    Solution: Move to database function or trigger
+
+
+OVERALL ASSESSMENT
+==================
+
+Risk Level: MEDIUM-HIGH
+
+Strengths:
+- Uses parameterized queries (safe from SQL injection)
+- Good form validation on join codes
+- RLS policies prevent most unauthorized access
+- Stripe webhook signature verification
+
+Weaknesses:
+- Exposed secrets in Git (CRITICAL)
+- N+1 queries cause performance issues
+- Large data loads without pagination
+- Missing authorization checks
+- No rate limiting on API endpoints
+- Weak password requirements
+- Inefficient database queries
+
+Quick Wins (1 hour each):
+1. Add .env to .gitignore
+2. Fix N+1 queries in 6 locations
+3. Add email validation
+4. Add organization name length limit
+
+Main Work (1-2 days each):
+1. Implement pagination system
+2. Add rate limiting middleware
+3. Fix inefficient queries in account/dashboard pages
+4. Add explicit authorization checks
+5. Rotate Stripe and Supabase keys
+
+
+FULL DETAILED REPORT
+====================
+
+See: SECURITY_ANALYSIS.md for complete analysis with code examples,
+file locations, line numbers, and detailed recommendations for each issue.
+
