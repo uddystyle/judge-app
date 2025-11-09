@@ -115,6 +115,12 @@
 		<p class="subtitle">
 			組織「{data.organization.name}」を有料プランにアップグレードして、より多くの機能を利用しましょう。
 		</p>
+		{#if urlCoupon}
+			<div class="coupon-badge">
+				<span class="coupon-icon">🎟️</span>
+				<span class="coupon-text">クーポン適用: {urlCoupon}</span>
+			</div>
+		{/if}
 	</div>
 
 	{#if errorMessage}
@@ -214,6 +220,28 @@
 		font-size: 15px;
 		color: var(--secondary-text);
 		line-height: 1.6;
+	}
+
+	.coupon-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		border: 2px solid var(--border-medium);
+		border-radius: 20px;
+		padding: 8px 16px;
+		margin-top: 16px;
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--primary-text);
+	}
+
+	.coupon-icon {
+		font-size: 16px;
+	}
+
+	.coupon-text {
+		letter-spacing: 0.02em;
 	}
 
 	.error-message {
