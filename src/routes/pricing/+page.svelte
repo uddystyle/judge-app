@@ -315,10 +315,10 @@
 	<div class="back-button-section">
 		{#if data.user}
 			{#if data.currentPlan === 'free'}
-				<!-- フリープランのユーザー: サブスクリプション画面へ -->
+				<!-- フリープランのユーザー: プラン変更ページへ -->
 				{#if data.organizations && data.organizations.length > 0}
-					<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/upgrade`)}>
-						プランを選択する
+					<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/change-plan`)}>
+						プランを変更する
 					</button>
 				{:else}
 					<button class="back-btn" on:click={() => goto('/organizations')}>
@@ -326,9 +326,13 @@
 					</button>
 				{/if}
 			{:else}
-				<!-- 有料プランのユーザー: プラン変更ページへ -->
-				<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/change-plan`)}>
-					プランを変更する
+				<!-- 有料プランのユーザー: Stripe Customer Portalへ -->
+				<button class="back-btn cancel" on:click={openCustomerPortal} disabled={portalLoading}>
+					{#if portalLoading}
+						処理中...
+					{:else}
+						プランをキャンセルする
+					{/if}
 				</button>
 			{/if}
 		{:else}
@@ -613,6 +617,17 @@
 	.back-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.back-btn.cancel {
+		background: white;
+		color: #dc3545;
+		border: 2px solid #dc3545;
+	}
+
+	.back-btn.cancel:hover:not(:disabled) {
+		background: #dc3545;
+		color: white;
 	}
 
 	@media (max-width: 768px) {

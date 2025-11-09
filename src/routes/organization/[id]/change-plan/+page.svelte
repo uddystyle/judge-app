@@ -1,7 +1,5 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
-	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData, ActionData } from './$types';
@@ -217,9 +215,6 @@
 					プランを変更する
 				{/if}
 			</button>
-			<NavButton on:click={() => goto('/pricing')}>
-				キャンセル
-			</NavButton>
 		</div>
 	</form>
 </div>
