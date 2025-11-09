@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
 	import type { ActionData, PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
@@ -15,6 +16,9 @@
 		standard: { name: 'Standard', price: '¥24,800/月' },
 		premium: { name: 'Premium', price: '¥49,800/月' }
 	};
+
+	// URLパラメータからクーポンコードを取得
+	const couponCode = $page.url.searchParams.get('coupon');
 
 	// ステップ管理: 1 = 組織名入力, 2 = プラン選択
 	let step = 1;
@@ -91,6 +95,9 @@
 		<form method="POST" action="?/create" use:enhance>
 			<input type="hidden" name="organizationName" value={organizationName} />
 			<input type="hidden" name="planType" value={selectedPlan} />
+			{#if couponCode}
+				<input type="hidden" name="couponCode" value={couponCode} />
+			{/if}
 
 			<div class="plan-selection">
 				<div class="plans-grid">

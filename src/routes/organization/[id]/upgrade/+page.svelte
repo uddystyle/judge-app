@@ -7,8 +7,9 @@
 
 	export let data: PageData;
 
-	// URLパラメータからプランを取得
+	// URLパラメータからプランとクーポンを取得
 	const urlPlan = $page.url.searchParams.get('plan') as 'basic' | 'standard' | 'premium' | null;
+	const urlCoupon = $page.url.searchParams.get('coupon');
 	let selectedPlan: 'basic' | 'standard' | 'premium' | null = urlPlan && ['basic', 'standard', 'premium'].includes(urlPlan) ? urlPlan : null;
 	let billingInterval: 'month' | 'year' = 'month';
 	let loading = false;
@@ -62,18 +63,25 @@
 		errorMessage = '';
 
 		try {
+			const requestBody: any = {
+				organizationId: data.organization.id,
+				planType: selectedPlan,
+				billingInterval,
+				returnUrl: `${window.location.origin}/account`,
+				cancelUrl: window.location.href
+			};
+
+			// クーポンコードがある場合は追加
+			if (urlCoupon) {
+				requestBody.couponCode = urlCoupon;
+			}
+
 			const response = await fetch('/api/stripe/upgrade-organization', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
 				},
-				body: JSON.stringify({
-					organizationId: data.organization.id,
-					planType: selectedPlan,
-					billingInterval,
-					returnUrl: `${window.location.origin}/account`,
-					cancelUrl: window.location.href
-				})
+				body: JSON.stringify(requestBody)
 			});
 
 			if (!response.ok) {

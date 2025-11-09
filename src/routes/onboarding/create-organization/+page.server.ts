@@ -50,6 +50,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const organizationNameRaw = formData.get('organizationName') as string;
 		const planType = (formData.get('planType') as string) || 'free';
+		const couponCode = formData.get('couponCode') as string | null;
 
 		// バリデーション（XSS対策を含む）
 		const validation = validateOrganizationName(organizationNameRaw);
@@ -127,8 +128,12 @@ export const actions: Actions = {
 			// フリープランの場合はダッシュボードへ
 			throw redirect(303, '/dashboard');
 		} else {
-			// 有料プランの場合はアップグレード画面へ（選択したプランをURLパラメータで渡す）
-			throw redirect(303, `/organization/${organization.id}/upgrade?plan=${planType}`);
+			// 有料プランの場合はアップグレード画面へ（選択したプランとクーポンをURLパラメータで渡す）
+			let upgradeUrl = `/organization/${organization.id}/upgrade?plan=${planType}`;
+			if (couponCode) {
+				upgradeUrl += `&coupon=${encodeURIComponent(couponCode)}`;
+			}
+			throw redirect(303, upgradeUrl);
 		}
 	}
 };
