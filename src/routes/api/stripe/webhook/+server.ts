@@ -215,7 +215,7 @@ async function handleOrganizationCheckout(
 						cancel_at_period_end: subscription.cancel_at_period_end
 					},
 					{
-						onConflict: 'stripe_customer_id',
+						onConflict: 'stripe_subscription_id',
 						ignoreDuplicates: false
 					}
 				);
