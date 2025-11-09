@@ -272,6 +272,14 @@
 	<div class="nav-buttons">
 		<hr class="divider" />
 
+		<!-- プラン関連メニュー -->
+		<NavButton on:click={() => goto('/pricing')}>プランの確認</NavButton>
+		{#if data.organizations && data.organizations.length > 0 && data.organizations[0].plan_type !== 'free'}
+			<NavButton on:click={() => goto(`/organization/${data.organizations[0].id}/change-plan`)}>
+				プランの変更
+			</NavButton>
+		{/if}
+
 		<NavButton on:click={() => goto('/dashboard')}>ダッシュボードに戻る</NavButton>
 		<NavButton variant="danger" on:click={handleLogout}>ログアウト</NavButton>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
