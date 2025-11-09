@@ -1,34 +1,62 @@
-/* src/app.css */
+/* src/app.css - Minimal Monochrome Design System */
 :root {
-    /* Primary colors - Orange accent */
-    --primary-orange: #ff6b35;
-    --primary-orange-light: #ff8c42;
-    --primary-orange-hover: #fffbf7;
+    /* Monochrome grayscale palette */
+    --gray-50: #fafafa;
+    --gray-100: #f5f5f5;
+    --gray-200: #e5e5e5;
+    --gray-300: #d4d4d4;
+    --gray-400: #a3a3a3;
+    --gray-500: #737373;
+    --gray-600: #525252;
+    --gray-700: #404040;
+    --gray-800: #262626;
+    --gray-900: #171717;
 
-    /* Background colors - Beige base */
-    --bg-cream: #fefaf5;
-    --bg-beige: #f5f1e8;
-    --bg-white: #ffffff;
+    /* Background colors - Clean white/gray base */
+    --bg-primary: #ffffff;
+    --bg-secondary: var(--gray-50);
+    --bg-tertiary: var(--gray-100);
+    --bg-hover: var(--gray-100);
 
-    /* Border colors */
-    --border-light: #f0e6d8;
-    --border-gray: #d2d2d7;
+    /* Border colors - Subtle */
+    --border-light: var(--gray-200);
+    --border-medium: var(--gray-300);
+    --border-dark: var(--gray-400);
 
-    /* Text colors */
-    --text-primary: #2d2d2d;
-    --text-secondary: #5d5d5d;
-    --text-muted: #6e6e73;
+    /* Text colors - High contrast */
+    --text-primary: var(--gray-900);
+    --text-secondary: var(--gray-600);
+    --text-muted: var(--gray-500);
+    --text-disabled: var(--gray-400);
 
-    /* Legacy iOS colors (for backward compatibility) */
-    --ios-blue: #007aff;
-    --ios-red: #ff3b30;
-    --ios-green: #28a745;
-    --ios-orange: var(--primary-orange);
-    --light-gray: var(--bg-beige);
-    --separator-gray: var(--border-gray);
+    /* Accent color - Minimal black for primary actions */
+    --accent-primary: var(--gray-900);
+    --accent-hover: var(--gray-800);
+    --accent-active: var(--gray-700);
+
+    /* Semantic colors - Monochrome with subtle contrast */
+    --color-success: var(--gray-700);
+    --color-error: var(--gray-800);
+    --color-warning: var(--gray-600);
+    --color-info: var(--gray-600);
+
+    /* Legacy compatibility (mapped to monochrome) */
+    --primary-orange: var(--accent-primary);
+    --primary-orange-light: var(--accent-hover);
+    --primary-orange-hover: var(--bg-hover);
+    --bg-cream: var(--bg-secondary);
+    --bg-beige: var(--bg-tertiary);
+    --bg-white: var(--bg-primary);
+    --border-gray: var(--border-medium);
+    --ios-blue: var(--accent-primary);
+    --ios-red: var(--color-error);
+    --ios-green: var(--color-success);
+    --ios-orange: var(--accent-primary);
+    --light-gray: var(--bg-tertiary);
+    --separator-gray: var(--border-medium);
     --primary-text: var(--text-primary);
-    --secondary-text: var(--text-muted);
-    --keypad-bg: #e5e5ea;
+    --secondary-text: var(--text-secondary);
+    --keypad-bg: var(--gray-200);
 }
 
 * {
@@ -40,9 +68,10 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, sans-serif;
-    background-color: var(--bg-beige);
+    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background-color: var(--bg-secondary);
     color: var(--text-primary);
     touch-action: manipulation;
-    line-height: 1.5;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
 }

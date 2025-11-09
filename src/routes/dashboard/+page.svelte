@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
@@ -8,13 +9,6 @@
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
-	async function handleLogout() {
-		// Supabaseからログアウトを実行
-		await supabase.auth.signOut();
-
-		// ログアウト後、ログインページへ移動
-		goto('/login');
-	}
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
 
@@ -123,19 +117,9 @@
 	/>
 </svelte:head>
 
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} />
+
 <div class="container">
-	<div class="header-bar">
-		<div class="title-section">
-			<h1 class="app-title">TENTO</h1>
-			<p class="app-subtitle">スキー・スノーボード検定・大会のための採点管理システム</p>
-		</div>
-		<button class="account-button" class:has-organization={data.organizations && data.organizations.length > 0} on:click={() => goto('/account')}>
-			<span class="account-name">{data.profile?.full_name || 'アカウント'}</span>
-			{#if data.organizations && data.organizations.length > 0}
-				<span class="org-status">✓ 組織所属</span>
-			{/if}
-		</button>
-	</div>
 
 	<div class="section">
 		<h2 class="section-title">参加中のセッション</h2>
@@ -205,81 +189,6 @@
 		max-width: 1200px;
 		margin: 0 auto;
 	}
-	.header-bar {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 28px;
-		gap: 16px;
-	}
-	.title-section {
-		flex: 1;
-		text-align: left;
-	}
-	.app-title {
-		font-family: 'M PLUS Rounded 1c', sans-serif;
-		font-size: 28px;
-		font-weight: 800;
-		color: #2d2d2d;
-		line-height: 1.2;
-		margin: 0 0 8px 0;
-		letter-spacing: 0.05em;
-	}
-	.app-subtitle {
-		font-size: 13px;
-		font-weight: 500;
-		color: #5d5d5d;
-		margin: 0;
-		line-height: 1.4;
-	}
-	.account-button {
-		background: var(--bg-white);
-		color: var(--text-primary);
-		border: 2px solid var(--border-light);
-		border-radius: 24px;
-		padding: 10px 18px;
-		font-size: 14px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 4px;
-		min-width: 140px;
-	}
-	.account-button.has-organization {
-		border-color: var(--primary-orange);
-		background: linear-gradient(135deg, #fff8f3 0%, #ffffff 100%);
-	}
-	.account-button:hover {
-		border-color: var(--primary-orange);
-		background: var(--primary-orange-hover);
-		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
-		transform: translateY(-1px);
-	}
-	.account-button:active {
-		transform: scale(0.98) translateY(0);
-	}
-	.account-name {
-		display: block;
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-	.org-status {
-		font-size: 11px;
-		font-weight: 600;
-		padding: 3px 8px;
-		border-radius: 12px;
-		display: inline-flex;
-		align-items: center;
-		gap: 3px;
-		white-space: nowrap;
-		background: var(--primary-orange);
-		color: white;
-	}
 	.list-keypad {
 		display: flex;
 		flex-direction: column;
@@ -298,26 +207,24 @@
 		gap: 8px;
 		height: auto;
 		min-height: 70px;
-		background: var(--bg-white);
-		color: var(--ios-blue);
+		background: var(--bg-primary);
+		color: var(--text-primary);
 		border-radius: 12px;
 		width: 100%;
 		max-width: 100%;
 		font-size: 17px;
 		font-weight: 600;
 		text-align: center;
-		border: 2px solid var(--border-light);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+		border: 1px solid var(--border-light);
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.15s ease;
 	}
 	.key.select-item:hover {
-		border-color: var(--primary-orange);
-		box-shadow: 0 4px 16px rgba(255, 107, 53, 0.15);
+		border-color: var(--border-dark);
 		transform: translateY(-2px);
 	}
 	.key.select-item:active {
-		background-color: var(--primary-orange-hover);
+		background-color: var(--bg-hover);
 		transform: translateY(0);
 	}
 	.session-name {
@@ -335,15 +242,15 @@
 		font-size: 11px;
 		font-weight: 600;
 		color: white;
-		background: var(--ios-blue);
+		background: var(--gray-700);
 		padding: 2px 6px;
 		border-radius: 4px;
 	}
 	.mode-badge.tournament {
-		background: var(--ios-green);
+		background: var(--gray-800);
 	}
 	.mode-badge.training {
-		background: var(--primary-orange);
+		background: var(--gray-600);
 	}
 	.join-code-wrapper {
 		display: flex;
@@ -356,7 +263,7 @@
 		display: flex;
 		align-items: center;
 		gap: 4px;
-		background-color: var(--bg-beige);
+		background-color: var(--bg-secondary);
 		padding: 6px 12px;
 		border-radius: 8px;
 		border: 1px solid var(--border-light);
@@ -377,22 +284,22 @@
 		font-size: 12px;
 		font-weight: 600;
 		color: white;
-		background-color: var(--ios-blue);
+		background-color: var(--accent-primary);
 		padding: 6px 12px;
 		border-radius: 8px;
 		border: none;
 		cursor: pointer;
-		transition: all 0.2s;
+		transition: all 0.15s ease;
 		white-space: nowrap;
 		min-width: 85px;
 		text-align: center;
+		letter-spacing: -0.01em;
 	}
 	.copy-btn:hover {
-		background-color: #0051d5;
-		box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+		background-color: var(--accent-hover);
 	}
 	.copy-btn:active {
-		background-color: #004bb5;
+		background-color: var(--accent-active);
 		transform: scale(0.95);
 	}
 
@@ -423,7 +330,7 @@
 		margin-right: auto;
 	}
 	.details-btn {
-		background-color: var(--primary-orange);
+		background-color: var(--gray-700);
 		color: white;
 		border: none;
 		border-radius: 8px;
@@ -432,39 +339,20 @@
 		font-weight: 500;
 		cursor: pointer;
 		text-decoration: none;
-		transition: all 0.2s;
+		transition: all 0.15s ease;
+		letter-spacing: -0.01em;
 	}
 	.details-btn:hover {
-		background-color: var(--primary-orange-light);
+		background-color: var(--gray-600);
 	}
 	.details-btn:active {
-		background-color: var(--primary-orange);
+		background-color: var(--gray-800);
 	}
 
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
 		.container {
 			padding: 60px 40px;
-		}
-		.header-bar {
-			margin-bottom: 40px;
-		}
-		.app-title {
-			font-size: 36px;
-		}
-		.app-subtitle {
-			font-size: 15px;
-		}
-		.account-button {
-			padding: 12px 20px;
-			min-width: 160px;
-		}
-		.account-name {
-			font-size: 16px;
-		}
-		.org-status {
-			font-size: 12px;
-			padding: 4px 10px;
 		}
 		.list-keypad {
 			gap: 20px;
@@ -514,22 +402,6 @@
 
 	/* PC対応: デスクトップ */
 	@media (min-width: 1024px) {
-		.app-title {
-			font-size: 42px;
-		}
-		.app-subtitle {
-			font-size: 16px;
-		}
-		.account-button {
-			padding: 14px 24px;
-			min-width: 180px;
-		}
-		.account-name {
-			font-size: 17px;
-		}
-		.org-status {
-			font-size: 13px;
-		}
 		.list-keypad {
 			gap: 24px;
 			max-width: 600px;

@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -16,6 +17,9 @@
 	let fullName = '';
 	let loading = false;
 	let message = '';
+
+	// ログアウト確認ダイアログの表示状態
+	let showLogoutDialog = false;
 
 	// dataが変更されたときにfullNameを更新
 	$: {
@@ -87,10 +91,11 @@
 	}
 
 	async function handleLogout() {
-		// Supabaseからログアウトを実行
-		await supabase.auth.signOut();
+		showLogoutDialog = true;
+	}
 
-		// ログアウト後、ログインページへ移動
+	async function confirmLogout() {
+		await supabase.auth.signOut();
 		goto('/login');
 	}
 
@@ -199,108 +204,10 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} />
 
 <div class="container">
 	<div class="instruction">アカウント設定</div>
-
-	<!-- 組織・プラン情報セクション -->
-	<div class="subscription-section">
-		<h2 class="section-title">組織・プラン情報</h2>
-
-		{#if !data.organizations || data.organizations.length === 0}
-			<!-- 組織未作成の場合 -->
-			<div class="no-organization-card">
-				<div class="warning-icon">⚠️</div>
-				<h3 class="warning-title">組織が作成されていません</h3>
-				<p class="warning-message">
-					TENTOでは、すべてのセッションは組織に属します。<br />
-					まずは組織を作成してください。
-				</p>
-				<div class="subscription-actions">
-					<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
-						組織を作成する
-					</NavButton>
-				</div>
-			</div>
-		{:else}
-			<!-- 複数組織を表示 -->
-			{#each data.organizations as org}
-				<div class="subscription-card">
-					<div class="organization-info">
-						<h3 class="org-name">{org.name}</h3>
-						<div class="org-details">
-							<span class="org-role" class:admin={org.userRole === 'admin'}>
-								{org.userRole === 'admin' ? '管理者' : 'メンバー'}
-							</span>
-							<span class="org-date">作成日: {formatDate(org.created_at)}</span>
-						</div>
-					</div>
-
-					<div class="plan-info">
-						<div class="plan-name-row">
-							<span class="plan-name">{getPlanName(org.plan_type)}プラン</span>
-							<span class="plan-price">{getPlanPrice(org.plan_type)}</span>
-						</div>
-					</div>
-
-					<div class="usage-info">
-						<h3 class="usage-title">今月の使用状況</h3>
-
-						<div class="usage-item">
-							<span class="usage-label">セッション作成:</span>
-							<div class="usage-bar-container">
-								<div class="usage-bar">
-									<div
-										class="usage-bar-fill"
-										style="width: {getUsagePercentage(org.planLimits, org.currentUsage)}%"
-										class:warning={getUsagePercentage(org.planLimits, org.currentUsage) > 80}
-									></div>
-								</div>
-								<div class="usage-text">{getUsageText(org.planLimits, org.currentUsage)}</div>
-							</div>
-						</div>
-
-						<div class="usage-item">
-							<span class="usage-label">組織メンバー:</span>
-							<div class="usage-text-only">
-								{getMembersUsageText(org.planLimits, org.currentUsage)}
-							</div>
-						</div>
-					</div>
-
-					<div class="subscription-actions">
-						<NavButton on:click={() => goto(`/organization/${org.id}`)}>
-							組織詳細を見る
-						</NavButton>
-						{#if org.userRole === 'admin'}
-							{#if org.plan_type === 'free'}
-								<NavButton variant="primary" on:click={() => goto(`/organization/${org.id}/upgrade`)}>
-									プランをアップグレード
-								</NavButton>
-							{:else}
-								<NavButton
-									variant="primary"
-									on:click={() => openCustomerPortal(org.id)}
-									disabled={portalLoading}
-								>
-									{portalLoading ? '読み込み中...' : 'プランを管理'}
-								</NavButton>
-							{/if}
-						{/if}
-					</div>
-				</div>
-			{/each}
-
-			<!-- 新しい組織を作成 -->
-			<div class="create-org-card">
-				<p class="create-org-text">複数の組織を作成・管理できます</p>
-				<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
-					新しい組織を作成
-				</NavButton>
-			</div>
-		{/if}
-	</div>
 
 	<!-- アカウント情報セクション -->
 	<h2 class="section-title">アカウント情報</h2>
@@ -372,6 +279,15 @@
 		</NavButton>
 	</div>
 </div>
+
+<ConfirmDialog
+	bind:isOpen={showLogoutDialog}
+	title="ログアウト"
+	message="ログアウトしますか？"
+	confirmText="ログアウト"
+	cancelText="キャンセル"
+	on:confirm={confirmLogout}
+/>
 
 <style>
 	.container {
@@ -457,7 +373,7 @@
 		font-size: 13px;
 	}
 	.org-role.admin {
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 	}
 	.org-date {
 		display: flex;
@@ -482,7 +398,7 @@
 	.plan-price {
 		font-size: 16px;
 		font-weight: 600;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 	.usage-info {
 		margin-bottom: 24px;
@@ -510,7 +426,7 @@
 		transition: width 0.3s ease;
 	}
 	.usage-bar-fill.warning {
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 	}
 	.usage-text {
 		font-size: 14px;
@@ -538,7 +454,7 @@
 		gap: 12px;
 	}
 	.create-org-card {
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border: 2px dashed var(--separator-gray);
 		border-radius: 16px;
 		padding: 24px;
@@ -608,7 +524,7 @@
 	.message {
 		text-align: center;
 		margin-top: 1rem;
-		color: var(--ios-red);
+		color: #dc3545;
 	}
 	.divider {
 		border: none;

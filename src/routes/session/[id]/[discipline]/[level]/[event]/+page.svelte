@@ -111,12 +111,12 @@
 	.numeric-display {
 		font-size: 64px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 		min-height: 100px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border-radius: 16px;
 		border: 3px solid var(--border-light);
 		margin-bottom: 24px;
@@ -129,7 +129,7 @@
 		margin-top: 28px;
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		margin-top: 1rem;
 		font-size: 14px;
 	}

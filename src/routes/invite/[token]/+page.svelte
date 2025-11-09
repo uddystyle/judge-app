@@ -164,7 +164,7 @@
 		margin: 0;
 	}
 	.organization-card {
-		background: linear-gradient(135deg, var(--primary-orange) 0%, var(--primary-orange-light) 100%);
+		background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary) 100%);
 		color: white;
 		padding: 32px;
 		border-radius: 20px;
@@ -187,7 +187,7 @@
 	}
 	.plan-badge {
 		background: white;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 		padding: 6px 14px;
 		border-radius: 8px;
 		font-weight: 600;
@@ -221,14 +221,14 @@
 		font-size: 16px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		color: var(--text-primary);
 		transition: all 0.2s;
 		box-sizing: border-box;
 	}
 	.input-field:focus {
 		outline: none;
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.input-field:disabled {
@@ -243,7 +243,7 @@
 	}
 	.error-message {
 		background: #fff5f5;
-		color: var(--ios-red);
+		color: #dc3545;
 		padding: 16px;
 		border-radius: 12px;
 		border: 2px solid #ffdddd;

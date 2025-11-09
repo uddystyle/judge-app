@@ -34,55 +34,63 @@
 
 <style>
 	.nav-btn {
-		background-color: var(--bg-white);
+		background-color: var(--bg-primary);
 		color: var(--text-primary);
-		border: 2px solid var(--border-light);
-		border-radius: 12px;
-		padding: 15px 20px;
-		font-size: 17px;
-		font-weight: 600;
+		border: 1.5px solid var(--border-medium);
+		border-radius: 8px;
+		padding: 12px 24px;
+		font-size: 15px;
+		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.2s;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-	}
-	.nav-btn:active {
-		transform: scale(0.98);
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-	}
-
-	/* Primary (オレンジ) スタイル */
-	.nav-btn.primary {
-		background: linear-gradient(135deg, var(--primary-orange) 0%, var(--primary-orange-light) 100%);
-		color: white;
-		border-color: var(--primary-orange);
-		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
-	}
-	.nav-btn.primary:active {
-		box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
-	}
-
-	/* Danger (赤) スタイル */
-	.nav-btn.danger {
-		background-color: #ff3b30;
-		color: white;
-		border-color: #ff3b30;
-	}
-	.nav-btn.danger:active {
-		background-color: #d93025;
-	}
-
-	/* Disabled (無効) スタイル */
-	.nav-btn:disabled {
-		background-color: var(--border-gray);
-		color: var(--text-muted);
-		border-color: var(--border-gray);
-		cursor: not-allowed;
-		opacity: 0.6;
+		transition: all 0.15s ease;
 		box-shadow: none;
+		letter-spacing: -0.01em;
 	}
-	.nav-btn.primary:disabled {
-		background: var(--border-gray);
-		border-color: var(--border-gray);
-		opacity: 0.6;
+
+	.nav-btn:hover:not(:disabled) {
+		background-color: var(--bg-hover);
+		border-color: var(--border-dark);
+	}
+
+	.nav-btn:active:not(:disabled) {
+		transform: scale(0.98);
+		background-color: var(--gray-200);
+	}
+
+	/* Primary - Black filled button */
+	.nav-btn.primary {
+		background-color: var(--accent-primary);
+		color: white;
+		border-color: var(--accent-primary);
+	}
+
+	.nav-btn.primary:hover:not(:disabled) {
+		background-color: var(--accent-hover);
+		border-color: var(--accent-hover);
+	}
+
+	.nav-btn.primary:active:not(:disabled) {
+		background-color: var(--accent-active);
+	}
+
+	/* Danger - Dark gray for destructive actions */
+	.nav-btn.danger {
+		background-color: var(--bg-primary);
+		color: var(--color-error);
+		border-color: var(--gray-400);
+	}
+
+	.nav-btn.danger:hover:not(:disabled) {
+		background-color: var(--gray-100);
+		border-color: var(--gray-500);
+	}
+
+	/* Disabled state */
+	.nav-btn:disabled {
+		background-color: var(--gray-100);
+		color: var(--text-disabled);
+		border-color: var(--gray-200);
+		cursor: not-allowed;
+		opacity: 0.5;
 	}
 </style>

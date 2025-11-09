@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import type { PageData } from './$types';
@@ -262,7 +263,10 @@
 		<div class="nav-buttons">
 			<NavButton variant="primary" on:click={handleCreateOrganization} disabled={loading}>
 				{#if loading}
-					処理中...
+					<span style="display: inline-flex; align-items: center; gap: 8px;">
+						処理中
+						<LoadingSpinner size="small" inline={true} />
+					</span>
 				{:else if hasSubscription}
 					組織を作成
 				{:else}
@@ -318,7 +322,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 24px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		padding: 32px;
 		border-radius: 20px;
 		border: 2px solid var(--border-light);
@@ -340,13 +344,13 @@
 		font-size: 17px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		color: var(--text-primary);
 		transition: all 0.2s;
 	}
 	.input-field:focus {
 		outline: none;
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.help-text {
@@ -371,25 +375,25 @@
 		font-weight: 600;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		color: var(--text-primary);
 		cursor: pointer;
 		transition: all 0.2s;
 		position: relative;
 	}
 	.toggle-btn:hover {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 	}
 	.toggle-btn.active {
-		border-color: var(--primary-orange);
-		background: var(--primary-orange);
+		border-color: var(--accent-primary);
+		background: var(--accent-primary);
 		color: white;
 	}
 	.discount-badge {
 		margin-left: 6px;
 		font-size: 12px;
 		padding: 2px 6px;
-		background: var(--ios-green);
+		background: #2d7a3e;
 		color: white;
 		border-radius: 4px;
 	}
@@ -402,19 +406,19 @@
 		padding: 24px;
 		border: 2px solid var(--border-light);
 		border-radius: 16px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		cursor: pointer;
 		transition: all 0.2s;
 		text-align: left;
 		position: relative;
 	}
 	.plan-card:hover {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 4px 16px rgba(255, 107, 53, 0.15);
 	}
 	.plan-card.selected {
-		border-color: var(--primary-orange);
-		background: var(--primary-orange-hover);
+		border-color: var(--accent-primary);
+		background: var(--accent-hover);
 		box-shadow: 0 4px 16px rgba(255, 107, 53, 0.2);
 	}
 	.plan-header {
@@ -429,7 +433,7 @@
 	.plan-price {
 		font-size: 28px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 	.price-unit {
 		font-size: 16px;
@@ -442,7 +446,7 @@
 		color: var(--text-primary);
 		margin-bottom: 16px;
 		padding: 8px 12px;
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-radius: 8px;
 	}
 	.plan-features {
@@ -463,14 +467,14 @@
 		content: '✓';
 		position: absolute;
 		left: 0;
-		color: var(--ios-green);
+		color: #2d7a3e;
 		font-weight: 700;
 	}
 	.selected-badge {
 		position: absolute;
 		top: 16px;
 		right: 16px;
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 		color: white;
 		padding: 6px 12px;
 		border-radius: 20px;
@@ -478,7 +482,7 @@
 		font-weight: 600;
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
@@ -503,14 +507,14 @@
 		flex-direction: column;
 		gap: 12px;
 		padding: 20px;
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-radius: 12px;
-		border: 2px solid var(--primary-orange);
+		border: 2px solid var(--accent-primary);
 	}
 	.plan-badge {
 		font-size: 20px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 	.plan-description {
 		font-size: 14px;

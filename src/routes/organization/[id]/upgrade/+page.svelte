@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
 
-	let selectedPlan: 'basic' | 'standard' | 'premium' | null = null;
+	// URLパラメータからプランを取得
+	const urlPlan = $page.url.searchParams.get('plan') as 'basic' | 'standard' | 'premium' | null;
+	let selectedPlan: 'basic' | 'standard' | 'premium' | null = urlPlan && ['basic', 'standard', 'premium'].includes(urlPlan) ? urlPlan : null;
 	let billingInterval: 'month' | 'year' = 'month';
 	let loading = false;
 	let errorMessage = '';
@@ -170,7 +173,7 @@
 
 		<!-- アクションボタン -->
 		<div class="actions">
-			<NavButton on:click={() => goto('/account')} disabled={loading}>
+			<NavButton on:click={() => goto('/pricing')} disabled={loading}>
 				キャンセル
 			</NavButton>
 			<NavButton variant="primary" on:click={handleUpgrade} disabled={loading || !selectedPlan}>
@@ -252,12 +255,12 @@
 	}
 
 	.billing-btn:hover {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 	}
 
 	.billing-btn.selected {
-		background: var(--primary-orange);
-		border-color: var(--primary-orange);
+		background: var(--accent-primary);
+		border-color: var(--accent-primary);
 		color: white;
 	}
 
@@ -288,12 +291,12 @@
 	}
 
 	.plan-card:hover {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
 	}
 
 	.plan-card.selected {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		background: linear-gradient(135deg, #fff8f3 0%, #ffffff 100%);
 	}
 
@@ -316,7 +319,7 @@
 	.plan-price {
 		font-size: 24px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 
 	.price-unit {
@@ -350,7 +353,7 @@
 		content: '✓';
 		position: absolute;
 		left: 0;
-		color: var(--ios-green);
+		color: #2d7a3e;
 		font-weight: 700;
 	}
 
@@ -358,7 +361,7 @@
 		position: absolute;
 		top: 12px;
 		right: 12px;
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 		color: white;
 		padding: 4px 12px;
 		border-radius: 20px;

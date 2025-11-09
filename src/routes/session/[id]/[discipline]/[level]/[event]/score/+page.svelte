@@ -23,7 +23,8 @@
 
 	$: isChief = data.isChief;
 	$: isMultiJudge = data.isMultiJudge;
-	$: showBibEditButton = isChief && isMultiJudge;
+	// 主任検定員かつ複数検定員モードON、または複数検定員モードOFFの場合にボタンを表示
+	$: showBibEditButton = (isChief && isMultiJudge) || !isMultiJudge;
 
 	// キーパッドから数字が入力されたときの処理
 	function handleInput(event: CustomEvent<string>) {
@@ -37,23 +38,25 @@
 		currentScore = '';
 	}
 
-	// 主任検定員がゼッケン入力を修正する際の処理
+	// ゼッケン番号を修正する際の処理
 	async function handleEditBib() {
 		const sessionId = $page.params.id;
 
-		// セッションのactive_prompt_idをクリア（一般検定員を準備画面に戻す）
-		const { error } = await supabase
-			.from('sessions')
-			.update({ active_prompt_id: null })
-			.eq('id', sessionId);
+		// 複数検定員モードの場合のみ、active_prompt_idをクリア（一般検定員を準備画面に戻す）
+		if (isMultiJudge) {
+			const { error } = await supabase
+				.from('sessions')
+				.update({ active_prompt_id: null })
+				.eq('id', sessionId);
 
-		if (error) {
-			console.error('Failed to clear active_prompt_id:', error);
-			alert('エラーが発生しました。');
-			return;
+			if (error) {
+				console.error('Failed to clear active_prompt_id:', error);
+				alert('エラーが発生しました。');
+				return;
+			}
 		}
 
-		// 主任検定員はゼッケン入力画面に遷移
+		// ゼッケン入力画面に遷移
 		goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}`);
 	}
 
@@ -226,7 +229,7 @@
 
 	{#if showBibEditButton}
 		<div class="nav-buttons">
-			<NavButton on:click={handleEditBib}>ゼッケン入力を修正</NavButton>
+			<NavButton on:click={handleEditBib}>ゼッケン番号を修正</NavButton>
 		</div>
 	{/if}
 </div>
@@ -247,16 +250,16 @@
 	.numeric-display {
 		font-size: 64px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--text-primary);
 		min-height: 100px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border-radius: 16px;
-		border: 3px solid var(--border-light);
+		border: 2px solid var(--border-medium);
 		margin-bottom: 24px;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+		box-shadow: none;
 	}
 	.nav-buttons {
 		display: flex;

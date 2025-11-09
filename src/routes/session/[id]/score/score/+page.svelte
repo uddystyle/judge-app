@@ -135,7 +135,7 @@
 	}
 
 	.scoring-badge.advanced {
-		background: var(--ios-green);
+		background: #2d7a3e;
 	}
 
 	.scoring-description {
@@ -146,8 +146,8 @@
 
 	.error-message {
 		background: #ffe6e6;
-		border: 1px solid var(--ios-red);
-		color: var(--ios-red);
+		border: 1px solid #dc3545;
+		color: #dc3545;
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;

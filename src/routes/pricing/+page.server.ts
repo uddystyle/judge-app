@@ -9,6 +9,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	// ユーザーがログインしている場合、現在のプランとプロフィールを取得
 	let currentPlan = 'free';
 	let profile = null;
+	let organizations: any[] = [];
 	if (user) {
 		// ユーザーが所属する組織を取得
 		const { data: memberships } = await supabase
@@ -27,6 +28,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		if (memberships && memberships.length > 0) {
 			const org = memberships[0].organizations as any;
 			currentPlan = org?.plan_type || 'free';
+			organizations = memberships;
 		} else {
 			// 組織に所属していない場合、個人サブスクリプションを確認
 			const { data: subscription } = await supabase
@@ -50,6 +52,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	return {
 		user,
 		profile,
-		currentPlan
+		currentPlan,
+		organizations
 	};
 };

@@ -3,9 +3,11 @@
 	import type { ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { goto } from '$app/navigation';
 
 	export let form: ActionData;
+	let loading = false;
 </script>
 
 <svelte:head>
@@ -22,7 +24,17 @@
 <div class="container">
 	<div class="instruction">新規アカウント登録</div>
 
-	<form method="POST" action="?/signup" use:enhance>
+	<form
+		method="POST"
+		action="?/signup"
+		use:enhance={() => {
+			loading = true;
+			return async ({ update }) => {
+				await update();
+				loading = false;
+			};
+		}}
+	>
 		<div class="form-container">
 			<input
 				type="text"
@@ -53,7 +65,16 @@
 			{/if}
 
 			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">登録する</NavButton>
+				<NavButton variant="primary" type="submit" disabled={loading}>
+					{#if loading}
+						<span style="display: inline-flex; align-items: center; gap: 8px;">
+							登録中
+							<LoadingSpinner size="small" inline={true} />
+						</span>
+					{:else}
+						登録する
+					{/if}
+				</NavButton>
 			</div>
 		</div>
 	</form>
@@ -82,7 +103,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		padding: 32px;
 		border-radius: 20px;
 		border: 2px solid var(--border-light);
@@ -94,13 +115,13 @@
 		font-size: 17px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		color: var(--text-primary);
 		transition: all 0.2s;
 	}
 	.form-container input:focus {
 		outline: none;
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.nav-buttons {
@@ -110,7 +131,7 @@
 		margin-top: 8px;
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;

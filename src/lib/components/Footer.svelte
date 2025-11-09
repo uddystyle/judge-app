@@ -69,11 +69,11 @@
 
 <style>
 	.footer {
-		background: linear-gradient(180deg, #fefaf5 0%, #f5f1e8 100%);
-		color: #2d2d2d;
+		background: var(--bg-primary);
+		color: var(--text-primary);
 		padding: 60px 20px 24px;
 		margin-top: 80px;
-		border-top: 1px solid #f0e6d8;
+		border-top: 1px solid var(--border-light);
 	}
 
 	.footer-container {
@@ -92,18 +92,18 @@
 		font-family: 'M PLUS Rounded 1c', sans-serif;
 		font-size: 32px;
 		font-weight: 800;
-		color: #ff6b35;
+		color: var(--text-primary);
 		margin-bottom: 12px;
 		letter-spacing: 0.05em;
 		background: transparent;
 		border: none;
 		padding: 0;
 		cursor: pointer;
-		transition: all 0.2s ease;
+		transition: all 0.15s ease;
 	}
 
 	.brand-name:hover {
-		color: #ff8555;
+		color: var(--text-secondary);
 		transform: scale(1.02);
 	}
 
@@ -113,9 +113,10 @@
 
 	.brand-description {
 		font-size: 15px;
-		color: #6e6e73;
+		color: var(--text-secondary);
 		line-height: 1.7;
 		max-width: 360px;
+		letter-spacing: -0.01em;
 	}
 
 	.footer-links {
@@ -131,7 +132,7 @@
 	.column-title {
 		font-size: 14px;
 		font-weight: 700;
-		color: #1d1d1f;
+		color: var(--text-primary);
 		margin-bottom: 20px;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
@@ -150,18 +151,19 @@
 	.link-button {
 		background: none;
 		border: none;
-		color: #6e6e73;
+		color: var(--text-secondary);
 		font-size: 15px;
 		cursor: pointer;
 		padding: 0;
 		text-align: left;
-		transition: all 0.2s ease;
+		transition: all 0.15s ease;
 		font-family: inherit;
 		position: relative;
+		letter-spacing: -0.01em;
 	}
 
 	.link-button:hover {
-		color: #ff6b35;
+		color: var(--text-primary);
 		transform: translateX(2px);
 	}
 
@@ -169,15 +171,16 @@
 		max-width: 1200px;
 		margin: 48px auto 0;
 		padding-top: 24px;
-		border-top: 1px solid #e8e0d5;
+		border-top: 1px solid var(--border-light);
 		text-align: center;
 	}
 
 	.copyright {
 		font-size: 13px;
-		color: #9e9e9e;
+		color: var(--text-muted);
 		margin: 0;
 		font-weight: 500;
+		letter-spacing: -0.01em;
 	}
 
 	/* タブレット以上 */
@@ -198,7 +201,7 @@
 		}
 
 		.brand-name:hover {
-			color: #ff8555;
+			color: var(--text-secondary);
 		}
 
 		.brand-description {

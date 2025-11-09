@@ -230,7 +230,7 @@
 	.success-icon {
 		width: 80px;
 		height: 80px;
-		background: var(--ios-green);
+		background: #2d7a3e;
 		color: white;
 		border-radius: 50%;
 		display: flex;
@@ -275,7 +275,7 @@
 	}
 
 	.required {
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 
 	.input {
@@ -295,7 +295,7 @@
 	}
 
 	.input.error {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 	}
 
 	.select {
@@ -314,7 +314,7 @@
 	}
 
 	.error-text {
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 		font-size: 14px;
 		margin-top: 6px;
 	}
@@ -369,7 +369,7 @@
 	}
 
 	.cancel-btn:hover {
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 	}
 
 	.back-btn {
@@ -440,7 +440,7 @@
 	}
 
 	.info-link {
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		color: var(--ios-blue);
 		border: 2px solid var(--ios-blue);
 		border-radius: 8px;

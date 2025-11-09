@@ -91,7 +91,7 @@
 	}
 	.success-message {
 		background: #e6f6e8;
-		border: 1px solid var(--ios-green);
+		border: 1px solid #2d7a3e;
 		color: #1e5c2e;
 		padding: 12px;
 		border-radius: 8px;
@@ -100,8 +100,8 @@
 	}
 	.error-message {
 		background: #ffe6e6;
-		border: 1px solid var(--ios-red);
-		color: var(--ios-red);
+		border: 1px solid #dc3545;
+		color: #dc3545;
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -160,7 +160,7 @@
 		border-radius: 4px;
 	}
 	.option-badge.advanced {
-		background: var(--ios-green);
+		background: #2d7a3e;
 	}
 	.option-description {
 		font-size: 15px;
@@ -178,7 +178,7 @@
 	}
 	.excluded {
 		text-decoration: line-through;
-		color: var(--ios-red);
+		color: #dc3545;
 	}
 
 	.form-actions {

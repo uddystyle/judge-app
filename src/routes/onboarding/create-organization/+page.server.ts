@@ -71,10 +71,7 @@ export const actions: Actions = {
 			});
 		}
 
-		// 複数組織対応: 重複チェックを削除
-		// ユーザーは複数の組織を作成できる
-
-		// プラン情報を取得
+		// 選択されたプランの制限値を取得
 		const { data: planLimits, error: planError } = await supabase
 			.from('plan_limits')
 			.select('max_organization_members')
@@ -85,11 +82,11 @@ export const actions: Actions = {
 			console.error('Failed to fetch plan limits:', planError);
 			return fail(400, {
 				organizationName,
-				error: '無効なプランが選択されました。'
+				error: 'プラン情報の取得に失敗しました。'
 			});
 		}
 
-		// 組織を作成
+		// 組織を作成（選択されたプランで）
 		const { data: organization, error: orgError } = await supabase
 			.from('organizations')
 			.insert({
@@ -109,8 +106,6 @@ export const actions: Actions = {
 		}
 
 		// ユーザーを組織の管理者として追加
-		// 注意: RLSの無限再帰エラーを避けるため、管理者チェックポリシーは削除済み
-		// ユーザーは自分自身のみをメンバーとして追加できる
 		const { error: memberError } = await supabase.from('organization_members').insert({
 			organization_id: organization.id,
 			user_id: user.id,
@@ -125,7 +120,15 @@ export const actions: Actions = {
 			});
 		}
 
-		// ダッシュボードへリダイレクト
-		throw redirect(303, '/dashboard');
+		console.log('[create] 組織作成完了:', organization.id, planType);
+
+		// プランに応じてリダイレクト
+		if (planType === 'free') {
+			// フリープランの場合はダッシュボードへ
+			throw redirect(303, '/dashboard');
+		} else {
+			// 有料プランの場合はアップグレード画面へ（選択したプランをURLパラメータで渡す）
+			throw redirect(303, `/organization/${organization.id}/upgrade?plan=${planType}`);
+		}
 	}
 };

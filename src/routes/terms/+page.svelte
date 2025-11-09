@@ -346,7 +346,7 @@
 		color: var(--primary-text);
 		margin-bottom: 16px;
 		padding-bottom: 8px;
-		border-bottom: 2px solid var(--primary-orange);
+		border-bottom: 2px solid var(--accent-primary);
 	}
 
 	.section p {
