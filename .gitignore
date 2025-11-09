@@ -21,3 +21,6 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Documentation with secrets
+PRODUCTION_SUPABASE_SETUP.md
