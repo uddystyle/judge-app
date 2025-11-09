@@ -87,13 +87,15 @@ export const actions: Actions = {
 			});
 		}
 
-		// 組織を作成（選択されたプランで）
+		// 組織を作成
+		// NOTE: 有料プランの場合、upgrade画面でプランを変更する可能性があるため、
+		// 一旦freeプランとして作成し、Stripe決済完了後のwebhookで正しいプランに更新される
 		const { data: organization, error: orgError } = await supabase
 			.from('organizations')
 			.insert({
 				name: organizationName,
-				plan_type: planType,
-				max_members: planLimits.max_organization_members
+				plan_type: 'free',
+				max_members: planType === 'free' ? planLimits.max_organization_members : 1
 			})
 			.select()
 			.single();

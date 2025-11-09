@@ -120,6 +120,8 @@ async function handleCheckoutCompleted(session: any) {
 	const planType = getPlanTypeFromPrice(priceId);
 	const billingInterval = subscription.items.data[0].price.recurring?.interval || 'month';
 
+	console.log('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
+
 	// 組織向けサブスクリプションの場合
 	if (isOrganization) {
 		await handleOrganizationCheckout(session, subscription, planType, billingInterval);
@@ -176,6 +178,7 @@ async function handleOrganizationCheckout(
 		// アップグレードの場合
 		if (isUpgrade && organizationId) {
 			console.log('[Webhook] 組織アップグレード開始:', organizationId);
+			console.log('[Webhook] プランタイプ:', planType, '最大メンバー:', maxMembers);
 
 			// 1. 組織を更新
 			const { error: orgError } = await supabaseAdmin
@@ -193,7 +196,7 @@ async function handleOrganizationCheckout(
 				throw orgError;
 			}
 
-			console.log('[Webhook] 組織更新成功:', organizationId);
+			console.log('[Webhook] 組織更新成功:', organizationId, 'plan_type:', planType);
 
 			// 2. subscriptionsテーブルに情報を保存（upsertを使用）
 			const { error: subError } = await supabaseAdmin
