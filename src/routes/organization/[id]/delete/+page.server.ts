@@ -239,6 +239,19 @@ export const actions: Actions = {
 			}
 		}
 
+		// subscriptionsテーブルのレコードを削除
+		const { error: subscriptionDeleteError } = await supabase
+			.from('subscriptions')
+			.delete()
+			.eq('organization_id', organizationId);
+
+		if (subscriptionDeleteError) {
+			console.error('Failed to delete subscriptions:', subscriptionDeleteError);
+			return fail(500, { error: 'サブスクリプション情報の削除に失敗しました。' });
+		}
+
+		console.log('[Organization Delete] subscriptionsレコードを削除');
+
 		// 組織メンバーを削除（自分自身）
 		const { error: memberDeleteError } = await supabase
 			.from('organization_members')
