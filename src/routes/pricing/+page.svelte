@@ -326,9 +326,9 @@
 					</button>
 				{/if}
 			{:else}
-				<!-- 有料プランのユーザー: Stripe Customer Portalへ -->
-				<button class="back-btn" on:click={openCustomerPortal} disabled={portalLoading}>
-					{portalLoading ? '読み込み中...' : 'プランを管理する'}
+				<!-- 有料プランのユーザー: プラン変更ページへ -->
+				<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/upgrade`)}>
+					プランを変更する
 				</button>
 			{/if}
 		{:else}
