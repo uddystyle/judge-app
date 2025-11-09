@@ -171,6 +171,8 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		return json({ url: session.url });
 	} catch (err: any) {
 		console.error('[Organization Upgrade API] エラー:', err);
-		throw error(500, err.message || 'Checkout Sessionの作成に失敗しました。');
+		console.error('[Organization Upgrade API] エラー詳細:', JSON.stringify(err, null, 2));
+		const message = err.message || 'Checkout Sessionの作成に失敗しました。';
+		return json({ message }, { status: 500 });
 	}
 };

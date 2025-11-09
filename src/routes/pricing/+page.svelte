@@ -120,14 +120,15 @@
 			});
 
 			if (!response.ok) {
-				throw new Error('Customer Portalの作成に失敗しました');
+				const errorData = await response.json();
+				throw new Error(errorData.message || 'Customer Portalの作成に失敗しました');
 			}
 
 			const result = await response.json();
 			window.location.href = result.url;
-		} catch (error) {
+		} catch (error: any) {
 			console.error('Customer Portal Error:', error);
-			alert('プラン管理画面の表示に失敗しました。');
+			alert(`プラン管理画面の表示に失敗しました。\n\nエラー: ${error.message}`);
 			portalLoading = false;
 		}
 	}

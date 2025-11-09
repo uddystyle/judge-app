@@ -86,12 +86,15 @@
 
 			if (!response.ok) {
 				const error = await response.json();
+				console.error('[Upgrade Error] Response:', error);
 				throw new Error(error.message || 'エラーが発生しました');
 			}
 
 			const result = await response.json();
+			console.log('[Upgrade Success] Redirecting to:', result.url);
 			window.location.href = result.url;
 		} catch (error: any) {
+			console.error('[Upgrade Error] Exception:', error);
 			errorMessage = error.message || 'エラーが発生しました';
 			loading = false;
 		}

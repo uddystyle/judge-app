@@ -15,13 +15,20 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	// 2. 組織情報を取得
 	const { data: organization } = await supabase
 		.from('organizations')
-		.select('id, name, plan_type')
+		.select('id, name, plan_type, stripe_customer_id')
 		.eq('id', params.id)
 		.single();
 
 	if (!organization) {
 		throw error(404, '組織が見つかりません。');
 	}
+
+	console.log('[Upgrade Page Load] 組織情報:', {
+		id: organization.id,
+		name: organization.name,
+		plan_type: organization.plan_type,
+		stripe_customer_id: organization.stripe_customer_id
+	});
 
 	// 3. 管理者権限を確認
 	const { data: member } = await supabase
@@ -35,8 +42,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(403, '組織の管理者権限が必要です。');
 	}
 
-	// 4. フリープランかどうか確認
-	if (organization.plan_type !== 'free') {
+	// 4. 既に有料プランに登録済みかどうか確認
+	// サブスクリプション情報を取得
+	const { data: subscription } = await supabase
+		.from('subscriptions')
+		.select('id, status')
+		.eq('organization_id', params.id)
+		.in('status', ['active', 'trialing'])
+		.single();
+
+	if (subscription) {
+		console.log('[Upgrade Page Load] 既にアクティブなサブスクリプションがあります。/accountにリダイレクト');
 		throw redirect(303, '/account');
 	}
 
