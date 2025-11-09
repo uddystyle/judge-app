@@ -1,7 +1,8 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
+import { stripe } from '$lib/server/stripe';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	const session = await locals.supabase.auth.getSession();
 
 	// 未ログインの場合はログインページへリダイレクト
@@ -29,9 +30,32 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.eq('id', user.id)
 		.single();
 
+	// URLパラメータからクーポンコードを取得
+	const couponCode = url.searchParams.get('coupon');
+	let validCoupon = null;
+
+	// クーポンコードが指定されている場合、Stripeで有効性を確認
+	if (couponCode) {
+		try {
+			const coupon = await stripe.coupons.retrieve(couponCode);
+			if (coupon.valid) {
+				validCoupon = {
+					id: coupon.id,
+					percentOff: coupon.percent_off,
+					amountOff: coupon.amount_off,
+					currency: coupon.currency
+				};
+			}
+		} catch (error) {
+			console.error('Invalid coupon code:', error);
+			// クーポンが無効でもエラーにせず、通常料金で表示
+		}
+	}
+
 	return {
 		user,
 		profile,
-		subscription
+		subscription,
+		coupon: validCoupon
 	};
 };

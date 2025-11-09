@@ -100,18 +100,25 @@
 				goto('/dashboard');
 			} else {
 				// サブスクリプションがない場合はStripe Checkoutへ
+				const requestBody: any = {
+					organizationName: organizationName.trim(),
+					planType: selectedPlan,
+					billingInterval: billingInterval,
+					returnUrl: window.location.origin + '/dashboard',
+					cancelUrl: window.location.href
+				};
+
+				// クーポンコードがある場合は追加
+				if (data.coupon) {
+					requestBody.couponCode = data.coupon.id;
+				}
+
 				const response = await fetch('/api/stripe/create-organization-checkout', {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json'
 					},
-					body: JSON.stringify({
-						organizationName: organizationName.trim(),
-						planType: selectedPlan,
-						billingInterval: billingInterval,
-						returnUrl: window.location.origin + '/dashboard',
-						cancelUrl: window.location.href
-					})
+					body: JSON.stringify(requestBody)
 				});
 
 				const result = await response.json();
@@ -144,6 +151,18 @@
 
 <div class="container">
 	<div class="instruction">組織を作成</div>
+
+	<!-- クーポン適用バッジ -->
+	{#if data.coupon}
+		<div class="coupon-badge">
+			🎉 特別割引が適用されます:
+			{#if data.coupon.percentOff}
+				{data.coupon.percentOff}% OFF
+			{:else if data.coupon.amountOff}
+				¥{(data.coupon.amountOff / 100).toLocaleString()} OFF
+			{/if}
+		</div>
+	{/if}
 
 	<div class="form-container">
 		<div class="form-section">
@@ -271,6 +290,30 @@
 		color: var(--text-primary);
 		margin-bottom: 40px;
 	}
+
+	.coupon-badge {
+		display: inline-block;
+		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+		color: white;
+		padding: 12px 24px;
+		border-radius: 12px;
+		font-size: 16px;
+		font-weight: 600;
+		margin-bottom: 24px;
+		box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+		animation: pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%,
+		100% {
+			transform: scale(1);
+		}
+		50% {
+			transform: scale(1.05);
+		}
+	}
+
 	.form-container {
 		display: flex;
 		flex-direction: column;

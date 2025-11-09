@@ -39,7 +39,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 	try {
 		// 2. リクエストボディの取得
-		const { organizationId, planType, billingInterval, returnUrl, cancelUrl } =
+		const { organizationId, planType, billingInterval, returnUrl, cancelUrl, couponCode } =
 			await request.json();
 
 		// バリデーション
@@ -122,7 +122,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		}
 
 		// 8. Stripe Checkout Sessionを作成
-		const session = await stripe.checkout.sessions.create({
+		const sessionParams: any = {
 			customer: customerId,
 			mode: 'subscription',
 			payment_method_types: ['card'],
@@ -155,7 +155,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 					is_upgrade: 'true'
 				}
 			}
-		});
+		};
+
+		// クーポンコードがある場合は追加
+		if (couponCode) {
+			sessionParams.discounts = [{ coupon: couponCode }];
+			console.log('[Organization Upgrade API] クーポンコードを適用:', couponCode);
+		}
+
+		const session = await stripe.checkout.sessions.create(sessionParams);
 
 		console.log('[Organization Upgrade API] Checkout Session作成成功:', session.id);
 
