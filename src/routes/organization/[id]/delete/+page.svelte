@@ -38,7 +38,20 @@
 			<li>メンバー情報</li>
 			<li>すべてのセッション（先に削除が必要）</li>
 			<li>セッションに関連するすべてのデータ</li>
+			{#if data.hasActiveSubscription}
+				<li class="subscription-warning">
+					<strong>アクティブなサブスクリプションが即座にキャンセルされます</strong>
+				</li>
+			{/if}
 		</ul>
+		{#if data.hasActiveSubscription}
+			<div class="subscription-notice">
+				<p><strong>💳 サブスクリプションについて：</strong></p>
+				<p>
+					この組織には有料プランのサブスクリプションがあります。組織を削除すると、Stripeのサブスクリプションが即座にキャンセルされ、以降の請求は発生しません。
+				</p>
+			</div>
+		{/if}
 	</div>
 
 	{#if form?.error}
@@ -147,6 +160,25 @@
 		left: 8px;
 		color: #dc3545;
 		font-weight: bold;
+	}
+	.subscription-warning {
+		color: #dc3545 !important;
+		font-weight: 600;
+	}
+	.subscription-notice {
+		background: #fffacd;
+		border: 2px solid #ffd700;
+		border-radius: 8px;
+		padding: 16px;
+		margin-top: 16px;
+		font-size: 14px;
+		line-height: 1.6;
+	}
+	.subscription-notice p {
+		margin: 0 0 8px 0;
+	}
+	.subscription-notice p:last-child {
+		margin-bottom: 0;
 	}
 	.form-container {
 		display: flex;

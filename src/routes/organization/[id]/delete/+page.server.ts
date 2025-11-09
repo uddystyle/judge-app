@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { stripe } from '$lib/server/stripe';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -25,8 +26,18 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw redirect(303, '/dashboard');
 	}
 
+	// アクティブなサブスクリプション情報を取得
+	const { data: activeSubscription } = await supabase
+		.from('subscriptions')
+		.select('id, status, current_period_end')
+		.eq('organization_id', organizationId)
+		.in('status', ['active', 'trialing', 'past_due'])
+		.single();
+
 	return {
-		organization: membership.organizations
+		organization: membership.organizations,
+		hasActiveSubscription: !!activeSubscription,
+		subscriptionEndDate: activeSubscription?.current_period_end || null
 	};
 };
 
@@ -77,6 +88,54 @@ export const actions: Actions = {
 			return fail(400, {
 				error: `この組織には${memberCount}名のメンバーがいます。先にすべてのメンバーを削除してください。`
 			});
+		}
+
+		// アクティブなサブスクリプションを確認してキャンセル
+		const { data: subscriptions } = await supabase
+			.from('subscriptions')
+			.select('id, stripe_subscription_id, status')
+			.eq('organization_id', organizationId)
+			.in('status', ['active', 'trialing', 'past_due']);
+
+		if (subscriptions && subscriptions.length > 0) {
+			console.log(`[Organization Delete] ${subscriptions.length}件のアクティブなサブスクリプションを検出`);
+
+			// 各サブスクリプションをキャンセル
+			for (const subscription of subscriptions) {
+				if (subscription.stripe_subscription_id) {
+					try {
+						// Stripe APIでサブスクリプションを即座にキャンセル
+						const canceledSubscription = await stripe.subscriptions.cancel(
+							subscription.stripe_subscription_id
+						);
+						console.log(
+							`[Organization Delete] Stripeサブスクリプションをキャンセル: ${subscription.stripe_subscription_id}`
+						);
+
+						// データベースのステータスを更新
+						await supabase
+							.from('subscriptions')
+							.update({
+								status: 'canceled',
+								cancel_at_period_end: false,
+								canceled_at: new Date().toISOString()
+							})
+							.eq('id', subscription.id);
+
+						console.log(
+							`[Organization Delete] データベースのサブスクリプションステータスを更新: ${subscription.id}`
+						);
+					} catch (stripeError: any) {
+						console.error(
+							`[Organization Delete] Stripeサブスクリプションのキャンセルに失敗:`,
+							stripeError
+						);
+						return fail(500, {
+							error: `サブスクリプションのキャンセルに失敗しました。サポートにお問い合わせください。(${stripeError.message})`
+						});
+					}
+				}
+			}
 		}
 
 		// 組織メンバーを削除（自分自身）
