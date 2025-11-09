@@ -27,6 +27,24 @@
 		<h1 class="page-title">組織の削除</h1>
 	</div>
 
+	{#if data.hasActiveSubscription}
+		<div class="subscription-alert">
+			<div class="alert-icon">💳</div>
+			<div class="alert-content">
+				<h3 class="alert-title">有料プランのサブスクリプションがキャンセルされます</h3>
+				<p class="alert-text">
+					この組織には有料プラン（<strong>{data.organization.plan_type.toUpperCase()}</strong>）のアクティブなサブスクリプションがあります。
+				</p>
+				<p class="alert-text">
+					組織を削除すると、<strong>Stripeのサブスクリプションが即座にキャンセル</strong>され、次回以降の請求は発生しません。
+				</p>
+				<p class="alert-note">
+					※ 既にお支払いいただいた期間分の料金は返金されません
+				</p>
+			</div>
+		</div>
+	{/if}
+
 	<div class="warning-section">
 		<div class="warning-icon">⚠️</div>
 		<h2 class="warning-title">この操作は取り消せません</h2>
@@ -38,20 +56,7 @@
 			<li>メンバー情報</li>
 			<li>すべてのセッション（先に削除が必要）</li>
 			<li>セッションに関連するすべてのデータ</li>
-			{#if data.hasActiveSubscription}
-				<li class="subscription-warning">
-					<strong>アクティブなサブスクリプションが即座にキャンセルされます</strong>
-				</li>
-			{/if}
 		</ul>
-		{#if data.hasActiveSubscription}
-			<div class="subscription-notice">
-				<p><strong>💳 サブスクリプションについて：</strong></p>
-				<p>
-					この組織には有料プランのサブスクリプションがあります。組織を削除すると、Stripeのサブスクリプションが即座にキャンセルされ、以降の請求は発生しません。
-				</p>
-			</div>
-		{/if}
 	</div>
 
 	{#if form?.error}
@@ -161,25 +166,50 @@
 		color: #dc3545;
 		font-weight: bold;
 	}
-	.subscription-warning {
-		color: #dc3545 !important;
-		font-weight: 600;
+
+	.subscription-alert {
+		background: linear-gradient(135deg, #fff4e6 0%, #ffe8cc 100%);
+		border: 3px solid var(--accent-primary);
+		border-radius: 16px;
+		padding: 24px;
+		margin-bottom: 24px;
+		display: flex;
+		gap: 16px;
+		align-items: flex-start;
+		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
 	}
-	.subscription-notice {
-		background: #fffacd;
-		border: 2px solid #ffd700;
-		border-radius: 8px;
-		padding: 16px;
-		margin-top: 16px;
-		font-size: 14px;
+
+	.alert-icon {
+		font-size: 36px;
+		flex-shrink: 0;
+		line-height: 1;
+	}
+
+	.alert-content {
+		flex: 1;
+	}
+
+	.alert-title {
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--accent-primary);
+		margin: 0 0 12px 0;
+	}
+
+	.alert-text {
+		font-size: 15px;
 		line-height: 1.6;
-	}
-	.subscription-notice p {
+		color: var(--primary-text);
 		margin: 0 0 8px 0;
 	}
-	.subscription-notice p:last-child {
-		margin-bottom: 0;
+
+	.alert-note {
+		font-size: 13px;
+		color: var(--secondary-text);
+		margin: 12px 0 0 0;
+		font-style: italic;
 	}
+
 	.form-container {
 		display: flex;
 		flex-direction: column;

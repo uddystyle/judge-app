@@ -90,46 +90,97 @@ export const actions: Actions = {
 			});
 		}
 
-		// アクティブなサブスクリプションを確認してキャンセル
-		const { data: subscriptions } = await supabase
+		// 組織情報を取得（Stripe顧客IDとサブスクリプションIDを含む）
+		const { data: organization } = await supabase
+			.from('organizations')
+			.select('stripe_customer_id, stripe_subscription_id')
+			.eq('id', organizationId)
+			.single();
+
+		// Stripeサブスクリプションをキャンセル
+		const subscriptionsToCancel: string[] = [];
+
+		// 1. データベースのsubscriptionsテーブルから検索
+		const { data: dbSubscriptions } = await supabase
 			.from('subscriptions')
 			.select('id, stripe_subscription_id, status')
 			.eq('organization_id', organizationId)
 			.in('status', ['active', 'trialing', 'past_due']);
 
-		if (subscriptions && subscriptions.length > 0) {
-			console.log(`[Organization Delete] ${subscriptions.length}件のアクティブなサブスクリプションを検出`);
+		if (dbSubscriptions && dbSubscriptions.length > 0) {
+			for (const sub of dbSubscriptions) {
+				if (sub.stripe_subscription_id) {
+					subscriptionsToCancel.push(sub.stripe_subscription_id);
+				}
+			}
+		}
 
-			// 各サブスクリプションをキャンセル
-			for (const subscription of subscriptions) {
-				if (subscription.stripe_subscription_id) {
-					try {
-						// Stripe APIでサブスクリプションを即座にキャンセル
-						const canceledSubscription = await stripe.subscriptions.cancel(
-							subscription.stripe_subscription_id
-						);
-						console.log(
-							`[Organization Delete] Stripeサブスクリプションをキャンセル: ${subscription.stripe_subscription_id}`
-						);
+		// 2. 組織テーブルのstripe_subscription_idも確認
+		if (organization?.stripe_subscription_id) {
+			if (!subscriptionsToCancel.includes(organization.stripe_subscription_id)) {
+				subscriptionsToCancel.push(organization.stripe_subscription_id);
+			}
+		}
 
-						// データベースのステータスを更新
-						await supabase
-							.from('subscriptions')
-							.update({
-								status: 'canceled',
-								cancel_at_period_end: false,
-								canceled_at: new Date().toISOString()
-							})
-							.eq('id', subscription.id);
+		// 3. Stripe APIで顧客に紐づくすべてのサブスクリプションを取得
+		if (organization?.stripe_customer_id) {
+			try {
+				const stripeSubscriptions = await stripe.subscriptions.list({
+					customer: organization.stripe_customer_id,
+					status: 'all'
+				});
 
-						console.log(
-							`[Organization Delete] データベースのサブスクリプションステータスを更新: ${subscription.id}`
-						);
-					} catch (stripeError: any) {
-						console.error(
-							`[Organization Delete] Stripeサブスクリプションのキャンセルに失敗:`,
-							stripeError
-						);
+				for (const stripeSub of stripeSubscriptions.data) {
+					// アクティブまたはトライアル中のサブスクリプションのみキャンセル対象
+					if (
+						['active', 'trialing', 'past_due'].includes(stripeSub.status) &&
+						!subscriptionsToCancel.includes(stripeSub.id)
+					) {
+						subscriptionsToCancel.push(stripeSub.id);
+					}
+				}
+			} catch (stripeError: any) {
+				console.error(
+					`[Organization Delete] Stripe顧客のサブスクリプション取得に失敗:`,
+					stripeError
+				);
+			}
+		}
+
+		// 見つかったすべてのサブスクリプションをキャンセル
+		if (subscriptionsToCancel.length > 0) {
+			console.log(
+				`[Organization Delete] ${subscriptionsToCancel.length}件のサブスクリプションをキャンセル`
+			);
+
+			for (const subscriptionId of subscriptionsToCancel) {
+				try {
+					// Stripe APIでサブスクリプションを即座にキャンセル
+					await stripe.subscriptions.cancel(subscriptionId);
+					console.log(
+						`[Organization Delete] Stripeサブスクリプションをキャンセル: ${subscriptionId}`
+					);
+
+					// データベースのステータスを更新（存在する場合）
+					await supabase
+						.from('subscriptions')
+						.update({
+							status: 'canceled',
+							cancel_at_period_end: false,
+							canceled_at: new Date().toISOString()
+						})
+						.eq('stripe_subscription_id', subscriptionId);
+
+					console.log(
+						`[Organization Delete] データベースのサブスクリプションステータスを更新: ${subscriptionId}`
+					);
+				} catch (stripeError: any) {
+					console.error(
+						`[Organization Delete] Stripeサブスクリプションのキャンセルに失敗:`,
+						stripeError
+					);
+					// リソースが見つからない場合はスキップ（既にキャンセルされている）
+					if (stripeError.code !== 'resource_missing') {
 						return fail(500, {
 							error: `サブスクリプションのキャンセルに失敗しました。サポートにお問い合わせください。(${stripeError.message})`
 						});
