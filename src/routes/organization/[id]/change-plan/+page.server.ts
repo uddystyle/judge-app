@@ -52,16 +52,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		.in('status', ['active', 'trialing'])
 		.single();
 
-	// サブスクリプションがない場合はupgradeページへリダイレクト
-	if (!subscription) {
-		console.log('[Change Plan Page Load] アクティブなサブスクリプションがありません。upgradeページにリダイレクト');
-		throw redirect(303, `/organization/${params.id}/upgrade`);
-	}
-
-	// フリープランの場合もupgradeページへリダイレクト
-	if (organization.plan_type === 'free') {
-		throw redirect(303, `/organization/${params.id}/upgrade`);
-	}
+	// サブスクリプション情報（フリープランの場合はnull）
 
 	// 5. プラン一覧を取得
 	const { data: plans } = await supabase
@@ -113,6 +104,11 @@ export const actions: Actions = {
 		// 現在のプランと同じ場合はエラー
 		if (organization.plan_type === newPlanType) {
 			return fail(400, { error: '既に同じプランを利用中です。' });
+		}
+
+		// フリープランからの変更の場合は、upgradeページへリダイレクト
+		if (organization.plan_type === 'free') {
+			throw redirect(303, `/organization/${params.id}/upgrade?plan=${newPlanType}`);
 		}
 
 		// サブスクリプション情報を取得

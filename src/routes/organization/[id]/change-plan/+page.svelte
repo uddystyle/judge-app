@@ -8,8 +8,11 @@
 	export let form: ActionData;
 
 	let selectedPlan: 'basic' | 'standard' | 'premium' | null = null;
-	let billingInterval: 'month' | 'year' = (data.subscription.billing_interval as 'month' | 'year') || 'month';
+	let billingInterval: 'month' | 'year' = (data.subscription?.billing_interval as 'month' | 'year') || 'month';
 	let loading = false;
+
+	// フリープランかどうか
+	$: isFree = data.organization.plan_type === 'free';
 
 	const plans = {
 		basic: {
@@ -83,11 +86,16 @@
 
 	<div class="current-plan-section">
 		<h2 class="section-title">現在のプラン</h2>
-		<div class="current-plan-card">
-			<div class="plan-badge current">{plans[data.organization.plan_type as keyof typeof plans].name}</div>
-			<p class="plan-price">
-				{formatPrice(getPrice(data.organization.plan_type as 'basic' | 'standard' | 'premium'))} / {billingInterval === 'month' ? '月' : '年'}
-			</p>
+		<div class="current-plan-card" class:free={isFree}>
+			{#if isFree}
+				<div class="plan-badge current">フリー</div>
+				<p class="plan-price">無料</p>
+			{:else}
+				<div class="plan-badge current">{plans[data.organization.plan_type as keyof typeof plans].name}</div>
+				<p class="plan-price">
+					{formatPrice(getPrice(data.organization.plan_type as 'basic' | 'standard' | 'premium'))} / {billingInterval === 'month' ? '月' : '年'}
+				</p>
+			{/if}
 		</div>
 	</div>
 
@@ -97,7 +105,17 @@
 		</div>
 	{/if}
 
-	{#if changeType === 'upgrade'}
+	{#if isFree && selectedPlan}
+		<div class="info-box upgrade">
+			<div class="info-icon">⬆️</div>
+			<div class="info-content">
+				<h3 class="info-title">有料プランへアップグレード</h3>
+				<p class="info-text">
+					有料プランを選択すると、Stripe決済ページへ移動します。決済完了後、すぐに新しいプランの機能が利用可能になります。
+				</p>
+			</div>
+		</div>
+	{:else if changeType === 'upgrade'}
 		<div class="info-box upgrade">
 			<div class="info-icon">⬆️</div>
 			<div class="info-content">
@@ -187,7 +205,13 @@
 				class="submit-btn"
 				disabled={!selectedPlan || selectedPlan === data.organization.plan_type || loading}
 			>
-				{loading ? '処理中...' : 'プランを変更する'}
+				{#if loading}
+					処理中...
+				{:else if isFree}
+					有料プランへアップグレード
+				{:else}
+					プランを変更する
+				{/if}
 			</button>
 			<NavButton on:click={() => goto('/pricing')}>
 				キャンセル
@@ -238,6 +262,10 @@
 		padding: 20px;
 		text-align: center;
 		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.2);
+	}
+
+	.current-plan-card.free {
+		background: linear-gradient(135deg, #95a5a6, #7f8c8d);
 	}
 
 	.plan-badge {

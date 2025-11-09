@@ -10,6 +10,7 @@
 	export let pageUser: any = null; // ページから渡されるユーザー情報（料金ページなど）
 	export let pageProfile: any = null; // ページから渡されるプロフィール情報
 	export let hasOrganization = false; // 組織に属しているかどうか
+	export let pageOrganizations: any[] = []; // ページから渡される組織情報
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
@@ -130,8 +131,13 @@
 						<span class="menu-label">プロフィール</span>
 					</button>
 					<button class="menu-item" on:click={() => handleMenuClick('/pricing')}>
-						<span class="menu-label">プランの変更</span>
+						<span class="menu-label">プランの確認</span>
 					</button>
+					{#if pageOrganizations.length > 0}
+						<button class="menu-item" on:click={() => handleMenuClick(`/organization/${pageOrganizations[0].id}/change-plan`)}>
+							<span class="menu-label">プランの変更</span>
+						</button>
+					{/if}
 					<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
 						<span class="menu-label">組織</span>
 					</button>
