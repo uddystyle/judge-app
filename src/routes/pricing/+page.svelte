@@ -327,7 +327,7 @@
 				{/if}
 			{:else}
 				<!-- 有料プランのユーザー: プラン変更ページへ -->
-				<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/upgrade`)}>
+				<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/change-plan`)}>
 					プランを変更する
 				</button>
 			{/if}
