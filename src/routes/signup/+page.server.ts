@@ -27,7 +27,9 @@ export const actions: Actions = {
 			options: {
 				data: {
 					full_name: fullName
-				}
+				},
+				// メール確認後、認証コールバックへリダイレクト
+				emailRedirectTo: `${process.env.PUBLIC_SITE_URL || 'http://localhost:5173'}/auth/callback`
 			}
 		});
 

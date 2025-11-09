@@ -321,7 +321,7 @@
 	}
 </script>
 
-<Header />
+<Header pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} />
 
 <div class="container">
 	{#if isSessionEnded}
@@ -487,7 +487,7 @@
 	.end-message {
 		margin: 24px auto;
 		padding: 24px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border-radius: 12px;
 		border: 2px solid var(--border-light);
 		color: var(--text-primary);
@@ -501,7 +501,7 @@
 		width: 20px;
 		height: 20px;
 		border: 2px solid rgba(0, 0, 0, 0.1);
-		border-top-color: var(--primary-orange);
+		border-top-color: var(--accent-primary);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 		margin-top: 20px;

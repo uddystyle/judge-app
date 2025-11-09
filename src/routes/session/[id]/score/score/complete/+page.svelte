@@ -173,7 +173,7 @@
 		font-size: 15px;
 		max-width: 340px;
 		background: #e6f6e8;
-		border: 1px solid var(--ios-green);
+		border: 1px solid #2d7a3e;
 		color: #1e5c2e;
 		line-height: 1.6;
 	}
@@ -193,7 +193,7 @@
 	}
 
 	.scoring-badge.advanced {
-		background: var(--ios-green);
+		background: #2d7a3e;
 	}
 
 	.nav-buttons {
@@ -250,11 +250,11 @@
 	.total-score {
 		text-align: center;
 		font-size: 20px;
-		color: var(--ios-green);
+		color: #2d7a3e;
 		padding: 12px;
 		background: #e6f6e8;
 		border-radius: 12px;
-		border: 1px solid var(--ios-green);
+		border: 1px solid #2d7a3e;
 	}
 
 	.single-score {

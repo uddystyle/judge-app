@@ -377,7 +377,7 @@
 		font-weight: 600;
 	}
 	.scoring-badge.advanced {
-		background: var(--ios-green);
+		background: #2d7a3e;
 	}
 	.form-container {
 		margin-bottom: 1.5rem;

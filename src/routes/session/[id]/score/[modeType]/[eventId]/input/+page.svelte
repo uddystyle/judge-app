@@ -126,8 +126,8 @@
 
 	.error-message {
 		background: #ffe6e6;
-		border: 1px solid var(--ios-red);
-		color: var(--ios-red);
+		border: 1px solid #dc3545;
+		color: #dc3545;
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -137,12 +137,12 @@
 	.numeric-display {
 		font-size: 64px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 		min-height: 100px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border-radius: 16px;
 		border: 3px solid var(--border-light);
 		margin-bottom: 24px;

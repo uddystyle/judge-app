@@ -273,7 +273,7 @@
 		gap: 12px;
 		margin-bottom: 20px;
 		padding-bottom: 12px;
-		border-bottom: 3px solid var(--primary-orange);
+		border-bottom: 3px solid var(--accent-primary);
 	}
 
 	.category-title {
@@ -322,7 +322,7 @@
 	}
 
 	.faq-question:hover {
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 	}
 
 	.question-text {
@@ -352,7 +352,7 @@
 
 	.faq-answer {
 		padding: 16px 20px 20px 20px;
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-top: 1px solid var(--separator-gray);
 	}
 

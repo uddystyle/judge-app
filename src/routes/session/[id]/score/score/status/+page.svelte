@@ -197,7 +197,7 @@
 	}
 
 	.scoring-badge.advanced {
-		background: var(--ios-green);
+		background: #2d7a3e;
 	}
 
 	.instruction {

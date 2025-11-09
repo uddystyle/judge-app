@@ -2,8 +2,10 @@
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { onMount } from 'svelte';
 
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -12,6 +14,11 @@
 	let password = '';
 	let errorMessage = '';
 	let loading = false;
+
+	// URLパラメータからエラーメッセージを取得
+	$: if ($page.url.searchParams.get('error')) {
+		errorMessage = $page.url.searchParams.get('error') || '';
+	}
 
 	async function handleLogin() {
 		loading = true;
@@ -80,7 +87,14 @@
 
 		<div class="nav-buttons">
 			<NavButton variant="primary" on:click={handleLogin} disabled={loading}>
-				{loading ? 'ログイン中...' : 'ログイン'}
+				{#if loading}
+					<span style="display: inline-flex; align-items: center; gap: 8px;">
+						ログイン中
+						<LoadingSpinner size="small" inline={true} />
+					</span>
+				{:else}
+					ログイン
+				{/if}
 			</NavButton>
 			<NavButton on:click={() => goto('/signup')}>新規登録</NavButton>
 		</div>
@@ -109,7 +123,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		padding: 24px;
 		border-radius: 16px;
 		border: 2px solid var(--border-light);
@@ -120,17 +134,17 @@
 		font-size: 16px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		color: var(--text-primary);
 		transition: all 0.2s;
 	}
 	.input-field:focus {
 		outline: none;
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;

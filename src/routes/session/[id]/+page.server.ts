@@ -14,6 +14,21 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	const sessionId = params.id;
 
+	// ユーザーのプロフィール情報を取得
+	const { data: profile } = await supabase
+		.from('profiles')
+		.select('full_name')
+		.eq('id', user.id)
+		.single();
+
+	// ユーザーが所属する組織を取得
+	const { data: memberships } = await supabase
+		.from('organization_members')
+		.select('organization_id')
+		.eq('user_id', user.id);
+
+	const organizations = memberships || [];
+
 	// セッションの詳細情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
@@ -107,6 +122,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		}
 
 		return {
+			user,
+			profile,
+			organizations,
 			isChief,
 			sessionDetails,
 			isTrainingMode: true,
@@ -127,6 +145,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			.eq('session_id', sessionId);
 
 		return {
+			user,
+			profile,
+			organizations,
 			isChief,
 			sessionDetails,
 			isTournamentMode: true,
@@ -147,6 +168,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		const disciplines = [...new Set(events.map((e) => e.discipline))];
 
 		return {
+			user,
+			profile,
+			organizations,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -168,6 +192,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		const disciplines = [...new Set(events.map((e) => e.discipline))];
 
 		return {
+			user,
+			profile,
+			organizations,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -179,6 +206,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	// その他の一般検定員の場合は、待機画面を表示するための情報だけを渡す
 	return {
+		user,
+		profile,
+		organizations,
 		isChief,
 		sessionDetails,
 		isTournamentMode: sessionDetails.is_tournament_mode,

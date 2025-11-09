@@ -6,10 +6,12 @@
 	import { currentBib as bibStore } from '$lib/stores';
 	import type { PageData } from './$types';
 	import { enhance } from '$app/forms';
-	import { supabase } from '$lib/supabaseClient';
-	import { onMount, onDestroy } from 'svelte';
+	import { getContext, onMount, onDestroy } from 'svelte';
+	import type { SupabaseClient } from '@supabase/supabase-js';
 
 	export let data: PageData;
+
+	const supabase = getContext<SupabaseClient>('supabase');
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
@@ -207,7 +209,7 @@
 		font-size: 16px;
 		max-width: 400px;
 		background: #e6f6e8;
-		border: 2px solid var(--ios-green);
+		border: 2px solid #2d7a3e;
 		color: #1e5c2e;
 		line-height: 1.6;
 	}
@@ -230,7 +232,7 @@
 		color: var(--text-primary);
 	}
 	.scores-list {
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border-radius: 12px;
 		padding: 8px 16px;
 		margin-bottom: 16px;
@@ -254,22 +256,22 @@
 	.score-value {
 		font-size: 18px;
 		font-weight: 600;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 	.average-score {
 		text-align: center;
 		font-size: 20px;
-		color: var(--ios-green);
+		color: #2d7a3e;
 		padding: 16px;
 		background: #e6f6e8;
 		border-radius: 12px;
-		border: 2px solid var(--ios-green);
+		border: 2px solid #2d7a3e;
 	}
 	.single-score {
 		text-align: center;
 		font-size: 24px;
 		font-weight: 700;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 		margin: 20px 0;
 	}
 

@@ -271,9 +271,9 @@
 		color: var(--primary-text);
 		margin-bottom: 32px;
 		padding: 16px;
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-radius: 8px;
-		border-left: 4px solid var(--primary-orange);
+		border-left: 4px solid var(--accent-primary);
 	}
 
 	.section {
@@ -290,7 +290,7 @@
 		color: var(--primary-text);
 		margin-bottom: 16px;
 		padding-bottom: 8px;
-		border-bottom: 2px solid var(--primary-orange);
+		border-bottom: 2px solid var(--accent-primary);
 	}
 
 	.section h3 {
@@ -374,7 +374,7 @@
 	}
 
 	.price-row:nth-child(even) {
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 	}
 
 	.price-label {
@@ -391,7 +391,7 @@
 
 	.important-box {
 		background: #fff4e6;
-		border: 2px solid var(--primary-orange);
+		border: 2px solid var(--accent-primary);
 		border-radius: 12px;
 		padding: 20px;
 		margin: 16px 0;
@@ -416,7 +416,7 @@
 	}
 
 	.important-box strong {
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 
 	.back-section {

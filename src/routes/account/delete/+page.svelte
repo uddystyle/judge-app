@@ -100,7 +100,7 @@
 		margin-top: 28px;
 	}
 	.message {
-		color: var(--ios-red);
+		color: #dc3545;
 		margin-top: 1rem;
 	}
 </style>

@@ -260,7 +260,7 @@
 		flex-wrap: wrap;
 	}
 	.plan-badge {
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 		color: white;
 		padding: 8px 16px;
 		border-radius: 8px;
@@ -282,7 +282,7 @@
 		margin-bottom: 20px;
 	}
 	.info-card {
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border: 2px solid var(--border-light);
 		border-radius: 16px;
 		padding: 24px;
@@ -309,7 +309,7 @@
 		font-weight: 600;
 	}
 	.admin-badge {
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 		color: white;
 		padding: 4px 12px;
 		border-radius: 6px;
@@ -321,7 +321,7 @@
 		gap: 12px;
 	}
 	.member-card {
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
 		padding: 16px;
@@ -333,7 +333,7 @@
 		transition: all 0.2s;
 	}
 	.member-card:hover {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
 	}
 	.member-info {
@@ -364,7 +364,7 @@
 		font-weight: 600;
 	}
 	.role-badge.admin {
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 	}
 	.joined-date {
 		font-size: 11px;
@@ -373,7 +373,7 @@
 	.invite-section {
 		margin-top: 20px;
 		padding: 24px;
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-radius: 12px;
 		border: 2px solid var(--border-light);
 	}
@@ -437,11 +437,11 @@
 		margin: 0 auto;
 	}
 	.danger-title {
-		color: var(--ios-red);
+		color: #dc3545;
 	}
 	.danger-section {
 		background: #fff5f5;
-		border: 2px solid var(--ios-red);
+		border: 2px solid #dc3545;
 		border-radius: 12px;
 		padding: 24px;
 		text-align: center;
@@ -454,7 +454,7 @@
 	}
 	.danger-btn {
 		width: 100%;
-		background: var(--ios-red);
+		background: #dc3545;
 		color: white;
 		border: none;
 		border-radius: 12px;

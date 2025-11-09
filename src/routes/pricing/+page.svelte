@@ -7,6 +7,7 @@
 	export let data: PageData;
 
 	let billingInterval: 'month' | 'year' = 'month';
+	let portalLoading = false;
 
 	// プラン定義（組織向け）
 	// 料金プランページは情報提供が目的のため、アクションボタンは配置しない
@@ -97,6 +98,39 @@
 	function getSavings(monthlyPrice: number, yearlyPrice: number): number {
 		return monthlyPrice * 12 - yearlyPrice;
 	}
+
+	// Stripe Customer Portalを開く
+	async function openCustomerPortal() {
+		if (!data.organizations || data.organizations.length === 0) {
+			alert('組織が見つかりません。');
+			return;
+		}
+
+		portalLoading = true;
+		try {
+			const response = await fetch('/api/stripe/customer-portal', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					organizationId: data.organizations[0].organization_id,
+					returnUrl: window.location.href
+				})
+			});
+
+			if (!response.ok) {
+				throw new Error('Customer Portalの作成に失敗しました');
+			}
+
+			const result = await response.json();
+			window.location.href = result.url;
+		} catch (error) {
+			console.error('Customer Portal Error:', error);
+			alert('プラン管理画面の表示に失敗しました。');
+			portalLoading = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -108,7 +142,7 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} />
 
 <div class="container">
 	<div class="header-section">
@@ -279,9 +313,23 @@
 	<!-- 戻るボタン -->
 	<div class="back-button-section">
 		{#if data.user}
-			<button class="back-btn" on:click={() => goto('/dashboard')}>
-				セッション画面に戻る
-			</button>
+			{#if data.currentPlan === 'free'}
+				<!-- フリープランのユーザー: サブスクリプション画面へ -->
+				{#if data.organizations && data.organizations.length > 0}
+					<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/upgrade`)}>
+						プランを選択する
+					</button>
+				{:else}
+					<button class="back-btn" on:click={() => goto('/organizations')}>
+						組織を作成する
+					</button>
+				{/if}
+			{:else}
+				<!-- 有料プランのユーザー: Stripe Customer Portalへ -->
+				<button class="back-btn" on:click={openCustomerPortal} disabled={portalLoading}>
+					{portalLoading ? '読み込み中...' : 'プランを管理する'}
+				</button>
+			{/if}
 		{:else}
 			<button class="back-btn" on:click={() => goto('/')}>
 				トップページに戻る
@@ -346,7 +394,7 @@
 
 	.badge {
 		display: inline-block;
-		background: var(--primary-orange);
+		background: var(--accent-primary);
 		color: white;
 		font-size: 11px;
 		padding: 2px 6px;
@@ -379,7 +427,7 @@
 	}
 
 	.plan-card.current {
-		border-color: var(--ios-green);
+		border-color: #2d7a3e;
 		background: #f8fff9;
 	}
 
@@ -401,7 +449,7 @@
 		top: -12px;
 		left: 50%;
 		transform: translateX(-50%);
-		background: var(--ios-green);
+		background: #2d7a3e;
 		color: white;
 		padding: 6px 16px;
 		border-radius: 20px;
@@ -432,7 +480,7 @@
 		font-size: 16px;
 		font-weight: 600;
 		color: var(--ios-blue);
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		padding: 10px 16px;
 		border-radius: 8px;
 		text-align: center;
@@ -448,7 +496,7 @@
 
 	.savings {
 		font-size: 14px;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 		font-weight: 600;
 	}
 
@@ -559,6 +607,11 @@
 	.back-btn:hover {
 		background: var(--ios-blue);
 		color: white;
+	}
+
+	.back-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	@media (max-width: 768px) {

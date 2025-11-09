@@ -241,7 +241,7 @@
 	}
 	.success-message {
 		background: #e6f6e8;
-		border: 1px solid var(--ios-green);
+		border: 1px solid #2d7a3e;
 		color: #1e5c2e;
 		padding: 12px;
 		border-radius: 8px;
@@ -250,8 +250,8 @@
 	}
 	.error-message {
 		background: #ffe6e6;
-		border: 1px solid var(--ios-red);
-		color: var(--ios-red);
+		border: 1px solid #dc3545;
+		color: #dc3545;
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -346,7 +346,7 @@
 	}
 	.import-warning {
 		font-size: 13px;
-		color: var(--ios-red);
+		color: #dc3545;
 		text-align: center;
 		margin: 0;
 	}
@@ -426,7 +426,7 @@
 		opacity: 0.7;
 	}
 	.delete-btn {
-		background: var(--ios-red);
+		background: #dc3545;
 		color: white;
 	}
 	.delete-btn:active {
@@ -464,7 +464,7 @@
 		transition: opacity 0.2s;
 	}
 	.save-btn {
-		background: var(--ios-green);
+		background: #2d7a3e;
 		color: white;
 	}
 	.cancel-btn {

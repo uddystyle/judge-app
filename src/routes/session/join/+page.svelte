@@ -70,7 +70,7 @@
 		margin-top: 28px;
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 	}
 

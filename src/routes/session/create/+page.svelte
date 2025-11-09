@@ -167,13 +167,13 @@
 	}
 	.error-container {
 		background: #fee;
-		border: 2px solid var(--ios-red);
+		border: 2px solid #dc3545;
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 		margin-bottom: 12px;
 	}
@@ -283,7 +283,7 @@
 		border-top: 1px solid var(--separator-gray);
 	}
 	.organization-selection {
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-radius: 12px;
 		padding: 16px;
 		text-align: left;
@@ -308,7 +308,7 @@
 	}
 	.org-select:focus {
 		outline: none;
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.help-text {

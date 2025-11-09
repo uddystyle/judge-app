@@ -100,12 +100,12 @@
 	.page-title {
 		font-size: 28px;
 		font-weight: 700;
-		color: var(--ios-red);
+		color: #dc3545;
 		margin-bottom: 8px;
 	}
 	.warning-section {
 		background: #fff5f5;
-		border: 2px solid var(--ios-red);
+		border: 2px solid #dc3545;
 		border-radius: 16px;
 		padding: 24px;
 		margin-bottom: 24px;
@@ -119,7 +119,7 @@
 	.warning-title {
 		font-size: 20px;
 		font-weight: 700;
-		color: var(--ios-red);
+		color: #dc3545;
 		margin-bottom: 12px;
 		text-align: center;
 	}
@@ -145,7 +145,7 @@
 		content: '•';
 		position: absolute;
 		left: 8px;
-		color: var(--ios-red);
+		color: #dc3545;
 		font-weight: bold;
 	}
 	.form-container {
@@ -155,7 +155,7 @@
 	}
 	.confirm-section {
 		text-align: left;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
 		padding: 20px;
@@ -170,7 +170,7 @@
 	}
 	.confirm-input {
 		width: 100%;
-		background: var(--bg-white);
+		background: var(--bg-primary);
 		border: 2px solid var(--separator-gray);
 		border-radius: 8px;
 		padding: 12px;
@@ -179,19 +179,19 @@
 	}
 	.confirm-input:focus {
 		outline: none;
-		border-color: var(--ios-red);
+		border-color: #dc3545;
 		box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.1);
 	}
 	.error-container {
 		background: #fee;
-		border: 2px solid var(--ios-red);
+		border: 2px solid #dc3545;
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
 		margin-bottom: 20px;
 	}
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 		margin: 0;
 	}
@@ -202,7 +202,7 @@
 	}
 	.delete-btn {
 		width: 100%;
-		background: var(--ios-red);
+		background: #dc3545;
 		color: white;
 		border: none;
 		border-radius: 12px;

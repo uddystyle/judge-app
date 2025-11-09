@@ -16,6 +16,9 @@
 		premium: { name: 'Premium', price: '¥49,800/月' }
 	};
 
+	// ステップ管理: 1 = 組織名入力, 2 = プラン選択
+	let step = 1;
+	let organizationName = '';
 	let selectedPlan = 'free';
 </script>
 
@@ -31,15 +34,16 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
-	<div class="header">
-		<h1 class="title">組織を作成</h1>
-		<p class="subtitle">
-			TENTOでは、すべてのセッションは組織に属します。<br />
-			まずは組織を作成してください。
-		</p>
-	</div>
+	{#if step === 1}
+		<!-- Step 1: 組織名入力 -->
+		<div class="header">
+			<h1 class="title">組織を作成</h1>
+			<p class="subtitle">
+				TENTOでは、すべてのセッションは組織に属します。<br />
+				まずは組織名を入力してください。
+			</p>
+		</div>
 
-	<form method="POST" action="?/create" use:enhance>
 		<div class="form-container">
 			<div class="input-group">
 				<label for="organization-name">組織名</label>
@@ -48,7 +52,7 @@
 					name="organizationName"
 					id="organization-name"
 					placeholder="例: 〇〇スキークラブ"
-					value={form?.organizationName ?? ''}
+					bind:value={organizationName}
 					required
 				/>
 				<p class="help-text">
@@ -57,10 +61,38 @@
 				</p>
 			</div>
 
-			<div class="plan-selection">
-				<h3>プランを選択</h3>
-				<input type="hidden" name="planType" value={selectedPlan} />
+			{#if form?.error}
+				<div class="error-container">
+					<p class="error-message">{form.error}</p>
+				</div>
+			{/if}
 
+			<div class="nav-buttons">
+				<NavButton variant="primary" on:click={() => (step = 2)} disabled={!organizationName.trim()}>
+					次へ進む
+				</NavButton>
+			</div>
+		</div>
+	{:else}
+		<!-- Step 2: プラン選択 -->
+		<div class="header">
+			<h1 class="title">プランを選択</h1>
+			<p class="subtitle">
+				TENTOでは、組織ごとにプランを設定します。<br />
+				プランを選択してください。
+			</p>
+		</div>
+
+		<div class="selected-org-info">
+			<div class="info-label">組織名:</div>
+			<div class="info-value">{organizationName}</div>
+		</div>
+
+		<form method="POST" action="?/create" use:enhance>
+			<input type="hidden" name="organizationName" value={organizationName} />
+			<input type="hidden" name="planType" value={selectedPlan} />
+
+			<div class="plan-selection">
 				<div class="plans-grid">
 					{#each data.plans as plan}
 						<label class="plan-card" class:selected={selectedPlan === plan.plan_type}>
@@ -78,19 +110,25 @@
 								<div class="feature">
 									<span class="feature-label">組織メンバー:</span>
 									<span class="feature-value">
-										{plan.max_organization_members === -1 ? '無制限' : `${plan.max_organization_members}人`}
+										{plan.max_organization_members === -1
+											? '無制限'
+											: `${plan.max_organization_members}人`}
 									</span>
 								</div>
 								<div class="feature">
 									<span class="feature-label">検定員:</span>
 									<span class="feature-value">
-										{plan.max_judges_per_session === -1 ? '無制限' : `${plan.max_judges_per_session}人`}
+										{plan.max_judges_per_session === -1
+											? '無制限'
+											: `${plan.max_judges_per_session}人`}
 									</span>
 								</div>
 								<div class="feature">
 									<span class="feature-label">セッション:</span>
 									<span class="feature-value">
-										{plan.max_sessions_per_month === -1 ? '無制限' : `月${plan.max_sessions_per_month}回`}
+										{plan.max_sessions_per_month === -1
+											? '無制限'
+											: `月${plan.max_sessions_per_month}回`}
 									</span>
 								</div>
 								<div class="feature">
@@ -108,28 +146,31 @@
 
 				<p class="plan-note">
 					{#if selectedPlan !== 'free'}
-						有料プランを選択した場合、組織作成後に決済情報の入力が必要です。
+						組織作成後、決済画面に進みます。
 					{:else}
-						後からプランをアップグレードできます。
+						フリープランで開始します。後からいつでもプランをアップグレードできます。
 					{/if}
 				</p>
-			</div>
 
-			{#if form?.error}
-				<div class="error-container">
-					<p class="error-message">{form.error}</p>
+				{#if form?.error}
+					<div class="error-container">
+						<p class="error-message">{form.error}</p>
+					</div>
+				{/if}
+
+				<div class="nav-buttons">
+					<NavButton variant="secondary" on:click={() => (step = 1)}> 組織名を変更 </NavButton>
+					<NavButton variant="primary" type="submit">
+						{#if selectedPlan !== 'free'}
+							組織を作成して決済へ進む
+						{:else}
+							組織を作成してはじめる
+						{/if}
+					</NavButton>
 				</div>
-			{/if}
-
-			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">組織を作成してはじめる</NavButton>
 			</div>
-		</div>
-	</form>
-
-	<div class="nav-buttons" style="margin-top: 16px;">
-		<NavButton on:click={() => goto('/dashboard')}>セッション画面に戻る</NavButton>
-	</div>
+		</form>
+	{/if}
 </div>
 
 <style>
@@ -188,8 +229,8 @@
 
 	.input-group input:focus {
 		outline: none;
-		border-color: var(--primary-orange);
-		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
+		border-color: var(--accent-primary);
+		box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
 	}
 
 	.help-text {
@@ -201,13 +242,6 @@
 
 	.plan-selection {
 		text-align: left;
-	}
-
-	.plan-selection h3 {
-		font-size: 16px;
-		font-weight: 600;
-		color: var(--primary-text);
-		margin-bottom: 16px;
 	}
 
 	.plans-grid {
@@ -228,14 +262,14 @@
 	}
 
 	.plan-card:hover {
-		border-color: var(--primary-orange);
+		border-color: var(--accent-primary);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 	}
 
 	.plan-card.selected {
-		border-color: var(--primary-orange);
-		background: #fff8f5;
-		box-shadow: 0 2px 12px rgba(255, 107, 53, 0.15);
+		border-color: var(--accent-primary);
+		background: var(--bg-tertiary);
+		box-shadow: 0 2px 12px rgba(23, 23, 23, 0.15);
 	}
 
 	.plan-card input[type='radio'] {
@@ -263,7 +297,7 @@
 	.plan-price {
 		font-size: 16px;
 		font-weight: 600;
-		color: var(--primary-orange);
+		color: var(--accent-primary);
 	}
 
 	.plan-features {
@@ -292,20 +326,41 @@
 		color: var(--secondary-text);
 		margin: 0;
 		padding: 12px;
-		background: var(--bg-beige);
+		background: var(--bg-secondary);
 		border-radius: 8px;
+	}
+
+	.selected-org-info {
+		background: var(--bg-tertiary);
+		border: 2px solid var(--border-medium);
+		border-radius: 12px;
+		padding: 16px;
+		margin-bottom: 24px;
+		text-align: left;
+	}
+
+	.info-label {
+		font-size: 13px;
+		color: var(--secondary-text);
+		margin-bottom: 4px;
+	}
+
+	.info-value {
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--text-primary);
 	}
 
 	.error-container {
 		background: #fee;
-		border: 2px solid var(--ios-red);
+		border: 2px solid #dc3545;
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
 	}
 
 	.error-message {
-		color: var(--ios-red);
+		color: #dc3545;
 		font-size: 14px;
 		margin: 0;
 	}
