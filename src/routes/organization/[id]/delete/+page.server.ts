@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	// ユーザーがこの組織の管理者かチェック
 	const { data: membership } = await supabase
 		.from('organization_members')
-		.select('role, organizations(id, name, plan_type)')
+		.select('role, organizations(id, name, plan_type, stripe_customer_id, stripe_subscription_id)')
 		.eq('organization_id', organizationId)
 		.eq('user_id', user.id)
 		.single();
@@ -26,18 +26,68 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw redirect(303, '/dashboard');
 	}
 
+	const organization = membership.organizations;
+
 	// アクティブなサブスクリプション情報を取得
-	const { data: activeSubscription } = await supabase
+	let hasActiveSubscription = false;
+	let subscriptionEndDate: string | null = null;
+
+	// 1. データベースのsubscriptionsテーブルから確認
+	const { data: dbSubscription } = await supabase
 		.from('subscriptions')
 		.select('id, status, current_period_end')
 		.eq('organization_id', organizationId)
 		.in('status', ['active', 'trialing', 'past_due'])
 		.single();
 
+	if (dbSubscription) {
+		hasActiveSubscription = true;
+		subscriptionEndDate = dbSubscription.current_period_end;
+	}
+
+	// 2. データベースに無い場合、Stripe APIで直接確認
+	if (!hasActiveSubscription) {
+		// 組織テーブルのstripe_subscription_idを確認
+		if (organization?.stripe_subscription_id) {
+			try {
+				const subscription = await stripe.subscriptions.retrieve(
+					organization.stripe_subscription_id
+				);
+				if (['active', 'trialing', 'past_due'].includes(subscription.status)) {
+					hasActiveSubscription = true;
+					subscriptionEndDate = new Date(subscription.current_period_end * 1000).toISOString();
+				}
+			} catch (error) {
+				console.error('[Load] stripe_subscription_id検証エラー:', error);
+			}
+		}
+
+		// stripe_customer_idから全サブスクリプションを確認
+		if (!hasActiveSubscription && organization?.stripe_customer_id) {
+			try {
+				const subscriptions = await stripe.subscriptions.list({
+					customer: organization.stripe_customer_id,
+					status: 'all',
+					limit: 10
+				});
+
+				for (const sub of subscriptions.data) {
+					if (['active', 'trialing', 'past_due'].includes(sub.status)) {
+						hasActiveSubscription = true;
+						subscriptionEndDate = new Date(sub.current_period_end * 1000).toISOString();
+						break;
+					}
+				}
+			} catch (error) {
+				console.error('[Load] stripe_customer_id検証エラー:', error);
+			}
+		}
+	}
+
 	return {
-		organization: membership.organizations,
-		hasActiveSubscription: !!activeSubscription,
-		subscriptionEndDate: activeSubscription?.current_period_end || null
+		organization,
+		hasActiveSubscription,
+		subscriptionEndDate
 	};
 };
 
