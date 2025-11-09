@@ -134,7 +134,7 @@
 						<span class="menu-label">プランの確認</span>
 					</button>
 					{#if pageOrganizations.length > 0}
-						<button class="menu-item" on:click={() => handleMenuClick(`/organization/${pageOrganizations[0].id}/change-plan`)}>
+						<button class="menu-item" on:click={() => handleMenuClick(`/organization/${pageOrganizations[0].id || pageOrganizations[0].organization_id}/change-plan`)}>
 							<span class="menu-label">プランの変更</span>
 						</button>
 					{/if}

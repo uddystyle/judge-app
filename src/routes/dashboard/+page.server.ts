@@ -115,6 +115,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	}
 
 	return {
+		user,
 		organizations,
 		sessions,
 		profile

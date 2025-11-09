@@ -61,8 +61,16 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		.neq('plan_type', 'free')
 		.order('max_organization_members', { ascending: true });
 
+	// 6. ユーザーのプロフィール情報を取得
+	const { data: profile } = await supabase
+		.from('profiles')
+		.select('id, full_name, avatar_url')
+		.eq('id', user.id)
+		.single();
+
 	return {
 		user,
+		profile,
 		organization,
 		subscription,
 		plans: plans || []
