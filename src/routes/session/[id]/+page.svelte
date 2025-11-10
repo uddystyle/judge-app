@@ -433,11 +433,26 @@
 			</div>
 		{:else}
 			<!-- 複数検定員モード: 準備中表示 -->
-			<div class="instruction">準備中…</div>
-			<div class="wait-message">
-				<p>主任検定員が採点の準備をしています。</p>
-				<p>しばらくお待ちください。</p>
-				<div class="loading"></div>
+			<div class="waiting-container">
+				<div class="waiting-icon">
+					<svg class="clock-icon" width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" opacity="0.2"/>
+						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" stroke-dasharray="220" stroke-dashoffset="0" class="clock-circle"/>
+						<line x1="40" y1="40" x2="40" y2="20" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="clock-hand-hour"/>
+						<line x1="40" y1="40" x2="55" y2="40" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="clock-hand-minute"/>
+						<circle cx="40" cy="40" r="3" fill="currentColor"/>
+					</svg>
+				</div>
+				<div class="instruction">準備中…</div>
+				<div class="wait-message">
+					<p class="wait-title">主任検定員が採点の準備をしています</p>
+					<p class="wait-subtitle">準備が完了すると自動的に表示されます</p>
+				</div>
+				<div class="pulse-indicator">
+					<span class="pulse-dot"></span>
+					<span class="pulse-dot"></span>
+					<span class="pulse-dot"></span>
+				</div>
 			</div>
 		{/if}
 	{/if}
@@ -478,12 +493,121 @@
 		line-height: 1.6;
 		max-width: 600px;
 	}
+	.waiting-container {
+		margin: 48px auto;
+		padding: 40px 24px;
+		background: linear-gradient(135deg, rgba(0, 122, 255, 0.03) 0%, rgba(0, 122, 255, 0.08) 100%);
+		border-radius: 20px;
+		border: 2px solid rgba(0, 122, 255, 0.15);
+		max-width: 500px;
+		box-shadow: 0 4px 20px rgba(0, 122, 255, 0.08);
+	}
+
+	.waiting-icon {
+		display: flex;
+		justify-content: center;
+		margin-bottom: 24px;
+	}
+
+	.clock-icon {
+		color: var(--ios-blue);
+	}
+
+	.clock-circle {
+		animation: dash 2s ease-in-out infinite;
+	}
+
+	.clock-hand-hour {
+		transform-origin: 40px 40px;
+		animation: rotate-hour 4s linear infinite;
+	}
+
+	.clock-hand-minute {
+		transform-origin: 40px 40px;
+		animation: rotate-minute 2s linear infinite;
+	}
+
+	@keyframes dash {
+		0%, 100% {
+			stroke-dashoffset: 0;
+		}
+		50% {
+			stroke-dashoffset: 110;
+		}
+	}
+
+	@keyframes rotate-hour {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@keyframes rotate-minute {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
 	.wait-message {
 		margin: 24px auto;
-		color: var(--text-secondary);
-		line-height: 1.6;
+		text-align: center;
 		max-width: 600px;
 	}
+
+	.wait-title {
+		font-size: 18px;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin-bottom: 12px;
+		line-height: 1.5;
+	}
+
+	.wait-subtitle {
+		font-size: 15px;
+		color: var(--text-secondary);
+		line-height: 1.6;
+	}
+
+	.pulse-indicator {
+		display: flex;
+		justify-content: center;
+		gap: 8px;
+		margin-top: 28px;
+	}
+
+	.pulse-dot {
+		width: 10px;
+		height: 10px;
+		background: var(--ios-blue);
+		border-radius: 50%;
+		animation: pulse 1.4s ease-in-out infinite;
+	}
+
+	.pulse-dot:nth-child(2) {
+		animation-delay: 0.2s;
+	}
+
+	.pulse-dot:nth-child(3) {
+		animation-delay: 0.4s;
+	}
+
+	@keyframes pulse {
+		0%, 100% {
+			transform: scale(1);
+			opacity: 1;
+		}
+		50% {
+			transform: scale(1.5);
+			opacity: 0.5;
+		}
+	}
+
 	.end-message {
 		margin: 24px auto;
 		padding: 24px;
@@ -495,21 +619,6 @@
 		font-size: 16px;
 		max-width: 600px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-	}
-	.loading {
-		display: inline-block;
-		width: 20px;
-		height: 20px;
-		border: 2px solid rgba(0, 0, 0, 0.1);
-		border-top-color: var(--accent-primary);
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-		margin-top: 20px;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	.info-text {
@@ -535,9 +644,15 @@
 			font-size: 18px;
 			margin: 32px auto;
 		}
-		.wait-message {
-			font-size: 18px;
-			margin: 32px auto;
+		.waiting-container {
+			padding: 48px 32px;
+			margin: 64px auto;
+		}
+		.wait-title {
+			font-size: 20px;
+		}
+		.wait-subtitle {
+			font-size: 16px;
 		}
 		.end-message {
 			font-size: 18px;
