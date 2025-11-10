@@ -38,13 +38,14 @@
 		color: var(--text-primary);
 		border: 1.5px solid var(--border-medium);
 		border-radius: 8px;
-		padding: 12px 24px;
+		padding: 14px 24px;
 		font-size: 15px;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.15s ease;
 		box-shadow: none;
 		letter-spacing: -0.01em;
+		min-height: 44px;
 	}
 
 	.nav-btn:hover:not(:disabled) {

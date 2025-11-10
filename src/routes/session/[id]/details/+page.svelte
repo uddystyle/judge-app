@@ -741,11 +741,12 @@
 		color: var(--primary-text);
 		border: none;
 		border-radius: 8px;
-		padding: 6px 12px;
+		padding: 10px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 		transition: background-color 0.2s;
+		min-height: 44px;
 	}
 	.appoint-btn:disabled {
 		background-color: var(--ios-blue);
@@ -958,13 +959,14 @@
 	.delete-btn-small,
 	.save-btn-small,
 	.cancel-btn-small {
-		padding: 6px 12px;
+		padding: 10px 16px;
 		border-radius: 6px;
 		border: none;
 		font-size: 14px;
 		cursor: pointer;
 		transition: opacity 0.2s;
 		font-weight: 500;
+		min-height: 44px;
 	}
 	.edit-btn-small {
 		background: var(--ios-blue);

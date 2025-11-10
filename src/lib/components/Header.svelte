@@ -220,7 +220,7 @@
 		color: var(--text-primary);
 		border: 1.5px solid var(--border-medium);
 		border-radius: 8px;
-		padding: 8px 16px;
+		padding: 10px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
@@ -228,6 +228,7 @@
 		white-space: nowrap;
 		box-shadow: none;
 		letter-spacing: -0.01em;
+		min-height: 44px;
 	}
 	.account-button:hover {
 		background: var(--bg-hover);
@@ -268,13 +269,14 @@
 		width: 100%;
 		background: transparent;
 		border: none;
-		padding: 12px 16px;
+		padding: 14px 16px;
 		text-align: left;
 		cursor: pointer;
 		transition: background 0.15s ease;
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		min-height: 44px;
 	}
 	.menu-item:hover {
 		background: var(--bg-hover);

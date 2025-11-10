@@ -230,6 +230,9 @@
 		justify-content: center;
 	}
 	.mode-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		font-size: 11px;
 		font-weight: 600;
 		color: white;
@@ -276,13 +279,14 @@
 		font-weight: 600;
 		color: white;
 		background-color: var(--accent-primary);
-		padding: 6px 12px;
+		padding: 10px 16px;
 		border-radius: 8px;
 		border: none;
 		cursor: pointer;
 		transition: all 0.15s ease;
 		white-space: nowrap;
 		min-width: 85px;
+		min-height: 44px;
 		text-align: center;
 		letter-spacing: -0.01em;
 	}
@@ -321,17 +325,21 @@
 		margin-right: auto;
 	}
 	.details-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		background-color: var(--gray-700);
 		color: white;
 		border: none;
 		border-radius: 8px;
-		padding: 6px 12px;
+		padding: 10px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 		text-decoration: none;
 		transition: all 0.15s ease;
 		letter-spacing: -0.01em;
+		min-height: 44px;
 	}
 	.details-btn:hover {
 		background-color: var(--gray-600);
