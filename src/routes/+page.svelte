@@ -140,7 +140,7 @@
 	<div class="pricing-section">
 		<div class="container">
 			<h2 class="section-title">料金プラン</h2>
-			<p class="pricing-intro">個人利用から組織利用まで、ニーズに合わせたプランをご用意</p>
+			<p class="pricing-intro">個人利用から組織利用まで、<br class="mobile-br" />ニーズに合わせたプランをご用意</p>
 
 			<div class="pricing-grid">
 				<div class="pricing-card">
@@ -212,8 +212,8 @@
 			<div class="container">
 				<h2 class="cta-title">今すぐ始めましょう</h2>
 				<p class="cta-description">
-					無料でアカウントを作成して、組織を立ち上げ、<br />
-					スキー・スノーボード検定・大会の採点を効率化しませんか？
+					無料でアカウントを作成して、<br class="mobile-br" />組織を立ち上げ、<br class="mobile-br" />
+					スキー・スノーボード検定・大会の<br class="mobile-br" />採点を効率化しませんか？
 				</p>
 				<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}> 無料で始める </button>
 			</div>
