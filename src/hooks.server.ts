@@ -81,9 +81,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (event.url.pathname.startsWith('/_app/')) {
 		response.headers.set('cache-control', 'public, max-age=31536000, immutable');
 	}
-	// 静的ページのキャッシュ（短時間）
+	// 完全に静的なページのみキャッシュ（ログイン状態に依存しないページ）
 	else if (
-		event.url.pathname === '/' ||
 		event.url.pathname.startsWith('/pricing') ||
 		event.url.pathname.startsWith('/faq') ||
 		event.url.pathname.startsWith('/privacy') ||
@@ -92,6 +91,21 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.url.pathname.startsWith('/contact')
 	) {
 		response.headers.set('cache-control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
+	}
+	// 認証が関わるページは絶対にキャッシュしない
+	else if (
+		event.url.pathname === '/' ||
+		event.url.pathname.startsWith('/dashboard') ||
+		event.url.pathname.startsWith('/login') ||
+		event.url.pathname.startsWith('/signup') ||
+		event.url.pathname.startsWith('/session') ||
+		event.url.pathname.startsWith('/account') ||
+		event.url.pathname.startsWith('/organization') ||
+		event.url.pathname.startsWith('/onboarding')
+	) {
+		response.headers.set('cache-control', 'private, no-cache, no-store, must-revalidate');
+		response.headers.set('pragma', 'no-cache');
+		response.headers.set('expires', '0');
 	}
 
 	return response;

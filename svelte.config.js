@@ -15,8 +15,8 @@ const config = {
 
 		// プリロード戦略の最適化
 		prerender: {
-			// 静的ページをプリレンダリング
-			entries: ['/', '/login', '/signup', '/pricing', '/faq', '/privacy', '/terms', '/legal', '/contact']
+			// 完全に静的なページのみプリレンダリング（認証状態に依存しないページ）
+			entries: ['/pricing', '/faq', '/privacy', '/terms', '/legal', '/contact']
 		}
 	}
 };

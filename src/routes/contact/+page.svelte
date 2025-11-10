@@ -21,7 +21,7 @@
 	<div class="header-section">
 		<h1 class="title">お問い合わせ</h1>
 		<p class="subtitle">
-			ご質問やご要望がございましたら、お気軽にお問い合わせください。<br />
+			ご質問やご要望がございましたら、<br class="mobile-br" />お気軽にお問い合わせください。<br />
 			通常、1-2営業日以内に返信いたします。
 		</p>
 	</div>
@@ -449,6 +449,17 @@
 	.info-link:hover {
 		background: var(--ios-blue);
 		color: white;
+	}
+
+	/* モバイルのみ表示される改行 */
+	.mobile-br {
+		display: inline;
+	}
+
+	@media (min-width: 768px) {
+		.mobile-br {
+			display: none;
+		}
 	}
 
 	@media (max-width: 768px) {

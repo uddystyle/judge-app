@@ -183,8 +183,8 @@
 	<div class="header-section">
 		<h1 class="title">よくある質問</h1>
 		<p class="subtitle">
-			TENTOの使い方や機能について、よくお問い合わせいただく質問をまとめました。<br />
-			解決しない場合は、お問い合わせフォームからご連絡ください。
+			TENTOの使い方や機能について、<br class="mobile-br" />よくお問い合わせいただく質問をまとめました。<br />
+			解決しない場合は、<br class="mobile-br" />お問い合わせフォームからご連絡ください。
 		</p>
 	</div>
 
@@ -395,6 +395,17 @@
 	.contact-btn:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	}
+
+	/* モバイルのみ表示される改行 */
+	.mobile-br {
+		display: inline;
+	}
+
+	@media (min-width: 768px) {
+		.mobile-br {
+			display: none;
+		}
 	}
 
 	@media (max-width: 768px) {
