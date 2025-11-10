@@ -241,6 +241,7 @@ export function validateDate(date: string | null | undefined): {
  */
 export function validateText(
 	text: string | null | undefined,
+	minLength: number = 1,
 	maxLength: number = 1000
 ): {
 	valid: boolean;
@@ -255,6 +256,13 @@ export function validateText(
 
 	if (sanitized.length === 0) {
 		return { valid: false, error: 'テキストを入力してください。' };
+	}
+
+	if (sanitized.length < minLength) {
+		return {
+			valid: false,
+			error: `テキストは${minLength}文字以上で入力してください。`
+		};
 	}
 
 	if (sanitized.length > maxLength) {
