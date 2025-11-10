@@ -653,8 +653,9 @@
 	.comparison-cards {
 		display: grid;
 		grid-template-columns: 1fr;
-		gap: 20px;
-		margin-top: 24px;
+		gap: 24px;
+		margin-top: 32px;
+		margin-bottom: 32px;
 	}
 
 	.comparison-card {
