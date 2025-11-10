@@ -29,27 +29,26 @@
 
 	{#if data.hasActiveSubscription}
 		<div class="subscription-alert">
-			<div class="alert-icon">💳</div>
 			<div class="alert-content">
 				<h3 class="alert-title">有料プランのサブスクリプションがキャンセルされます</h3>
 				<p class="alert-text">
-					この組織には有料プラン（<strong>{data.organization.plan_type.toUpperCase()}</strong>）のアクティブなサブスクリプションがあります。
+					この組織には有料プラン（<strong>{data.organization.plan_type.toUpperCase()}</strong
+					>）のアクティブなサブスクリプションがあります。
 				</p>
 				<p class="alert-text">
-					組織を削除すると、<strong>Stripeのサブスクリプションが即座にキャンセル</strong>され、次回以降の請求は発生しません。
+					組織を削除すると、<strong>Stripeのサブスクリプションが即座にキャンセル</strong
+					>され、次回以降の請求は発生しません。
 				</p>
-				<p class="alert-note">
-					※ 既にお支払いいただいた期間分の料金は返金されません
-				</p>
+				<p class="alert-note">※ 既にお支払いいただいた期間分の料金は返金されません</p>
 			</div>
 		</div>
 	{/if}
 
 	<div class="warning-section">
-		<div class="warning-icon">⚠️</div>
 		<h2 class="warning-title">この操作は取り消せません</h2>
 		<p class="warning-text">
-			組織「<strong>{data.organization.name}</strong>」を削除すると、以下のデータがすべて失われます：
+			組織「<strong>{data.organization.name}</strong
+			>」を削除すると、以下のデータがすべて失われます：
 		</p>
 		<ul class="warning-list">
 			<li>組織情報</li>
@@ -65,17 +64,22 @@
 		</div>
 	{/if}
 
-	<form method="POST" action="?/delete" use:enhance={() => {
-		isDeleting = true;
-		return async ({ update }) => {
-			await update();
-			isDeleting = false;
-		};
-	}}>
+	<form
+		method="POST"
+		action="?/delete"
+		use:enhance={() => {
+			isDeleting = true;
+			return async ({ update }) => {
+				await update();
+				isDeleting = false;
+			};
+		}}
+	>
 		<div class="form-container">
 			<div class="confirm-section">
 				<label for="confirm-input" class="confirm-label">
-					削除を確認するために、組織名「<strong>{data.organization.name}</strong>」を入力してください：
+					削除を確認するために、組織名「<strong>{data.organization.name}</strong
+					>」を入力してください：
 				</label>
 				<input
 					type="text"
@@ -87,11 +91,7 @@
 			</div>
 
 			<div class="nav-buttons">
-				<button
-					type="submit"
-					class="delete-btn"
-					disabled={!canDelete || isDeleting}
-				>
+				<button type="submit" class="delete-btn" disabled={!canDelete || isDeleting}>
 					{isDeleting ? '削除中...' : '組織を削除'}
 				</button>
 			</div>
@@ -99,9 +99,7 @@
 	</form>
 
 	<div class="nav-buttons" style="margin-top: 20px;">
-		<NavButton on:click={() => goto(`/organization/${data.organization.id}`)}>
-			キャンセル
-		</NavButton>
+		<NavButton on:click={() => goto(`/organization/${data.organization.id}`)}>キャンセル</NavButton>
 	</div>
 </div>
 
@@ -128,11 +126,6 @@
 		padding: 24px;
 		margin-bottom: 24px;
 		text-align: left;
-	}
-	.warning-icon {
-		font-size: 48px;
-		text-align: center;
-		margin-bottom: 16px;
 	}
 	.warning-title {
 		font-size: 20px;
@@ -177,12 +170,6 @@
 		gap: 16px;
 		align-items: flex-start;
 		box-shadow: 0 4px 12px rgba(255, 107, 53, 0.15);
-	}
-
-	.alert-icon {
-		font-size: 36px;
-		flex-shrink: 0;
-		line-height: 1;
 	}
 
 	.alert-content {
