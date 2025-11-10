@@ -666,13 +666,6 @@
 		max-width: 500px;
 		margin: 0 auto;
 	}
-	.instruction {
-		font-size: 24px;
-		font-weight: 700;
-		margin-bottom: 28px;
-		text-align: center;
-	}
-	.form-container,
 	.settings-section {
 		margin-bottom: 1.5rem;
 	}
@@ -881,17 +874,6 @@
 		font-weight: 600;
 		color: var(--primary-text);
 	}
-	.option-badge {
-		font-size: 12px;
-		font-weight: 500;
-		color: white;
-		background: var(--ios-blue);
-		padding: 2px 8px;
-		border-radius: 4px;
-	}
-	.option-badge.advanced {
-		background: #2d7a3e;
-	}
 	.option-description {
 		font-size: 15px;
 		color: var(--secondary-text);
@@ -1081,10 +1063,6 @@
 			padding: 60px 40px;
 			max-width: 900px;
 		}
-		.instruction {
-			font-size: 36px;
-			margin-bottom: 40px;
-		}
 		.form-label,
 		.settings-title {
 			font-size: 20px;
@@ -1186,15 +1164,6 @@
 		font-weight: 600;
 		color: var(--primary-text);
 		padding: 8px 0;
-	}
-
-	.session-name-readonly {
-		font-size: 20px;
-		padding: 12px;
-		background: var(--bg-primary);
-		border: 2px solid var(--separator-gray);
-		border-radius: 8px;
-		margin-bottom: 8px;
 	}
 
 	.readonly-notice {

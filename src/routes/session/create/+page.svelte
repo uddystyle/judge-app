@@ -3,6 +3,7 @@
 	import type { ActionData, PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { goto } from '$app/navigation';
 
 	// This `form` variable will hold the data returned from the server action
@@ -12,12 +13,23 @@
 	let selectedMode: 'kentei' | 'tournament' | 'training' = 'kentei';
 	let maxJudges = 100; // 研修モードのデフォルト最大検定員数
 	let selectedOrganization = data.organizations[0]?.id || ''; // デフォルトで最初の組織を選択
+	let isSubmitting = false;
 </script>
 
 <div class="container">
 	<div class="instruction">新しいセッションを作成</div>
 
-	<form method="POST" action="?/create" use:enhance>
+	<form
+		method="POST"
+		action="?/create"
+		use:enhance={() => {
+			isSubmitting = true;
+			return async ({ update }) => {
+				await update();
+				isSubmitting = false;
+			};
+		}}
+	>
 		<div class="form-container">
 			<input
 				type="text"
@@ -25,13 +37,14 @@
 				id="session-name-input"
 				placeholder="セッション名 (例: 2025冬期検定)"
 				value={form?.sessionName ?? ''}
+				disabled={isSubmitting}
 			/>
 
 			<!-- 組織選択（複数組織対応） -->
 			{#if data.organizations.length > 1}
 				<div class="organization-selection">
 					<h3>組織選択</h3>
-					<select name="organizationId" bind:value={selectedOrganization} class="org-select">
+					<select name="organizationId" bind:value={selectedOrganization} class="org-select" disabled={isSubmitting}>
 						{#each data.organizations as org}
 							<option value={org.id}>{org.name}</option>
 						{/each}
@@ -54,6 +67,7 @@
 						name="mode"
 						value="kentei"
 						bind:group={selectedMode}
+					disabled={isSubmitting}
 					/>
 					<div class="mode-content">
 						<div class="mode-title">検定モード</div>
@@ -67,6 +81,7 @@
 						name="mode"
 						value="tournament"
 						bind:group={selectedMode}
+					disabled={isSubmitting}
 					/>
 					<div class="mode-content">
 						<div class="mode-title">大会モード</div>
@@ -80,6 +95,7 @@
 						name="mode"
 						value="training"
 						bind:group={selectedMode}
+					disabled={isSubmitting}
 					/>
 					<div class="mode-content">
 						<div class="mode-title">研修モード</div>
@@ -100,6 +116,7 @@
 							min="1"
 							max="100"
 							bind:value={maxJudges}
+						disabled={isSubmitting}
 						/>
 					</div>
 					<p class="info-text">
@@ -125,7 +142,16 @@
 			{/if}
 
 			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">作成</NavButton>
+				<NavButton variant="primary" type="submit" disabled={isSubmitting}>
+					{#if isSubmitting}
+						<span style="display: inline-flex; align-items: center; gap: 8px;">
+							作成中
+							<LoadingSpinner size="small" inline={true} />
+						</span>
+					{:else}
+						作成
+					{/if}
+				</NavButton>
 			</div>
 		</div>
 	</form>

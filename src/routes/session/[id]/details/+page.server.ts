@@ -170,37 +170,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 // --- フォームアクション（名前の更新など） ---
 export const actions: Actions = {
-	updateName: async ({ request, params, locals: { supabase } }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
-		if (userError || !user) {
-			throw redirect(303, '/login');
-		}
-
-		const formData = await request.formData();
-		const newName = formData.get('sessionName') as string;
-
-		if (!newName || newName.trim().length === 0) {
-			return fail(400, { error: '検定名は必須です。' });
-		}
-
-		// sessionsテーブルの名前を更新
-		const { error: updateError } = await supabase
-			.from('sessions')
-			.update({ name: newName })
-			.eq('id', params.id);
-
-		if (updateError) {
-			console.error('Failed to update session name:', updateError);
-			return fail(500, { error: '更新に失敗しました。' });
-		}
-
-		return { success: true, message: '検定名を更新しました。' };
-	},
-
 	appointChief: async ({ request, params, locals: { supabase } }) => {
 		const {
 			data: { user },
