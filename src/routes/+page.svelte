@@ -8,6 +8,12 @@
 
 <svelte:head>
 	<title>TENTO - スキー・スノーボード検定・大会採点アプリ</title>
+	<meta name="description" content="スキー・スノーボード検定・大会のための採点管理システム。組織単位で複数の検定員が協力してリアルタイムで採点を行える、シンプルで使いやすいクラウドアプリケーション。" />
+	<meta name="keywords" content="スキー,スノーボード,検定,大会,採点,アプリ,管理システム,リアルタイム,クラウド" />
+	<meta property="og:title" content="TENTO - スキー・スノーボード検定・大会採点アプリ" />
+	<meta property="og:description" content="組織単位で複数の検定員が協力してリアルタイムで採点を行える、シンプルで使いやすいクラウドアプリケーション。" />
+	<meta property="og:type" content="website" />
+	<link rel="canonical" href="https://tento.vercel.app/" />
 </svelte:head>
 
 <div class="page">

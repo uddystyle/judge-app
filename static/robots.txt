@@ -1,3 +1,12 @@
-# allow crawling everything by default
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /dashboard
+Disallow: /session/
+Disallow: /account
+Disallow: /organization/
+Disallow: /organizations
+Disallow: /onboarding/
+Disallow: /invite/
+Disallow: /api/
+
+Sitemap: https://tento.vercel.app/sitemap.xml

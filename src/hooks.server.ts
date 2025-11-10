@@ -70,9 +70,29 @@ export const handle: Handle = async ({ event, resolve }) => {
 		};
 	};
 
-	return resolve(event, {
+	const response = await resolve(event, {
 		filterSerializedResponseHeaders(name) {
-			return name === 'content-range';
+			return name === 'content-range' || name === 'cache-control';
 		}
 	});
+
+	// パフォーマンス向上のためのキャッシュヘッダー設定
+	// 静的リソース（CSS、JS、フォント等）のキャッシュ
+	if (event.url.pathname.startsWith('/_app/')) {
+		response.headers.set('cache-control', 'public, max-age=31536000, immutable');
+	}
+	// 静的ページのキャッシュ（短時間）
+	else if (
+		event.url.pathname === '/' ||
+		event.url.pathname.startsWith('/pricing') ||
+		event.url.pathname.startsWith('/faq') ||
+		event.url.pathname.startsWith('/privacy') ||
+		event.url.pathname.startsWith('/terms') ||
+		event.url.pathname.startsWith('/legal') ||
+		event.url.pathname.startsWith('/contact')
+	) {
+		response.headers.set('cache-control', 'public, max-age=300, s-maxage=600, stale-while-revalidate=86400');
+	}
+
+	return response;
 };
