@@ -20,10 +20,10 @@
 	<div class="hero">
 		<div class="hero-content">
 			<h1 class="title">TENTO</h1>
-			<p class="subtitle">スキー・スノーボード検定・大会のための採点管理システム</p>
+			<p class="subtitle">スキー・スノーボード<br class="mobile-br" />検定・大会のための採点管理システム</p>
 			<p class="description">
-				組織単位で複数の検定員が協力してリアルタイムで採点を行える、<br />
-				シンプルで使いやすいクラウドアプリケーションです。
+				組織単位で複数の検定員が協力して<br class="mobile-br" />リアルタイムで採点を行える、<br />
+				シンプルで使いやすい<br class="mobile-br" />クラウドアプリケーションです。
 			</p>
 
 			<div class="cta-buttons">
@@ -558,7 +558,16 @@
 		letter-spacing: -0.01em;
 	}
 
+	/* モバイルのみ表示される改行 */
+	.mobile-br {
+		display: inline;
+	}
+
 	@media (min-width: 768px) {
+		/* タブレット以上では改行を非表示 */
+		.mobile-br {
+			display: none;
+		}
 		.hero {
 			padding: 120px 40px;
 		}
