@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -99,7 +100,7 @@
 	/>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={true} pageOrganizations={[data.organization]} />
 
 <div class="container">
 	<div class="page-header">
@@ -156,7 +157,6 @@
 				<div class="member-card">
 					<div class="member-info">
 						<div class="member-name">{member.profiles?.full_name || '名前未設定'}</div>
-						<div class="member-email">{member.profiles?.email || ''}</div>
 					</div>
 					<div class="member-meta">
 						<span class="role-badge" class:admin={member.role === 'admin'}>
@@ -234,6 +234,8 @@
 		<NavButton on:click={() => goto('/dashboard')}>ダッシュボードに戻る</NavButton>
 	</div>
 </div>
+
+<Footer />
 
 <style>
 	.container {
@@ -344,10 +346,6 @@
 		font-weight: 600;
 		color: var(--text-primary);
 		margin-bottom: 4px;
-	}
-	.member-email {
-		font-size: 13px;
-		color: var(--text-secondary);
 	}
 	.member-meta {
 		display: flex;

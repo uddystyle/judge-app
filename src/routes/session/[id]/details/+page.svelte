@@ -2,6 +2,7 @@
 	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import * as XLSX from 'xlsx';
@@ -105,6 +106,8 @@
 		}
 	}
 </script>
+
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} pageOrganizations={data.organizations || []} />
 
 <div class="container">
 	<div class="instruction">{data.sessionDetails.name} の詳細</div>
@@ -612,6 +615,8 @@
 		</div>
 	{/if}
 </div>
+
+<Footer />
 
 <style>
 	.container {

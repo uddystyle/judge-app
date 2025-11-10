@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { getContext } from 'svelte';
@@ -288,6 +289,8 @@
 	cancelText="キャンセル"
 	on:confirm={confirmLogout}
 />
+
+<Footer />
 
 <style>
 	.container {

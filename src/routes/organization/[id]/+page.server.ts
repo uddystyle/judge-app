@@ -36,23 +36,38 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(403, 'この組織にアクセスする権限がありません');
 	}
 
-	// 組織のメンバー一覧を取得
-	const { data: members } = await locals.supabase
+	// 組織のメンバー一覧を取得（2段階クエリ）
+	const { data: membershipsData, error: membershipsError } = await locals.supabase
 		.from('organization_members')
-		.select(
-			`
-			id,
-			role,
-			joined_at,
-			profiles:user_id (
-				id,
-				full_name,
-				email
-			)
-		`
-		)
+		.select('id, role, joined_at, user_id')
 		.eq('organization_id', organizationId)
 		.order('joined_at', { ascending: true });
+
+	if (membershipsError) {
+		console.error('Error fetching memberships:', membershipsError);
+	}
+
+	// メンバーのプロフィール情報を取得
+	let members: any[] = [];
+	if (membershipsData && membershipsData.length > 0) {
+		const userIds = membershipsData.map((m: any) => m.user_id);
+		const { data: profilesData, error: profilesError } = await locals.supabase
+			.from('profiles')
+			.select('id, full_name')
+			.in('id', userIds);
+
+		if (profilesError) {
+			console.error('Error fetching profiles:', profilesError);
+		} else {
+			// メンバーシップとプロフィールを結合
+			members = membershipsData.map((membership: any) => ({
+				id: membership.id,
+				role: membership.role,
+				joined_at: membership.joined_at,
+				profiles: profilesData?.find((p: any) => p.id === membership.user_id) || null
+			}));
+		}
+	}
 
 	// 組織の有効な招待を取得（管理者のみ）
 	let invitations = [];
