@@ -208,7 +208,64 @@
 	<!-- 機能比較表 -->
 	<div class="comparison-section">
 		<h2 class="comparison-title">詳細な機能比較</h2>
-		<div class="comparison-table-container">
+
+		<!-- モバイル: カード表示 -->
+		<div class="comparison-cards mobile-only">
+			{#each plans as plan}
+				<div class="comparison-card">
+					<h3 class="card-plan-name">{plan.name}</h3>
+					<div class="card-features">
+						<div class="card-feature-row">
+							<span class="card-label">月額料金</span>
+							<span class="card-value">{plan.id === 'free' ? '¥0' : `¥${plan.monthlyPrice.toLocaleString()}`}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">組織メンバー</span>
+							<span class="card-value">{plan.id === 'free' ? '1名' : plan.id === 'basic' ? '10名' : plan.id === 'standard' ? '30名' : '100名'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">検定員数</span>
+							<span class="card-value">{plan.id === 'free' ? '3名' : plan.id === 'basic' ? '15名' : plan.id === 'standard' ? '50名' : '100名'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">月間セッション</span>
+							<span class="card-value">{plan.id === 'free' ? '3回' : '無制限'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">検定モード</span>
+							<span class="card-value">✓</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">大会モード</span>
+							<span class="card-value">{plan.id === 'free' ? '✗' : '✓'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">研修モード</span>
+							<span class="card-value">{plan.id === 'free' ? '✗' : '✓'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">スコアボード</span>
+							<span class="card-value">{plan.id === 'free' ? '✗' : '✓'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">エクスポート</span>
+							<span class="card-value">✓</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">保存期間</span>
+							<span class="card-value">{plan.id === 'free' ? '3ヶ月' : plan.id === 'basic' ? '12ヶ月' : plan.id === 'standard' ? '24ヶ月' : '無制限'}</span>
+						</div>
+						<div class="card-feature-row">
+							<span class="card-label">サポート</span>
+							<span class="card-value">{plan.id === 'premium' ? '優先' : 'メール'}</span>
+						</div>
+					</div>
+				</div>
+			{/each}
+		</div>
+
+		<!-- タブレット以上: テーブル表示 -->
+		<div class="comparison-table-container desktop-only">
 			<table class="comparison-table">
 				<thead>
 					<tr>
@@ -228,22 +285,22 @@
 						<td>¥49,800</td>
 					</tr>
 					<tr>
-						<td>組織メンバー数</td>
-						<td>1名のみ</td>
-						<td>10名まで</td>
-						<td>30名まで</td>
-						<td>100名まで</td>
+						<td>組織メンバー</td>
+						<td>1名</td>
+						<td>10名</td>
+						<td>30名</td>
+						<td>100名</td>
 					</tr>
 					<tr>
-						<td>検定員数（/セッション）</td>
-						<td>3名まで</td>
-						<td>15名まで</td>
-						<td>50名まで</td>
-						<td>100名まで</td>
+						<td>検定員数</td>
+						<td>3名</td>
+						<td>15名</td>
+						<td>50名</td>
+						<td>100名</td>
 					</tr>
 					<tr>
-						<td>月間セッション数</td>
-						<td>3回まで</td>
+						<td>月間セッション</td>
+						<td>3回</td>
 						<td>無制限</td>
 						<td>無制限</td>
 						<td>無制限</td>
@@ -270,21 +327,21 @@
 						<td>✓</td>
 					</tr>
 					<tr>
-						<td>スコアボード公開</td>
+						<td>スコアボード</td>
 						<td>✗</td>
 						<td>✓</td>
 						<td>✓</td>
 						<td>✓</td>
 					</tr>
 					<tr>
-						<td>Excelエクスポート</td>
+						<td>エクスポート</td>
 						<td>✓</td>
 						<td>✓</td>
 						<td>✓</td>
 						<td>✓</td>
 					</tr>
 					<tr>
-						<td>データ保存期間</td>
+						<td>保存期間</td>
 						<td>3ヶ月</td>
 						<td>12ヶ月</td>
 						<td>24ヶ月</td>
@@ -295,7 +352,7 @@
 						<td>メール</td>
 						<td>メール</td>
 						<td>メール</td>
-						<td>優先サポート</td>
+						<td>優先</td>
 					</tr>
 				</tbody>
 			</table>
@@ -583,6 +640,73 @@
 		font-weight: 600;
 	}
 
+	/* モバイル/デスクトップ切り替え（デフォルト: デスクトップ表示） */
+	.mobile-only {
+		display: none;
+	}
+
+	.desktop-only {
+		display: block;
+	}
+
+	/* モバイル: カードレイアウト */
+	.comparison-cards {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 20px;
+		margin-top: 24px;
+	}
+
+	.comparison-card {
+		background: white;
+		border: 2px solid var(--separator-gray);
+		border-radius: 12px;
+		padding: 20px;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+	}
+
+	.card-plan-name {
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--primary-text);
+		margin-bottom: 16px;
+		padding-bottom: 12px;
+		border-bottom: 2px solid var(--separator-gray);
+	}
+
+	.card-features {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.card-feature-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 10px 0;
+		border-bottom: 1px solid #f0f0f0;
+	}
+
+	.card-feature-row:last-child {
+		border-bottom: none;
+	}
+
+	.card-label {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--primary-text);
+		flex: 1;
+	}
+
+	.card-value {
+		font-size: 15px;
+		color: var(--primary-text);
+		font-weight: 500;
+		text-align: right;
+		min-width: 80px;
+	}
+
 	.back-button-section {
 		margin-top: 60px;
 		text-align: center;
@@ -630,13 +754,24 @@
 			grid-template-columns: 1fr;
 		}
 
-		.comparison-table {
-			font-size: 14px;
+		/* モバイル: カード表示、テーブル非表示 */
+		.mobile-only {
+			display: block;
 		}
 
-		.comparison-table th,
-		.comparison-table td {
-			padding: 12px 8px;
+		.desktop-only {
+			display: none;
+		}
+	}
+
+	/* タブレット以上: テーブル表示、カード非表示 */
+	@media (min-width: 769px) {
+		.mobile-only {
+			display: none;
+		}
+
+		.desktop-only {
+			display: block;
 		}
 	}
 
