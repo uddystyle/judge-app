@@ -157,11 +157,11 @@
 				<div class="member-card">
 					<div class="member-info">
 						<div class="member-name">{member.profiles?.full_name || '名前未設定'}</div>
-					</div>
-					<div class="member-meta">
 						<span class="role-badge" class:admin={member.role === 'admin'}>
 							{roleNames[member.role]}
 						</span>
+					</div>
+					<div class="member-meta">
 						<span class="joined-date">参加: {formatDate(member.joined_at)}</span>
 					</div>
 				</div>
@@ -340,18 +340,18 @@
 	}
 	.member-info {
 		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 10px;
 	}
 	.member-name {
 		font-size: 16px;
 		font-weight: 600;
 		color: var(--text-primary);
-		margin-bottom: 4px;
 	}
 	.member-meta {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 6px;
+		align-items: center;
 	}
 	.role-badge {
 		background: var(--ios-blue);
@@ -360,6 +360,7 @@
 		border-radius: 6px;
 		font-size: 12px;
 		font-weight: 600;
+		white-space: nowrap;
 	}
 	.role-badge.admin {
 		background: var(--accent-primary);
@@ -479,11 +480,6 @@
 		}
 		.member-card {
 			padding: 20px;
-		}
-		.member-meta {
-			flex-direction: row;
-			align-items: center;
-			gap: 12px;
 		}
 	}
 </style>
