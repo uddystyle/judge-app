@@ -13,15 +13,6 @@
 	$: canDelete = confirmText === data.organization.name;
 </script>
 
-<svelte:head>
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
-		rel="stylesheet"
-	/>
-</svelte:head>
-
 <div class="container">
 	<div class="page-header">
 		<h1 class="page-title">組織の削除</h1>

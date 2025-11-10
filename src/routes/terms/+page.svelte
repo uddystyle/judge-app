@@ -9,12 +9,6 @@
 
 <svelte:head>
 	<title>利用規約 - TENTO</title>
-	<link rel="preconnect" href="https://fonts.googleapis.com" />
-	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-	<link
-		href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
-		rel="stylesheet"
-	/>
 </svelte:head>
 
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
