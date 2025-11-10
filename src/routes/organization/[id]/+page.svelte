@@ -318,14 +318,15 @@
 		font-size: 32px;
 		font-weight: 700;
 		color: var(--text-primary);
-		margin-bottom: 16px;
+		margin: 0;
 	}
 	.plan-info {
 		display: flex;
 		align-items: center;
-		justify-content: flex-end;
+		justify-content: flex-start;
 		gap: 16px;
 		flex-wrap: wrap;
+		margin-top: 16px;
 	}
 	.plan-badge {
 		background: var(--accent-primary);
@@ -569,6 +570,7 @@
 		gap: 12px;
 		width: 100%;
 		max-width: 500px;
+		margin-bottom: 16px;
 	}
 
 	.name-input {
@@ -645,7 +647,7 @@
 		color: #2d7a3e;
 		padding: 12px 16px;
 		border-radius: 8px;
-		margin-top: 12px;
+		margin-bottom: 16px;
 		font-size: 14px;
 		font-weight: 600;
 	}
@@ -655,7 +657,7 @@
 		color: #c33;
 		padding: 12px 16px;
 		border-radius: 8px;
-		margin-top: 12px;
+		margin-bottom: 16px;
 		font-size: 14px;
 		font-weight: 600;
 	}
