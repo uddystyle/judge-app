@@ -23,6 +23,7 @@ export function sanitizeString(input: string | null | undefined): string {
 export function validateEmail(email: string | null | undefined): {
 	valid: boolean;
 	error?: string;
+	sanitized?: string;
 } {
 	if (!email) {
 		return { valid: false, error: 'メールアドレスを入力してください。' };
@@ -41,7 +42,7 @@ export function validateEmail(email: string | null | undefined): {
 		return { valid: false, error: 'メールアドレスが長すぎます。' };
 	}
 
-	return { valid: true };
+	return { valid: true, sanitized };
 }
 
 /**
