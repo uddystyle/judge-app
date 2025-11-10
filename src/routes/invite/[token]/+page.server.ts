@@ -9,13 +9,15 @@ const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KE
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const token = params.token;
 
-	// 招待情報を取得
-	const { data: invitation, error: inviteError } = await locals.supabase
+	console.log('[Invite Page] Loading invitation with token:', token);
+
+	// 招待情報を取得（RLSをバイパスするためsupabaseAdminを使用）
+	const { data: invitation, error: inviteError} = await supabaseAdmin
 		.from('invitations')
 		.select(
 			`
 			*,
-			organizations (
+			organizations!organization_id (
 				id,
 				name,
 				plan_type
@@ -25,9 +27,17 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.eq('token', token)
 		.single();
 
-	if (inviteError || !invitation) {
+	if (inviteError) {
+		console.error('[Invite Page] Error fetching invitation:', inviteError);
 		throw error(404, '招待が見つかりません');
 	}
+
+	if (!invitation) {
+		console.error('[Invite Page] No invitation found for token:', token);
+		throw error(404, '招待が見つかりません');
+	}
+
+	console.log('[Invite Page] Invitation found:', invitation);
 
 	// 有効期限チェック
 	if (new Date(invitation.expires_at) < new Date()) {
@@ -40,13 +50,12 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	// すでにログイン済みかチェック
-	const session = await locals.supabase.auth.getSession();
-	const user = session.data.session?.user;
+	const { data: { user } } = await locals.supabase.auth.getUser();
 
 	// ユーザーのプロフィール情報を取得（ログイン済みの場合のみ）
 	let profile = null;
 	if (user) {
-		const { data: profileData } = await locals.supabase
+		const { data: profileData } = await supabaseAdmin
 			.from('profiles')
 			.select('full_name')
 			.eq('id', user.id)
@@ -54,7 +63,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		profile = profileData;
 
 		// ログイン済みの場合、すでに組織のメンバーかチェック
-		const { data: existingMembership } = await locals.supabase
+		const { data: existingMembership } = await supabaseAdmin
 			.from('organization_members')
 			.select('id')
 			.eq('organization_id', invitation.organizations.id)
@@ -176,14 +185,13 @@ export const actions: Actions = {
 
 		// 認証チェック
 		const {
-			data: { session }
-		} = await locals.supabase.auth.getSession();
+			data: { user },
+			error: userError
+		} = await locals.supabase.auth.getUser();
 
-		if (!session) {
+		if (userError || !user) {
 			return fail(401, { error: 'ログインが必要です' });
 		}
-
-		const user = session.user;
 
 		// 招待情報を取得
 		const { data: invitation } = await supabaseAdmin

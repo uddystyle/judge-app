@@ -2,14 +2,15 @@ import type { PageServerLoad } from './$types';
 import { error, redirect } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	const session = await locals.supabase.auth.getSession();
-
 	// 未ログインの場合はログインページへリダイレクト
-	if (!session.data.session) {
+	const {
+		data: { user },
+		error: userError
+	} = await locals.supabase.auth.getUser();
+
+	if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const user = session.data.session.user;
 	const organizationId = params.id;
 
 	// 組織情報を取得

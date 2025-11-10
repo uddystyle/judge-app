@@ -12,14 +12,13 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 	try {
 		// 認証チェック
 		const {
-			data: { session }
-		} = await supabase.auth.getSession();
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
 
-		if (!session) {
+		if (userError || !user) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
-
-		const user = session.user;
 		const { organizationId, role = 'member', expiresInHours = 48 } = await request.json();
 
 		// バリデーション
