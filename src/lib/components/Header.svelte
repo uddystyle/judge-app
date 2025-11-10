@@ -122,7 +122,11 @@
 					</span>
 				{/if}
 				{profile?.full_name || 'アカウント'}
-				<span class="menu-icon">{showMenu ? '▲' : '▼'}</span>
+				<span class="menu-icon" class:rotated={showMenu}>
+					<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+				</span>
 			</button>
 
 			{#if showMenu}
@@ -144,10 +148,12 @@
 					<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
 						<span class="menu-label">セッション</span>
 					</button>
-					<div class="menu-divider"></div>
-					<button class="menu-item logout" on:click={handleLogout}>
-						<span class="menu-label">ログアウト</span>
-					</button>
+					{#if user}
+						<div class="menu-divider"></div>
+						<button class="menu-item logout" on:click={handleLogout}>
+							<span class="menu-label">ログアウト</span>
+						</button>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -232,8 +238,16 @@
 		background: var(--gray-200);
 	}
 	.menu-icon {
-		font-size: 10px;
-		transition: transform 0.15s ease;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+	.menu-icon.rotated {
+		transform: rotate(180deg);
+	}
+	.menu-icon svg {
+		display: block;
 	}
 	.account-menu-wrapper {
 		position: relative;

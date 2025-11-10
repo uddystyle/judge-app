@@ -36,48 +36,43 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				.filter((id: any) => id)
 		: [];
 
-	// セッションを並行して取得（2つのクエリを同時実行してN+1を回避）
-	const [orgSessionsResult, guestSessionsResult] = await Promise.all([
-		// 組織経由のセッション
-		organizationIds.length > 0
-			? supabase
-					.from('sessions')
-					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
-					.in('organization_id', organizationIds)
-					.order('created_at', { ascending: false })
-			: Promise.resolve({ data: [], error: null }),
-		// ゲスト参加のセッション
-		supabase
-			.from('session_participants')
-			.select(
-				`
-				session_id,
-				sessions (
-					id,
-					name,
-					session_date,
-					join_code,
-					is_active,
-					is_tournament_mode,
-					mode,
-					organization_id
-				)
-			`
-			)
-			.eq('user_id', user.id)
-	]);
+	// 組織経由のセッション
+	const orgSessionsResult = organizationIds.length > 0
+		? await supabase
+				.from('sessions')
+				.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
+				.in('organization_id', organizationIds)
+				.order('created_at', { ascending: false })
+		: { data: [], error: null };
 
 	if (orgSessionsResult.error) {
 		console.error('Error fetching org sessions:', orgSessionsResult.error);
 	}
-	if (guestSessionsResult.error) {
-		console.error('Error fetching guest sessions:', guestSessionsResult.error);
-	}
 
 	const orgSessions = orgSessionsResult.data || [];
-	const guestSessions = guestSessionsResult.data
-		? guestSessionsResult.data.map((p: any) => p.sessions).filter((s: any) => s)
-		: [];
+
+	// ゲスト参加のセッション（2段階クエリ）
+	const participantsResult = await supabase
+		.from('session_participants')
+		.select('session_id')
+		.eq('user_id', user.id);
+
+	let guestSessions: any[] = [];
+	if (participantsResult.data && participantsResult.data.length > 0) {
+		const sessionIds = participantsResult.data.map((p: any) => p.session_id);
+		const sessionsResult = await supabase
+			.from('sessions')
+			.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
+			.in('id', sessionIds);
+
+		if (sessionsResult.error) {
+			console.error('Error fetching guest sessions:', sessionsResult.error);
+		} else {
+			guestSessions = sessionsResult.data || [];
+		}
+	} else if (participantsResult.error) {
+		console.error('Error fetching session participants:', participantsResult.error);
+	}
 
 	// 重複を削除してマージ（組織経由のセッションを優先）
 	const sessionMap = new Map();
