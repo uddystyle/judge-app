@@ -573,6 +573,8 @@
 
 	.comparison-section {
 		margin-top: 60px;
+		margin-bottom: 60px;
+		padding: 0 0 40px 0;
 	}
 
 	.comparison-title {
@@ -762,6 +764,22 @@
 
 		.desktop-only {
 			display: none;
+		}
+
+		/* モバイル: カードレイアウトのgridを明示的に設定 */
+		.comparison-cards.mobile-only {
+			display: grid;
+		}
+
+		/* モバイル: 機能比較セクションの上下スペース調整 */
+		.comparison-section {
+			margin-top: 48px;
+			margin-bottom: 48px;
+			padding: 32px 0;
+		}
+
+		.comparison-title {
+			margin-bottom: 24px;
 		}
 	}
 
