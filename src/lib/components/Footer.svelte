@@ -28,7 +28,7 @@
 	<div class="footer-container">
 		<div class="footer-brand">
 			<button class="brand-name" on:click={() => goto('/?view=landing')}>TENTO</button>
-			<p class="brand-description">スキー・スノーボード検定・大会のための採点管理システム</p>
+			<p class="brand-description">スキー・スノーボード検定・大会のための<br />採点管理システム</p>
 		</div>
 
 		<div class="footer-links">
