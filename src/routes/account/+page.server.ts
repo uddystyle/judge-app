@@ -72,39 +72,37 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		userRole: m.role
 	}));
 
-	// 各組織のプラン制限と使用状況を取得
+	// 今月の開始日を計算
+	const currentMonth = new Date();
+	currentMonth.setDate(1);
+	const currentMonthISO = currentMonth.toISOString();
+
+	// 各組織のプラン制限と使用状況を並列取得
 	const organizationsWithUsage = await Promise.all(
 		organizations.map(async (org: any) => {
-			// プラン制限情報を取得
-			const { data: planLimits } = await supabase
-				.from('plan_limits')
-				.select('*')
-				.eq('plan_type', org.plan_type)
-				.single();
-
-			// 今月の使用状況を取得
-			const currentMonth = new Date();
-			currentMonth.setDate(1);
-
-			// 組織のセッション数をカウント
-			const { count: sessionsCount } = await supabase
-				.from('sessions')
-				.select('*', { count: 'exact', head: true })
-				.eq('organization_id', org.id)
-				.gte('created_at', currentMonth.toISOString());
-
-			// 組織のメンバー数をカウント
-			const { count: membersCount } = await supabase
-				.from('organization_members')
-				.select('*', { count: 'exact', head: true })
-				.eq('organization_id', org.id);
+			// 各組織の3つのクエリを並列実行
+			const [planLimitsResult, sessionsCountResult, membersCountResult] = await Promise.all([
+				// プラン制限情報を取得
+				supabase.from('plan_limits').select('*').eq('plan_type', org.plan_type).single(),
+				// 組織のセッション数をカウント
+				supabase
+					.from('sessions')
+					.select('*', { count: 'exact', head: true })
+					.eq('organization_id', org.id)
+					.gte('created_at', currentMonthISO),
+				// 組織のメンバー数をカウント
+				supabase
+					.from('organization_members')
+					.select('*', { count: 'exact', head: true })
+					.eq('organization_id', org.id)
+			]);
 
 			return {
 				...org,
-				planLimits,
+				planLimits: planLimitsResult.data,
 				currentUsage: {
-					sessions_count: sessionsCount || 0,
-					members_count: membersCount || 0
+					sessions_count: sessionsCountResult.count || 0,
+					members_count: membersCountResult.count || 0
 				}
 			};
 		})

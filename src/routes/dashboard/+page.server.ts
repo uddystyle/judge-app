@@ -12,11 +12,13 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		throw redirect(303, '/login');
 	}
 
-	// ユーザーが所属するすべての組織を取得（複数組織対応）
-	const { data: memberships } = await supabase
-		.from('organization_members')
-		.select(
-			`
+	// ユーザーのプロフィールと組織を並列取得
+	const [profileResult, membershipsResult] = await Promise.all([
+		supabase.from('profiles').select('full_name, id').eq('id', user.id).single(),
+		supabase
+			.from('organization_members')
+			.select(
+				`
 			role,
 			organizations (
 				id,
@@ -26,8 +28,12 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				created_at
 			)
 		`
-		)
-		.eq('user_id', user.id);
+			)
+			.eq('user_id', user.id)
+	]);
+
+	const profile = profileResult.data;
+	const memberships = membershipsResult.data;
 
 	// 組織IDを抽出
 	const organizationIds = memberships
@@ -36,14 +42,19 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				.filter((id: any) => id)
 		: [];
 
-	// 組織経由のセッション
-	const orgSessionsResult = organizationIds.length > 0
-		? await supabase
-				.from('sessions')
-				.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
-				.in('organization_id', organizationIds)
-				.order('created_at', { ascending: false })
-		: { data: [], error: null };
+	// 組織経由のセッションとゲスト参加セッションを並列取得
+	const [orgSessionsResult, participantsResult] = await Promise.all([
+		// 組織経由のセッション
+		organizationIds.length > 0
+			? supabase
+					.from('sessions')
+					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
+					.in('organization_id', organizationIds)
+					.order('created_at', { ascending: false })
+			: Promise.resolve({ data: [], error: null }),
+		// ゲスト参加のセッションID取得
+		supabase.from('session_participants').select('session_id').eq('user_id', user.id)
+	]);
 
 	if (orgSessionsResult.error) {
 		console.error('Error fetching org sessions:', orgSessionsResult.error);
@@ -51,12 +62,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	const orgSessions = orgSessionsResult.data || [];
 
-	// ゲスト参加のセッション（2段階クエリ）
-	const participantsResult = await supabase
-		.from('session_participants')
-		.select('session_id')
-		.eq('user_id', user.id);
-
+	// ゲストセッションの詳細を取得（セッションIDがある場合のみ）
 	let guestSessions: any[] = [];
 	if (participantsResult.data && participantsResult.data.length > 0) {
 		const sessionIds = participantsResult.data.map((p: any) => p.session_id);
@@ -88,13 +94,6 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	});
 
 	const sessions = Array.from(sessionMap.values());
-
-	// ユーザーのプロフィール情報を取得
-	const { data: profile } = await supabase
-		.from('profiles')
-		.select('full_name, id')
-		.eq('id', user.id)
-		.single();
 
 	// 組織配列を作成（UIが期待する形式）
 	const organizations = memberships
