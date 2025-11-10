@@ -172,7 +172,7 @@
 			<div class="info-cards">
 				<div class="info-card">
 					<h3>メールでのお問い合わせ</h3>
-					<p>support@tento-app.com</p>
+					<p>support@tentoapp.com</p>
 					<p class="info-note">営業時間: 平日 9:00-18:00</p>
 				</div>
 				<div class="info-card">

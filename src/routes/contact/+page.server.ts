@@ -1,6 +1,8 @@
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
 import { validateEmail, validateName, validateText } from '$lib/server/validation';
+import { Resend } from 'resend';
+import { RESEND_API_KEY } from '$env/static/private';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const { supabase } = locals;
@@ -116,6 +118,65 @@ export const actions = {
 					category,
 					message: messageRaw
 				});
+			}
+
+			// メール通知を送信（Resend APIキーが設定されている場合のみ）
+			if (RESEND_API_KEY) {
+				try {
+					const resend = new Resend(RESEND_API_KEY);
+
+					// カテゴリの日本語ラベル
+					const categoryLabels: Record<string, string> = {
+						general: '一般的な質問',
+						technical: '技術的な問題',
+						billing: '料金・請求について',
+						feature: '機能に関する要望',
+						other: 'その他'
+					};
+
+					const categoryLabel = categoryLabels[category] || category;
+
+					await resend.emails.send({
+						from: 'TENTO <onboarding@resend.dev>',
+						to: 'support@tentoapp.com',
+						subject: `【TENTO】新規お問い合わせ: ${subject}`,
+						text: `
+新しいお問い合わせが届きました。
+
+━━━━━━━━━━━━━━━━━━━━━━
+お問い合わせ情報
+━━━━━━━━━━━━━━━━━━━━━━
+
+【お名前】
+${name}
+
+【メールアドレス】
+${email}
+
+${organization ? `【組織名・団体名】\n${organization}\n\n` : ''}【件名】
+${subject}
+
+【お問い合わせ種別】
+${categoryLabel}
+
+【お問い合わせ内容】
+${message}
+
+━━━━━━━━━━━━━━━━━━━━━━
+送信日時: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+━━━━━━━━━━━━━━━━━━━━━━
+
+※ このメールは自動送信されています。
+※ 返信はお問い合わせ者のメールアドレス（${email}）宛にお送りください。
+						`.trim()
+					});
+
+					console.log('Contact notification email sent successfully');
+				} catch (emailError) {
+					// メール送信に失敗してもデータベースには保存されているので、
+					// エラーログのみ出力してユーザーには成功を返す
+					console.error('Failed to send contact notification email:', emailError);
+				}
 			}
 
 			// 成功
