@@ -1,13 +1,31 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { enhance } from '$app/forms';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
-	import type { PageData } from './$types';
+	import type { PageData, ActionData } from './$types';
 
 	export let data: PageData;
+	export let form: ActionData;
 
 	const isAdmin = data.userRole === 'admin';
+
+	// 組織名編集用の状態
+	let isEditingName = false;
+	let editedName = data.organization.name;
+	let isSubmittingName = false;
+
+	function startEditingName() {
+		if (!isAdmin) return;
+		isEditingName = true;
+		editedName = data.organization.name;
+	}
+
+	function cancelEditingName() {
+		isEditingName = false;
+		editedName = data.organization.name;
+	}
 
 	// プラン名のマッピング
 	const planNames: Record<string, string> = {
@@ -95,7 +113,65 @@
 
 <div class="container">
 	<div class="page-header">
-		<h1 class="page-title">{data.organization.name}</h1>
+		{#if form?.success}
+			<div class="success-notification">{form.message}</div>
+		{/if}
+		{#if form?.error}
+			<div class="error-notification">{form.error}</div>
+		{/if}
+
+		{#if isEditingName}
+			<!-- 編集モード -->
+			<form
+				method="POST"
+				action="?/updateName"
+				class="name-edit-form"
+				use:enhance={() => {
+					isSubmittingName = true;
+					return async ({ update, result }) => {
+						await update();
+						isSubmittingName = false;
+						if (result.type === 'success') {
+							isEditingName = false;
+						}
+					};
+				}}
+			>
+				<input
+					type="text"
+					name="name"
+					bind:value={editedName}
+					class="name-input"
+					placeholder="組織名を入力"
+					required
+					minlength="2"
+					maxlength="100"
+					disabled={isSubmittingName}
+				/>
+				<div class="name-edit-buttons">
+					<button type="submit" class="save-btn" disabled={isSubmittingName}>
+						{isSubmittingName ? '保存中...' : '保存'}
+					</button>
+					<button type="button" class="cancel-btn" on:click={cancelEditingName} disabled={isSubmittingName}>
+						キャンセル
+					</button>
+				</div>
+			</form>
+		{:else}
+			<!-- 表示モード -->
+			<div class="name-display">
+				<h1 class="page-title">{data.organization.name}</h1>
+				{#if isAdmin}
+					<button class="edit-name-btn" on:click={startEditingName} title="組織名を編集">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+							<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+						</svg>
+					</button>
+				{/if}
+			</div>
+		{/if}
+
 		<div class="plan-info">
 			<span class="plan-badge">{planNames[data.organization.plan_type] || 'フリー'}</span>
 			<span class="member-limit">
@@ -236,7 +312,6 @@
 		min-height: calc(100vh - 80px);
 	}
 	.page-header {
-		text-align: center;
 		margin-bottom: 40px;
 	}
 	.page-title {
@@ -248,7 +323,7 @@
 	.plan-info {
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		justify-content: flex-end;
 		gap: 16px;
 		flex-wrap: wrap;
 	}
@@ -460,6 +535,129 @@
 	}
 	.danger-btn:active {
 		transform: scale(0.98);
+	}
+
+	/* 組織名インライン編集用スタイル */
+	.name-display {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.edit-name-btn {
+		background: transparent;
+		border: none;
+		color: var(--ios-blue);
+		padding: 8px;
+		border-radius: 6px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+		opacity: 0.7;
+	}
+
+	.edit-name-btn:hover {
+		opacity: 1;
+		background: rgba(0, 122, 255, 0.1);
+	}
+
+	.name-edit-form {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		width: 100%;
+		max-width: 500px;
+	}
+
+	.name-input {
+		width: 100%;
+		padding: 12px 16px;
+		border: 2px solid var(--separator-gray);
+		border-radius: 10px;
+		font-size: 24px;
+		font-weight: 700;
+		font-family: inherit;
+		background: white;
+		transition: all 0.2s;
+	}
+
+	.name-input:focus {
+		outline: none;
+		border-color: var(--ios-blue);
+	}
+
+	.name-input:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.name-edit-buttons {
+		display: flex;
+		gap: 8px;
+	}
+
+	.save-btn {
+		padding: 10px 20px;
+		background: var(--ios-blue);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.save-btn:hover:not(:disabled) {
+		opacity: 0.85;
+	}
+
+	.save-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.cancel-btn {
+		padding: 10px 20px;
+		background: white;
+		color: var(--secondary-text);
+		border: 2px solid var(--separator-gray);
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.cancel-btn:hover:not(:disabled) {
+		background: var(--bg-secondary);
+	}
+
+	.cancel-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.success-notification {
+		background: #e8f5e9;
+		color: #2d7a3e;
+		padding: 12px 16px;
+		border-radius: 8px;
+		margin-top: 12px;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.error-notification {
+		background: #fee;
+		color: #c33;
+		padding: 12px 16px;
+		border-radius: 8px;
+		margin-top: 12px;
+		font-size: 14px;
+		font-weight: 600;
 	}
 
 	@media (min-width: 768px) {

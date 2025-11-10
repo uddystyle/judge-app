@@ -1,5 +1,6 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { validateSessionName } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -522,6 +523,65 @@ export const actions: Actions = {
 		}
 
 		return { eventSuccess: '種目を削除しました。' };
+	},
+
+	// セッション名を更新
+	updateName: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			return fail(401, { error: 'ログインが必要です。' });
+		}
+
+		const sessionId = params.id;
+
+		// セッションが存在し、作成者が現在のユーザーかチェック
+		const { data: session, error: sessionError } = await supabase
+			.from('sessions')
+			.select('created_by')
+			.eq('id', sessionId)
+			.single();
+
+		if (sessionError || !session) {
+			return fail(404, { error: 'セッションが見つかりません。' });
+		}
+
+		if (session.created_by !== user.id) {
+			return fail(403, { error: 'セッション名を変更する権限がありません。作成者のみが変更できます。' });
+		}
+
+		const formData = await request.formData();
+		const nameRaw = formData.get('name') as string;
+
+		// バリデーション
+		const nameValidation = validateSessionName(nameRaw);
+		if (!nameValidation.valid) {
+			return fail(400, {
+				error: nameValidation.error || 'セッション名が無効です。',
+				name: nameRaw
+			});
+		}
+
+		const name = nameValidation.sanitized || '';
+
+		// セッション名を更新
+		const { error: updateError } = await supabase
+			.from('sessions')
+			.update({ name })
+			.eq('id', sessionId);
+
+		if (updateError) {
+			console.error('Session name update error:', updateError);
+			return fail(500, {
+				error: 'セッション名の更新に失敗しました。しばらくしてから再度お試しください。',
+				name: nameRaw
+			});
+		}
+
+		return { success: true, message: 'セッション名を更新しました。' };
 	},
 
 	deleteSession: async ({ params, locals: { supabase } }) => {

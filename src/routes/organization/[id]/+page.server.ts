@@ -1,5 +1,6 @@
-import type { PageServerLoad } from './$types';
-import { error, redirect } from '@sveltejs/kit';
+import type { PageServerLoad, Actions } from './$types';
+import { error, redirect, fail } from '@sveltejs/kit';
+import { validateOrganizationName } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	// 未ログインの場合はログインページへリダイレクト
@@ -98,3 +99,62 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		invitations
 	};
 };
+
+export const actions = {
+	updateName: async ({ request, params, locals }) => {
+		const { supabase } = locals;
+		const organizationId = params.id;
+
+		// 未ログインの場合
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			return fail(401, { error: 'ログインが必要です。' });
+		}
+
+		// ユーザーがこの組織の管理者かチェック
+		const { data: membership } = await supabase
+			.from('organization_members')
+			.select('role')
+			.eq('organization_id', organizationId)
+			.eq('user_id', user.id)
+			.single();
+
+		if (!membership || membership.role !== 'admin') {
+			return fail(403, { error: '組織名を変更する権限がありません。管理者のみが変更できます。' });
+		}
+
+		const formData = await request.formData();
+		const nameRaw = formData.get('name') as string;
+
+		// バリデーション
+		const nameValidation = validateOrganizationName(nameRaw);
+		if (!nameValidation.valid) {
+			return fail(400, {
+				error: nameValidation.error || '組織名が無効です。',
+				name: nameRaw
+			});
+		}
+
+		const name = nameValidation.sanitized || '';
+
+		// 組織名を更新
+		const { error: updateError } = await supabase
+			.from('organizations')
+			.update({ name, updated_at: new Date().toISOString() })
+			.eq('id', organizationId);
+
+		if (updateError) {
+			console.error('Organization name update error:', updateError);
+			return fail(500, {
+				error: '組織名の更新に失敗しました。しばらくしてから再度お試しください。',
+				name: nameRaw
+			});
+		}
+
+		return { success: true, message: '組織名を更新しました。' };
+	}
+} satisfies Actions;

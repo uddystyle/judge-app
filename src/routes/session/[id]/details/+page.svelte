@@ -16,6 +16,23 @@
 	let isMultiJudge = data.sessionDetails.is_multi_judge;
 	let requiredJudges = data.sessionDetails.required_judges;
 
+	// セッション名編集用の状態
+	let isEditingName = false;
+	let editedName = data.sessionDetails.name;
+	let isSubmittingName = false;
+	const isCreator = data.currentUserId === data.sessionDetails.created_by;
+
+	function startEditingName() {
+		if (!isCreator) return;
+		isEditingName = true;
+		editedName = data.sessionDetails.name;
+	}
+
+	function cancelEditingName() {
+		isEditingName = false;
+		editedName = data.sessionDetails.name;
+	}
+
 	// 大会モード用の採点方式
 	let selectedMethod: '3judges' | '5judges' = data.sessionDetails.exclude_extremes
 		? '5judges'
@@ -110,43 +127,68 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} pageOrganizations={data.organizations || []} />
 
 <div class="container">
-	<div class="instruction">{data.sessionDetails.name} の詳細</div>
+	<!-- セッション名ヘッダー -->
+	<div class="session-header">
+		{#if form?.success}
+			<div class="success-notification">{form.message}</div>
+		{/if}
+		{#if form?.error}
+			<div class="error-notification">{form.error}</div>
+		{/if}
 
-	<div class="settings-section">
-		<h3 class="settings-title">
-			{data.isTrainingMode ? '研修名' : data.isTournamentMode ? '大会名' : '検定名'}
-		</h3>
-
-		{#if data.currentUserId === data.sessionDetails.chief_judge_id}
-			<!-- 主任検定員のみ編集可能 -->
+		{#if isEditingName}
+			<!-- 編集モード -->
 			<form
 				method="POST"
 				action="?/updateName"
+				class="name-edit-form"
 				use:enhance={() => {
-					return async ({ update }) => {
-						await update({ reset: false });
+					isSubmittingName = true;
+					return async ({ update, result }) => {
+						await update();
+						isSubmittingName = false;
+						if (result.type === 'success') {
+							isEditingName = false;
+							// ストアを更新
+							data.sessionDetails.name = editedName;
+						}
 					};
 				}}
 			>
-				<div class="form-container">
-					<input type="text" id="session-name" name="sessionName" bind:value={sessionName} class="name-input" />
-
-					<div class="nav-buttons">
-						<NavButton variant="primary" type="submit">名前を更新</NavButton>
-					</div>
-
-					{#if form?.message}
-						<p class="message" class:success={form?.success}>{form.message}</p>
-					{/if}
+				<input
+					type="text"
+					name="name"
+					bind:value={editedName}
+					class="name-input"
+					placeholder="セッション名を入力"
+					required
+					maxlength="200"
+					disabled={isSubmittingName}
+				/>
+				<div class="name-edit-buttons">
+					<button type="submit" class="save-btn" disabled={isSubmittingName}>
+						{isSubmittingName ? '保存中...' : '保存'}
+					</button>
+					<button type="button" class="cancel-btn" on:click={cancelEditingName} disabled={isSubmittingName}>
+						キャンセル
+					</button>
 				</div>
 			</form>
 		{:else}
-			<!-- 一般検定員: 表示のみ -->
-			<div class="readonly-value session-name-readonly">{sessionName}</div>
-			<p class="readonly-notice">※ 名前の変更は主任検定員のみ可能です</p>
+			<!-- 表示モード -->
+			<div class="name-display">
+				<h1 class="session-title">{data.sessionDetails.name}</h1>
+				{#if isCreator}
+					<button class="edit-name-btn" on:click={startEditingName} title="セッション名を編集">
+						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+							<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+						</svg>
+					</button>
+				{/if}
+			</div>
 		{/if}
 	</div>
-	<hr class="divider" />
 
 	<div class="settings-section">
 		<h3 class="settings-title">参加中の検定員</h3>
@@ -1163,20 +1205,6 @@
 		text-align: center;
 	}
 
-	.name-input {
-		width: 100%;
-		padding: 12px;
-		font-size: 16px;
-		border: 2px solid var(--separator-gray);
-		border-radius: 8px;
-		margin-bottom: 12px;
-	}
-
-	.name-input:focus {
-		outline: none;
-		border-color: var(--ios-blue);
-	}
-
 	/* 採点方法の読み取り専用表示 */
 	.readonly-scoring-method {
 		background: var(--bg-primary);
@@ -1201,6 +1229,141 @@
 		font-size: 15px;
 		color: var(--secondary-text);
 		line-height: 1.5;
+	}
+
+	/* セッション名ヘッダー */
+	.session-header {
+		margin-bottom: 32px;
+	}
+
+	.session-title {
+		font-size: 32px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0;
+	}
+
+	.name-display {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.edit-name-btn {
+		background: transparent;
+		border: none;
+		color: var(--ios-blue);
+		padding: 8px;
+		border-radius: 6px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+		opacity: 0.7;
+	}
+
+	.edit-name-btn:hover {
+		opacity: 1;
+		background: rgba(0, 122, 255, 0.1);
+	}
+
+	.name-edit-form {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		width: 100%;
+		max-width: 500px;
+	}
+
+	.name-edit-form .name-input {
+		width: 100%;
+		padding: 12px 16px;
+		border: 2px solid var(--separator-gray);
+		border-radius: 10px;
+		font-size: 24px;
+		font-weight: 700;
+		font-family: inherit;
+		background: white;
+		transition: all 0.2s;
+	}
+
+	.name-edit-form .name-input:focus {
+		outline: none;
+		border-color: var(--ios-blue);
+	}
+
+	.name-edit-form .name-input:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.name-edit-buttons {
+		display: flex;
+		gap: 8px;
+	}
+
+	.name-edit-buttons .save-btn {
+		padding: 10px 20px;
+		background: var(--ios-blue);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+		width: auto;
+	}
+
+	.name-edit-buttons .save-btn:hover:not(:disabled) {
+		opacity: 0.85;
+	}
+
+	.name-edit-buttons .save-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.name-edit-buttons .cancel-btn {
+		padding: 10px 20px;
+		background: white;
+		color: var(--secondary-text);
+		border: 2px solid var(--separator-gray);
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.name-edit-buttons .cancel-btn:hover:not(:disabled) {
+		background: var(--bg-secondary);
+	}
+
+	.name-edit-buttons .cancel-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.success-notification {
+		background: #e8f5e9;
+		color: #2d7a3e;
+		padding: 12px 16px;
+		border-radius: 8px;
+		margin-bottom: 16px;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.error-notification {
+		background: #fee;
+		color: #c33;
+		padding: 12px 16px;
+		border-radius: 8px;
+		margin-bottom: 16px;
+		font-size: 14px;
+		font-weight: 600;
 	}
 
 	@media (max-width: 768px) {
