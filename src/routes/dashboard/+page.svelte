@@ -169,7 +169,7 @@
 				新しいセッションを作成
 			</NavButton>
 		{/if}
-		<NavButton on:click={() => goto('/session/join')}>コードで参加</NavButton>
+		<NavButton on:click={() => goto('/session/join')}>コードでセッションに参加</NavButton>
 	</div>
 </div>
 

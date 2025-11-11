@@ -21,8 +21,8 @@
 	// URLパラメータからクーポンコードを取得
 	const couponCode = $page.url.searchParams.get('coupon');
 
-	// ステップ管理: 1 = 組織名入力, 2 = プラン選択
-	let step = 1;
+	// ステップ管理: 0 = 選択画面, 1 = 組織名入力, 2 = プラン選択
+	let step = 0;
 	let organizationName = '';
 	let selectedPlan = 'free';
 </script>
@@ -30,7 +30,39 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
-	{#if step === 1}
+	{#if step === 0}
+		<!-- Step 0: 選択画面 -->
+		<div class="header">
+			<h1 class="title">TENTOへようこそ</h1>
+			<p class="subtitle">
+				次のステップを選択してください
+			</p>
+		</div>
+
+		<div class="choice-container">
+			<button class="choice-card" on:click={() => (step = 1)}>
+				<h2 class="choice-title">組織を作成する</h2>
+				<p class="choice-description">
+					スキークラブや団体として<br />
+					セッションを管理します
+				</p>
+				<div class="choice-badge">推奨</div>
+			</button>
+
+			<button class="choice-card secondary" on:click={() => goto('/session/join')}>
+				<h2 class="choice-title">セッションに参加する</h2>
+				<p class="choice-description">
+					招待コードを使って<br />
+					既存のセッションに参加します
+				</p>
+			</button>
+		</div>
+
+		<div class="info-note">
+			<p>組織を作成すると、セッションの作成や管理ができるようになります。</p>
+			<p>セッションに参加する場合は、主催者から招待コードを受け取ってください。</p>
+		</div>
+	{:else if step === 1}
 		<!-- Step 1: 組織名入力 -->
 		<div class="header">
 			<h1 class="title">組織を作成</h1>
@@ -64,6 +96,9 @@
 			{/if}
 
 			<div class="nav-buttons">
+				<NavButton variant="secondary" on:click={() => (step = 0)}>
+					戻る
+				</NavButton>
 				<NavButton variant="primary" on:click={() => (step = 2)} disabled={!organizationName.trim()}>
 					次へ進む
 				</NavButton>
@@ -401,6 +436,89 @@
 		margin-top: 8px;
 	}
 
+	.choice-container {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		margin-bottom: 32px;
+	}
+
+	.choice-card {
+		position: relative;
+		background: white;
+		border: 3px solid var(--separator-gray);
+		border-radius: 16px;
+		padding: 32px 24px;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		text-align: center;
+		width: 100%;
+	}
+
+	.choice-card:hover {
+		border-color: var(--ios-blue);
+		box-shadow: 0 8px 24px rgba(0, 122, 255, 0.15);
+		transform: translateY(-4px);
+	}
+
+	.choice-card:active {
+		transform: translateY(-2px);
+	}
+
+	.choice-card.secondary {
+		border-color: var(--border-light);
+	}
+
+	.choice-card.secondary:hover {
+		border-color: var(--secondary-text);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+	}
+
+	.choice-title {
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin-bottom: 12px;
+	}
+
+	.choice-description {
+		font-size: 15px;
+		color: var(--text-secondary);
+		line-height: 1.6;
+		margin: 0;
+	}
+
+	.choice-badge {
+		position: absolute;
+		top: 16px;
+		right: 16px;
+		background: var(--ios-blue);
+		color: white;
+		font-size: 12px;
+		font-weight: 700;
+		padding: 4px 12px;
+		border-radius: 12px;
+		letter-spacing: 0.05em;
+	}
+
+	.info-note {
+		background: var(--bg-secondary);
+		border-radius: 12px;
+		padding: 20px;
+		text-align: left;
+	}
+
+	.info-note p {
+		font-size: 14px;
+		color: var(--text-secondary);
+		line-height: 1.7;
+		margin: 0 0 8px 0;
+	}
+
+	.info-note p:last-child {
+		margin-bottom: 0;
+	}
+
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
 		.container {
@@ -441,6 +559,27 @@
 
 		.feature {
 			font-size: 14px;
+		}
+
+		.choice-container {
+			flex-direction: row;
+			gap: 24px;
+		}
+
+		.choice-title {
+			font-size: 22px;
+		}
+
+		.choice-description {
+			font-size: 16px;
+		}
+
+		.info-note {
+			padding: 24px;
+		}
+
+		.info-note p {
+			font-size: 15px;
 		}
 	}
 
