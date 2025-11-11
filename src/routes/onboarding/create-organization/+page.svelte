@@ -4,6 +4,7 @@
 	import type { ActionData, PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 
 	export let form: ActionData;
@@ -176,6 +177,8 @@
 		</form>
 	{/if}
 </div>
+
+<Footer />
 
 <style>
 	.container {

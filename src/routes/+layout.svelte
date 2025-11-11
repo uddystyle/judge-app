@@ -21,6 +21,16 @@
 	// アプリ内の全コンポーネントで利用できるように共有する
 	setContext('supabase', supabase);
 
+	// ページ遷移時に自動的にページトップにスクロール
+	$: if ($navigating) {
+		// 遷移開始時は何もしない（ローディングバーを表示）
+	} else {
+		// 遷移完了時にページトップにスクロール
+		if (typeof window !== 'undefined') {
+			window.scrollTo(0, 0);
+		}
+	}
+
 	// サーバーからのセッション情報と、クライアントの認証状態を同期させる
 	onMount(() => {
 		const {
