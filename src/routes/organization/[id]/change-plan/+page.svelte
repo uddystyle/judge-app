@@ -20,7 +20,7 @@
 			maxMembers: 10,
 			maxJudges: 15,
 			monthlyPrice: 8800,
-			yearlyPrice: 88000,
+			yearlyPrice: 70000,
 			features: ['組織メンバー10名まで', '検定員15名まで', 'セッション無制限', '検定・大会・研修モード']
 		},
 		standard: {
@@ -28,7 +28,7 @@
 			maxMembers: 30,
 			maxJudges: 50,
 			monthlyPrice: 24800,
-			yearlyPrice: 248000,
+			yearlyPrice: 180000,
 			features: ['組織メンバー30名まで', '検定員50名まで', 'セッション無制限', '検定・大会・研修モード']
 		},
 		premium: {
@@ -36,7 +36,7 @@
 			maxMembers: 100,
 			maxJudges: 100,
 			monthlyPrice: 49800,
-			yearlyPrice: 498000,
+			yearlyPrice: 300000,
 			features: ['組織メンバー100名まで', '検定員100名まで', 'セッション無制限', '検定・大会・研修モード']
 		}
 	};

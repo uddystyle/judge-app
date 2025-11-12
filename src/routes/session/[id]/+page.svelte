@@ -263,6 +263,38 @@
 									console.log('[一般検定員/polling] ========== 初回ポーリング ==========');
 									console.log('[一般検定員/polling] 初回 - 状態を記録');
 									const isJoining = $page.url.searchParams.get('join') === 'true';
+
+									// 初回ポーリング時に既にセッションが終了している場合は即座に遷移
+									if (currentStatus === 'ended') {
+										console.log('[一般検定員/polling] ⚠️ 初回ポーリングで既にセッション終了を検知！');
+										console.log('[一般検定員/polling] ✅✅✅ 終了画面に即座に遷移します！');
+										if (!isPageActive) {
+											console.log('[一般検定員/polling] ⚠️ ページが非アクティブのため、遷移をスキップ');
+											return;
+										}
+										// リソースをクリーンアップ
+										console.log('[一般検定員/polling] リアルタイム接続とポーリングを停止します');
+										if (realtimeChannel) {
+											supabase.removeChannel(realtimeChannel);
+											realtimeChannel = null;
+										}
+										if (pollingInterval) {
+											clearInterval(pollingInterval);
+											pollingInterval = null;
+										}
+										isSessionEnded = true;
+										try {
+											const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
+											const targetUrl = `/session/${sessionId}?ended=true${guestParam}`;
+											console.log('[一般検定員/polling] 遷移先URL:', targetUrl);
+											await goto(targetUrl);
+											console.log('[一般検定員/polling] goto完了');
+										} catch (error) {
+											console.error('[一般検定員/polling] ❌ goto失敗:', error);
+										}
+										return;
+									}
+
 									previousStatus = currentStatus;
 									// セッション再参加直後の場合、既存のactive_prompt_idを無視してnullとして扱う
 									// これにより、その後の新しい採点指示を確実に検知できる
@@ -275,8 +307,7 @@
 										currentIsActive
 									});
 
-									// 初回は状態を記録するだけで、終了画面への遷移は行わない
-									// これにより、セッションが既に終了していても待機画面で監視を続けられる
+									// 初回は状態を記録するだけで、終了画面への遷移は行わない（ただし既に終了している場合は上で遷移済み）
 									console.log('[一般検定員/polling] 初回なので状態記録のみ。遷移はしない。');
 									return;
 								}

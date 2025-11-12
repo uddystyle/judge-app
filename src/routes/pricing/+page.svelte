@@ -36,7 +36,7 @@
 			name: 'Basic',
 			subtitle: '小規模クラブ向け',
 			monthlyPrice: 8800,
-			yearlyPrice: 88000,
+			yearlyPrice: 70000,
 			maxMembers: '組織メンバー: 10名まで',
 			features: [
 				'組織メンバー: 10名まで',
@@ -54,7 +54,7 @@
 			name: 'Standard',
 			subtitle: '中規模組織向け',
 			monthlyPrice: 24800,
-			yearlyPrice: 248000,
+			yearlyPrice: 180000,
 			maxMembers: '組織メンバー: 30名まで',
 			features: [
 				'組織メンバー: 30名まで',
@@ -73,7 +73,7 @@
 			name: 'Premium',
 			subtitle: '大規模組織向け',
 			monthlyPrice: 49800,
-			yearlyPrice: 498000,
+			yearlyPrice: 300000,
 			maxMembers: '組織メンバー: 100名まで',
 			features: [
 				'組織メンバー: 100名まで',
