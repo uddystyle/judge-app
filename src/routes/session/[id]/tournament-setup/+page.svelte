@@ -20,7 +20,6 @@
 	<div class="setup-cards">
 		<!-- 種目設定カード -->
 		<div class="setup-card">
-			<div class="card-icon">📋</div>
 			<div class="card-content">
 				<h3>種目設定</h3>
 				<p class="card-description">種目を追加してください</p>
@@ -33,7 +32,6 @@
 
 		<!-- 採点方式カード -->
 		<div class="setup-card">
-			<div class="card-icon">🎯</div>
 			<div class="card-content">
 				<h3>採点方式</h3>
 				<p class="card-description">3審3採 または 5審3採</p>
@@ -52,7 +50,6 @@
 
 		<!-- 参加者登録カード（オプション） -->
 		<div class="setup-card optional">
-			<div class="card-icon">👥</div>
 			<div class="card-content">
 				<h3>参加者情報 <span class="optional-badge">オプション</span></h3>
 				<p class="card-description">エクスポート時に選手名・チーム名を含めたい場合に登録</p>
@@ -110,10 +107,6 @@
 	.setup-card.optional {
 		border-style: dashed;
 		background: #f8f9fa;
-	}
-	.card-icon {
-		font-size: 32px;
-		margin-bottom: 12px;
 	}
 	.card-content h3 {
 		font-size: 18px;
