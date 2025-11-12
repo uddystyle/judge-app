@@ -29,7 +29,9 @@
 			return;
 		}
 
-		const url = `/api/score-status/${sessionId}/${bib}?discipline=${encodeURIComponent(data.customEvent.discipline)}&level=${encodeURIComponent(data.customEvent.level)}&event=${encodeURIComponent(data.customEvent.event_name)}`;
+		const guestIdentifier = $page.url.searchParams.get('guest');
+		const guestParam = guestIdentifier ? `&guest=${encodeURIComponent(guestIdentifier)}` : '';
+		const url = `/api/score-status/${sessionId}/${bib}?discipline=${encodeURIComponent(data.customEvent.discipline)}&level=${encodeURIComponent(data.customEvent.level)}&event=${encodeURIComponent(data.customEvent.event_name)}${guestParam}`;
 
 		const response = await fetch(url);
 

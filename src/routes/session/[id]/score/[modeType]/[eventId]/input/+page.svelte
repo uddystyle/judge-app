@@ -22,6 +22,8 @@
 	$: minScore = data.eventInfo.min_score || 0;
 	$: maxScore = data.eventInfo.max_score || 100;
 	$: precision = data.eventInfo.score_precision || 1;
+	$: guestIdentifier = data.guestIdentifier;
+	$: formAction = guestIdentifier ? `?/submitScore&guest=${guestIdentifier}` : '?/submitScore';
 
 	let currentScore = '';
 	let loading = false;
@@ -72,10 +74,11 @@
 	// フォーム送信後の処理
 	$: if (form?.success && form?.score !== undefined && form?.bibNumber) {
 		// 複数検定員モードがONの場合はstatus画面へ、OFFの場合はcomplete画面へ
+		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
 		if (data.isMultiJudge) {
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}`);
+			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}${guestParam}`);
 		} else {
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}`);
+			goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}${guestParam}`);
 		}
 	}
 
@@ -84,11 +87,12 @@
 		// ストアをクリア
 		currentBib.set(null);
 		// ゼッケン入力画面に戻る
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}`);
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
 	}
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	{#if form?.error}
@@ -103,7 +107,7 @@
 		on:confirm={handleConfirm}
 	/>
 
-	<form id="scoreForm" method="POST" action="?/submitScore" use:enhance style="display: none;">
+	<form id="scoreForm" method="POST" action={formAction} use:enhance style="display: none;">
 		<input type="hidden" name="score" value={currentScore} />
 		<input type="hidden" name="participantId" value={participantId} />
 		<input type="hidden" name="bibNumber" value={bibNumber} />

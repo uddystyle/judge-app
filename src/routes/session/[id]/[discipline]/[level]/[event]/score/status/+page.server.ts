@@ -1,17 +1,37 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const sessionId = params.id;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const sessionId = params.id;
 
 	// セッションの詳細情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -26,7 +46,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	return {
 		user,
-		sessionDetails
+		sessionDetails,
+		guestIdentifier,
+		guestParticipant
 	};
 };
 
@@ -46,6 +68,8 @@ export const actions: Actions = {
 		const bib = formData.get('bib') as string;
 		const judgeName = formData.get('judgeName') as string;
 
+		console.log('[requestCorrection] 修正要求を受信:', { bib, judgeName, sessionId: id });
+
 		if (!bib || !judgeName) {
 			return fail(400, { error: 'パラメータが不足しています。' });
 		}
@@ -62,21 +86,44 @@ export const actions: Actions = {
 		}
 
 		// 該当する検定員の得点を削除
-		const { error: deleteError } = await supabase
+		console.log('[requestCorrection] 得点を削除中...', {
+			session_id: id,
+			bib,
+			discipline,
+			level,
+			event_name: event,
+			judge_name: judgeName
+		});
+
+		const { data: deletedData, error: deleteError, count } = await supabase
 			.from('results')
-			.delete()
+			.delete({ count: 'exact' })
 			.eq('session_id', id)
 			.eq('bib', bib)
 			.eq('discipline', discipline)
 			.eq('level', level)
 			.eq('event_name', event)
-			.eq('judge_name', judgeName);
+			.eq('judge_name', judgeName)
+			.select();
 
 		if (deleteError) {
-			console.error('Error deleting score:', deleteError);
+			console.error('[requestCorrection] ❌ 削除失敗:', deleteError);
 			return fail(500, { error: '得点の削除に失敗しました。' });
 		}
 
+		console.log('[requestCorrection] 削除結果:', {
+			judgeName,
+			deletedCount: count,
+			deletedRows: deletedData?.length || 0,
+			deletedData
+		});
+
+		if (!count || count === 0) {
+			console.error('[requestCorrection] ⚠️ 削除された行が0件です。RLSポリシーの問題の可能性があります。');
+			return fail(500, { error: '得点の削除に失敗しました（削除された行が0件）。' });
+		}
+
+		console.log('[requestCorrection] ✅ 削除成功:', { judgeName, deletedCount: count });
 		return { success: true, message: `${judgeName}に修正を要求しました。` };
 	},
 

@@ -12,6 +12,7 @@
 
 	// URLのパラメータ（[id]や[discipline]）を取得
 	$: ({ id, discipline } = $page.params);
+	$: guestIdentifier = $page.url.searchParams.get('guest');
 
 	onMount(() => {
 		// 種別を設定、級以降をクリア
@@ -24,11 +25,12 @@
 	// 級ボタンがクリックされたときに実行される関数
 	function selectLevel(level: string) {
 		// 次のページ（種目選択）へ移動
-		goto(`/session/${id}/${discipline}/${level}`);
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+		goto(`/session/${id}/${discipline}/${level}${guestParam}`);
 	}
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	<div class="instruction">級を選択してください</div>
@@ -42,7 +44,10 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto(`/session/${id}`)}>種別選択に戻る</NavButton>
+		<NavButton on:click={() => {
+			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+			goto(`/session/${id}${guestParam}`);
+		}}>種別選択に戻る</NavButton>
 	</div>
 </div>
 

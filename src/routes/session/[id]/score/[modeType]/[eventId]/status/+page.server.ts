@@ -1,17 +1,37 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const { id: sessionId, modeType, eventId } = params;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const { id: sessionId, modeType, eventId } = params;
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -24,7 +44,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(404, '検定が見つかりません。');
 	}
 
-	const isChief = user.id === sessionDetails.chief_judge_id;
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
 
 	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
@@ -80,7 +100,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		isChief,
 		isMultiJudge,
 		isTrainingMode,
-		totalJudges
+		totalJudges,
+		guestParticipant,
+		guestIdentifier
 	};
 };
 

@@ -7,7 +7,23 @@ export const GET: RequestHandler = async ({ params, url, locals: { supabase } })
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', params.sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw error(401, 'Unauthorized');
+		}
+	} else if (userError || !user) {
 		throw error(401, 'Unauthorized');
 	}
 

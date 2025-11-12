@@ -1,17 +1,37 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const { id: sessionId, modeType, eventId } = params;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const { id: sessionId, modeType, eventId } = params;
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -24,7 +44,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(404, '検定が見つかりません。');
 	}
 
-	const isChief = user.id === sessionDetails.chief_judge_id;
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 
 	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
 	let isMultiJudge = false;
@@ -36,12 +56,13 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			.maybeSingle();
 		isMultiJudge = trainingSession?.is_multi_judge || false;
 	} else if (modeType === 'tournament') {
-		// 大会モードは常に複数検定員モードON
+		// 大会モードは常に複数検定員モードON（ただしゲストユーザーは採点可能）
 		isMultiJudge = true;
 	}
 
 	// 複数検定員モードONの場合、主任検定員のみアクセス可能
-	if (isMultiJudge && !isChief) {
+	// ただし、ゲストユーザーは例外として採点可能
+	if (isMultiJudge && !isChief && !guestParticipant) {
 		throw redirect(303, `/session/${sessionId}`);
 	}
 
@@ -101,7 +122,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		isTournamentMode,
 		isChief,
 		isMultiJudge,
-		excludeExtremes: sessionDetails.exclude_extremes || false
+		excludeExtremes: sessionDetails.exclude_extremes || false,
+		guestParticipant,
+		guestIdentifier,
+		user
 	};
 };
 
@@ -124,14 +148,19 @@ export const actions: Actions = {
 		}
 
 		const { id: sessionId, modeType, eventId } = params;
+		const sessionIdInt = parseInt(sessionId);
 
 		// 同じゼッケン番号の参加者が既に存在するか確認
-		const { data: existingParticipant } = await supabase
+		const { data: existingParticipant, error: checkError } = await supabase
 			.from('participants')
 			.select('id')
-			.eq('session_id', sessionId)
+			.eq('session_id', sessionIdInt)
 			.eq('bib_number', bibNumber)
 			.maybeSingle();
+
+		if (checkError) {
+			console.error('[submitBib] Error checking existing participant:', checkError);
+		}
 
 		let participantId: string;
 
@@ -139,10 +168,16 @@ export const actions: Actions = {
 			participantId = existingParticipant.id;
 		} else {
 			// 参加者レコードを新規作成
+			console.log('[submitBib] Creating new participant:', {
+				session_id: sessionIdInt,
+				bib_number: bibNumber,
+				athlete_name: `選手${bibNumber}`
+			});
+
 			const { data: newParticipant, error: createError } = await supabase
 				.from('participants')
 				.insert({
-					session_id: sessionId,
+					session_id: sessionIdInt,
 					bib_number: bibNumber,
 					athlete_name: `選手${bibNumber}`
 				})
@@ -150,8 +185,14 @@ export const actions: Actions = {
 				.single();
 
 			if (createError) {
-				console.error('Error creating participant:', createError);
-				return fail(500, { error: '参加者レコードの作成に失敗しました。' });
+				console.error('[submitBib] Error creating participant:', createError);
+				console.error('[submitBib] Error details:', {
+					code: createError.code,
+					message: createError.message,
+					details: createError.details,
+					hint: createError.hint
+				});
+				return fail(500, { error: `参加者レコードの作成に失敗しました。${createError.message || ''}` });
 			}
 
 			if (!newParticipant) {
@@ -197,10 +238,18 @@ export const actions: Actions = {
 				// scoring_prompts に採点指示を作成
 				// event_id と mode を保存するために、discipline または level カラムを活用
 				// discipline に mode (tournament/training) を、level に eventId を文字列として保存
+				console.log('[submitBib] Creating scoring prompt:', {
+					session_id: sessionIdInt,
+					discipline: modeType,
+					level: eventId.toString(),
+					event_name,
+					bib_number: bibNumber
+				});
+
 				const { data: prompt, error: promptError } = await supabase
 					.from('scoring_prompts')
 					.insert({
-						session_id: sessionId,
+						session_id: sessionIdInt,
 						discipline: modeType, // 'tournament' または 'training'
 						level: eventId.toString(), // event_id を文字列として保存
 						event_name: event_name,
@@ -209,17 +258,33 @@ export const actions: Actions = {
 					.select()
 					.single();
 
+				if (promptError) {
+					console.error('[submitBib] Error creating scoring prompt:', promptError);
+					console.error('[submitBib] Prompt error details:', {
+						code: promptError.code,
+						message: promptError.message,
+						details: promptError.details
+					});
+				}
+
 				if (!promptError && prompt) {
+					console.log('[submitBib] Scoring prompt created:', prompt.id);
 					// セッションをアクティブにし、active_prompt_idを設定
 					// status を 'active' に戻すことで、ended 状態から再開可能
-					await supabase
+					const { error: updateError } = await supabase
 						.from('sessions')
 						.update({
 							active_prompt_id: prompt.id,
 							is_active: true,
 							status: 'active'  // セッションを再開（ended → active）
 						})
-						.eq('id', sessionId);
+						.eq('id', sessionIdInt);
+
+					if (updateError) {
+						console.error('[submitBib] Error updating session:', updateError);
+					} else {
+						console.log('[submitBib] Session updated with active_prompt_id:', prompt.id);
+					}
 				}
 			}
 		}

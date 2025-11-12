@@ -18,6 +18,7 @@
 	$: isTournamentMode = data.isTournamentMode;
 	$: isMultiJudge = data.isMultiJudge;
 	$: isChief = data.isChief;
+	$: guestIdentifier = $page.url.searchParams.get('guest');
 
 	onMount(() => {
 		currentBib = '';
@@ -62,7 +63,8 @@
 
 		// 複数検定員モードOFFの場合は、直接採点画面に遷移
 		if (!isMultiJudge) {
-			goto(`/session/${id}/${discipline}/${level}/${event}/score?bib=${bib}`);
+			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
+			goto(`/session/${id}/${discipline}/${level}/${event}/score?bib=${bib}${guestParam}`);
 			return;
 		}
 
@@ -73,7 +75,7 @@
 	}
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	<div class="instruction">ゼッケン番号を入力してください</div>
@@ -89,7 +91,10 @@
 	{/if}
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto(isTournamentMode ? `/session/${id}/tournament-events` : `/session/${id}/${discipline}/${level}`)}>
+		<NavButton on:click={() => {
+			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+			goto(isTournamentMode ? `/session/${id}/tournament-events${guestParam}` : `/session/${id}/${discipline}/${level}${guestParam}`);
+		}}>
 			種目選択に戻る
 		</NavButton>
 	</div>

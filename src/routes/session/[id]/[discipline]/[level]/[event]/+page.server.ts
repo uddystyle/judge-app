@@ -7,11 +7,31 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const { id: sessionId } = params;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const { id: sessionId } = params;
 
 	// セッション情報を取得して、主任検定員かどうかを確認
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -32,15 +52,21 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 
 	// 一般検定員の場合、複数検定員モードONならセッション詳細ページ（待機画面）にリダイレクト
 	// 複数検定員モードOFFの場合は、一般検定員もアクセス可能
-	const isChief = user.id === sessionDetails.chief_judge_id;
-	if (!isChief && sessionDetails.is_multi_judge) {
+	// ゲストユーザーは主任検定員ではない
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
+	if (!isChief && sessionDetails.is_multi_judge && !guestIdentifier) {
 		throw redirect(303, `/session/${sessionId}`);
+	} else if (!isChief && sessionDetails.is_multi_judge && guestIdentifier) {
+		throw redirect(303, `/session/${sessionId}?guest=${guestIdentifier}`);
 	}
 
 	return {
 		isTournamentMode: sessionDetails.is_tournament_mode,
 		isMultiJudge: sessionDetails.is_multi_judge,
-		isChief
+		isChief,
+		user,
+		guestIdentifier,
+		guestParticipant
 	};
 };
 
@@ -78,7 +104,8 @@ export const actions: Actions = {
 
 		if (promptError) {
 			console.error('Failed to create scoring prompt:', promptError);
-			return fail(500, { error: '採点指示の作成に失敗しました。' });
+			console.error('Prompt error details:', JSON.stringify(promptError, null, 2));
+			return fail(500, { error: `採点指示の作成に失敗しました: ${promptError.message || JSON.stringify(promptError)}` });
 		}
 
 		// 2. sessionsテーブルのactive_prompt_idを、今作成した指示のIDに更新

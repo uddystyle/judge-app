@@ -7,11 +7,31 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const { id: sessionId, discipline } = params;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const { id: sessionId, discipline } = params;
 
 	// 得点入力ページへのアクセスの場合は権限チェックをスキップ
 	// （一般検定員も得点入力ページにはアクセスできる必要がある）
@@ -32,9 +52,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 
 	// 一般検定員の場合、複数検定員モードONならセッション詳細ページ（待機画面）にリダイレクト
 	// 複数検定員モードOFFの場合は、一般検定員もアクセス可能
-	const isChief = user.id === sessionDetails.chief_judge_id;
-	if (!isChief && sessionDetails.is_multi_judge) {
+	// ゲストユーザーは主任検定員ではない
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
+	if (!isChief && sessionDetails.is_multi_judge && !guestIdentifier) {
 		throw redirect(303, `/session/${sessionId}`);
+	} else if (!isChief && sessionDetails.is_multi_judge && guestIdentifier) {
+		throw redirect(303, `/session/${sessionId}?guest=${guestIdentifier}`);
 	}
 
 	const { data: events, error: eventsError } = await supabase
@@ -60,6 +83,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	});
 
 	return {
-		levels
+		levels,
+		user,
+		guestIdentifier,
+		guestParticipant
 	};
 };

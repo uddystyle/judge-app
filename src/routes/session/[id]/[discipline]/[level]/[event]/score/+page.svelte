@@ -17,6 +17,7 @@
 	let realtimeChannel: any;
 	let pollingInterval: any;
 	let previousIsActive: boolean | null = null;
+	let isPageMounted = true; // ページがマウントされているかを追跡
 
 	let currentScore = '';
 	let loading = false;
@@ -57,7 +58,9 @@
 		}
 
 		// ゼッケン入力画面に遷移
-		goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}`);
+		const guestIdentifier = $page.url.searchParams.get('guest');
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+		goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}${guestParam}`);
 	}
 
 	async function handleConfirm() {
@@ -85,12 +88,30 @@
 			data: { user }
 		} = await supabase.auth.getUser();
 
+		// ゲストユーザーの場合、名前を取得
+		let judgeName = profile?.full_name || user?.email;
+		const guestIdentifier = $page.url.searchParams.get('guest');
+
+		if (!user && guestIdentifier) {
+			const { data: guestData } = await supabase
+				.from('session_participants')
+				.select('guest_name')
+				.eq('session_id', id)
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestData?.guest_name) {
+				judgeName = guestData.guest_name;
+			}
+		}
+
 		const { error } = await supabase.from('results').upsert(
 			{
 				session_id: id,
 				bib: bib,
 				score: score,
-				judge_name: profile?.full_name || user?.email,
+				judge_name: judgeName,
 				discipline: discipline,
 				level: level,
 				event_name: event
@@ -105,11 +126,12 @@
 		if (error) {
 			alert('得点の送信に失敗しました: ' + error.message);
 		} else {
+			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
 			if (sessionDetails?.is_multi_judge) {
-				goto(`/session/${id}/${discipline}/${level}/${event}/score/status?bib=${bib}`);
+				goto(`/session/${id}/${discipline}/${level}/${event}/score/status?bib=${bib}${guestParam}`);
 			} else {
 				goto(
-					`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${score}`
+					`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${score}${guestParam}`
 				);
 			}
 		}
@@ -172,6 +194,25 @@
 
 					// ポーリング追加
 					pollingInterval = setInterval(async () => {
+						// ページがアンマウントされていたらポーリングを停止
+						if (!isPageMounted) {
+							console.log('[採点画面/polling] ⚠️ ページがアンマウントされているため、ポーリングを停止します');
+							if (pollingInterval) {
+								clearInterval(pollingInterval);
+							}
+							return;
+						}
+
+						// 現在のパスをチェック - 採点画面から離れていたらポーリングを停止
+						const currentPath = window.location.pathname;
+						if (!currentPath.endsWith('/score')) {
+							console.log('[採点画面/polling] ⚠️ 採点画面から離れているため、ポーリングを停止します。パス:', currentPath);
+							if (pollingInterval) {
+								clearInterval(pollingInterval);
+							}
+							return;
+						}
+
 						const { data: sessionData, error } = await supabase
 							.from('sessions')
 							.select('is_active, active_prompt_id')
@@ -190,14 +231,24 @@
 							// セッション終了を先にチェック
 							if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
 								console.log('[採点画面] ✅ 検定終了を検知（ポーリング）');
-								goto(`/session/${sessionId}?ended=true`);
+								// 再度パスチェック - 採点画面にいる場合のみ遷移
+								if (window.location.pathname.endsWith('/score')) {
+									goto(`/session/${sessionId}?ended=true`);
+								} else {
+									console.log('[採点画面] ⚠️ 既に採点画面から離れているため、遷移をスキップ');
+								}
 								return;
 							}
 
 							// active_prompt_idがnullになった場合（一般検定員のみ、かつセッションがアクティブな場合）
 							if (!isChief && isActive === true && currentPromptId === null) {
 								console.log('[採点画面/一般検定員] ✅ ゼッケン修正を検知（ポーリング）');
-								goto(`/session/${sessionId}`);
+								// 再度パスチェック - 採点画面にいる場合のみ遷移
+								if (window.location.pathname.endsWith('/score')) {
+									goto(`/session/${sessionId}`);
+								} else {
+									console.log('[採点画面] ⚠️ 既に採点画面から離れているため、遷移をスキップ');
+								}
 								return;
 							}
 
@@ -209,6 +260,8 @@
 	});
 
 	onDestroy(() => {
+		console.log('[採点画面] onDestroy実行 - ページを離れます');
+		isPageMounted = false; // ページを離れたことを記録
 		if (realtimeChannel) {
 			supabase.removeChannel(realtimeChannel);
 		}
@@ -216,9 +269,12 @@
 			clearInterval(pollingInterval);
 		}
 	});
+
+	// ゲスト情報を取得（URLから）
+	$: guestIdentifier = $page.url.searchParams.get('guest');
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	<div class="instruction">得点を入力してください</div>

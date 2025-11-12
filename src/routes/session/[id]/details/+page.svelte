@@ -6,6 +6,8 @@
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import * as XLSX from 'xlsx';
+	import QRCode from 'qrcode';
+	import { onMount } from 'svelte';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -61,6 +63,77 @@
 
 	// 研修モード設定
 	let isMultiJudgeTraining = data.trainingSession?.is_multi_judge || false;
+
+	// QRコード関連
+	let showQRModal = false;
+	let qrCodeDataUrl = '';
+	let inviteUrl = '';
+	let copiedInviteUrl = false;
+
+	onMount(() => {
+		// 招待URLを生成
+		const baseUrl = window.location.origin;
+		inviteUrl = `${baseUrl}/session/invite/${data.sessionDetails.invite_token}`;
+	});
+
+	async function generateQRCode() {
+		try {
+			qrCodeDataUrl = await QRCode.toDataURL(inviteUrl, {
+				width: 300,
+				margin: 2,
+				color: {
+					dark: '#171717',
+					light: '#FFFFFF'
+				}
+			});
+			showQRModal = true;
+		} catch (err) {
+			console.error('QRコード生成エラー:', err);
+			alert('QRコードの生成に失敗しました。');
+		}
+	}
+
+	function closeQRModal() {
+		showQRModal = false;
+	}
+
+	async function downloadQR() {
+		try {
+			// 高解像度QRコードを生成
+			const qrCodeDataUrlHD = await QRCode.toDataURL(inviteUrl, {
+				width: 512,
+				margin: 2
+			});
+
+			// ダウンロード
+			const link = document.createElement('a');
+			link.href = qrCodeDataUrlHD;
+			link.download = `${data.sessionDetails.name}_招待QRコード.png`;
+			link.click();
+		} catch (err) {
+			console.error('QRコードダウンロードエラー:', err);
+			alert('QRコードのダウンロードに失敗しました。');
+		}
+	}
+
+	function printQR() {
+		window.print();
+	}
+
+	function copyInviteUrl() {
+		navigator.clipboard.writeText(inviteUrl).then(
+			() => {
+				copiedInviteUrl = true;
+				setTimeout(() => {
+					copiedInviteUrl = false;
+				}, 2000);
+			},
+			(err) => {
+				console.error('コピーに失敗しました:', err);
+				alert('URLのコピーに失敗しました。');
+			}
+		);
+	}
 
 	async function handleExport() {
 		exportLoading = true;
@@ -190,6 +263,33 @@
 		{/if}
 	</div>
 
+	<!-- ゲスト招待セクション -->
+	<div class="settings-section">
+		<h3 class="settings-title">ゲストを招待</h3>
+		<div class="invite-container">
+			<div class="invite-item">
+				<label class="invite-label">招待URL</label>
+				<div class="url-display">
+					<input type="text" value={inviteUrl} readonly class="url-input" />
+					<button class="copy-btn" on:click={copyInviteUrl}>
+						{copiedInviteUrl ? '✓ コピー済' : 'コピー'}
+					</button>
+				</div>
+			</div>
+
+			<div class="invite-item">
+				<label class="invite-label">QRコード</label>
+				<button class="qr-btn" on:click={generateQRCode}>
+					QRコードを表示
+				</button>
+			</div>
+
+			<p class="invite-note">※ アカウント登録不要で参加できます</p>
+		</div>
+	</div>
+
+	<hr class="divider" />
+
 	<div class="settings-section">
 		<h3 class="settings-title">参加中の検定員</h3>
 		<div class="participants-container">
@@ -197,13 +297,18 @@
 				{#each data.participants as p}
 					<div class="participant-item">
 						<span class="participant-name">
-							{p.profiles?.full_name || 'プロフィール未設定'}
-							{#if data.sessionDetails.chief_judge_id === p.user_id}
-								<span class="chief-badge">(主任)</span>
+							{#if p.is_guest}
+								{p.guest_name}
+								<span class="guest-badge">(ゲスト)</span>
+							{:else}
+								{p.profiles?.full_name || 'プロフィール未設定'}
+								{#if data.sessionDetails.chief_judge_id === p.user_id}
+									<span class="chief-badge">(主任)</span>
+								{/if}
 							{/if}
 						</span>
 
-						{#if data.currentUserId === data.sessionDetails.created_by}
+						{#if !p.is_guest && data.currentUserId === data.sessionDetails.created_by}
 							<form method="POST" action="?/appointChief" use:enhance>
 								<input type="hidden" name="userId" value={p.user_id} />
 								<button
@@ -216,6 +321,26 @@
 									{:else}
 										主任に任命
 									{/if}
+								</button>
+							</form>
+						{/if}
+
+						{#if p.is_guest && data.currentUserId === data.sessionDetails.created_by}
+							<form
+								method="POST"
+								action="?/removeGuest"
+								use:enhance={() => {
+									return async ({ update }) => {
+										const confirmed = confirm(`ゲストユーザー「${p.guest_name}」をセッションから削除しますか？\n\nこの操作は取り消せません。`);
+										if (confirmed) {
+											await update();
+										}
+									};
+								}}
+							>
+								<input type="hidden" name="guestIdentifier" value={p.guest_identifier} />
+								<button type="submit" class="appoint-btn danger">
+									削除
 								</button>
 							</form>
 						{/if}
@@ -658,6 +783,37 @@
 	{/if}
 </div>
 
+<!-- QRコードモーダル -->
+{#if showQRModal}
+	<div class="modal-overlay" on:click={closeQRModal} role="button" tabindex="0" on:keydown={(e) => e.key === 'Escape' && closeQRModal()}>
+		<div class="modal-content" on:click|stopPropagation role="button" tabindex="0" on:keydown={() => {}}>
+			<div class="modal-header">
+				<h2 class="modal-title">{data.sessionDetails.name}</h2>
+				<button class="modal-close" on:click={closeQRModal} aria-label="閉じる">×</button>
+			</div>
+
+			<div class="modal-body">
+				{#if qrCodeDataUrl}
+					<img src={qrCodeDataUrl} alt="招待QRコード" class="qr-image" />
+				{/if}
+				<p class="qr-instruction">カメラで読み取ってください</p>
+			</div>
+
+			<div class="modal-actions">
+				<button class="modal-btn secondary" on:click={downloadQR}>
+					ダウンロード
+				</button>
+				<button class="modal-btn secondary" on:click={printQR}>
+					印刷
+				</button>
+				<button class="modal-btn primary" on:click={closeQRModal}>
+					閉じる
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <Footer />
 
 <style>
@@ -717,6 +873,12 @@
 		font-size: 12px;
 		font-weight: 600;
 		color: #2d7a3e;
+		margin-left: 8px;
+	}
+	.guest-badge {
+		font-size: 12px;
+		font-weight: 600;
+		color: #666;
 		margin-left: 8px;
 	}
 	.nav-buttons {
@@ -1335,6 +1497,240 @@
 		margin-bottom: 16px;
 		font-size: 14px;
 		font-weight: 600;
+	}
+
+	/* ゲスト招待セクション */
+	.invite-container {
+		background: white;
+		border-radius: 12px;
+		padding: 16px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.invite-item {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.invite-label {
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	.url-display {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+
+	.url-input {
+		flex: 1;
+		padding: 12px;
+		border: 2px solid var(--border-medium);
+		border-radius: 8px;
+		font-size: 14px;
+		color: var(--text-secondary);
+		background: var(--bg-secondary);
+		font-family: monospace;
+	}
+
+	.url-input:focus {
+		outline: none;
+		border-color: var(--accent-primary);
+	}
+
+	.copy-btn {
+		padding: 12px 16px;
+		background: var(--accent-primary);
+		color: white;
+		border: none;
+		border-radius: 8px;
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.copy-btn:hover {
+		opacity: 0.9;
+		transform: translateY(-1px);
+	}
+
+	.copy-btn:active {
+		transform: translateY(0);
+	}
+
+	.qr-btn {
+		width: 100%;
+		padding: 14px;
+		background: white;
+		color: var(--text-primary);
+		border: 2px solid var(--border-medium);
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.qr-btn:hover {
+		background: var(--bg-secondary);
+		border-color: var(--accent-primary);
+	}
+
+	.qr-btn:active {
+		transform: scale(0.98);
+	}
+
+	.invite-note {
+		font-size: 13px;
+		color: var(--text-secondary);
+		text-align: center;
+		margin: 0;
+		padding-top: 8px;
+		border-top: 1px solid var(--border-light);
+	}
+
+	/* QRコードモーダル */
+	.modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 1000;
+		padding: 20px;
+	}
+
+	.modal-content {
+		background: white;
+		border-radius: 16px;
+		max-width: 400px;
+		width: 100%;
+		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+		animation: modalFadeIn 0.2s ease-out;
+	}
+
+	@keyframes modalFadeIn {
+		from {
+			opacity: 0;
+			transform: scale(0.95);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 20px 24px;
+		border-bottom: 2px solid var(--border-light);
+	}
+
+	.modal-title {
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0;
+	}
+
+	.modal-close {
+		width: 32px;
+		height: 32px;
+		border: none;
+		background: var(--bg-secondary);
+		border-radius: 50%;
+		font-size: 24px;
+		line-height: 1;
+		cursor: pointer;
+		color: var(--text-secondary);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+	}
+
+	.modal-close:hover {
+		background: var(--border-medium);
+		color: var(--text-primary);
+	}
+
+	.modal-body {
+		padding: 32px 24px;
+		text-align: center;
+	}
+
+	.qr-image {
+		width: 300px;
+		height: 300px;
+		border: 2px solid var(--border-medium);
+		border-radius: 12px;
+		padding: 16px;
+		background: white;
+		margin: 0 auto 20px;
+	}
+
+	.qr-instruction {
+		font-size: 15px;
+		color: var(--text-secondary);
+		margin: 0;
+	}
+
+	.modal-actions {
+		padding: 16px 24px 24px;
+		display: flex;
+		gap: 12px;
+		justify-content: center;
+	}
+
+	.modal-btn {
+		padding: 14px 24px;
+		border: none;
+		border-radius: 10px;
+		font-size: 15px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+		font-family: inherit;
+	}
+
+	.modal-btn.primary {
+		background: var(--accent-primary);
+		color: white;
+		flex: 1;
+	}
+
+	.modal-btn.primary:hover {
+		opacity: 0.9;
+		transform: translateY(-1px);
+	}
+
+	.modal-btn.secondary {
+		background: var(--bg-secondary);
+		color: var(--text-primary);
+		border: 2px solid var(--border-medium);
+	}
+
+	.modal-btn.secondary:hover {
+		background: var(--border-light);
+	}
+
+	.modal-btn:active {
+		transform: translateY(0);
 	}
 
 	@media (max-width: 768px) {

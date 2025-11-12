@@ -30,10 +30,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	}
 
 	// --- 参加者の一覧をプロフィール情報と共に取得 ---
-	// まず参加者のuser_idを取得
-	const { data: participantIds, error: participantsError } = await supabase
+	// 通常ユーザーとゲストユーザーを両方取得
+	const { data: participantData, error: participantsError } = await supabase
 		.from('session_participants')
-		.select('user_id')
+		.select('user_id, is_guest, guest_name, guest_identifier')
 		.eq('session_id', sessionId);
 
 	if (participantsError) {
@@ -42,7 +42,19 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	// 各参加者のプロフィール情報を個別に取得してマージ
 	const participants = await Promise.all(
-		(participantIds || []).map(async (p) => {
+		(participantData || []).map(async (p) => {
+			// ゲストユーザーの場合
+			if (p.is_guest) {
+				return {
+					user_id: null,
+					is_guest: true,
+					guest_name: p.guest_name,
+					guest_identifier: p.guest_identifier,
+					profiles: null
+				};
+			}
+
+			// 通常ユーザーの場合
 			const { data: profile } = await supabase
 				.from('profiles')
 				.select('full_name')
@@ -51,6 +63,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 			return {
 				user_id: p.user_id,
+				is_guest: false,
+				guest_name: null,
 				profiles: profile
 			};
 		})
@@ -184,6 +198,18 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const userIdToAppoint = formData.get('userId') as string;
 
+		// 任命しようとしているユーザーがゲストでないか確認
+		const { data: participantData } = await supabase
+			.from('session_participants')
+			.select('is_guest')
+			.eq('session_id', params.id)
+			.eq('user_id', userIdToAppoint)
+			.single();
+
+		if (participantData?.is_guest) {
+			return fail(400, { error: 'ゲストユーザーは主任検定員に任命できません。' });
+		}
+
 		// データベースを更新
 		const { data: currentSession, error: fetchError } = await supabase
 			.from('sessions')
@@ -207,6 +233,53 @@ export const actions: Actions = {
 		}
 
 		return { success: true };
+	},
+
+	removeGuest: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const guestIdentifier = formData.get('guestIdentifier') as string;
+
+		if (!guestIdentifier) {
+			return fail(400, { error: 'ゲスト識別子が指定されていません。' });
+		}
+
+		// セッションの作成者であることを確認
+		const { data: session, error: sessionError } = await supabase
+			.from('sessions')
+			.select('created_by')
+			.eq('id', params.id)
+			.single();
+
+		if (sessionError || !session) {
+			return fail(404, { error: 'セッションが見つかりません。' });
+		}
+
+		if (session.created_by !== user.id) {
+			return fail(403, { error: 'ゲストユーザーを削除する権限がありません。' });
+		}
+
+		// ゲストユーザーをsession_participantsから削除
+		const { error: deleteError } = await supabase
+			.from('session_participants')
+			.delete()
+			.eq('session_id', params.id)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true);
+
+		if (deleteError) {
+			return fail(500, { error: 'ゲストユーザーの削除に失敗しました。' });
+		}
+
+		return { success: true, message: 'ゲストユーザーを削除しました。' };
 	},
 
 	updateTrainingSettings: async ({ request, params, locals: { supabase } }) => {

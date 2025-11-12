@@ -38,7 +38,14 @@
 		} = supabase.auth.onAuthStateChange((event, _session) => {
 			// 認証状態が変更されたら、サーバー側のデータを再読み込みして同期する
 			// onAuthStateChangeから返されるsessionパラメータは使用しない（セキュリティ警告を回避）
-			if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT') {
+
+			// ゲストユーザーの場合はSIGNED_OUTイベントを無視
+			const isGuestUser = typeof window !== 'undefined' &&
+				new URL(window.location.href).searchParams.has('guest');
+
+			if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+				invalidateAll();
+			} else if (event === 'SIGNED_OUT' && !isGuestUser) {
 				invalidateAll();
 			}
 		});

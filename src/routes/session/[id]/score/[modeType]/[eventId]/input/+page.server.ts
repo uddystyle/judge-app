@@ -7,16 +7,37 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
-		throw redirect(303, '/login');
-	}
-
 	const { id: sessionId, modeType, eventId } = params;
 	const bibNumber = url.searchParams.get('bib');
 	const participantId = url.searchParams.get('participantId');
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
+		throw redirect(303, '/login');
+	}
 
 	if (!bibNumber || !participantId) {
-		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}`);
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
 	}
 
 	// セッション情報を取得
@@ -84,7 +105,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		isMultiJudge = sessionDetails.is_multi_judge || false;
 	}
 
-	const isChief = user.id === sessionDetails.chief_judge_id;
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 
 	return {
 		sessionDetails,
@@ -94,18 +115,52 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		participantId,
 		isTrainingMode,
 		isMultiJudge,
-		isChief
+		isChief,
+		guestParticipant,
+		guestIdentifier,
+		user
 	};
 };
 
 export const actions: Actions = {
-	submitScore: async ({ request, params, locals: { supabase } }) => {
+	submitScore: async ({ request, params, url, locals: { supabase } }) => {
+		console.log('[submitScore] Action called');
+		console.log('[submitScore] URL:', url.toString());
+		console.log('[submitScore] URL search params:', Object.fromEntries(url.searchParams));
+
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		console.log('[submitScore] User check:', { hasUser: !!user, userError });
+
+		const guestIdentifier = url.searchParams.get('guest');
+		console.log('[submitScore] Guest identifier from URL:', guestIdentifier);
+
+		// ゲストユーザーの認証
+		let guestParticipant = null;
+		if (!user && guestIdentifier) {
+			console.log('[submitScore] Checking guest authentication...');
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			console.log('[submitScore] Guest data:', guestData);
+			console.log('[submitScore] Guest error:', guestError);
+
+			if (guestError || !guestData) {
+				console.error('[submitScore] Guest authentication failed');
+				return fail(401, { error: 'ゲスト認証が必要です。' });
+			}
+
+			guestParticipant = guestData;
+			console.log('[submitScore] Guest authenticated:', guestParticipant.guest_name);
+		} else if (userError || !user) {
+			console.error('[submitScore] No user and no valid guest identifier');
 			return fail(401, { error: '認証が必要です。' });
 		}
 
@@ -115,6 +170,18 @@ export const actions: Actions = {
 		const bibNumber = parseInt(formData.get('bibNumber') as string);
 
 		const { id: sessionId, modeType, eventId } = params;
+		const sessionIdInt = parseInt(sessionId);
+
+		console.log('[submitScore] Score submission:', {
+			score,
+			bibNumber,
+			sessionId: sessionIdInt,
+			modeType,
+			eventId,
+			hasUser: !!user,
+			hasGuest: !!guestParticipant,
+			guestName: guestParticipant?.guest_name
+		});
 
 		// 得点をデータベースに保存
 		if (modeType === 'training') {
@@ -170,18 +237,40 @@ export const actions: Actions = {
 				return fail(404, { error: '種目が見つかりません。' });
 			}
 
-			const { data: profile } = await supabase
-				.from('profiles')
-				.select('full_name')
-				.eq('id', user.id)
-				.single();
+			// 検定員名を取得（通常ユーザーまたはゲストユーザー）
+			let judgeName: string;
+			if (guestParticipant) {
+				judgeName = guestParticipant.guest_name;
+				console.log('[submitScore] Using guest name:', judgeName);
+			} else if (user) {
+				const { data: profile } = await supabase
+					.from('profiles')
+					.select('full_name')
+					.eq('id', user.id)
+					.single();
+				judgeName = profile?.full_name || user.email || 'Unknown';
+				console.log('[submitScore] Using user name:', judgeName);
+			} else {
+				console.error('[submitScore] Neither user nor guest found!');
+				return fail(401, { error: '認証が必要です。' });
+			}
+
+			console.log('[submitScore] Inserting result:', {
+				session_id: sessionIdInt,
+				bib: bibNumber,
+				score,
+				judge_name: judgeName,
+				discipline: eventData.discipline,
+				level: eventData.level,
+				event_name: eventData.event_name
+			});
 
 			const { error: insertError } = await supabase.from('results').upsert(
 				{
-					session_id: sessionId,
+					session_id: sessionIdInt,
 					bib: bibNumber,
 					score: score,
-					judge_name: profile?.full_name || user.email,
+					judge_name: judgeName,
 					discipline: eventData.discipline,
 					level: eventData.level,
 					event_name: eventData.event_name
@@ -192,9 +281,17 @@ export const actions: Actions = {
 			);
 
 			if (insertError) {
-				console.error('Error saving tournament score:', insertError);
-				return fail(500, { error: '採点の保存に失敗しました。' });
+				console.error('[submitScore] Error saving tournament score:', insertError);
+				console.error('[submitScore] Error details:', {
+					code: insertError.code,
+					message: insertError.message,
+					details: insertError.details,
+					hint: insertError.hint
+				});
+				return fail(500, { error: `採点の保存に失敗しました。${insertError.message || ''}` });
 			}
+
+			console.log('[submitScore] Score saved successfully');
 		}
 
 		return {

@@ -11,6 +11,8 @@
 	export let pageProfile: any = null; // ページから渡されるプロフィール情報
 	export let hasOrganization = false; // 組織に属しているかどうか
 	export let pageOrganizations: any[] = []; // ページから渡される組織情報
+	export let isGuest = false; // ゲストユーザーかどうか
+	export let guestName: string | null = null; // ゲストユーザーの名前
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
@@ -112,49 +114,63 @@
 			{/if}
 		</div>
 		<div class="account-menu-wrapper">
-			<button class="account-button" on:click={toggleMenu}>
-				{#if hasOrganization}
-					<span class="org-badge">
+			{#if isGuest}
+				<!-- ゲストユーザー: メニューなしの表示のみ -->
+				<div class="guest-label">
+					<span class="guest-badge">
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 							<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
-							<path d="M5 8L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+							<text x="8" y="11" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">G</text>
 						</svg>
 					</span>
-				{/if}
-				{profile?.full_name || 'アカウント'}
-				<span class="menu-icon" class:rotated={showMenu}>
-					<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-					</svg>
-				</span>
-			</button>
-
-			{#if showMenu}
-				<div class="dropdown-menu">
-					<button class="menu-item" on:click={() => handleMenuClick('/account')}>
-						<span class="menu-label">プロフィール</span>
-					</button>
-					<button class="menu-item" on:click={() => handleMenuClick('/pricing')}>
-						<span class="menu-label">プランの確認</span>
-					</button>
-					{#if pageOrganizations.length > 0}
-						<button class="menu-item" on:click={() => handleMenuClick(`/organization/${pageOrganizations[0].id || pageOrganizations[0].organization_id}/change-plan`)}>
-							<span class="menu-label">プランの変更</span>
-						</button>
-					{/if}
-					<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
-						<span class="menu-label">組織</span>
-					</button>
-					<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
-						<span class="menu-label">セッション</span>
-					</button>
-					{#if user}
-						<div class="menu-divider"></div>
-						<button class="menu-item logout" on:click={handleLogout}>
-							<span class="menu-label">ログアウト</span>
-						</button>
-					{/if}
+					{guestName || 'ゲスト'}
 				</div>
+			{:else}
+				<!-- 通常ユーザー: メニュー付き -->
+				<button class="account-button" on:click={toggleMenu}>
+					{#if hasOrganization}
+						<span class="org-badge">
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
+								<path d="M5 8L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</span>
+					{/if}
+					{profile?.full_name || 'アカウント'}
+					<span class="menu-icon" class:rotated={showMenu}>
+						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+					</span>
+				</button>
+
+				{#if showMenu}
+					<div class="dropdown-menu">
+						<button class="menu-item" on:click={() => handleMenuClick('/account')}>
+							<span class="menu-label">プロフィール</span>
+						</button>
+						<button class="menu-item" on:click={() => handleMenuClick('/pricing')}>
+							<span class="menu-label">プランの確認</span>
+						</button>
+						{#if pageOrganizations.length > 0}
+							<button class="menu-item" on:click={() => handleMenuClick(`/organization/${pageOrganizations[0].id || pageOrganizations[0].organization_id}/change-plan`)}>
+								<span class="menu-label">プランの変更</span>
+							</button>
+						{/if}
+						<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
+							<span class="menu-label">組織</span>
+						</button>
+						<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
+							<span class="menu-label">セッション</span>
+						</button>
+						{#if user}
+							<div class="menu-divider"></div>
+							<button class="menu-item logout" on:click={handleLogout}>
+								<span class="menu-label">ログアウト</span>
+							</button>
+						{/if}
+					</div>
+				{/if}
 			{/if}
 		</div>
 	</div>
@@ -237,6 +253,30 @@
 	.account-button:active {
 		transform: scale(0.98);
 		background: var(--gray-200);
+	}
+	.guest-label {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		background: var(--bg-secondary);
+		color: var(--text-secondary);
+		border: 1.5px solid var(--border-medium);
+		border-radius: 8px;
+		padding: 10px 16px;
+		font-size: 14px;
+		font-weight: 500;
+		white-space: nowrap;
+		min-height: 44px;
+		letter-spacing: -0.01em;
+	}
+	.guest-badge {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--accent-primary);
+	}
+	.guest-badge svg {
+		display: block;
 	}
 	.menu-icon {
 		display: flex;

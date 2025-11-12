@@ -10,17 +10,41 @@
 	export let form: ActionData;
 
 	$: sessionId = $page.params.id;
+	$: judgeCount = data.judgeCount;
 
 	// 現在の採点方式を取得
 	let selectedMethod: '3judges' | '5judges' = data.sessionDetails.exclude_extremes
 		? '5judges'
 		: '3judges';
+
+	// 検定員数に基づいて選択可能かどうかを判定（厳密に一致する必要がある）
+	$: canSelect3Judges = judgeCount === 3;
+	$: canSelect5Judges = judgeCount === 5;
+
+	// 検定員数が変わったときに、現在の選択が無効な場合は自動調整
+	$: {
+		if (selectedMethod === '3judges' && !canSelect3Judges) {
+			// 3審3採が選択されているが無効な場合
+			if (canSelect5Judges) {
+				selectedMethod = '5judges';
+			}
+		} else if (selectedMethod === '5judges' && !canSelect5Judges) {
+			// 5審3採が選択されているが無効な場合
+			if (canSelect3Judges) {
+				selectedMethod = '3judges';
+			}
+		}
+	}
 </script>
 
 <Header />
 
 <div class="container">
 	<div class="instruction">採点方式設定</div>
+
+	<div class="judge-count-info">
+		<p>現在の検定員数: <strong>{judgeCount}人</strong></p>
+	</div>
 
 	{#if form?.success}
 		<div class="success-message">{form.message}</div>
@@ -33,8 +57,8 @@
 	<form method="POST" action="?/updateScoringMethod" use:enhance>
 		<div class="scoring-options">
 			<!-- 3審3採 -->
-			<label class="scoring-option" class:selected={selectedMethod === '3judges'}>
-				<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} />
+			<label class="scoring-option" class:selected={selectedMethod === '3judges'} class:disabled={!canSelect3Judges}>
+				<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} disabled={!canSelect3Judges} />
 				<div class="option-content">
 					<div class="option-header">
 						<span class="option-title">3審3採</span>
@@ -42,12 +66,15 @@
 					</div>
 					<div class="option-description">3人の検定員の点数の合計</div>
 					<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
+					{#if !canSelect3Judges}
+						<div class="requirement-warning">検定員数がちょうど3人の時のみ選択できます（現在: {judgeCount}人）</div>
+					{/if}
 				</div>
 			</label>
 
 			<!-- 5審3採 -->
-			<label class="scoring-option" class:selected={selectedMethod === '5judges'}>
-				<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} />
+			<label class="scoring-option" class:selected={selectedMethod === '5judges'} class:disabled={!canSelect5Judges}>
+				<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} disabled={!canSelect5Judges} />
 				<div class="option-content">
 					<div class="option-header">
 						<span class="option-title">5審3採</span>
@@ -60,6 +87,9 @@
 						例: 8.5 + 8.0 + <span class="excluded">9.0</span> + 8.5 +
 						<span class="excluded">7.5</span> = 25.0点
 					</div>
+					{#if !canSelect5Judges}
+						<div class="requirement-warning">検定員数がちょうど5人の時のみ選択できます（現在: {judgeCount}人）</div>
+					{/if}
 				</div>
 			</label>
 		</div>
@@ -85,9 +115,25 @@
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
-		margin-bottom: 28px;
+		margin-bottom: 20px;
 		text-align: center;
 		color: var(--primary-text);
+	}
+	.judge-count-info {
+		background: #f8f9fa;
+		border-radius: 8px;
+		padding: 12px 16px;
+		margin-bottom: 24px;
+		text-align: center;
+	}
+	.judge-count-info p {
+		margin: 0;
+		font-size: 15px;
+		color: var(--secondary-text);
+	}
+	.judge-count-info strong {
+		color: var(--primary-text);
+		font-size: 18px;
 	}
 	.success-message {
 		background: #e6f6e8;
@@ -132,8 +178,17 @@
 		border-color: var(--ios-blue);
 		background: #f0f8ff;
 	}
-	.scoring-option:hover {
+	.scoring-option:hover:not(.disabled) {
 		border-color: var(--ios-blue);
+	}
+	.scoring-option.disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		background: #f8f9fa;
+		pointer-events: none;
+	}
+	.scoring-option.disabled:hover {
+		border-color: var(--separator-gray);
 	}
 	.option-content {
 		display: flex;
@@ -179,6 +234,15 @@
 	.excluded {
 		text-decoration: line-through;
 		color: #dc3545;
+	}
+	.requirement-warning {
+		font-size: 14px;
+		color: #dc3545;
+		background: #ffe6e6;
+		padding: 8px 12px;
+		border-radius: 6px;
+		margin-top: 8px;
+		font-weight: 500;
 	}
 
 	.form-actions {

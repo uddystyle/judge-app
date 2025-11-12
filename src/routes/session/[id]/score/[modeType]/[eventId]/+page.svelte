@@ -20,6 +20,7 @@
 	$: excludeExtremes = data.excludeExtremes;
 	$: isTrainingMode = data.isTrainingMode;
 	$: isMultiJudge = data.isMultiJudge;
+	$: guestIdentifier = data.guestIdentifier;
 
 	let bibNumber = '';
 
@@ -50,13 +51,18 @@
 	// フォーム送信後の処理
 	$: if (form?.success && form?.bibNumber && form?.participantId) {
 		// ゼッケン番号入力後は常に得点入力画面へ
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}`);
+		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}${guestParam}`);
 	}
 
 	// モードに応じた戻り先
-	$: backUrl = isTrainingMode
-		? `/session/${sessionId}/training-events`
-		: `/session/${sessionId}/tournament-events`;
+	$: {
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+		backUrl = isTrainingMode
+			? `/session/${sessionId}/training-events${guestParam}`
+			: `/session/${sessionId}/tournament-events${guestParam}`;
+	}
+	let backUrl: string;
 
 	// ヘッダー情報を設定
 	onMount(() => {

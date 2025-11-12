@@ -32,12 +32,21 @@
 			return;
 		}
 
-		const url = `/api/score-status/${id}/${bib}?discipline=${encodeURIComponent(discipline || '')}&level=${encodeURIComponent(level || '')}&event=${encodeURIComponent(event || '')}`;
+		const guestIdentifier = $page.url.searchParams.get('guest');
+		const guestParam = guestIdentifier ? `&guest=${encodeURIComponent(guestIdentifier)}` : '';
+		const url = `/api/score-status/${id}/${bib}?discipline=${encodeURIComponent(discipline || '')}&level=${encodeURIComponent(level || '')}&event=${encodeURIComponent(event || '')}${guestParam}`;
 
+		console.log('[fetchStatus] ポーリング中...', { url, isGuest: !!guestIdentifier });
 		const response = await fetch(url);
 
 		if (response.ok) {
-			scoreStatus = await response.json();
+			const newData = await response.json();
+			const judgeNames = newData.scores?.map((s: any) => s.judge_name) || [];
+			console.log('[fetchStatus] 新しいデータを取得:', {
+				scoreCount: newData.scores?.length,
+				judgeNames: judgeNames.join(', ')
+			});
+			scoreStatus = newData;
 		} else {
 			const errorText = await response.text();
 			console.error('❌ API Error:', response.status, errorText);
@@ -53,30 +62,70 @@
 		bib = $page.url.searchParams.get('bib');
 
 		fetchStatus();
-		pollingInterval = setInterval(fetchStatus, 3000); // Poll every 3 seconds
+		pollingInterval = setInterval(fetchStatus, 1000); // Poll every 1 second (for debugging)
 
 		// dataから直接判定（リアクティブステートメントに依存しない）
 		const currentIsChief = data.user?.id === data.sessionDetails?.chief_judge_id;
 
 		// セッション終了検知用のポーリング（主任・一般共通）
+		let previousActivePromptId: string | null = null;
 		sessionPollingInterval = setInterval(async () => {
 			const { data: sessionData, error } = await supabase
 				.from('sessions')
-				.select('is_active')
+				.select('is_active, active_prompt_id')
 				.eq('id', id)
 				.single();
 
 			if (!error && sessionData) {
 				const isActive = sessionData.is_active;
+				const activePromptId = sessionData.active_prompt_id;
+
 				if (previousIsActive === null) {
 					previousIsActive = isActive;
+					previousActivePromptId = activePromptId;
 					return;
 				}
+
+				// セッション終了を検知
 				if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
 					console.log('[status] ✅ 検定終了を検知（ポーリング）');
-					goto(`/session/${id}?ended=true`);
+					const guestIdentifier = $page.url.searchParams.get('guest');
+					const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+					goto(`/session/${id}?ended=true${guestParam}`);
+					return;
 				}
+
+				// 新しい採点指示を検知（一般検定員のみ）
+				if (!currentIsChief && activePromptId && activePromptId !== previousActivePromptId) {
+					console.log('[status] ✅ 新しい採点指示を検知（ポーリング）:', activePromptId);
+					const { data: promptData, error: promptError } = await supabase
+						.from('scoring_prompts')
+						.select('*')
+						.eq('id', activePromptId)
+						.single();
+
+					if (!promptError && promptData) {
+						console.log('[status] 採点指示データ取得成功:', promptData);
+						// ゼッケン番号をストアに保存
+						currentBib.set(promptData.bib_number);
+						const guestIdentifier = $page.url.searchParams.get('guest');
+						const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+						goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`);
+						return;
+					}
+				}
+
+				// 採点が確定された場合（一般検定員のみ）
+				if (!currentIsChief && activePromptId === null && previousActivePromptId !== null) {
+					console.log('[status] ✅ 採点確定を検知（ポーリング）。待機画面に遷移します。');
+					const guestIdentifier = $page.url.searchParams.get('guest');
+					const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+					goto(`/session/${id}${guestParam}`);
+					return;
+				}
+
 				previousIsActive = isActive;
+				previousActivePromptId = activePromptId;
 			}
 		}, 3000);
 
@@ -96,19 +145,48 @@
 					async (payload) => {
 						console.log('[一般検定員/status] セッション更新を検知:', payload);
 						const isActive = payload.new.is_active;
-						console.log('[一般検定員/status] is_active:', isActive);
+						const activePromptId = payload.new.active_prompt_id;
+						const oldActivePromptId = payload.old.active_prompt_id;
+						console.log('[一般検定員/status] is_active:', isActive, 'active_prompt_id:', activePromptId, 'old:', oldActivePromptId);
 
 						// セッションが終了した場合、待機画面（終了画面）に遷移
 						if (isActive === false) {
 							console.log('[一般検定員/status] 検定終了を検知。終了画面に遷移します。');
-							goto(`/session/${id}?ended=true`);
+							const guestIdentifier = $page.url.searchParams.get('guest');
+							const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+							goto(`/session/${id}?ended=true${guestParam}`);
 							return;
 						}
 
+						// 新しいactive_prompt_idが設定された場合（次の滑走者）
+						if (activePromptId && activePromptId !== oldActivePromptId) {
+							console.log('[一般検定員/status] 新しい採点指示を検知:', activePromptId);
+							// 新しい指示の詳細を取得
+							const { data: promptData, error: promptError } = await supabase
+								.from('scoring_prompts')
+								.select('*')
+								.eq('id', activePromptId)
+								.single();
+
+							if (!promptError && promptData) {
+								console.log('[一般検定員/status] 採点指示データ取得成功:', promptData);
+								// ゼッケン番号をストアに保存
+								currentBib.set(promptData.bib_number);
+								// 得点入力画面に遷移
+								const guestIdentifier = $page.url.searchParams.get('guest');
+								const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+								goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`);
+								return;
+							}
+						}
+
 						// active_prompt_idがnullになったら、採点が確定された
-						if (payload.new.active_prompt_id === null && payload.old.active_prompt_id !== null) {
+						if (activePromptId === null && oldActivePromptId !== null) {
 							// 一般検定員は待機画面に戻る（次のゼッケン番号を待つ）
-							goto(`/session/${id}`);
+							console.log('[一般検定員/status] 採点確定を検知。待機画面に遷移します。');
+							const guestIdentifier = $page.url.searchParams.get('guest');
+							const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
+							goto(`/session/${id}${guestParam}`);
 						}
 					}
 				)
@@ -140,27 +218,40 @@
 	let canSubmit = false;
 	$: canSubmit = (scoreStatus?.scores?.length || 0) >= (scoreStatus?.requiredJudges || 1);
 
-	// 一般検定員：自分の得点が削除されたら採点画面に遷移
+	// 一般検定員・ゲストユーザー：自分の得点が削除されたら採点画面に遷移
 	let previousMyScore: any = null;
 	let hasInitialized = false;
 	$: {
 		if (!isChief && scoreStatus?.scores) {
 			const profile = get(userProfile);
-			const currentUserName = profile?.full_name || data.user?.email || '';
+			// ゲストユーザーの場合は guest_name、通常ユーザーの場合は full_name または email
+			const currentUserName = data.guestParticipant?.guest_name || profile?.full_name || data.user?.email || '';
 			const myScore = scoreStatus.scores.find((s: any) => s.judge_name === currentUserName);
+
+			console.log('[一般検定員/status] リアクティブチェック:', {
+				currentUserName,
+				guestName: data.guestParticipant?.guest_name,
+				profileName: profile?.full_name,
+				email: data.user?.email,
+				myScore,
+				previousMyScore,
+				hasInitialized,
+				allScores: scoreStatus.scores.map((s: any) => s.judge_name)
+			});
 
 			// 初回ロード時は自分の得点を記録
 			if (!hasInitialized) {
 				previousMyScore = myScore;
 				hasInitialized = true;
-				console.log('[一般検定員/status] 初期化:', { currentUserName, myScore });
+				console.log('[一般検定員/status] 初期化:', { currentUserName, myScore, isGuest: !!data.guestIdentifier });
 			}
 			// 前回は自分の得点があったが、今回はない場合 = 修正要求された
 			else if (previousMyScore && !myScore) {
-				console.log('[一般検定員/status] 修正要求を検知。採点画面に遷移します。');
+				console.log('[一般検定員/status] ✅ 修正要求を検知。採点画面に遷移します。');
 				// ゼッケン番号をストアに保存してから遷移
 				currentBib.set(parseInt(bib || '0'));
-				goto(`/session/${id}/${discipline}/${level}/${event}/score`);
+				const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
+				goto(`/session/${id}/${discipline}/${level}/${event}/score${guestParam}`);
 			}
 
 			previousMyScore = myScore;
@@ -168,7 +259,7 @@
 	}
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <!-- <div class="container">
 	<div class="instruction">採点内容の確認</div>

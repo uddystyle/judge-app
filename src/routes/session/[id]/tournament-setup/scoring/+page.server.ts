@@ -38,8 +38,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw redirect(303, `/session/${sessionId}`);
 	}
 
+	// セッション参加者数（検定員数）を取得
+	const { data: participants, error: participantsError } = await supabase
+		.from('session_participants')
+		.select('id')
+		.eq('session_id', sessionId);
+
+	const judgeCount = participants?.length || 0;
+
 	return {
-		sessionDetails
+		sessionDetails,
+		judgeCount
 	};
 };
 
@@ -61,6 +70,23 @@ export const actions: Actions = {
 		// バリデーション
 		if (!scoringMethod || (scoringMethod !== '3judges' && scoringMethod !== '5judges')) {
 			return fail(400, { error: '採点方式を選択してください。' });
+		}
+
+		// セッション参加者数（検定員数）を取得
+		const { data: participants } = await supabase
+			.from('session_participants')
+			.select('id')
+			.eq('session_id', params.id);
+
+		const judgeCount = participants?.length || 0;
+
+		// 検定員数のバリデーション（厳密に一致する必要がある）
+		if (scoringMethod === '3judges' && judgeCount !== 3) {
+			return fail(400, { error: '3審3採を選択するには、検定員数がちょうど3人である必要があります。' });
+		}
+
+		if (scoringMethod === '5judges' && judgeCount !== 5) {
+			return fail(400, { error: '5審3採を選択するには、検定員数がちょうど5人である必要があります。' });
 		}
 
 		const excludeExtremes = scoringMethod === '5judges';
