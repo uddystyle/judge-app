@@ -14,6 +14,9 @@
 	// フリープランかどうか
 	$: isFree = data.organization.plan_type === 'free';
 
+	// 現在のサブスクリプションの請求間隔（実際に決済した間隔）
+	const currentBillingInterval = (data.subscription?.billing_interval as 'month' | 'year') || 'month';
+
 	const plans = {
 		basic: {
 			name: 'Basic',
@@ -66,6 +69,16 @@
 		return isPlanUpgrade(newPlan) ? 'upgrade' : 'downgrade';
 	}
 
+	// 割引率を計算
+	function getDiscountRate(plan: 'basic' | 'standard' | 'premium'): number {
+		const monthly = plans[plan].monthlyPrice;
+		const yearly = plans[plan].yearlyPrice;
+		return Math.round((1 - yearly / (monthly * 12)) * 100);
+	}
+
+	// 現在と同じプラン＆同じ請求間隔かどうか
+	$: isSamePlanAndInterval = selectedPlan === data.organization.plan_type && billingInterval === currentBillingInterval;
+
 	$: changeType = selectedPlan ? getChangeType(selectedPlan) : null;
 </script>
 
@@ -84,9 +97,11 @@
 				<div class="plan-badge current">フリー</div>
 				<p class="current-price">無料</p>
 			{:else}
-				<div class="plan-badge current">{plans[data.organization.plan_type as keyof typeof plans].name}</div>
+				{@const currentPlan = plans[data.organization.plan_type as keyof typeof plans]}
+				{@const currentPrice = currentBillingInterval === 'month' ? currentPlan.monthlyPrice : currentPlan.yearlyPrice}
+				<div class="plan-badge current">{currentPlan.name}</div>
 				<p class="current-price">
-					{formatPrice(getPrice(data.organization.plan_type as 'basic' | 'standard' | 'premium'))} / {billingInterval === 'month' ? '月' : '年'}
+					{formatPrice(currentPrice)} / {currentBillingInterval === 'month' ? '月' : '年'}
 				</p>
 			{/if}
 		</div>
@@ -105,6 +120,42 @@
 				<h3 class="info-title">有料プランへアップグレード</h3>
 				<p class="info-text">
 					有料プランを選択すると、Stripe決済ページへ移動します。決済完了後、すぐに新しいプランの機能が利用可能になります。
+				</p>
+			</div>
+		</div>
+	{:else if selectedPlan !== data.organization.plan_type && billingInterval !== currentBillingInterval}
+		<div class="info-box upgrade">
+			<div class="info-content">
+				<h3 class="info-title">プランと請求間隔の変更</h3>
+				<p class="info-text">
+					{#if changeType === 'upgrade'}
+						プランのアップグレード
+						{#if billingInterval === 'year'}
+							と月額から年額への変更です。既にお支払いいただいた金額との差額を日割り計算し、即座に請求いたします。年額プランでは最大50%の割引が適用されます。
+						{:else}
+							と年額から月額への変更です。プランのアップグレードは即座に適用され、差額を請求いたします。請求間隔の変更は次回の請求日から適用されます。
+						{/if}
+					{:else}
+						プランのダウングレード
+						{#if billingInterval === 'year'}
+							と月額から年額への変更です。プランのダウングレードは次回の請求日から適用されます。現在の請求期間終了後、新しいプランの年額での請求が開始されます。
+						{:else}
+							と年額から月額への変更です。変更は次回の請求日から適用されます。現在の請求期間終了まで、引き続き現在のプランをご利用いただけます。
+						{/if}
+					{/if}
+				</p>
+			</div>
+		</div>
+	{:else if selectedPlan === data.organization.plan_type && billingInterval !== currentBillingInterval}
+		<div class="info-box upgrade">
+			<div class="info-content">
+				<h3 class="info-title">請求間隔の変更</h3>
+				<p class="info-text">
+					{#if billingInterval === 'year'}
+						月額から年額への変更です。既にお支払いいただいた金額との差額を日割り計算し、即座に請求いたします。年額プランでは最大50%の割引が適用されます。
+					{:else}
+						年額から月額への変更です。変更は次回の請求日から適用されます。現在の請求期間終了まで、引き続き年額プランをご利用いただけます。
+					{/if}
 				</p>
 			</div>
 		</div>
@@ -156,34 +207,39 @@
 				on:click={() => (billingInterval = 'year')}
 			>
 				年額
-				<span class="discount-badge">2ヶ月分お得</span>
+				<span class="discount-badge">最大50%オフ</span>
 			</button>
 		</div>
 
 		<div class="plans-container">
 			{#each Object.entries(plans) as [planKey, plan]}
 				{@const isCurrentPlan = planKey === data.organization.plan_type}
+				{@const isSamePlanAndBilling = isCurrentPlan && billingInterval === currentBillingInterval}
+				{@const displayPrice = billingInterval === 'month' ? plan.monthlyPrice : plan.yearlyPrice}
 				<div
 					class="plan-card"
 					class:selected={selectedPlan === planKey}
-					class:current={isCurrentPlan}
-					on:click={() => !isCurrentPlan && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
+					class:current={isSamePlanAndBilling}
+					on:click={() => !isSamePlanAndBilling && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
 					role="button"
 					tabindex="0"
-					on:keypress={(e) => e.key === 'Enter' && !isCurrentPlan && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
+					on:keypress={(e) => e.key === 'Enter' && !isSamePlanAndBilling && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
 				>
-					{#if isCurrentPlan}
+					{#if isSamePlanAndBilling}
 						<div class="plan-badge current">現在のプラン</div>
 					{/if}
 					<h3 class="plan-name">{plan.name}</h3>
-					<p class="plan-price">{formatPrice(getPrice(planKey as 'basic' | 'standard' | 'premium'))}</p>
+					<p class="plan-price">{formatPrice(displayPrice)}</p>
 					<p class="plan-interval">/ {billingInterval === 'month' ? '月' : '年'}</p>
+					{#if billingInterval === 'year'}
+						<p class="plan-discount">{getDiscountRate(planKey as 'basic' | 'standard' | 'premium')}%オフ</p>
+					{/if}
 					<ul class="plan-features">
 						{#each plan.features as feature}
 							<li>{feature}</li>
 						{/each}
 					</ul>
-					{#if !isCurrentPlan}
+					{#if !isSamePlanAndBilling}
 						<div class="select-indicator">
 							{selectedPlan === planKey ? '✓ 選択中' : '選択する'}
 						</div>
@@ -196,7 +252,7 @@
 			<button
 				type="submit"
 				class="submit-btn"
-				disabled={!selectedPlan || selectedPlan === data.organization.plan_type || loading}
+				disabled={!selectedPlan || isSamePlanAndInterval || loading}
 			>
 				{#if loading}
 					処理中...
@@ -427,6 +483,13 @@
 	.plan-interval {
 		font-size: 14px;
 		color: var(--text-secondary);
+		margin: 0 0 4px 0;
+	}
+
+	.plan-discount {
+		font-size: 14px;
+		font-weight: 600;
+		color: #2d7a3e;
 		margin: 0 0 16px 0;
 	}
 
