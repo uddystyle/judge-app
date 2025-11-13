@@ -59,19 +59,37 @@
 			console.log('[status] training_scores取得:', { trainingScores, scoresError });
 
 			if (trainingScores) {
-				// judge_idからprofilesテーブルを使って名前を取得
+				// judge_idまたはguest_identifierから名前を取得
 				const scoresWithNames = await Promise.all(
 					trainingScores.map(async (s: any) => {
-						const { data: profile } = await supabase
-							.from('profiles')
-							.select('full_name')
-							.eq('id', s.judge_id)
-							.single();
+						let judgeName = '不明';
+
+						if (s.guest_identifier) {
+							// ゲストユーザーの場合
+							const { data: guestData } = await supabase
+								.from('session_participants')
+								.select('guest_name')
+								.eq('guest_identifier', s.guest_identifier)
+								.single();
+
+							judgeName = guestData?.guest_name || 'ゲスト';
+						} else if (s.judge_id) {
+							// 認証ユーザーの場合
+							const { data: profile } = await supabase
+								.from('profiles')
+								.select('full_name')
+								.eq('id', s.judge_id)
+								.single();
+
+							judgeName = profile?.full_name || '不明';
+						}
 
 						return {
 							judge_id: s.judge_id,
-							judge_name: profile?.full_name || '不明',
-							score: s.score
+							guest_identifier: s.guest_identifier,
+							judge_name: judgeName,
+							score: s.score,
+							is_guest: !!s.guest_identifier
 						};
 					})
 				);
@@ -399,6 +417,8 @@
 							>
 								<input type="hidden" name="bib" value={bib} />
 								<input type="hidden" name="judgeName" value={s.judge_name} />
+								<input type="hidden" name="judgeId" value={s.judge_id || ''} />
+								<input type="hidden" name="guestIdentifier" value={s.guest_identifier || ''} />
 								<button type="submit" class="correction-btn">修正</button>
 							</form>
 						{/if}

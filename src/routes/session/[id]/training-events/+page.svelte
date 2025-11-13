@@ -7,10 +7,12 @@
 	export let data: PageData;
 
 	$: sessionId = $page.params.id;
+	$: guestIdentifier = data.guestIdentifier;
 
 	function selectEvent(eventId: string) {
-		// 統一された採点画面へ遷移
-		goto(`/session/${sessionId}/score/training/${eventId}`);
+		// 統一された採点画面へ遷移（ゲストパラメータを引き継ぐ）
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+		goto(`/session/${sessionId}/score/training/${eventId}${guestParam}`);
 	}
 </script>
 
@@ -36,7 +38,10 @@
 		<div class="empty-state">
 			<p>種目が登録されていません。</p>
 			<p>検定詳細ページから種目を追加してください。</p>
-			<NavButton on:click={() => goto(`/session/${sessionId}/details`)}>
+			<NavButton on:click={() => {
+				const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+				goto(`/session/${sessionId}/details${guestParam}`);
+			}}>
 				検定詳細へ
 			</NavButton>
 		</div>
@@ -60,7 +65,10 @@
 	{/if}
 
 	<div class="nav-buttons">
-		<NavButton variant="secondary" on:click={() => goto(`/session/${sessionId}`)}>
+		<NavButton variant="secondary" on:click={() => {
+			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+			goto(`/session/${sessionId}${guestParam}`);
+		}}>
 			戻る
 		</NavButton>
 	</div>
@@ -127,10 +135,13 @@
 	}
 
 	.events-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+		display: flex;
+		flex-direction: column;
 		gap: 1rem;
 		margin-bottom: 2rem;
+		max-width: 600px;
+		margin-left: auto;
+		margin-right: auto;
 	}
 
 	.event-card {
@@ -142,6 +153,9 @@
 		transition: all 0.2s;
 		text-align: left;
 		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 	}
 
 	.event-card:hover {
@@ -154,17 +168,15 @@
 		font-size: 1.1rem;
 		font-weight: 600;
 		color: #1a1a1a;
-		margin-bottom: 0.5rem;
+		flex: 1;
 	}
 
 	.arrow {
-		position: absolute;
-		top: 1.5rem;
-		right: 1.5rem;
 		font-size: 1.5rem;
 		color: #ff9800;
-		opacity: 0;
+		opacity: 0.5;
 		transition: opacity 0.2s;
+		margin-left: 1rem;
 	}
 
 	.event-card:hover .arrow {

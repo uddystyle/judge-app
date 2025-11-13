@@ -7,13 +7,33 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
-		throw redirect(303, '/login');
-	}
-
 	const { id: sessionId, modeType, eventId } = params;
 	const bib = url.searchParams.get('bib');
 	const score = url.searchParams.get('score');
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
+		throw redirect(303, '/login');
+	}
 
 	if (!bib) {
 		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}`);
@@ -30,7 +50,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw error(404, '検定が見つかりません。');
 	}
 
-	const isChief = user.id === sessionDetails.chief_judge_id;
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
 
 	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
@@ -87,17 +107,33 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				.eq('athlete_id', participantId);
 
 			if (trainingScores) {
-				// judge_idからprofilesテーブルを使って名前を取得
+				// judge_idまたはguest_identifierから名前を取得
 				const scoresWithNames = await Promise.all(
 					trainingScores.map(async (s: any) => {
-						const { data: profile } = await supabase
-							.from('profiles')
-							.select('full_name')
-							.eq('id', s.judge_id)
-							.single();
+						let judgeName = '不明';
+
+						if (s.guest_identifier) {
+							// ゲストユーザーの場合
+							const { data: guestData } = await supabase
+								.from('session_participants')
+								.select('guest_name')
+								.eq('guest_identifier', s.guest_identifier)
+								.single();
+
+							judgeName = guestData?.guest_name || 'ゲスト';
+						} else if (s.judge_id) {
+							// 認証ユーザーの場合
+							const { data: profile } = await supabase
+								.from('profiles')
+								.select('full_name')
+								.eq('id', s.judge_id)
+								.single();
+
+							judgeName = profile?.full_name || '不明';
+						}
 
 						return {
-							judge_name: profile?.full_name || '不明',
+							judge_name: judgeName,
 							score: s.score
 						};
 					})
@@ -153,18 +189,38 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		displayScore,
 		isChief,
 		isMultiJudge,
-		isTrainingMode
+		isTrainingMode,
+		user,
+		guestParticipant,
+		guestIdentifier
 	};
 };
 
 export const actions: Actions = {
-	endSession: async ({ params, locals: { supabase } }) => {
+	endSession: async ({ params, url, locals: { supabase } }) => {
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの認証
+		let guestParticipant = null;
+		if (!user && guestIdentifier) {
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return { success: false, error: 'ゲスト認証が必要です。' };
+			}
+
+			guestParticipant = guestData;
+		} else if (userError || !user) {
 			return { success: false, error: '認証が必要です。' };
 		}
 
@@ -182,7 +238,7 @@ export const actions: Actions = {
 			return { success: false, error: '検定が見つかりません。' };
 		}
 
-		const isChief = user.id === sessionDetails.chief_judge_id;
+		const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 		const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
 
 		// 研修モードの場合、training_sessionsからis_multi_judgeを取得
@@ -241,16 +297,34 @@ export const actions: Actions = {
 		console.log('[主任検定員] 更新後の確認:', { verifyData, verifyError });
 
 		// セッション詳細画面（終了画面）にリダイレクト
-		throw redirect(303, `/session/${sessionId}?ended=true`);
+		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+		throw redirect(303, `/session/${sessionId}?ended=true${guestParam}`);
 	},
 
-	changeEvent: async ({ params, locals: { supabase } }) => {
+	changeEvent: async ({ params, url, locals: { supabase } }) => {
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの認証
+		let guestParticipant = null;
+		if (!user && guestIdentifier) {
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return { success: false, error: 'ゲスト認証が必要です。' };
+			}
+
+			guestParticipant = guestData;
+		} else if (userError || !user) {
 			return { success: false, error: '認証が必要です。' };
 		}
 
@@ -268,10 +342,23 @@ export const actions: Actions = {
 			return { success: false, error: '検定が見つかりません。' };
 		}
 
-		const isChief = user.id === sessionDetails.chief_judge_id;
+		const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
+
+		// 研修モードの場合、training_sessionsからis_multi_judgeを取得
+		let isMultiJudge = false;
+		if (modeType === 'training') {
+			const { data: trainingSession } = await supabase
+				.from('training_sessions')
+				.select('is_multi_judge')
+				.eq('session_id', sessionId)
+				.maybeSingle();
+			isMultiJudge = trainingSession?.is_multi_judge || false;
+		} else {
+			isMultiJudge = sessionDetails.is_multi_judge || false;
+		}
 
 		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
-		if (!isChief && sessionDetails.is_multi_judge) {
+		if (!isChief && isMultiJudge) {
 			return { success: false, error: '種目を変更する権限がありません。' };
 		}
 
@@ -287,7 +374,8 @@ export const actions: Actions = {
 		}
 
 		// 種目選択画面に戻る
-		const eventListUrl = modeType === 'training' ? `/session/${sessionId}/training-events` : `/session/${sessionId}/tournament-events`;
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+		const eventListUrl = modeType === 'training' ? `/session/${sessionId}/training-events${guestParam}` : `/session/${sessionId}/tournament-events${guestParam}`;
 		throw redirect(303, eventListUrl);
 	}
 };

@@ -1,17 +1,37 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const sessionId = params.id;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const sessionId = params.id;
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -36,26 +56,41 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.eq('session_id', sessionId)
 		.maybeSingle();
 
-	// 主任検定員判定
-	const isChief = user.id === sessionDetails.chief_judge_id;
+	// 主任検定員判定（ゲストは主任検定員になれない）
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 
 	// 複数検定員モードの場合、主任検定員のみアクセス可能
-	if (trainingSession?.is_multi_judge && !isChief) {
-		throw error(403, '複数検定員モードでは主任検定員のみが種目を選択できます。');
+	if (trainingSession?.is_multi_judge) {
+		if (guestParticipant) {
+			// ゲストユーザーは複数検定員モードで種目選択できない
+			throw error(
+				403,
+				'複数検定員モードでは主任検定員が採点指示を出します。待機画面でお待ちください。'
+			);
+		} else if (!isChief) {
+			// 一般検定員も種目選択できない
+			throw error(403, '複数検定員モードでは主任検定員のみが種目を選択できます。');
+		}
 	}
 
 	// 参加者であることを確認（フリーモードの場合）
 	// ただし、主任検定員の場合は参加者チェックをスキップ
 	if (!trainingSession?.is_multi_judge && !isChief) {
-		const { data: participant } = await supabase
-			.from('session_participants')
-			.select('user_id')
-			.eq('session_id', sessionId)
-			.eq('user_id', user.id)
-			.maybeSingle();
+		if (guestParticipant) {
+			// ゲストユーザーは既に参加者として確認済み
+			// フリーモードでは種目選択可能
+		} else {
+			// 認証ユーザーの参加者チェック
+			const { data: participant } = await supabase
+				.from('session_participants')
+				.select('user_id')
+				.eq('session_id', sessionId)
+				.eq('user_id', user.id)
+				.maybeSingle();
 
-		if (!participant) {
-			throw error(403, 'このセッションの参加者ではありません。');
+			if (!participant) {
+				throw error(403, 'このセッションの参加者ではありません。');
+			}
 		}
 	}
 
@@ -75,6 +110,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		trainingSession,
 		events: events || [],
 		isChief,
-		isMultiJudge: trainingSession?.is_multi_judge || false
+		isMultiJudge: trainingSession?.is_multi_judge || false,
+		user,
+		guestParticipant,
+		guestIdentifier
 	};
 };

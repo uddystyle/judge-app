@@ -73,7 +73,7 @@
 	});
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	<div class="instruction">ゼッケン番号を入力してください</div>
@@ -103,7 +103,7 @@
 
 	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} />
 
-	<form id="bibForm" method="POST" action="?/submitBib" use:enhance style="display: none;">
+	<form id="bibForm" method="POST" action="?/submitBib{guestIdentifier ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;">
 		<input type="hidden" name="bibNumber" value={bibNumber} />
 	</form>
 

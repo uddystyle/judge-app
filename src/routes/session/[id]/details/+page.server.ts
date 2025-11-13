@@ -295,17 +295,63 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const isMultiJudge = formData.get('isMultiJudge') === 'true';
 
-		const { error: updateError } = await supabase
+		console.log('[updateTrainingSettings] ========== 研修設定更新 ==========');
+		console.log('[updateTrainingSettings] sessionId:', params.id);
+		console.log('[updateTrainingSettings] isMultiJudge:', isMultiJudge);
+		console.log('[updateTrainingSettings] user:', user.id);
+
+		// training_sessionsレコードが存在するか確認
+		const { data: existingSession } = await supabase
+			.from('training_sessions')
+			.select('session_id')
+			.eq('session_id', params.id)
+			.maybeSingle();
+
+		console.log('[updateTrainingSettings] 既存レコード:', existingSession);
+
+		if (!existingSession) {
+			// レコードが存在しない場合は新規作成
+			console.log('[updateTrainingSettings] レコードが存在しないため新規作成します');
+			const { data: insertResult, error: insertError } = await supabase
+				.from('training_sessions')
+				.insert({
+					session_id: params.id,
+					max_judges: 100,
+					show_individual_scores: true,
+					show_score_comparison: true,
+					show_deviation_analysis: false,
+					is_multi_judge: isMultiJudge
+				})
+				.select();
+
+			console.log('[updateTrainingSettings] 作成結果:', { insertResult, insertError });
+
+			if (insertError) {
+				console.error('[updateTrainingSettings] ❌ 作成失敗:', insertError);
+				return fail(500, { trainingSettingsError: '研修モード設定の作成に失敗しました。' });
+			}
+
+			console.log('[updateTrainingSettings] ✅ 作成成功');
+			return { trainingSettingsSuccess: '研修設定を作成しました。' };
+		}
+
+		// レコードが存在する場合は更新
+		const { data: updateResult, error: updateError } = await supabase
 			.from('training_sessions')
 			.update({
 				is_multi_judge: isMultiJudge
 			})
-			.eq('session_id', params.id);
+			.eq('session_id', params.id)
+			.select();
+
+		console.log('[updateTrainingSettings] 更新結果:', { updateResult, updateError });
 
 		if (updateError) {
+			console.error('[updateTrainingSettings] ❌ 更新失敗:', updateError);
 			return fail(500, { trainingSettingsError: '設定の更新に失敗しました。' });
 		}
 
+		console.log('[updateTrainingSettings] ✅ 更新成功');
 		return { trainingSettingsSuccess: '研修設定を更新しました。' };
 	},
 

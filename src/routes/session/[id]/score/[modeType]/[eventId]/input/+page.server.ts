@@ -185,14 +185,22 @@ export const actions: Actions = {
 
 		// 得点をデータベースに保存
 		if (modeType === 'training') {
-			// 既存のスコアを確認
-			const { data: existingScore } = await supabase
+			// 既存のスコアを確認（認証ユーザーまたはゲスト）
+			let existingScoreQuery = supabase
 				.from('training_scores')
 				.select('id')
 				.eq('event_id', eventId)
-				.eq('judge_id', user.id)
-				.eq('athlete_id', participantId)
-				.maybeSingle();
+				.eq('athlete_id', participantId);
+
+			if (guestParticipant) {
+				// ゲストユーザーの場合
+				existingScoreQuery = existingScoreQuery.eq('guest_identifier', guestIdentifier);
+			} else {
+				// 認証ユーザーの場合
+				existingScoreQuery = existingScoreQuery.eq('judge_id', user.id);
+			}
+
+			const { data: existingScore } = await existingScoreQuery.maybeSingle();
 
 			let saveError;
 
@@ -209,21 +217,30 @@ export const actions: Actions = {
 				saveError = error;
 			} else {
 				// 新規スコアを挿入
-				const { error } = await supabase
-					.from('training_scores')
-					.insert({
-						event_id: eventId,
-						judge_id: user.id,
-						athlete_id: participantId,
-						score: score,
-						is_finalized: true
-					});
+				const scoreData: any = {
+					event_id: eventId,
+					athlete_id: participantId,
+					score: score,
+					is_finalized: true
+				};
+
+				if (guestParticipant) {
+					// ゲストユーザーの場合
+					scoreData.guest_identifier = guestIdentifier;
+					console.log('[submitScore] Inserting training score for guest:', guestIdentifier);
+				} else {
+					// 認証ユーザーの場合
+					scoreData.judge_id = user.id;
+					console.log('[submitScore] Inserting training score for user:', user.id);
+				}
+
+				const { error } = await supabase.from('training_scores').insert(scoreData);
 				saveError = error;
 			}
 
 			if (saveError) {
-				console.error('Error saving training score:', saveError);
-				return fail(500, { error: '採点の保存に失敗しました。' });
+				console.error('[submitScore] Error saving training score:', saveError);
+				return fail(500, { error: `採点の保存に失敗しました。${saveError.message || ''}` });
 			}
 		} else {
 			// 大会モード - resultsテーブルに保存

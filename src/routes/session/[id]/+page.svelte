@@ -506,18 +506,88 @@
 		<div class="instruction">{data.isTournamentMode ? '大会終了' : data.isTrainingMode ? '研修終了' : '検定終了'}</div>
 		<div class="end-message">
 			<p>この{data.isTournamentMode ? '大会' : data.isTrainingMode ? '研修' : '検定'}は終了しました。</p>
-			{#if data.guestIdentifier}
-				<p class="info-text" style="margin-top: 16px; color: var(--text-secondary);">
-					主任検定員がセッションを再開する場合は、<br>下のボタンから再参加できます。
-				</p>
+
+			{#if !data.isChief && data.isTrainingMode}
+				<!-- 研修モード: 主任検定員以外（一般検定員とゲストユーザー）に現在の設定を表示 -->
+				<div class="settings-info">
+					<p class="settings-label">現在の設定:</p>
+					<div class="settings-badge" class:multi-judge-on={data.isMultiJudge} class:multi-judge-off={!data.isMultiJudge}>
+						{#if data.isMultiJudge}
+							複数検定員モード ON
+						{:else}
+							複数検定員モード OFF（自由採点）
+						{/if}
+					</div>
+				</div>
+
+				{#if data.isMultiJudge && data.guestIdentifier}
+					<p class="info-text" style="margin-top: 16px; color: var(--text-secondary);">
+						主任検定員がセッションを再開する場合は、<br>下のボタンから再参加できます。
+					</p>
+				{/if}
+
 				<div class="nav-buttons" style="margin-top: 24px;">
-					<NavButton variant="primary" on:click={() => {
-						const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
-						// 完全にページをリロードして監視を再開
-						window.location.href = `/session/${data.sessionDetails.id}${guestParam}`;
+					<!-- 設定変更確認ボタン（主任検定員以外全員に表示） -->
+					<NavButton on:click={() => {
+						// ページをリロードして最新の設定を取得（ended=true を維持）
+						const url = data.guestIdentifier
+							? `/session/${data.sessionDetails.id}?ended=true&guest=${data.guestIdentifier}`
+							: `/session/${data.sessionDetails.id}?ended=true`;
+						window.location.href = url;
 					}}>
-						セッションを再開
+						設定の変更を確認
 					</NavButton>
+
+					{#if data.guestIdentifier}
+						<!-- ゲストユーザー向け：セッション再開ボタン -->
+						<NavButton variant="primary" on:click={() => {
+							// 完全にページをリロードして監視を再開
+							window.location.href = `/session/${data.sessionDetails.id}?guest=${data.guestIdentifier}&join=true`;
+						}}>
+							セッションに参加
+						</NavButton>
+					{/if}
+				</div>
+			{:else if !data.isChief && data.isTournamentMode}
+				<!-- 大会モード: 主任検定員以外（一般検定員とゲストユーザー）に採点方式を表示 -->
+				<div class="settings-info">
+					<p class="settings-label">採点方式:</p>
+					<div class="scoring-method-badge">
+						{#if data.sessionDetails.exclude_extremes}
+							5審3採（最高点・最低点を除く）
+						{:else}
+							3審3採
+						{/if}
+					</div>
+				</div>
+
+				{#if data.guestIdentifier}
+					<p class="info-text" style="margin-top: 16px; color: var(--text-secondary);">
+						主任検定員がセッションを再開する場合は、<br>下のボタンから再参加できます。
+					</p>
+				{/if}
+
+				<div class="nav-buttons" style="margin-top: 24px;">
+					<!-- 設定変更確認ボタン（主任検定員以外全員に表示） -->
+					<NavButton on:click={() => {
+						// ページをリロードして最新の設定を取得（ended=true を維持）
+						const url = data.guestIdentifier
+							? `/session/${data.sessionDetails.id}?ended=true&guest=${data.guestIdentifier}`
+							: `/session/${data.sessionDetails.id}?ended=true`;
+						window.location.href = url;
+					}}>
+						設定の変更を確認
+					</NavButton>
+
+					{#if data.guestIdentifier}
+						<!-- ゲストユーザー向け：セッション再開ボタン -->
+						<NavButton variant="primary" on:click={() => {
+							// 完全にページをリロードして監視を再開
+							window.location.href = `/session/${data.sessionDetails.id}?guest=${data.guestIdentifier}&join=true`;
+						}}>
+							セッションに参加
+						</NavButton>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -535,7 +605,10 @@
 				{/if}
 			</div>
 			<div class="list-keypad">
-				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-events`)}>
+				<NavButton variant="primary" on:click={() => {
+					const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
+					goto(`/session/${data.sessionDetails.id}/training-events${guestParam}`);
+				}}>
 					種目選択へ進む
 				</NavButton>
 			</div>
@@ -622,7 +695,10 @@
 			<div class="wait-message">
 				<p>種目選択画面から採点を開始できます。</p>
 				<div class="nav-buttons">
-					<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-events`)}>
+					<NavButton variant="primary" on:click={() => {
+						const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
+						goto(`/session/${data.sessionDetails.id}/training-events${guestParam}`);
+					}}>
 						種目選択へ進む
 					</NavButton>
 				</div>
@@ -845,6 +921,55 @@
 		font-size: 14px;
 		color: var(--text-secondary);
 		margin-top: 8px;
+	}
+
+	/* 設定情報表示 */
+	.settings-info {
+		margin-top: 20px;
+		padding: 16px;
+		background: #f8f9fa;
+		border-radius: 8px;
+		text-align: center;
+	}
+
+	.settings-label {
+		font-size: 14px;
+		color: var(--text-secondary);
+		margin: 0 0 8px 0;
+		font-weight: 500;
+	}
+
+	.settings-badge {
+		display: inline-block;
+		padding: 8px 16px;
+		border-radius: 20px;
+		font-size: 15px;
+		font-weight: 600;
+		transition: all 0.2s;
+	}
+
+	.settings-badge.multi-judge-on {
+		background: #fff3e0;
+		color: #ff9800;
+		border: 2px solid #ff9800;
+	}
+
+	.settings-badge.multi-judge-off {
+		background: #e3f2fd;
+		color: #2196f3;
+		border: 2px solid #2196f3;
+	}
+
+	.scoring-method-badge {
+		display: inline-block;
+		margin-top: 12px;
+		padding: 6px 14px;
+		background: #f5f5f5;
+		color: #666;
+		border-radius: 16px;
+		font-size: 14px;
+		font-weight: 500;
+		border: 1px solid #ddd;
 	}
 
 	/* ゲストユーザー待機画面 */

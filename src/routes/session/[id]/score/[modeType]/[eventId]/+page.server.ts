@@ -130,13 +130,30 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 };
 
 export const actions: Actions = {
-	submitBib: async ({ request, params, locals: { supabase } }) => {
+	submitBib: async ({ request, params, url, locals: { supabase } }) => {
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの認証
+		let guestParticipant = null;
+		if (!user && guestIdentifier) {
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return fail(401, { error: 'ゲスト認証が必要です。' });
+			}
+
+			guestParticipant = guestData;
+		} else if (userError || !user) {
 			return fail(401, { error: '認証が必要です。' });
 		}
 

@@ -121,6 +121,8 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const bib = formData.get('bib') as string;
 		const judgeName = formData.get('judgeName') as string;
+		const judgeId = formData.get('judgeId') as string;
+		const guestIdentifier = formData.get('guestIdentifier') as string;
 
 		if (!bib || !judgeName) {
 			return fail(400, { error: 'パラメータが不足しています。' });
@@ -153,27 +155,42 @@ export const actions: Actions = {
 
 		// モードに応じて得点を削除
 		if (isTrainingMode) {
-			// judge_nameからjudge_idを取得
-			const { data: judgeProfile } = await supabase
-				.from('profiles')
-				.select('id')
-				.eq('full_name', judgeName)
-				.maybeSingle();
-
-			if (!judgeProfile) {
-				return fail(404, { error: '検定員が見つかりません。' });
-			}
-
-			const { error: deleteError } = await supabase
+			// ゲストまたは認証ユーザーの判定
+			let deleteQuery = supabase
 				.from('training_scores')
 				.delete()
 				.eq('event_id', eventId)
-				.eq('athlete_id', participant.id)
-				.eq('judge_id', judgeProfile.id);
+				.eq('athlete_id', participant.id);
+
+			if (guestIdentifier) {
+				// ゲストユーザーの場合
+				console.log('[requestCorrection] Deleting guest score:', guestIdentifier);
+				deleteQuery = deleteQuery.eq('guest_identifier', guestIdentifier);
+			} else if (judgeId) {
+				// 認証ユーザーの場合（judgeIdがフォームから送信されている）
+				console.log('[requestCorrection] Deleting user score:', judgeId);
+				deleteQuery = deleteQuery.eq('judge_id', judgeId);
+			} else {
+				// フォールバック: judge_nameから検定員を特定
+				const { data: judgeProfile } = await supabase
+					.from('profiles')
+					.select('id')
+					.eq('full_name', judgeName)
+					.maybeSingle();
+
+				if (!judgeProfile) {
+					return fail(404, { error: '検定員が見つかりません。' });
+				}
+
+				console.log('[requestCorrection] Deleting user score (fallback):', judgeProfile.id);
+				deleteQuery = deleteQuery.eq('judge_id', judgeProfile.id);
+			}
+
+			const { error: deleteError } = await deleteQuery;
 
 			if (deleteError) {
-				console.error('Error deleting training score:', deleteError);
-				return fail(500, { error: '得点の削除に失敗しました。' });
+				console.error('[requestCorrection] Error deleting training score:', deleteError);
+				return fail(500, { error: `得点の削除に失敗しました。${deleteError.message || ''}` });
 			}
 		} else {
 			// 大会モードの場合、resultsから削除

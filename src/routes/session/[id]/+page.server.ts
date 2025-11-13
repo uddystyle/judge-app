@@ -133,12 +133,20 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	// 研修モードの場合
 	if (sessionDetails.mode === 'training') {
+		console.log('[Session Page Load] ========== 研修モード ==========');
+		console.log('[Session Page Load] sessionId:', sessionId);
+		console.log('[Session Page Load] user:', user?.id || 'guest');
+		console.log('[Session Page Load] guestIdentifier:', guestIdentifier);
+
 		// 研修セッション情報を取得
 		const { data: trainingSession, error: trainingError } = await supabase
 			.from('training_sessions')
 			.select('*')
 			.eq('session_id', sessionId)
 			.maybeSingle();
+
+		console.log('[Session Page Load] training_sessions取得結果:', { trainingSession, trainingError });
+		console.log('[Session Page Load] is_multi_judge:', trainingSession?.is_multi_judge);
 
 		if (trainingError) {
 			throw error(500, '研修セッション情報の取得に失敗しました。');
@@ -180,7 +188,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			}
 		}
 
-		return {
+		const returnData = {
 			user,
 			profile,
 			organizations,
@@ -192,9 +200,17 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			chiefJudgeUserId,
 			hasEvents: (eventsCount || 0) > 0,
 			isSessionActive: sessionDetails.is_active,
+			isMultiJudge: trainingSession?.is_multi_judge || false,
 			guestParticipant,
 			guestIdentifier
 		};
+
+		console.log('[Session Page Load] ========== 返却データ ==========');
+		console.log('[Session Page Load] isMultiJudge:', returnData.isMultiJudge);
+		console.log('[Session Page Load] isChief:', returnData.isChief);
+		console.log('[Session Page Load] guestIdentifier:', returnData.guestIdentifier);
+
+		return returnData;
 	}
 
 	// 大会モードの場合
@@ -215,6 +231,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isTrainingMode: false,
 			hasEvents: (eventsCount || 0) > 0,
 			isSessionActive: sessionDetails.is_active,
+			isMultiJudge: true,
 			guestParticipant,
 			guestIdentifier
 		};
@@ -240,6 +257,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isTournamentMode: false,
 			isTrainingMode: false,
 			isSessionActive: sessionDetails.is_active,
+			isMultiJudge: sessionDetails.is_multi_judge || false,
 			guestParticipant,
 			guestIdentifier
 		};
@@ -266,6 +284,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isTournamentMode: false,
 			isTrainingMode: false,
 			isSessionActive: sessionDetails.is_active,
+			isMultiJudge: sessionDetails.is_multi_judge || false,
 			guestParticipant,
 			guestIdentifier
 		};

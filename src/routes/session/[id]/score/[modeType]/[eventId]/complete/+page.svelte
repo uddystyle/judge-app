@@ -14,7 +14,9 @@
 	$: sessionId = $page.params.id;
 	$: modeType = $page.params.modeType;
 	$: eventId = $page.params.eventId;
-	$: eventListUrl = data.isTrainingMode ? `/session/${sessionId}/training-events` : `/session/${sessionId}/tournament-events`;
+	$: guestIdentifier = data.guestIdentifier;
+	$: guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+	$: eventListUrl = data.isTrainingMode ? `/session/${sessionId}/training-events${guestParam}` : `/session/${sessionId}/tournament-events${guestParam}`;
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
@@ -24,7 +26,7 @@
 
 	function handleNextAthlete() {
 		bibStore.set(null);
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}`);
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
 	}
 
 	function handleEndSession() {
@@ -65,12 +67,13 @@
 						// セッションが終了した場合、待機画面（終了画面）に遷移
 						if (isActive === false) {
 							console.log('[一般検定員/complete] 検定/大会/研修終了を検知。終了画面に遷移します。');
-							goto(`/session/${sessionId}?ended=true`);
+							const endedParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+							goto(`/session/${sessionId}?ended=true${endedParam}`);
 						}
 						// active_prompt_idがクリアされた場合、待機画面に遷移（種目変更）
 						else if (activePromptId === null && payload.old.active_prompt_id !== null) {
 							console.log('[一般検定員/complete] 種目変更を検知。待機画面に遷移します。');
-							goto(`/session/${sessionId}`);
+							goto(`/session/${sessionId}${guestParam}`);
 						}
 					}
 				)
@@ -101,7 +104,8 @@
 									// 終了した場合（true -> false）
 									if (isActive === false && previousIsActive === true) {
 										console.log('[一般検定員/complete] ✅ 終了を検知（ポーリング）');
-										goto(`/session/${sessionId}?ended=true`);
+										const endedParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+										goto(`/session/${sessionId}?ended=true${endedParam}`);
 									}
 									previousIsActive = isActive;
 								}
@@ -130,7 +134,7 @@
 	});
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	<div class="instruction">送信完了</div>
@@ -177,8 +181,8 @@
 	</div>
 
 	<!-- 非表示のフォーム -->
-	<form bind:this={endSessionForm} method="POST" action="?/endSession" use:enhance style="display: none;"></form>
-	<form bind:this={changeEventForm} method="POST" action="?/changeEvent" use:enhance style="display: none;"></form>
+	<form bind:this={endSessionForm} method="POST" action="?/endSession{guestParam ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
+	<form bind:this={changeEventForm} method="POST" action="?/changeEvent{guestParam ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
 </div>
 
 <style>
