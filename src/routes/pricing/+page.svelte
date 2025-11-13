@@ -164,11 +164,14 @@
 	<!-- プランカード -->
 	<div class="plans-grid">
 		{#each plans as plan}
-			<div class="plan-card" class:recommended={plan.recommended} class:current={data.user && data.currentPlan === plan.id}>
+			{@const isSamePlan = data.user && data.currentPlan === plan.id}
+			{@const isSameInterval = String(data.currentBillingInterval) === String(billingInterval)}
+			{@const isCurrentPlanAndInterval = isSamePlan && (plan.id === 'free' || isSameInterval)}
+			<div class="plan-card" class:recommended={plan.recommended} class:current={isCurrentPlanAndInterval}>
 				{#if plan.recommended}
 					<div class="recommended-badge">おすすめ</div>
 				{/if}
-				{#if data.user && data.currentPlan === plan.id}
+				{#if isCurrentPlanAndInterval}
 					<div class="current-badge">現在のプラン</div>
 				{/if}
 
