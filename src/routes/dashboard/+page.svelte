@@ -3,6 +3,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -106,6 +107,27 @@
 				return 'フリー';
 		}
 	}
+
+	// 大会モードで検定員数が揃っているかチェック
+	function canStartTournament(participantCount: number): boolean {
+		return participantCount === 3 || participantCount === 5;
+	}
+
+	// アラートダイアログの状態
+	let showAlert = false;
+	let alertMessage = '';
+	let alertTitle = '開始できません';
+
+	// セッションクリック時の処理
+	function handleSessionClick(session: any) {
+		// 大会モードで検定員数が揃っていない場合
+		if (session.mode === 'tournament' && !canStartTournament(session.participantCount)) {
+			alertMessage = `大会モードを開始するには、\n3人または5人の検定員が必要です。\n\n現在の検定員数: ${session.participantCount}人`;
+			showAlert = true;
+			return;
+		}
+		goto(`/session/${session.id}`);
+	}
 </script>
 
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} pageOrganizations={data.organizations || []} />
@@ -117,21 +139,46 @@
 		<div class="list-keypad">
 			{#if data.sessions && data.sessions.length > 0}
 				{#each data.sessions as session}
+					{@const isTournament = session.mode === 'tournament'}
+					{@const canStart = !isTournament || canStartTournament(session.participantCount)}
 					<div
 						class="key select-item"
-						on:click={() => goto(`/session/${session.id}`)}
+						class:disabled={!canStart}
+						on:click={() => handleSessionClick(session)}
 						role="button"
 						tabindex="0"
-						on:keydown={(e) => e.key === 'Enter' && goto(`/session/${session.id}`)}
+						on:keydown={(e) => e.key === 'Enter' && handleSessionClick(session)}
 					>
-						<div class="session-name">
-							{session.name}
-							{#if session.mode === 'tournament'}
-								<span class="mode-badge tournament">大会</span>
-							{:else if session.mode === 'training'}
-								<span class="mode-badge training">研修</span>
-							{:else}
-								<span class="mode-badge">検定</span>
+						<div class="session-info-wrapper">
+							<div class="session-name">
+								{session.name}
+								{#if session.mode === 'tournament'}
+									<span class="mode-badge tournament">大会</span>
+									{#if canStart}
+										<span class="scoring-method-badge">
+											{session.exclude_extremes ? '5審3採' : '3審3採'}
+										</span>
+									{/if}
+								{:else if session.mode === 'training'}
+									<span class="mode-badge training">研修</span>
+									<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
+										{session.isMultiJudge ? '合同ジャッジ' : '個別ジャッジ'}
+									</span>
+								{:else}
+									<span class="mode-badge">検定</span>
+									<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
+										{session.isMultiJudge ? '合同ジャッジ' : '個別ジャッジ'}
+									</span>
+								{/if}
+							</div>
+							{#if isTournament && !canStart}
+								<div class="participant-count">
+									<span class="participant-label">検定員:</span>
+									<span class="participant-value warning">
+										{session.participantCount}人
+									</span>
+									<span class="warning-text">(3人または5人必要)</span>
+								</div>
 							{/if}
 						</div>
 						<div class="join-code-wrapper">
@@ -172,6 +219,14 @@
 		<NavButton on:click={() => goto('/session/join')}>コードでセッションに参加</NavButton>
 	</div>
 </div>
+
+<AlertDialog
+	bind:isOpen={showAlert}
+	title={alertTitle}
+	message={alertMessage}
+	confirmText="OK"
+	on:confirm={() => {}}
+/>
 
 <style>
 	.container {
@@ -218,6 +273,26 @@
 		background-color: var(--bg-hover);
 		transform: translateY(0);
 	}
+	.key.select-item.disabled {
+		cursor: not-allowed;
+		background: #f5f5f5;
+	}
+	.key.select-item.disabled:hover {
+		border-color: var(--border-light);
+		transform: none;
+	}
+	.key.select-item.disabled .session-info-wrapper {
+		opacity: 0.6;
+	}
+	.key.select-item.disabled .join-code-wrapper {
+		opacity: 1;
+	}
+	.session-info-wrapper {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		width: 100%;
+	}
 	.session-name {
 		font-size: 18px;
 		font-weight: 600;
@@ -228,6 +303,30 @@
 		gap: 8px;
 		flex-wrap: wrap;
 		justify-content: center;
+	}
+	.participant-count {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		font-size: 14px;
+		flex-wrap: wrap;
+	}
+	.participant-label {
+		font-weight: 500;
+		color: var(--text-secondary);
+	}
+	.participant-value {
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+	.participant-value.warning {
+		color: #dc3545;
+	}
+	.warning-text {
+		font-size: 12px;
+		color: #dc3545;
+		font-weight: 500;
 	}
 	.mode-badge {
 		display: inline-flex;
@@ -245,6 +344,31 @@
 	}
 	.mode-badge.training {
 		background: var(--gray-600);
+	}
+	.scoring-method-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 11px;
+		font-weight: 600;
+		color: white;
+		background: #2d7a3e;
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+	.judge-mode-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 11px;
+		font-weight: 600;
+		color: white;
+		background: var(--ios-blue);
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+	.judge-mode-badge.individual {
+		background: #ff9800;
 	}
 	.join-code-wrapper {
 		display: flex;
@@ -269,10 +393,9 @@
 	}
 	.join-code-value {
 		font-size: 14px;
-		font-weight: 600;
+		font-weight: 700;
 		color: var(--text-primary);
-		font-family: 'Courier New', monospace;
-		letter-spacing: 1px;
+		letter-spacing: 2px;
 	}
 	.copy-btn {
 		font-size: 12px;

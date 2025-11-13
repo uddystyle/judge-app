@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		organizationIds.length > 0
 			? supabase
 					.from('sessions')
-					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
+					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes')
 					.in('organization_id', organizationIds)
 					.order('created_at', { ascending: false })
 			: Promise.resolve({ data: [], error: null }),
@@ -68,7 +68,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		const sessionIds = participantsResult.data.map((p: any) => p.session_id);
 		const sessionsResult = await supabase
 			.from('sessions')
-			.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id')
+			.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes')
 			.in('id', sessionIds);
 
 		if (sessionsResult.error) {
@@ -95,6 +95,33 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	const sessions = Array.from(sessionMap.values());
 
+	// 各セッションの検定員数と研修設定を取得
+	const sessionsWithParticipantCount = await Promise.all(
+		sessions.map(async (session: any) => {
+			const { count } = await supabase
+				.from('session_participants')
+				.select('*', { count: 'exact', head: true })
+				.eq('session_id', session.id);
+
+			// 研修モードの場合、is_multi_judgeを取得
+			let isMultiJudge = false;
+			if (session.mode === 'training') {
+				const { data: trainingSession } = await supabase
+					.from('training_sessions')
+					.select('is_multi_judge')
+					.eq('session_id', session.id)
+					.maybeSingle();
+				isMultiJudge = trainingSession?.is_multi_judge || false;
+			}
+
+			return {
+				...session,
+				participantCount: count || 0,
+				isMultiJudge
+			};
+		})
+	);
+
 	// 組織配列を作成（UIが期待する形式）
 	const organizations = memberships
 		? memberships.map((m: any) => ({
@@ -111,7 +138,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	return {
 		user,
 		organizations,
-		sessions,
+		sessions: sessionsWithParticipantCount,
 		profile
 	};
 };

@@ -3,6 +3,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import * as XLSX from 'xlsx';
@@ -40,6 +41,24 @@
 		? '5judges'
 		: '3judges';
 
+	// 検定員数に基づく採点方式の制限
+	$: canUse3Judges = participantCount === 3;
+	$: canUse5Judges = participantCount === 5;
+
+	// 検定員数が条件に合わない場合、選択を自動調整
+	$: if (!canUse5Judges && selectedMethod === '5judges') {
+		// 5審3採が選択できない場合、3審3採に変更（3審3採が使える場合のみ）
+		if (canUse3Judges) {
+			selectedMethod = '3judges';
+		}
+	}
+	$: if (!canUse3Judges && selectedMethod === '3judges') {
+		// 3審3採が選択できない場合、5審3採に変更（5審3採が使える場合のみ）
+		if (canUse5Judges) {
+			selectedMethod = '5judges';
+		}
+	}
+
 	let exportLoading = false;
 
 	// 種目管理用の変数
@@ -63,6 +82,36 @@
 
 	// 研修モード設定
 	let isMultiJudgeTraining = data.trainingSession?.is_multi_judge || false;
+
+	// ゲストユーザー削除確認ダイアログ
+	let showRemoveGuestDialog = false;
+	let guestToRemove: { identifier: string; name: string } | null = null;
+	let removeGuestForms: { [key: string]: HTMLFormElement } = {};
+
+	function openRemoveGuestDialog(guestIdentifier: string, guestName: string) {
+		guestToRemove = { identifier: guestIdentifier, name: guestName };
+		showRemoveGuestDialog = true;
+	}
+
+	function handleRemoveGuestConfirm() {
+		if (guestToRemove && removeGuestForms[guestToRemove.identifier]) {
+			removeGuestForms[guestToRemove.identifier].requestSubmit();
+		}
+		showRemoveGuestDialog = false;
+		guestToRemove = null;
+	}
+
+	function handleRemoveGuestCancel() {
+		showRemoveGuestDialog = false;
+		guestToRemove = null;
+	}
+
+	// 参加者リスト更新
+	let isRefreshing = false;
+	function handleRefresh() {
+		isRefreshing = true;
+		window.location.reload();
+	}
 
 	// QRコード関連
 	let showQRModal = false;
@@ -291,7 +340,15 @@
 	<hr class="divider" />
 
 	<div class="settings-section">
-		<h3 class="settings-title">参加中の検定員</h3>
+		<div class="section-header-with-action">
+			<h3 class="settings-title">参加中の検定員</h3>
+			<button class="refresh-btn-with-label" class:refreshing={isRefreshing} on:click={handleRefresh} title="参加者リストを更新">
+				<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+				</svg>
+				<span class="refresh-label">リストを更新</span>
+			</button>
+		</div>
 		<div class="participants-container">
 			{#if data.participants && data.participants.length > 0}
 				{#each data.participants as p}
@@ -327,19 +384,17 @@
 
 						{#if p.is_guest && data.currentUserId === data.sessionDetails.created_by}
 							<form
+								bind:this={removeGuestForms[p.guest_identifier]}
 								method="POST"
 								action="?/removeGuest"
-								use:enhance={() => {
-									return async ({ update }) => {
-										const confirmed = confirm(`ゲストユーザー「${p.guest_name}」をセッションから削除しますか？\n\nこの操作は取り消せません。`);
-										if (confirmed) {
-											await update();
-										}
-									};
-								}}
+								use:enhance
 							>
 								<input type="hidden" name="guestIdentifier" value={p.guest_identifier} />
-								<button type="submit" class="appoint-btn danger">
+								<button
+									type="button"
+									class="appoint-btn danger"
+									on:click={() => openRemoveGuestDialog(p.guest_identifier, p.guest_name)}
+								>
 									削除
 								</button>
 							</form>
@@ -492,13 +547,22 @@
 						};
 					}}
 				>
+					{#if !canUse3Judges && !canUse5Judges}
+						<div class="error-message">
+							採点を開始するには、3人または5人の検定員が必要です。現在の検定員数: {participantCount}人
+						</div>
+					{/if}
+
 					<div class="scoring-options">
 						<!-- 3審3採 -->
-						<label class="scoring-option" class:selected={selectedMethod === '3judges'}>
-							<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} />
+						<label class="scoring-option" class:selected={selectedMethod === '3judges'} class:disabled={!canUse3Judges}>
+							<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} disabled={!canUse3Judges} />
 							<div class="option-content">
 								<div class="option-header">
 									<span class="option-title">3審3採</span>
+									{#if !canUse3Judges}
+										<span class="required-badge">3人必要</span>
+									{/if}
 								</div>
 								<div class="option-description">3人の検定員の点数の合計</div>
 								<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
@@ -506,11 +570,14 @@
 						</label>
 
 						<!-- 5審3採 -->
-						<label class="scoring-option" class:selected={selectedMethod === '5judges'}>
-							<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} />
+						<label class="scoring-option" class:selected={selectedMethod === '5judges'} class:disabled={!canUse5Judges}>
+							<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} disabled={!canUse5Judges} />
 							<div class="option-content">
 								<div class="option-header">
 									<span class="option-title">5審3採</span>
+									{#if !canUse5Judges}
+										<span class="required-badge">5人必要</span>
+									{/if}
 								</div>
 								<div class="option-description">
 									5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
@@ -524,7 +591,7 @@
 					</div>
 
 					<div class="form-actions">
-						<button type="submit" class="save-btn">採点方法を保存</button>
+						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges}>採点方法を保存</button>
 					</div>
 				</form>
 			{:else}
@@ -814,6 +881,18 @@
 	</div>
 {/if}
 
+<!-- ゲストユーザー削除確認ダイアログ -->
+<ConfirmDialog
+	bind:isOpen={showRemoveGuestDialog}
+	title="ゲストユーザーを削除"
+	message={guestToRemove ? `ゲストユーザー「${guestToRemove.name}」をセッションから削除しますか？\n\nこの操作は取り消せません。` : ''}
+	confirmText="削除"
+	cancelText="キャンセル"
+	variant="danger"
+	on:confirm={handleRemoveGuestConfirm}
+	on:cancel={handleRemoveGuestCancel}
+/>
+
 <Footer />
 
 <style>
@@ -832,6 +911,56 @@
 		margin-bottom: 0.5rem;
 		display: block;
 		text-align: left;
+	}
+	.section-header-with-action {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.5rem;
+	}
+	.section-header-with-action .settings-title {
+		margin-bottom: 0;
+	}
+	.refresh-btn-with-label {
+		background: var(--bg-primary);
+		border: 2px solid var(--border-light);
+		border-radius: 8px;
+		padding: 8px 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 500;
+	}
+	.refresh-btn-with-label:hover {
+		background: var(--bg-hover);
+		border-color: var(--border-medium);
+	}
+	.refresh-btn-with-label:active {
+		transform: scale(0.98);
+		opacity: 0.7;
+	}
+	.refresh-btn-with-label.refreshing {
+		pointer-events: none;
+		opacity: 0.7;
+	}
+	.refresh-btn-with-label.refreshing svg {
+		animation: spin 1s linear infinite;
+	}
+	.refresh-label {
+		white-space: nowrap;
+	}
+	@keyframes spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.helper-text {
 		font-size: 14px;
@@ -1021,6 +1150,14 @@
 	.scoring-option:hover {
 		border-color: var(--ios-blue);
 	}
+	.scoring-option.disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		background: #f5f5f5;
+	}
+	.scoring-option.disabled:hover {
+		border-color: var(--separator-gray);
+	}
 	.option-content {
 		display: flex;
 		flex-direction: column;
@@ -1031,11 +1168,21 @@
 		align-items: center;
 		gap: 8px;
 		margin-bottom: 4px;
+		flex-wrap: wrap;
 	}
 	.option-title {
 		font-size: 20px;
 		font-weight: 600;
 		color: var(--primary-text);
+	}
+	.required-badge {
+		display: inline-block;
+		background: #ff9800;
+		color: white;
+		padding: 4px 10px;
+		border-radius: 12px;
+		font-size: 12px;
+		font-weight: 600;
 	}
 	.option-description {
 		font-size: 15px;
@@ -1073,6 +1220,11 @@
 	}
 	.save-btn:active {
 		opacity: 0.7;
+	}
+	.save-btn:disabled {
+		background: #ccc;
+		cursor: not-allowed;
+		opacity: 0.6;
 	}
 
 	/* 種目管理のスタイル */
