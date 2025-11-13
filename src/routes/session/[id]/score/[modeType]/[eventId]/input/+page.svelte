@@ -26,7 +26,7 @@
 	$: showBackButton = !data.isMultiJudge || data.isChief;
 
 	let loading = false;
-	let submittedScore = '';
+	let scoreInput: HTMLInputElement;
 
 	// ヘッダー情報を設定
 	onMount(() => {
@@ -39,7 +39,10 @@
 	// ScoreInputコンポーネントからのsubmitイベントを処理
 	function handleSubmit(event: CustomEvent<{ score: number }>) {
 		loading = true;
-		submittedScore = event.detail.score.toString();
+		// hidden inputの値を直接設定
+		if (scoreInput) {
+			scoreInput.value = event.detail.score.toString();
+		}
 		// フォームを送信
 		const formElement = document.getElementById('scoreForm') as HTMLFormElement;
 		if (formElement) {
@@ -85,7 +88,7 @@
 />
 
 <form id="scoreForm" method="POST" action={formAction} use:enhance style="display: none;">
-	<input type="hidden" name="score" value={submittedScore} />
+	<input type="hidden" name="score" bind:this={scoreInput} />
 	<input type="hidden" name="participantId" value={participantId} />
 	<input type="hidden" name="bibNumber" value={bibNumber} />
 </form>
