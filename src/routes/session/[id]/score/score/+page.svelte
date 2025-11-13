@@ -3,10 +3,12 @@
 	import NumericKeypad from '$lib/components/NumericKeypad.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
 	import { onMount } from 'svelte';
+	import { currentSession, currentDiscipline, currentEvent, currentBib } from '$lib/stores';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -16,8 +18,14 @@
 	$: sessionName = data.sessionDetails.name;
 	$: eventName = data.customEvent.event_name;
 	$: excludeExtremes = data.sessionDetails.exclude_extremes;
+	$: guestIdentifier = data.guestIdentifier;
 
 	let bibNumber = '';
+
+	// アラートダイアログの状態
+	let showAlert = false;
+	let alertMessage = '';
+	let alertTitle = '入力エラー';
 
 	function handleInput(event: CustomEvent<string>) {
 		const num = event.detail;
@@ -32,7 +40,8 @@
 
 	async function handleConfirm() {
 		if (!bibNumber || parseInt(bibNumber) <= 0) {
-			alert('ゼッケン番号を入力してください');
+			alertMessage = 'ゼッケン番号を入力してください';
+			showAlert = true;
 			return;
 		}
 
@@ -43,8 +52,15 @@
 		}
 	}
 
-	// フォーム送信後の処理
+	// ヘッダー情報を設定
 	onMount(() => {
+		// ストアを設定
+		currentSession.set({ name: sessionName });
+		currentDiscipline.set('大会');
+		currentEvent.set(eventName);
+		currentBib.set(null); // ゼッケン入力前
+
+		// フォーム送信後の処理
 		if (form?.success && form?.bibNumber) {
 			// 採点状況確認画面へ遷移
 			goto(`/session/${sessionId}/tournament-events/${eventId}/score/status?bib=${form.bibNumber}`);
@@ -52,14 +68,9 @@
 	});
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
-	<div class="session-info">
-		<div class="session-name">{sessionName}</div>
-		<div class="event-name">{eventName}</div>
-	</div>
-
 	<div class="instruction">ゼッケン番号を入力してください</div>
 
 	<div class="scoring-info">
@@ -91,26 +102,18 @@
 	</div>
 </div>
 
+<AlertDialog
+	bind:isOpen={showAlert}
+	title={alertTitle}
+	message={alertMessage}
+	confirmText="OK"
+	on:confirm={() => {}}
+/>
+
 <style>
 	.container {
 		padding: 28px 20px;
 		text-align: center;
-	}
-
-	.session-info {
-		margin-bottom: 20px;
-	}
-
-	.session-name {
-		font-size: 14px;
-		color: var(--secondary-text);
-		margin-bottom: 4px;
-	}
-
-	.event-name {
-		font-size: 20px;
-		font-weight: 600;
-		color: var(--primary-text);
 	}
 
 	.instruction {

@@ -37,7 +37,7 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 
 	if (participantError || !participant) {
 		console.error('[Export API] Unauthorized export attempt:', { userId: user.id, sessionId: sessionIdNum });
-		throw error(403, 'このセッションにアクセスする権限がありません。');
+		throw error(403, 'セッションにアクセスする権限がありません。');
 	}
 
 	// セッション情報を取得してモードを確認

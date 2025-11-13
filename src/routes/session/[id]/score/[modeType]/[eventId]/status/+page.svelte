@@ -7,7 +7,7 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
-	import { currentBib, userProfile } from '$lib/stores';
+	import { currentBib, userProfile, currentSession, currentDiscipline, currentEvent } from '$lib/stores';
 	import { get } from 'svelte/store';
 
 	export let data: PageData;
@@ -132,6 +132,12 @@
 		console.log('[status/onMount] params:', { sessionId, modeType, eventId, bib });
 		console.log('[status/onMount] totalJudges:', data.totalJudges, 'isTrainingMode:', data.isTrainingMode, 'isMultiJudge:', data.isMultiJudge);
 
+		// ヘッダー情報を設定
+		currentSession.set({ name: data.sessionDetails?.name || '' });
+		currentDiscipline.set(data.isTrainingMode ? '研修モード' : '大会モード');
+		currentEvent.set(data.eventInfo?.name || data.eventInfo?.event_name || '');
+		currentBib.set(bib ? parseInt(bib) : null);
+
 		fetchStatus();
 		pollingInterval = setInterval(fetchStatus, 3000); // Poll every 3 seconds
 
@@ -238,7 +244,7 @@
 							return;
 						}
 
-						// 新しいactive_prompt_idが設定された場合（次の選手）
+						// 新しいactive_prompt_idが設定された場合（次の滑走者）
 						if (newActivePromptId && newActivePromptId !== oldActivePromptId) {
 							console.log('[一般検定員/status/realtime] 新しい採点指示を検知:', newActivePromptId);
 							// 新しい指示の詳細を取得

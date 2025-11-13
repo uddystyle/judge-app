@@ -39,7 +39,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			.single();
 
 		if (!membership || membership.role !== 'admin') {
-			return json({ error: '管理者のみが招待を作成できます' }, { status: 403 });
+			return json({ error: '招待を作成する権限がありません。' }, { status: 403 });
 		}
 
 		// 組織メンバー数制限チェック

@@ -353,6 +353,9 @@ export const actions: Actions = {
 				.eq('session_id', sessionId)
 				.maybeSingle();
 			isMultiJudge = trainingSession?.is_multi_judge || false;
+		} else if (modeType === 'tournament') {
+			// 大会モードは常に複数検定員モードON
+			isMultiJudge = true;
 		} else {
 			isMultiJudge = sessionDetails.is_multi_judge || false;
 		}

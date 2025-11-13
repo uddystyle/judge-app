@@ -7,26 +7,28 @@
 		confirm: void;
 	};
 
+	export let disabled: boolean = false;
+
 	const dispatch = createEventDispatcher<KeypadEvent>();
 </script>
 
 <div class="numeric-keypad">
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '7')}>7</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '8')}>8</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '9')}>9</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '4')}>4</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '5')}>5</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '6')}>6</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '1')}>1</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '2')}>2</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '3')}>3</button>
-	<button type="button" class="numeric-key" on:click={() => dispatch('input', '0')}>0</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '7')} {disabled}>7</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '8')} {disabled}>8</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '9')} {disabled}>9</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '4')} {disabled}>4</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '5')} {disabled}>5</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '6')} {disabled}>6</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '1')} {disabled}>1</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '2')} {disabled}>2</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '3')} {disabled}>3</button>
+	<button type="button" class="numeric-key" on:click={() => dispatch('input', '0')} {disabled}>0</button>
 
-	<button type="button" class="numeric-key spacer" aria-label="spacer" tabindex="-1"></button>
+	<button type="button" class="numeric-key spacer" aria-label="spacer" tabindex="-1" disabled></button>
 
-	<button type="button" class="numeric-key clear" on:click={() => dispatch('clear')}>C</button>
+	<button type="button" class="numeric-key clear" on:click={() => dispatch('clear')} {disabled}>C</button>
 
-	<button type="button" class="numeric-key confirm" on:click={() => dispatch('confirm')}
+	<button type="button" class="numeric-key confirm" on:click={() => dispatch('confirm')} {disabled}
 		>確定</button
 	>
 </div>
@@ -101,6 +103,11 @@
 	.numeric-key.spacer:active {
 		background: transparent;
 		transform: none;
+	}
+	.numeric-key:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		pointer-events: none;
 	}
 
 	/* PC対応: タブレット以上 */

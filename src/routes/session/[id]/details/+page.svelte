@@ -4,6 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import * as XLSX from 'xlsx';
@@ -24,6 +25,11 @@
 	let editedName = data.sessionDetails.name;
 	let isSubmittingName = false;
 	const isCreator = data.currentUserId === data.sessionDetails.created_by;
+
+	// アラートダイアログの状態
+	let showAlert = false;
+	let alertMessage = '';
+	let alertTitle = 'エラー';
 
 	function startEditingName() {
 		if (!isCreator) return;
@@ -138,7 +144,8 @@
 			showQRModal = true;
 		} catch (err) {
 			console.error('QRコード生成エラー:', err);
-			alert('QRコードの生成に失敗しました。');
+			alertMessage = 'QRコードの生成に失敗しました。';
+			showAlert = true;
 		}
 	}
 
@@ -161,7 +168,8 @@
 			link.click();
 		} catch (err) {
 			console.error('QRコードダウンロードエラー:', err);
-			alert('QRコードのダウンロードに失敗しました。');
+			alertMessage = 'QRコードのダウンロードに失敗しました。';
+			showAlert = true;
 		}
 	}
 
@@ -179,7 +187,8 @@
 			},
 			(err) => {
 				console.error('コピーに失敗しました:', err);
-				alert('URLのコピーに失敗しました。');
+				alertMessage = 'URLのコピーに失敗しました。';
+				showAlert = true;
 			}
 		);
 	}
@@ -192,7 +201,8 @@
 			const jsonData = await response.json();
 
 			if (!response.ok || !jsonData.results || jsonData.results.length === 0) {
-				alert('エクスポートするデータがありません。');
+				alertMessage = 'エクスポートするデータがありません。';
+				showAlert = true;
 				return;
 			}
 
@@ -239,7 +249,8 @@
 			}
 		} catch (err) {
 			console.error('Export failed:', err);
-			alert('エクスポート処理中にエラーが発生しました。');
+			alertMessage = 'エクスポート処理中にエラーが発生しました。';
+			showAlert = true;
 		} finally {
 			exportLoading = false;
 		}
@@ -891,6 +902,14 @@
 	variant="danger"
 	on:confirm={handleRemoveGuestConfirm}
 	on:cancel={handleRemoveGuestCancel}
+/>
+
+<AlertDialog
+	bind:isOpen={showAlert}
+	title={alertTitle}
+	message={alertMessage}
+	confirmText="OK"
+	on:confirm={() => {}}
 />
 
 <Footer />

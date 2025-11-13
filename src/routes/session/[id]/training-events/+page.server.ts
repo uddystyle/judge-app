@@ -69,7 +69,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			);
 		} else if (!isChief) {
 			// 一般検定員も種目選択できない
-			throw error(403, '複数検定員モードでは主任検定員のみが種目を選択できます。');
+			throw error(403, '種目を選択する権限がありません。');
 		}
 	}
 

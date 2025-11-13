@@ -34,7 +34,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.single();
 
 	if (!membership) {
-		throw error(403, 'この組織にアクセスする権限がありません');
+		throw error(403, '組織にアクセスする権限がありません。');
 	}
 
 	// 組織のメンバー一覧を取得（2段階クエリ）
@@ -124,7 +124,7 @@ export const actions = {
 			.single();
 
 		if (!membership || membership.role !== 'admin') {
-			return fail(403, { error: '組織名を変更する権限がありません。管理者のみが変更できます。' });
+			return fail(403, { error: '組織名を変更する権限がありません。' });
 		}
 
 		const formData = await request.formData();

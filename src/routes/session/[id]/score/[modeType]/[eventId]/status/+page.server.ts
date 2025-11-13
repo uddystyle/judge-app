@@ -107,13 +107,27 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 };
 
 export const actions: Actions = {
-	requestCorrection: async ({ request, params, locals: { supabase } }) => {
+	requestCorrection: async ({ request, params, locals: { supabase }, url }) => {
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの認証
+		if (!user && guestIdentifier) {
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return fail(401, { error: 'ゲスト認証が必要です。' });
+			}
+		} else if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -122,21 +136,41 @@ export const actions: Actions = {
 		const bib = formData.get('bib') as string;
 		const judgeName = formData.get('judgeName') as string;
 		const judgeId = formData.get('judgeId') as string;
-		const guestIdentifier = formData.get('guestIdentifier') as string;
+		const formGuestIdentifier = formData.get('guestIdentifier') as string;
 
 		if (!bib || !judgeName) {
 			return fail(400, { error: 'パラメータが不足しています。' });
 		}
 
-		// セッション情報を取得して主任検定員かチェック
+		// セッション情報を取得して権限をチェック
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
 			.select('chief_judge_id')
 			.eq('id', sessionId)
 			.single();
 
-		if (sessionError || sessionData.chief_judge_id !== user.id) {
-			return fail(403, { error: '主任検定員のみが修正を要求できます。' });
+		if (sessionError) {
+			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
+		}
+
+		const isChief = user ? user.id === sessionData.chief_judge_id : false;
+
+		// 複数検定員モードの確認
+		let isMultiJudge = false;
+		if (modeType === 'training') {
+			const { data: trainingSession } = await supabase
+				.from('training_sessions')
+				.select('is_multi_judge')
+				.eq('session_id', sessionId)
+				.maybeSingle();
+			isMultiJudge = trainingSession?.is_multi_judge || false;
+		} else if (modeType === 'tournament') {
+			isMultiJudge = true;
+		}
+
+		// 複数検定員モードONの場合、主任検定員のみが修正を要求できる
+		if (!isChief && isMultiJudge) {
+			return fail(403, { error: '修正を要求する権限がありません。' });
 		}
 
 		const isTrainingMode = modeType === 'training';
@@ -162,10 +196,10 @@ export const actions: Actions = {
 				.eq('event_id', eventId)
 				.eq('athlete_id', participant.id);
 
-			if (guestIdentifier) {
+			if (formGuestIdentifier) {
 				// ゲストユーザーの場合
-				console.log('[requestCorrection] Deleting guest score:', guestIdentifier);
-				deleteQuery = deleteQuery.eq('guest_identifier', guestIdentifier);
+				console.log('[requestCorrection] Deleting guest score:', formGuestIdentifier);
+				deleteQuery = deleteQuery.eq('guest_identifier', formGuestIdentifier);
 			} else if (judgeId) {
 				// 認証ユーザーの場合（judgeIdがフォームから送信されている）
 				console.log('[requestCorrection] Deleting user score:', judgeId);
@@ -223,13 +257,27 @@ export const actions: Actions = {
 		return { success: true, message: '修正を要求しました。' };
 	},
 
-	finalizeScore: async ({ request, params, locals: { supabase } }) => {
+	finalizeScore: async ({ request, params, locals: { supabase }, url }) => {
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの認証
+		if (!user && guestIdentifier) {
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return fail(401, { error: 'ゲスト認証が必要です。' });
+			}
+		} else if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -241,15 +289,35 @@ export const actions: Actions = {
 			return fail(400, { error: 'ゼッケン番号が指定されていません。' });
 		}
 
-		// セッション情報を取得して主任検定員かチェック
+		// セッション情報を取得して権限をチェック
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
 			.select('chief_judge_id, exclude_extremes')
 			.eq('id', sessionId)
 			.single();
 
-		if (sessionError || sessionData.chief_judge_id !== user.id) {
-			return fail(403, { error: '主任検定員のみが確定できます。' });
+		if (sessionError) {
+			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
+		}
+
+		const isChief = user ? user.id === sessionData.chief_judge_id : false;
+
+		// 複数検定員モードの確認
+		let isMultiJudge = false;
+		if (modeType === 'training') {
+			const { data: trainingSession } = await supabase
+				.from('training_sessions')
+				.select('is_multi_judge')
+				.eq('session_id', sessionId)
+				.maybeSingle();
+			isMultiJudge = trainingSession?.is_multi_judge || false;
+		} else if (modeType === 'tournament') {
+			isMultiJudge = true;
+		}
+
+		// 複数検定員モードONの場合、主任検定員のみが確定できる
+		if (!isChief && isMultiJudge) {
+			return fail(403, { error: '得点を確定する権限がありません。' });
 		}
 
 		const isTrainingMode = modeType === 'training';

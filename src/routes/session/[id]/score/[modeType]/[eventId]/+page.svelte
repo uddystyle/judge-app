@@ -3,6 +3,7 @@
 	import NumericKeypad from '$lib/components/NumericKeypad.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
@@ -24,6 +25,11 @@
 
 	let bibNumber = '';
 
+	// アラートダイアログの状態
+	let showAlert = false;
+	let alertMessage = '';
+	let alertTitle = '入力エラー';
+
 	function handleInput(event: CustomEvent<string>) {
 		const num = event.detail;
 		if (bibNumber.length < 3) {
@@ -37,7 +43,8 @@
 
 	async function handleConfirm() {
 		if (!bibNumber || parseInt(bibNumber) <= 0) {
-			alert('ゼッケン番号を入力してください');
+			alertMessage = 'ゼッケン番号を入力してください';
+			showAlert = true;
 			return;
 		}
 
@@ -114,16 +121,27 @@
 	</div>
 </div>
 
+<AlertDialog
+	bind:isOpen={showAlert}
+	title={alertTitle}
+	message={alertMessage}
+	confirmText="OK"
+	on:confirm={() => {}}
+/>
+
 <style>
 	.container {
 		padding: 28px 20px;
 		text-align: center;
+		max-width: 600px;
+		margin: 0 auto;
 	}
 
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
-		margin-bottom: 20px;
+		color: var(--text-primary);
+		margin-bottom: 28px;
 	}
 
 	.scoring-info {
@@ -192,7 +210,6 @@
 		.container {
 			padding: 60px 40px;
 			max-width: 800px;
-			margin: 0 auto;
 		}
 		.instruction {
 			font-size: 32px;

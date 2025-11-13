@@ -1,17 +1,37 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const { id: sessionId, eventId } = params;
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
+
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
+	} else if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const { id: sessionId, eventId } = params;
 
 	// セッションの詳細情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -42,10 +62,18 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(404, '種目が見つかりません。');
 	}
 
+	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
+	// 大会モードは常に複数検定員モードON
+	const isMultiJudge = true;
+
 	return {
 		user,
 		sessionDetails,
-		customEvent
+		customEvent,
+		isChief,
+		isMultiJudge,
+		guestParticipant,
+		guestIdentifier
 	};
 };
 
@@ -56,7 +84,21 @@ export const actions: Actions = {
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの認証
+		if (!user && guestIdentifier) {
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return fail(401, { error: 'ゲスト認証が必要です。' });
+			}
+		} else if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -68,15 +110,24 @@ export const actions: Actions = {
 			return fail(400, { error: 'ゼッケン番号が指定されていません。' });
 		}
 
-		// セッション情報を取得して主任検定員かチェック
+		// セッション情報を取得して権限をチェック
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
 			.select('*')
 			.eq('id', sessionId)
 			.single();
 
-		if (sessionError || sessionData.chief_judge_id !== user.id) {
-			return fail(403, { error: '主任検定員のみが確定できます。' });
+		if (sessionError) {
+			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
+		}
+
+		const isChief = user ? user.id === sessionData.chief_judge_id : false;
+		// 大会モードは常に複数検定員モードON
+		const isMultiJudge = true;
+
+		// 複数検定員モードONの場合、主任検定員のみが確定できる
+		if (!isChief && isMultiJudge) {
+			return fail(403, { error: '得点を確定する権限がありません。' });
 		}
 
 		// カスタム種目の情報を取得

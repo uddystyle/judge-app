@@ -184,7 +184,7 @@
 	.event-name {
 		font-size: 20px;
 		font-weight: 600;
-		color: var(--primary-text);
+		color: var(--text-primary);
 		margin-bottom: 8px;
 	}
 
@@ -192,9 +192,9 @@
 		display: inline-block;
 		background: var(--ios-blue);
 		color: white;
-		padding: 4px 12px;
-		border-radius: 12px;
-		font-size: 13px;
+		padding: 6px 16px;
+		border-radius: 20px;
+		font-size: 14px;
 		font-weight: 600;
 	}
 
@@ -205,6 +205,7 @@
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
+		color: var(--text-primary);
 		margin-bottom: 28px;
 	}
 	.form-container {

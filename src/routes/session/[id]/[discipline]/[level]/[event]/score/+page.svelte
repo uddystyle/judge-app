@@ -2,6 +2,8 @@
 	import NumericKeypad from '$lib/components/NumericKeypad.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
+	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { page } from '$app/stores';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -22,10 +24,15 @@
 	let currentScore = '';
 	let loading = false;
 
+	// アラートダイアログの状態
+	let showAlert = false;
+	let alertMessage = '';
+	let alertTitle = 'エラー';
+
 	$: isChief = data.isChief;
 	$: isMultiJudge = data.isMultiJudge;
-	// 主任検定員かつ複数検定員モードON、または複数検定員モードOFFの場合にボタンを表示
-	$: showBibEditButton = (isChief && isMultiJudge) || !isMultiJudge;
+	// 主任検定員または複数検定員モードOFFの場合にボタンを表示
+	$: showBibEditButton = isChief || !isMultiJudge;
 
 	// キーパッドから数字が入力されたときの処理
 	function handleInput(event: CustomEvent<string>) {
@@ -52,7 +59,8 @@
 
 			if (error) {
 				console.error('Failed to clear active_prompt_id:', error);
-				alert('エラーが発生しました。');
+				alertMessage = 'エラーが発生しました。';
+				showAlert = true;
 				return;
 			}
 		}
@@ -66,7 +74,9 @@
 	async function handleConfirm() {
 		const score = parseInt(currentScore, 10) || 0;
 		if (score < 0 || score > 99) {
-			alert('得点は0～99の範囲で入力してください');
+			alertTitle = '入力エラー';
+			alertMessage = '得点は0～99の範囲で入力してください';
+			showAlert = true;
 			return;
 		}
 
@@ -79,7 +89,9 @@
 		const sessionDetails = get(currentSession);
 
 		if (!bib) {
-			alert('ゼッケン番号がありません。前のページに戻って再入力してください。');
+			alertTitle = 'エラー';
+			alertMessage = 'ゼッケン番号がありません。前のページに戻って再入力してください。';
+			showAlert = true;
 			loading = false;
 			return;
 		}
@@ -124,7 +136,10 @@
 		);
 
 		if (error) {
-			alert('得点の送信に失敗しました: ' + error.message);
+			alertTitle = 'エラー';
+			alertMessage = '得点の送信に失敗しました: ' + error.message;
+			showAlert = true;
+			loading = false;
 		} else {
 			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
 			if (sessionDetails?.is_multi_judge) {
@@ -281,14 +296,29 @@
 
 	<div class="numeric-display">{currentScore || '0'}</div>
 
-	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} />
+	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} disabled={loading} />
+
+	{#if loading}
+		<div class="loading-overlay">
+			<LoadingSpinner size="large" />
+			<p class="loading-text">送信中...</p>
+		</div>
+	{/if}
 
 	{#if showBibEditButton}
 		<div class="nav-buttons">
-			<NavButton on:click={handleEditBib}>ゼッケン番号を修正</NavButton>
+			<NavButton on:click={handleEditBib}>ゼッケン番号入力に戻る</NavButton>
 		</div>
 	{/if}
 </div>
+
+<AlertDialog
+	bind:isOpen={showAlert}
+	title={alertTitle}
+	message={alertMessage}
+	confirmText="OK"
+	on:confirm={() => {}}
+/>
 
 <style>
 	.container {
@@ -306,22 +336,41 @@
 	.numeric-display {
 		font-size: 64px;
 		font-weight: 700;
-		color: var(--text-primary);
+		color: var(--accent-primary);
 		min-height: 100px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		background: var(--bg-primary);
 		border-radius: 16px;
-		border: 2px solid var(--border-medium);
+		border: 3px solid var(--border-light);
 		margin-bottom: 24px;
-		box-shadow: none;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 	}
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
 		margin-top: 28px;
+	}
+	.loading-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		color: white;
+	}
+	.loading-text {
+		margin-top: 16px;
+		font-size: 18px;
+		font-weight: 600;
 	}
 
 	/* PC対応: タブレット以上 */

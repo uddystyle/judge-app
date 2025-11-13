@@ -113,7 +113,7 @@ export const actions: Actions = {
 			.single();
 
 		if (!membership || membership.role !== 'admin') {
-			return fail(403, { error: '管理者のみが組織を削除できます。' });
+			return fail(403, { error: '組織を削除する権限がありません。' });
 		}
 
 		// 組織に紐づくセッションの数を確認

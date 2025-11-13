@@ -157,15 +157,47 @@ export const actions: Actions = {
 			return fail(401, { error: '認証が必要です。' });
 		}
 
+		const { id: sessionId, modeType, eventId } = params;
+		const sessionIdInt = parseInt(sessionId);
+
+		// セッション情報を取得して権限をチェック
+		const { data: sessionData, error: sessionError } = await supabase
+			.from('sessions')
+			.select('chief_judge_id')
+			.eq('id', sessionIdInt)
+			.single();
+
+		if (sessionError) {
+			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
+		}
+
+		const isChief = user ? user.id === sessionData.chief_judge_id : false;
+
+		// 複数検定員モードの確認
+		let isMultiJudge = false;
+		if (modeType === 'training') {
+			const { data: trainingSession } = await supabase
+				.from('training_sessions')
+				.select('is_multi_judge')
+				.eq('session_id', sessionIdInt)
+				.maybeSingle();
+			isMultiJudge = trainingSession?.is_multi_judge || false;
+		} else if (modeType === 'tournament') {
+			isMultiJudge = true;
+		}
+
+		// 複数検定員モードONの場合、主任検定員のみがゼッケン番号を確定できる
+		// ゲストユーザーは例外として許可
+		if (!isChief && isMultiJudge && !guestParticipant) {
+			return fail(403, { error: 'ゼッケン番号を確定する権限がありません。' });
+		}
+
 		const formData = await request.formData();
 		const bibNumber = parseInt(formData.get('bibNumber') as string);
 
 		if (isNaN(bibNumber) || bibNumber <= 0) {
 			return fail(400, { error: 'ゼッケン番号は正の整数である必要があります。' });
 		}
-
-		const { id: sessionId, modeType, eventId } = params;
-		const sessionIdInt = parseInt(sessionId);
 
 		// 同じゼッケン番号の参加者が既に存在するか確認
 		const { data: existingParticipant, error: checkError } = await supabase

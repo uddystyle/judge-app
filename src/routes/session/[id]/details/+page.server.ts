@@ -638,7 +638,7 @@ export const actions: Actions = {
 		}
 
 		if (session.created_by !== user.id) {
-			return fail(403, { error: 'セッション名を変更する権限がありません。作成者のみが変更できます。' });
+			return fail(403, { error: 'セッション名を変更する権限がありません。' });
 		}
 
 		const formData = await request.formData();
@@ -692,7 +692,7 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionData?.created_by !== user.id) {
-			return fail(403, { error: 'この検定を削除する権限がありません。' });
+			return fail(403, { error: '検定を削除する権限がありません。' });
 		}
 
 		// Delete related data in the correct order to respect database constraints

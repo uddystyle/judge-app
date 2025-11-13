@@ -2,6 +2,7 @@
 	import NumericKeypad from '$lib/components/NumericKeypad.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { currentBib as bibStore, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
@@ -13,6 +14,11 @@
 	export let data: PageData;
 	let currentBib = '';
 	let formElement: HTMLFormElement;
+
+	// アラートダイアログの状態
+	let showAlert = false;
+	let alertMessage = '';
+	let alertTitle = '入力エラー';
 
 	$: ({ id, discipline, level, event } = $page.params);
 	$: isTournamentMode = data.isTournamentMode;
@@ -45,8 +51,8 @@
 	function beforeSubmit() {
 		const bib = parseInt(currentBib, 10) || 0;
 		if (bib < 1 || bib > 999) {
-			// SvelteKitのフォームが送信をキャンセルしてくれる
-			alert('ゼッケン番号は1～999の範囲で入力してください');
+			alertMessage = 'ゼッケン番号は1～999の範囲で入力してください';
+			showAlert = true;
 			return false;
 		}
 		bibStore.set(bib);
@@ -56,7 +62,8 @@
 	function handleConfirm() {
 		const bib = parseInt(currentBib, 10) || 0;
 		if (bib < 1 || bib > 999) {
-			alert('ゼッケン番号は1～999の範囲で入力してください');
+			alertMessage = 'ゼッケン番号は1～999の範囲で入力してください';
+			showAlert = true;
 			return;
 		}
 		bibStore.set(bib);
@@ -79,6 +86,14 @@
 
 <div class="container">
 	<div class="instruction">ゼッケン番号を入力してください</div>
+
+	{#if isMultiJudge}
+		<div class="scoring-info">
+			<div class="scoring-badge training">複数検定員モード</div>
+			<p class="scoring-description">主任が採点を指示します</p>
+		</div>
+	{/if}
+
 	<div class="numeric-display">{currentBib || '0'}</div>
 
 	<form method="POST" action="?/setPrompt" use:enhance bind:this={formElement}>
@@ -100,6 +115,14 @@
 	</div>
 </div>
 
+<AlertDialog
+	bind:isOpen={showAlert}
+	title={alertTitle}
+	message={alertMessage}
+	confirmText="OK"
+	on:confirm={() => {}}
+/>
+
 <style>
 	.container {
 		padding: 28px 20px;
@@ -112,6 +135,24 @@
 		font-weight: 700;
 		color: var(--text-primary);
 		margin-bottom: 28px;
+	}
+	.scoring-info {
+		margin-bottom: 20px;
+	}
+	.scoring-badge {
+		display: inline-block;
+		background: #ff9800;
+		color: white;
+		padding: 6px 16px;
+		border-radius: 20px;
+		font-size: 14px;
+		font-weight: 600;
+		margin-bottom: 8px;
+	}
+	.scoring-description {
+		font-size: 14px;
+		color: var(--secondary-text);
+		margin: 0;
 	}
 	.numeric-display {
 		font-size: 64px;

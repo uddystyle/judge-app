@@ -64,6 +64,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	}
 
 	const isChief = user.id === sessionDetails.chief_judge_id;
+	// 大会モードは常に複数検定員モードON
+	const isMultiJudge = true;
 
 	return {
 		sessionDetails,
@@ -72,6 +74,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		totalScore: parseInt(score),
 		scores: scores || [],
 		isChief,
+		isMultiJudge,
 		excludeExtremes: sessionDetails.exclude_extremes
 	};
 };
@@ -96,8 +99,16 @@ export const actions: Actions = {
 			.eq('id', sessionId)
 			.single();
 
-		if (sessionError || sessionData.chief_judge_id !== user.id) {
-			return { success: false, error: '主任検定員のみが終了できます。' };
+		if (sessionError) {
+			return { success: false, error: 'セッション情報の取得に失敗しました。' };
+		}
+
+		const isChief = user.id === sessionData.chief_judge_id;
+		// 大会モードは常に複数検定員モードON
+		const isMultiJudge = true;
+
+		if (!isChief && isMultiJudge) {
+			return { success: false, error: 'セッションを終了する権限がありません。' };
 		}
 
 		// セッションを終了状態に更新

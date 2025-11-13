@@ -82,6 +82,25 @@ export const actions: Actions = {
 			throw redirect(303, '/login');
 		}
 
+		// セッション情報を取得して権限をチェック
+		const { data: sessionData, error: sessionError } = await supabase
+			.from('sessions')
+			.select('chief_judge_id, is_multi_judge')
+			.eq('id', params.id)
+			.single();
+
+		if (sessionError) {
+			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
+		}
+
+		const isChief = user.id === sessionData.chief_judge_id;
+		const isMultiJudge = sessionData.is_multi_judge;
+
+		// 複数検定員モードONの場合、主任検定員のみがゼッケン番号を確定できる
+		if (!isChief && isMultiJudge) {
+			return fail(403, { error: 'ゼッケン番号を確定する権限がありません。' });
+		}
+
 		const formData = await request.formData();
 		const bib = Number(formData.get('bib'));
 

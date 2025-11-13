@@ -7,6 +7,7 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { onMount, onDestroy } from 'svelte';
+	import { currentSession, currentDiscipline, currentEvent, currentBib } from '$lib/stores';
 
 	export let data: PageData;
 
@@ -17,6 +18,7 @@
 	$: eventId = $page.params.eventId;
 	$: sessionName = data.sessionDetails.name;
 	$: eventName = data.customEvent.event_name;
+	$: guestIdentifier = data.guestIdentifier;
 
 	function handleNextSkier() {
 		goto(`/session/${sessionId}/tournament-events/${eventId}/score`);
@@ -30,6 +32,12 @@
 	}
 
 	onMount(() => {
+		// ヘッダー情報を設定
+		currentSession.set({ name: sessionName });
+		currentDiscipline.set('大会');
+		currentEvent.set(eventName);
+		currentBib.set(data.bib);
+
 		// 一般検定員の場合、セッション終了を監視
 		if (!data.isChief) {
 			console.log('[一般検定員/complete] リアルタイムリスナーをセットアップ中...', { sessionId });
@@ -78,14 +86,9 @@
 	});
 </script>
 
-<Header />
+<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
-	<div class="session-info">
-		<div class="session-name">{sessionName}</div>
-		<div class="event-name">{eventName}</div>
-	</div>
-
 	<div class="instruction">送信完了</div>
 
 	<div class="status">
@@ -122,7 +125,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextSkier}>次の滑走者</NavButton>
-		{#if data.isChief}
+		{#if data.isChief || !data.isMultiJudge}
 			<NavButton on:click={handleEndSession}>セッションを終了する</NavButton>
 		{/if}
 	</div>
@@ -141,39 +144,26 @@
 	.container {
 		padding: 28px 20px;
 		text-align: center;
-	}
-
-	.session-info {
-		margin-bottom: 20px;
-	}
-
-	.session-name {
-		font-size: 14px;
-		color: var(--secondary-text);
-		margin-bottom: 4px;
-	}
-
-	.event-name {
-		font-size: 20px;
-		font-weight: 600;
-		color: var(--primary-text);
+		max-width: 600px;
+		margin: 0 auto;
 	}
 
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
+		color: var(--text-primary);
 		margin-bottom: 28px;
 	}
 
 	.status {
-		padding: 15px;
+		padding: 20px;
 		border-radius: 12px;
 		margin: 20px auto;
 		text-align: center;
-		font-size: 15px;
-		max-width: 340px;
+		font-size: 16px;
+		max-width: 400px;
 		background: #e6f6e8;
-		border: 1px solid #2d7a3e;
+		border: 2px solid #2d7a3e;
 		color: #1e5c2e;
 		line-height: 1.6;
 	}
@@ -204,24 +194,26 @@
 	}
 
 	.scores-container {
-		max-width: 400px;
+		max-width: 500px;
 		margin: 20px auto;
 		text-align: left;
 	}
 
 	.scores-title {
-		font-size: 17px;
+		font-size: 18px;
 		font-weight: 600;
+		color: var(--text-primary);
 		margin-bottom: 12px;
 		text-align: center;
 	}
 
 	.scores-list {
-		background: white;
+		background: var(--bg-primary);
 		border-radius: 12px;
 		padding: 8px 16px;
 		margin-bottom: 16px;
-		border: 1px solid var(--separator-gray);
+		border: 2px solid var(--border-light);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 	}
 
 	.score-item {
@@ -238,29 +230,74 @@
 
 	.judge-name {
 		font-weight: 500;
-		color: var(--primary-text);
+		color: var(--text-primary);
 	}
 
 	.score-value {
 		font-size: 18px;
 		font-weight: 600;
-		color: var(--ios-blue);
+		color: var(--accent-primary);
 	}
 
 	.total-score {
 		text-align: center;
 		font-size: 20px;
 		color: #2d7a3e;
-		padding: 12px;
+		padding: 16px;
 		background: #e6f6e8;
 		border-radius: 12px;
-		border: 1px solid #2d7a3e;
+		border: 2px solid #2d7a3e;
 	}
 
 	.single-score {
 		text-align: center;
-		font-size: 20px;
-		color: var(--ios-blue);
+		font-size: 24px;
+		font-weight: 700;
+		color: var(--accent-primary);
 		margin: 20px 0;
+	}
+
+	/* PC対応: タブレット以上 */
+	@media (min-width: 768px) {
+		.container {
+			padding: 60px 40px;
+			max-width: 800px;
+		}
+		.instruction {
+			font-size: 36px;
+			margin-bottom: 40px;
+		}
+		.status {
+			padding: 24px;
+			font-size: 18px;
+		}
+		.scores-container {
+			max-width: 600px;
+		}
+		.scores-title {
+			font-size: 22px;
+		}
+		.scores-list {
+			padding: 12px 24px;
+		}
+		.score-item {
+			padding: 16px 0;
+		}
+		.judge-name {
+			font-size: 18px;
+		}
+		.score-value {
+			font-size: 22px;
+		}
+		.total-score {
+			font-size: 24px;
+			padding: 20px;
+		}
+		.single-score {
+			font-size: 32px;
+		}
+		.nav-buttons {
+			margin-top: 40px;
+		}
 	}
 </style>
