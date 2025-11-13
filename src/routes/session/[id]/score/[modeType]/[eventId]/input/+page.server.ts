@@ -107,6 +107,27 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 
+	// プロフィールと組織情報を取得（認証ユーザーの場合のみ）
+	let profile = null;
+	let organizations = [];
+
+	if (user) {
+		const { data: profileData } = await supabase
+			.from('profiles')
+			.select('*')
+			.eq('id', user.id)
+			.single();
+
+		profile = profileData;
+
+		const { data: orgData } = await supabase
+			.from('organization_members')
+			.select('organization_id, organizations(id, name)')
+			.eq('user_id', user.id);
+
+		organizations = orgData || [];
+	}
+
 	return {
 		sessionDetails,
 		eventInfo,
@@ -118,7 +139,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		isChief,
 		guestParticipant,
 		guestIdentifier,
-		user
+		user,
+		profile,
+		organizations
 	};
 };
 

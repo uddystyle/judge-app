@@ -31,7 +31,14 @@
 	}
 </script>
 
-<Header />
+<Header
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.organizations && data.organizations.length > 0}
+	pageOrganizations={data.organizations || []}
+	isGuest={false}
+	guestName={null}
+/>
 
 <div class="container">
 	<div class="instruction">種目設定</div>

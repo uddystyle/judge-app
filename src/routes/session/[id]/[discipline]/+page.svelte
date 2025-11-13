@@ -30,7 +30,14 @@
 	}
 </script>
 
-<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
+<Header
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.organizations && data.organizations.length > 0}
+	pageOrganizations={data.organizations || []}
+	isGuest={!!data.guestIdentifier}
+	guestName={data.guestParticipant?.guest_name || null}
+/>
 
 <div class="container">
 	<div class="instruction">級を選択してください</div>

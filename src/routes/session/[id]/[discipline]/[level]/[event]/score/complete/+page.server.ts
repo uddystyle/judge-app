@@ -67,6 +67,27 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw error(500, '得点の取得に失敗しました。');
 	}
 
+	// プロフィールと組織情報を取得（認証ユーザーの場合のみ）
+	let profile = null;
+	let organizations = [];
+
+	if (user) {
+		const { data: profileData } = await supabase
+			.from('profiles')
+			.select('*')
+			.eq('id', user.id)
+			.single();
+
+		profile = profileData;
+
+		const { data: orgData } = await supabase
+			.from('organization_members')
+			.select('organization_id, organizations(id, name)')
+			.eq('user_id', user.id);
+
+		organizations = orgData || [];
+	}
+
 	return {
 		bib,
 		averageScore,
@@ -76,7 +97,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		isTournamentMode: sessionDetails.is_tournament_mode,
 		user,
 		guestIdentifier,
-		guestParticipant
+		guestParticipant,
+		profile,
+		organizations
 	};
 };
 

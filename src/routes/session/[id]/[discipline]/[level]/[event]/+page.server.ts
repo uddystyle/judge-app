@@ -60,13 +60,36 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		throw redirect(303, `/session/${sessionId}?guest=${guestIdentifier}`);
 	}
 
+	// プロフィールと組織情報を取得（認証ユーザーの場合のみ）
+	let profile = null;
+	let organizations = [];
+
+	if (user) {
+		const { data: profileData } = await supabase
+			.from('profiles')
+			.select('*')
+			.eq('id', user.id)
+			.single();
+
+		profile = profileData;
+
+		const { data: orgData } = await supabase
+			.from('organization_members')
+			.select('organization_id, organizations(id, name)')
+			.eq('user_id', user.id);
+
+		organizations = orgData || [];
+	}
+
 	return {
 		isTournamentMode: sessionDetails.is_tournament_mode,
 		isMultiJudge: sessionDetails.is_multi_judge,
 		isChief,
 		user,
 		guestIdentifier,
-		guestParticipant
+		guestParticipant,
+		profile,
+		organizations
 	};
 };
 

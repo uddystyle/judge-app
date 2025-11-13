@@ -119,7 +119,14 @@
 	$: canSubmit = (scoreStatus?.scores?.length || 0) >= requiredJudges;
 </script>
 
-<Header />
+<Header
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.organizations && data.organizations.length > 0}
+	pageOrganizations={data.organizations || []}
+	isGuest={!!data.guestIdentifier}
+	guestName={data.guestParticipant?.guest_name || null}
+/>
 
 <div class="container">
 	<div class="session-info">

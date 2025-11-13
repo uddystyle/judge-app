@@ -257,7 +257,14 @@
 	$: guestIdentifier = $page.url.searchParams.get('guest');
 </script>
 
-<Header pageUser={data.user} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
+<Header
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.organizations && data.organizations.length > 0}
+	pageOrganizations={data.organizations || []}
+	isGuest={!!data.guestIdentifier}
+	guestName={data.guestParticipant?.guest_name || null}
+/>
 
 <ScoreInput
 	minScore={0}

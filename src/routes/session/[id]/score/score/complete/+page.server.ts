@@ -67,6 +67,22 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// 大会モードは常に複数検定員モードON
 	const isMultiJudge = true;
 
+	// プロフィールと組織情報を取得
+	const { data: profileData } = await supabase
+		.from('profiles')
+		.select('*')
+		.eq('id', user.id)
+		.single();
+
+	const profile = profileData;
+
+	const { data: orgData } = await supabase
+		.from('organization_members')
+		.select('organization_id, organizations(id, name)')
+		.eq('user_id', user.id);
+
+	const organizations = orgData || [];
+
 	return {
 		sessionDetails,
 		customEvent,
@@ -75,7 +91,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		scores: scores || [],
 		isChief,
 		isMultiJudge,
-		excludeExtremes: sessionDetails.exclude_extremes
+		excludeExtremes: sessionDetails.exclude_extremes,
+		user,
+		profile,
+		organizations
 	};
 };
 

@@ -34,6 +34,22 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw redirect(303, `/session/${sessionId}`);
 	}
 
+	// プロフィールと組織情報を取得
+	const { data: profileData } = await supabase
+		.from('profiles')
+		.select('*')
+		.eq('id', user.id)
+		.single();
+
+	const profile = profileData;
+
+	const { data: orgData } = await supabase
+		.from('organization_members')
+		.select('organization_id, organizations(id, name)')
+		.eq('user_id', user.id);
+
+	const organizations = orgData || [];
+
 	// カスタム種目の情報を取得
 	const { data: customEvent, error: eventError } = await supabase
 		.from('custom_events')
@@ -49,7 +65,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	return {
 		sessionDetails,
-		customEvent
+		customEvent,
+		user,
+		profile,
+		organizations
 	};
 };
 
