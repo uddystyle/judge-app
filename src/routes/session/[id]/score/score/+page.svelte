@@ -83,10 +83,8 @@
 	<div class="scoring-info">
 		{#if excludeExtremes}
 			<div class="scoring-badge advanced">5審3採</div>
-			<p class="scoring-description">5人の検定員で採点します</p>
 		{:else}
 			<div class="scoring-badge">3審3採</div>
-			<p class="scoring-description">3人の検定員で採点します</p>
 		{/if}
 	</div>
 
