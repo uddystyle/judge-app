@@ -550,16 +550,9 @@
 				</div>
 			{:else if !data.isChief && data.isTournamentMode}
 				<!-- 大会モード: 主任検定員以外（一般検定員とゲストユーザー）に採点方式を表示 -->
-				<div class="settings-info">
-					<p class="settings-label">採点方式:</p>
-					<div class="scoring-method-badge">
-						{#if data.sessionDetails.exclude_extremes}
-							5審3採（最高点・最低点を除く）
-						{:else}
-							3審3採
-						{/if}
-					</div>
-				</div>
+				<p class="info-text" style="margin-top: 16px;">
+					採点方式：{#if data.sessionDetails.exclude_extremes}5審3採（最高点・最低点を除く）{:else}3審3採{/if}
+				</p>
 
 				{#if data.guestIdentifier}
 					<p class="info-text" style="margin-top: 16px; color: var(--text-secondary);">
@@ -960,18 +953,6 @@
 		border: 2px solid #2196f3;
 	}
 
-	.scoring-method-badge {
-		display: inline-block;
-		margin-top: 12px;
-		padding: 6px 14px;
-		background: #f5f5f5;
-		color: #666;
-		border-radius: 16px;
-		font-size: 14px;
-		font-weight: 500;
-		border: 1px solid #ddd;
-	}
-
 	/* ゲストユーザー待機画面 */
 	.guest-waiting-container {
 		display: flex;
@@ -1026,22 +1007,6 @@
 		gap: 12px;
 		width: 100%;
 		max-width: 400px;
-	}
-
-	.guest-discipline-selection {
-		width: 100%;
-		max-width: 400px;
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-	}
-
-	.discipline-label {
-		font-size: 16px;
-		font-weight: 600;
-		color: var(--text-primary);
-		text-align: center;
-		margin: 0;
 	}
 
 	/* PC対応: タブレット以上 */
