@@ -162,12 +162,12 @@
 								{:else if session.mode === 'training'}
 									<span class="mode-badge training">研修</span>
 									<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-										{session.isMultiJudge ? '合同ジャッジ' : '個別ジャッジ'}
+										{session.isMultiJudge ? '合同採点' : '個別採点'}
 									</span>
 								{:else}
 									<span class="mode-badge">検定</span>
 									<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-										{session.isMultiJudge ? '合同ジャッジ' : '個別ジャッジ'}
+										{session.isMultiJudge ? '合同採点' : '個別採点'}
 									</span>
 								{/if}
 							</div>
