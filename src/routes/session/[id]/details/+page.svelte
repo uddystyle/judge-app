@@ -643,7 +643,7 @@
 					</div>
 
 					<div class="form-actions">
-						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges}>採点方法を保存</button>
+						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges}>設定を保存</button>
 					</div>
 				</form>
 			{:else}
@@ -800,8 +800,8 @@
 						<p class="message success">{form.settingsSuccess}</p>
 					{/if}
 
-					<div class="nav-buttons">
-						<NavButton variant="primary" type="submit">ルールを保存</NavButton>
+					<div class="form-actions">
+						<button type="submit" class="save-btn">設定を保存</button>
 					</div>
 				</form>
 			{:else}
@@ -1948,6 +1948,7 @@
 	/* 点差コントロール */
 	.score-diff-section {
 		margin-top: 32px;
+		margin-bottom: 24px;
 		padding: 24px;
 		background: var(--bg-secondary);
 		border-radius: 12px;
