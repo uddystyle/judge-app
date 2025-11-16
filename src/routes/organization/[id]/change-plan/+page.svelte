@@ -319,7 +319,7 @@
 		font-size: 14px;
 		font-weight: 600;
 		padding: 6px 16px;
-		border-radius: 8px;
+		border-radius: 100px;
 		margin-bottom: 12px;
 	}
 
@@ -427,7 +427,7 @@
 		background: var(--bg-secondary);
 		color: var(--text-primary);
 		padding: 2px 8px;
-		border-radius: 8px;
+		border-radius: 100px;
 		border: 1px solid var(--border-light);
 	}
 
