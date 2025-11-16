@@ -40,35 +40,43 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(500, '参加者情報の取得に失敗しました。');
 	}
 
-	// 各参加者のプロフィール情報を個別に取得してマージ
-	const participants = await Promise.all(
-		(participantData || []).map(async (p) => {
-			// ゲストユーザーの場合
-			if (p.is_guest) {
-				return {
-					user_id: null,
-					is_guest: true,
-					guest_name: p.guest_name,
-					guest_identifier: p.guest_identifier,
-					profiles: null
-				};
-			}
+	// 各参加者のプロフィール情報を一括取得（N+1問題を解決）
+	const userIds = (participantData || [])
+		.filter((p) => !p.is_guest && p.user_id)
+		.map((p) => p.user_id);
 
-			// 通常ユーザーの場合
-			const { data: profile } = await supabase
-				.from('profiles')
-				.select('full_name')
-				.eq('id', p.user_id)
-				.single();
+	// 全ユーザーのプロフィールを一度に取得
+	const { data: profiles } = userIds.length > 0
+		? await supabase.from('profiles').select('id, full_name').in('id', userIds)
+		: { data: [] };
 
+	// プロフィールをマップ化
+	const profileMap = new Map();
+	(profiles || []).forEach((profile) => {
+		profileMap.set(profile.id, profile);
+	});
+
+	// 参加者データにプロフィールをマージ
+	const participants = (participantData || []).map((p) => {
+		// ゲストユーザーの場合
+		if (p.is_guest) {
 			return {
-				user_id: p.user_id,
-				is_guest: false,
-				guest_name: null,
-				profiles: profile
+				user_id: null,
+				is_guest: true,
+				guest_name: p.guest_name,
+				guest_identifier: p.guest_identifier,
+				profiles: null
 			};
-		})
-	);
+		}
+
+		// 通常ユーザーの場合
+		return {
+			user_id: p.user_id,
+			is_guest: false,
+			guest_name: null,
+			profiles: profileMap.get(p.user_id) || null
+		};
+	});
 
 	// --- モードに応じて種目を取得 ---
 	let events: any[] = [];
@@ -120,25 +128,29 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			.eq('training_events.session_id', sessionId)
 			.order('created_at', { ascending: false });
 
-		// 検定員の情報を個別に取得してマージ
+		// 検定員の情報を一括取得してマージ（N+1問題を解決）
 		if (scores && scores.length > 0) {
-			const scoresWithJudges = await Promise.all(
-				scores.map(async (score) => {
-					const { data: judgeProfile } = await supabase
-						.from('profiles')
-						.select('full_name')
-						.eq('id', score.judge_id)
-						.single();
+			const judgeIds = [...new Set(scores.map((score) => score.judge_id))];
 
-					return {
-						...score,
-						judge: {
-							full_name: judgeProfile?.full_name || '不明'
-						}
-					};
-				})
-			);
-			trainingScores = scoresWithJudges;
+			// 全検定員のプロフィールを一度に取得
+			const { data: judgeProfiles } = await supabase
+				.from('profiles')
+				.select('id, full_name')
+				.in('id', judgeIds);
+
+			// 検定員プロフィールをマップ化
+			const judgeProfileMap = new Map();
+			(judgeProfiles || []).forEach((profile) => {
+				judgeProfileMap.set(profile.id, profile);
+			});
+
+			// スコアに検定員情報をマージ
+			trainingScores = scores.map((score) => ({
+				...score,
+				judge: {
+					full_name: judgeProfileMap.get(score.judge_id)?.full_name || '不明'
+				}
+			}));
 		} else {
 			trainingScores = [];
 		}

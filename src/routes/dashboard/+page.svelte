@@ -196,7 +196,11 @@
 									COPY
 								{/if}
 							</button>
-							<a href={`/session/${session.id}/details`} class="details-btn" on:click|stopPropagation
+							<a
+								href={`/session/${session.id}/details`}
+								class="details-btn"
+								data-sveltekit-preload-data="hover"
+								on:click|stopPropagation
 								>詳細</a
 							>
 						</div>

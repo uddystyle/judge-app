@@ -95,32 +95,44 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	const sessions = Array.from(sessionMap.values());
 
-	// 各セッションの検定員数と研修設定を取得
-	const sessionsWithParticipantCount = await Promise.all(
-		sessions.map(async (session: any) => {
-			const { count } = await supabase
-				.from('session_participants')
-				.select('*', { count: 'exact', head: true })
-				.eq('session_id', session.id);
+	// 各セッションの検定員数と研修設定を取得（N+1問題を解決）
+	const sessionIds = sessions.map((s: any) => s.id);
 
-			// 研修モードの場合、is_multi_judgeを取得
-			let isMultiJudge = false;
-			if (session.mode === 'training') {
-				const { data: trainingSession } = await supabase
+	// 全セッションの参加者と研修設定を並列取得（1回のクエリで取得）
+	const [allParticipantsResult, trainingSettingsResult] = await Promise.all([
+		sessionIds.length > 0
+			? supabase.from('session_participants').select('session_id').in('session_id', sessionIds)
+			: Promise.resolve({ data: [], error: null }),
+		sessionIds.length > 0
+			? supabase
 					.from('training_sessions')
-					.select('is_multi_judge')
-					.eq('session_id', session.id)
-					.maybeSingle();
-				isMultiJudge = trainingSession?.is_multi_judge || false;
-			}
+					.select('session_id, is_multi_judge')
+					.in('session_id', sessionIds)
+			: Promise.resolve({ data: [], error: null })
+	]);
 
-			return {
-				...session,
-				participantCount: count || 0,
-				isMultiJudge
-			};
-		})
-	);
+	// 参加者数をセッションIDごとにカウント
+	const participantCountMap = new Map();
+	if (allParticipantsResult.data) {
+		allParticipantsResult.data.forEach((p: any) => {
+			participantCountMap.set(p.session_id, (participantCountMap.get(p.session_id) || 0) + 1);
+		});
+	}
+
+	// 研修設定をマップ化
+	const trainingSettingsMap = new Map();
+	if (trainingSettingsResult.data) {
+		trainingSettingsResult.data.forEach((t: any) => {
+			trainingSettingsMap.set(t.session_id, t.is_multi_judge);
+		});
+	}
+
+	// セッションにデータをマージ（DBクエリなし）
+	const sessionsWithParticipantCount = sessions.map((session: any) => ({
+		...session,
+		participantCount: participantCountMap.get(session.id) || 0,
+		isMultiJudge: trainingSettingsMap.get(session.id) || false
+	}));
 
 	// 組織配列を作成（UIが期待する形式）
 	const organizations = memberships
