@@ -566,7 +566,7 @@
 		background: var(--ios-blue);
 		color: white;
 		padding: 6px 16px;
-		border-radius: 20px;
+		border-radius: 100px;
 		font-size: 14px;
 		font-weight: 600;
 	}
@@ -578,7 +578,7 @@
 		background: var(--ios-orange);
 		color: white;
 		padding: 6px 16px;
-		border-radius: 20px;
+		border-radius: 100px;
 		font-size: 14px;
 		font-weight: 600;
 	}

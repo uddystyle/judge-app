@@ -340,8 +340,8 @@
 		font-weight: 600;
 		color: white;
 		background: var(--gray-700);
-		padding: 2px 6px;
-		border-radius: 4px;
+		padding: 4px 10px;
+		border-radius: 100px;
 	}
 	.mode-badge.tournament {
 		background: var(--gray-800);
@@ -357,8 +357,8 @@
 		font-weight: 600;
 		color: white;
 		background: #2d7a3e;
-		padding: 2px 6px;
-		border-radius: 4px;
+		padding: 4px 10px;
+		border-radius: 100px;
 	}
 	.judge-mode-badge {
 		display: inline-flex;
@@ -368,8 +368,8 @@
 		font-weight: 600;
 		color: white;
 		background: var(--ios-blue);
-		padding: 2px 6px;
-		border-radius: 4px;
+		padding: 4px 10px;
+		border-radius: 100px;
 	}
 	.judge-mode-badge.individual {
 		background: #ff9800;

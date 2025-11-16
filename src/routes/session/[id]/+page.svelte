@@ -935,7 +935,7 @@
 	.settings-badge {
 		display: inline-block;
 		padding: 8px 16px;
-		border-radius: 20px;
+		border-radius: 100px;
 		font-size: 15px;
 		font-weight: 600;
 		transition: all 0.2s;
