@@ -46,6 +46,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
+	const isTournamentMode = modeType === 'tournament' || sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament';
 
 	// プロフィールと組織情報を取得（認証ユーザーの場合のみ）
 	let profile = null;
@@ -121,6 +122,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		isChief,
 		isMultiJudge,
 		isTrainingMode,
+		isTournamentMode,
 		totalJudges,
 		guestParticipant,
 		guestIdentifier,
@@ -315,7 +317,7 @@ export const actions: Actions = {
 		// セッション情報を取得して権限をチェック
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
-			.select('chief_judge_id, exclude_extremes')
+			.select('chief_judge_id, exclude_extremes, max_score_diff, is_tournament_mode, mode')
 			.eq('id', sessionId)
 			.single();
 
@@ -382,8 +384,23 @@ export const actions: Actions = {
 			return fail(400, { error: '採点結果がありません。' });
 		}
 
-		let finalScore = 0;
 		const scoreValues = scores.map((s) => parseFloat(s.score)).sort((a, b) => a - b);
+
+		// 大会モードで点差制限が設定されている場合、点差をチェック
+		const isTournamentMode = modeType === 'tournament' || sessionData.is_tournament_mode || sessionData.mode === 'tournament';
+		if (isTournamentMode && sessionData.max_score_diff !== null && sessionData.max_score_diff !== undefined) {
+			const maxScore = Math.max(...scoreValues);
+			const minScore = Math.min(...scoreValues);
+			const scoreDiff = Math.round(maxScore - minScore);
+
+			if (scoreDiff > sessionData.max_score_diff) {
+				return fail(400, {
+					error: `点差が上限を超えています（${scoreDiff}点 > ${sessionData.max_score_diff}点）。再採点を指示してください。`
+				});
+			}
+		}
+
+		let finalScore = 0;
 
 		if (sessionData.exclude_extremes && scoreValues.length >= 5) {
 			// 5審3採: 最大・最小を除く3人の合計

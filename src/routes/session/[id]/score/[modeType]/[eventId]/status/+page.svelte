@@ -309,8 +309,63 @@
 		}
 	});
 
+	// 点差を計算する関数（整数）
+	function calculateScoreDiff(scores: any[]): number | null {
+		if (!scores || scores.length === 0) return null;
+
+		const scoreValues = scores.map((s) => parseFloat(s.score));
+		const maxScore = Math.max(...scoreValues);
+		const minScore = Math.min(...scoreValues);
+
+		// 整数に丸める
+		return Math.round(maxScore - minScore);
+	}
+
+	// 最高得点と最低得点を判定
+	function isMaxScore(score: string, scores: any[]): boolean {
+		if (!scores || scores.length === 0) return false;
+		const scoreValues = scores.map((s) => parseFloat(s.score));
+		const maxScore = Math.max(...scoreValues);
+		return parseFloat(score) === maxScore;
+	}
+
+	function isMinScore(score: string, scores: any[]): boolean {
+		if (!scores || scores.length === 0) return false;
+		const scoreValues = scores.map((s) => parseFloat(s.score));
+		const minScore = Math.min(...scoreValues);
+		return parseFloat(score) === minScore;
+	}
+
+	// 点差チェック
+	let scoreDiff: number | null = null;
+	let scoreDiffExceeded: boolean = false;
+
+	// 研修モードではない、かつ大会モードである場合のみtrue
+	$: isTournamentMode = !data.isTrainingMode && (data.isTournamentMode || modeType === 'tournament' || data.sessionDetails?.is_tournament_mode || data.sessionDetails?.mode === 'tournament');
+
+	$: {
+		if (isTournamentMode && scoreStatus?.scores && scoreStatus.scores.length > 0) {
+			scoreDiff = calculateScoreDiff(scoreStatus.scores);
+
+			const maxAllowedDiff = data.sessionDetails?.max_score_diff;
+			if (maxAllowedDiff !== null && maxAllowedDiff !== undefined && scoreDiff !== null) {
+				scoreDiffExceeded = scoreDiff > maxAllowedDiff;
+			} else {
+				scoreDiffExceeded = false;
+			}
+		} else {
+			scoreDiff = null;
+			scoreDiffExceeded = false;
+		}
+	}
+
 	let canSubmit = false;
-	$: canSubmit = (scoreStatus?.scores?.length || 0) >= (scoreStatus?.requiredJudges || 1);
+	$: {
+		const hasRequiredScores = (scoreStatus?.scores?.length || 0) >= (scoreStatus?.requiredJudges || 1);
+		const scoreDiffOk = !scoreDiffExceeded;
+
+		canSubmit = hasRequiredScores && scoreDiffOk;
+	}
 
 	// 一般検定員：自分の得点が削除されたら採点画面に遷移
 	let previousMyScore: any = null;
@@ -378,6 +433,11 @@
 			<div class="scoring-badge" class:advanced={data.sessionDetails.exclude_extremes}>
 				{data.sessionDetails.exclude_extremes ? '5審3採' : '3審3採'}
 			</div>
+			{#if data.sessionDetails?.max_score_diff !== null && data.sessionDetails?.max_score_diff !== undefined}
+				<div class="score-diff-badge">
+					点差制限: {data.sessionDetails.max_score_diff}点
+				</div>
+			{/if}
 		</div>
 	{/if}
 
@@ -390,7 +450,13 @@
 					<div class="participant-item">
 						<div class="participant-info">
 							<span class="participant-name">{s.judge_name}</span>
-							<span class="score-value">{s.score} 点</span>
+							<span
+								class="score-value"
+								class:max-score={isChief && isMaxScore(s.score, scoreStatus.scores)}
+								class:min-score={isChief && isMinScore(s.score, scoreStatus.scores)}
+							>
+								{s.score} 点
+							</span>
 						</div>
 						{#if isChief}
 							<form
@@ -443,6 +509,13 @@
 		</div>
 	</div>
 
+	<!-- 点差制限の警告（大会モードのみ） -->
+	{#if isTournamentMode && isChief && scoreDiffExceeded}
+		<div class="score-diff-warning">
+			点差が上限を超えています。<br />検定員に再採点を指示してください。
+		</div>
+	{/if}
+
 	<div class="status-message">
 		{#if isChief}
 			<p>
@@ -454,9 +527,11 @@
 				<input type="hidden" name="bib" value={bib} />
 				<div class="nav-buttons">
 					<NavButton variant="primary" type="submit" disabled={!canSubmit}>
-						{canSubmit
-							? 'この内容で送信する'
-							: `(${scoreStatus.requiredJudges || 1}人の採点が必要です)`}
+						{#if (scoreStatus?.scores?.length || 0) < (scoreStatus?.requiredJudges || 1)}
+							({scoreStatus.requiredJudges || 1}人の採点が必要です)
+						{:else}
+							この内容で送信する
+						{/if}
 					</NavButton>
 				</div>
 			</form>
@@ -480,6 +555,11 @@
 	}
 	.scoring-info {
 		margin-bottom: 20px;
+		display: flex;
+		gap: 10px;
+		justify-content: center;
+		align-items: center;
+		flex-wrap: wrap;
 	}
 	.scoring-badge {
 		display: inline-block;
@@ -492,6 +572,15 @@
 	}
 	.scoring-badge.advanced {
 		background: #2d7a3e;
+	}
+	.score-diff-badge {
+		display: inline-block;
+		background: var(--ios-orange);
+		color: white;
+		padding: 6px 16px;
+		border-radius: 20px;
+		font-size: 14px;
+		font-weight: 600;
 	}
 	.form-container {
 		margin-bottom: 1.5rem;
@@ -537,6 +626,14 @@
 		color: var(--ios-blue);
 		margin-left: auto;
 	}
+	.score-value.max-score {
+		color: #d32f2f;
+		font-weight: 700;
+	}
+	.score-value.min-score {
+		color: #1976d2;
+		font-weight: 700;
+	}
 	.correction-btn {
 		background: var(--ios-orange);
 		color: white;
@@ -558,5 +655,17 @@
 	}
 	.nav-buttons {
 		margin-top: 1rem;
+	}
+	/* 点差制限警告のスタイル */
+	.score-diff-warning {
+		margin-top: 20px;
+		background: var(--ios-orange);
+		color: white;
+		padding: 16px;
+		border-radius: 12px;
+		font-size: 15px;
+		font-weight: 600;
+		text-align: center;
+		line-height: 1.6;
 	}
 </style>

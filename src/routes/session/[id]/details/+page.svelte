@@ -47,6 +47,10 @@
 		? '5judges'
 		: '3judges';
 
+	// 点差コントロール用の変数
+	let enableScoreDiffControl = data.sessionDetails.max_score_diff !== null;
+	let maxScoreDiff = data.sessionDetails.max_score_diff || 2;
+
 	// 検定員数に基づく採点方式の制限
 	$: canUse3Judges = participantCount === 3;
 	$: canUse5Judges = participantCount === 5;
@@ -328,7 +332,7 @@
 		<h3 class="settings-title">ゲストを招待</h3>
 		<div class="invite-container">
 			<div class="invite-item">
-				<label class="invite-label">招待URL</label>
+				<span class="invite-label">招待URL</span>
 				<div class="url-display">
 					<input type="text" value={inviteUrl} readonly class="url-input" />
 					<button class="copy-btn" on:click={copyInviteUrl}>
@@ -338,7 +342,7 @@
 			</div>
 
 			<div class="invite-item">
-				<label class="invite-label">QRコード</label>
+				<span class="invite-label">QRコード</span>
 				<button class="qr-btn" on:click={generateQRCode}>
 					QRコードを表示
 				</button>
@@ -601,6 +605,43 @@
 						</label>
 					</div>
 
+					<!-- 点差コントロール設定 -->
+					<div class="score-diff-section">
+						<h4 class="subsection-title">点差コントロール</h4>
+
+						<div class="score-diff-toggle">
+							<input
+								type="checkbox"
+								id="enableScoreDiffControl"
+								name="enableScoreDiffControl"
+								bind:checked={enableScoreDiffControl}
+							/>
+							<label for="enableScoreDiffControl">点差制限を有効にする</label>
+						</div>
+
+						{#if enableScoreDiffControl}
+							<div class="score-diff-input-group">
+								<label for="maxScoreDiff" class="input-label">最大許容点差</label>
+								<div class="input-with-unit">
+									<input
+										type="number"
+										id="maxScoreDiff"
+										name="maxScoreDiff"
+										min="1"
+										max="10"
+										step="1"
+										bind:value={maxScoreDiff}
+										class="score-diff-input"
+									/>
+									<span class="unit">点</span>
+								</div>
+								<p class="help-text">
+									最高点と最低点の差がこの値を超えた場合、得点を確定できません。
+								</p>
+							</div>
+						{/if}
+					</div>
+
 					<div class="form-actions">
 						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges}>採点方法を保存</button>
 					</div>
@@ -678,7 +719,7 @@
 			{:else}
 				<!-- 一般検定員: 表示のみ -->
 				<div class="setting-item">
-					<label class="form-label">複数検定員モード</label>
+					<span class="form-label">複数検定員モード</span>
 					<div class="readonly-value">
 						{isMultiJudgeTraining ? 'ON' : 'OFF'}
 					</div>
@@ -766,7 +807,7 @@
 			{:else}
 				<!-- 一般検定員: 表示のみ -->
 				<div class="setting-item">
-					<label class="form-label">複数審判モード</label>
+					<span class="form-label">複数審判モード</span>
 					<div class="readonly-value">
 						{isMultiJudge ? 'ON' : 'OFF'}
 					</div>
@@ -782,7 +823,7 @@
 
 				{#if isMultiJudge}
 					<div class="setting-item">
-						<label class="form-label">必須審判員数</label>
+						<span class="form-label">必須審判員数</span>
 						<div class="readonly-value">{requiredJudges}人</div>
 					</div>
 				{/if}
@@ -1904,6 +1945,91 @@
 		transform: translateY(0);
 	}
 
+	/* 点差コントロール */
+	.score-diff-section {
+		margin-top: 32px;
+		padding: 24px;
+		background: var(--bg-secondary);
+		border-radius: 12px;
+		border: 1px solid var(--border-medium);
+	}
+
+	.subsection-title {
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin-bottom: 16px;
+	}
+
+	.score-diff-toggle {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-bottom: 20px;
+	}
+
+	.score-diff-toggle input[type="checkbox"] {
+		width: 20px;
+		height: 20px;
+		cursor: pointer;
+	}
+
+	.score-diff-toggle label {
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+
+	.score-diff-input-group {
+		padding-left: 32px;
+		margin-top: 16px;
+	}
+
+	.input-label {
+		display: block;
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin-bottom: 8px;
+	}
+
+	.input-with-unit {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+
+	.score-diff-input {
+		width: 100px;
+		padding: 10px 12px;
+		font-size: 16px;
+		border: 2px solid var(--border-medium);
+		border-radius: 8px;
+		font-family: inherit;
+		transition: all 0.2s;
+	}
+
+	.score-diff-input:focus {
+		outline: none;
+		border-color: var(--accent-primary);
+		box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
+	}
+
+	.unit {
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-secondary);
+	}
+
+	.help-text {
+		font-size: 13px;
+		color: var(--text-secondary);
+		line-height: 1.5;
+		margin: 0;
+	}
+
 	@media (max-width: 768px) {
 		.scoreboard-header,
 		.scoreboard-row {
@@ -1914,6 +2040,14 @@
 
 		.athlete-name {
 			font-size: 11px;
+		}
+
+		.score-diff-section {
+			padding: 16px;
+		}
+
+		.subsection-title {
+			font-size: 16px;
 		}
 	}
 </style>

@@ -381,10 +381,27 @@ export const actions: Actions = {
 		const scoringMethod = formData.get('scoringMethod') as string;
 		const excludeExtremes = scoringMethod === '5judges';
 
+		// 点差コントロールの設定を取得
+		const enableScoreDiffControl = formData.get('enableScoreDiffControl') === 'on';
+		const maxScoreDiffStr = formData.get('maxScoreDiff') as string;
+		const maxScoreDiff = enableScoreDiffControl && maxScoreDiffStr
+			? parseInt(maxScoreDiffStr, 10)
+			: null;
+
+		// バリデーション
+		if (enableScoreDiffControl && maxScoreDiff !== null) {
+			if (isNaN(maxScoreDiff) || maxScoreDiff < 1 || maxScoreDiff > 10) {
+				return fail(400, {
+					tournamentSettingsError: '点差制限は1〜10点の範囲で設定してください。'
+				});
+			}
+		}
+
 		const { error: updateError } = await supabase
 			.from('sessions')
 			.update({
-				exclude_extremes: excludeExtremes
+				exclude_extremes: excludeExtremes,
+				max_score_diff: maxScoreDiff
 			})
 			.eq('id', params.id);
 
