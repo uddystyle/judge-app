@@ -4,12 +4,34 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 
 	export let data: PageData;
 	export let form: ActionData;
 
 	let guestName = '';
 	let isSubmitting = false;
+
+	// ゲスト情報をLocalStorageから復元
+	onMount(() => {
+		if (data.session) {
+			const storageKey = `guest_${data.session.id}`;
+			const savedGuestData = localStorage.getItem(storageKey);
+
+			if (savedGuestData) {
+				try {
+					const guestData = JSON.parse(savedGuestData);
+					// 既にこのセッションに参加済みの場合、自動的にセッションページへ
+					console.log('[Guest] 保存されたゲスト情報を検出:', guestData);
+					goto(`/session/${data.session.id}?guest=${guestData.guest_identifier}`);
+				} catch (e) {
+					console.error('[Guest] ゲスト情報の復元に失敗:', e);
+					localStorage.removeItem(storageKey);
+				}
+			}
+		}
+	});
 </script>
 
 <Header showAppName={true} />
@@ -60,9 +82,29 @@
 
 				<form method="POST" action="?/join" use:enhance={() => {
 					isSubmitting = true;
-					return async ({ update }) => {
+					return async ({ result, update }) => {
 						await update();
 						isSubmitting = false;
+
+						// 参加成功時、LocalStorageにゲスト情報を保存
+						if (result.type === 'redirect' && data.session) {
+							// リダイレクトURLからguest_identifierを抽出
+							const redirectUrl = result.location;
+							const url = new URL(redirectUrl, window.location.origin);
+							const guestIdentifier = url.searchParams.get('guest');
+
+							if (guestIdentifier) {
+								const storageKey = `guest_${data.session.id}`;
+								const guestData = {
+									guest_identifier: guestIdentifier,
+									guest_name: guestName,
+									session_id: data.session.id,
+									joined_at: new Date().toISOString()
+								};
+								localStorage.setItem(storageKey, JSON.stringify(guestData));
+								console.log('[Guest] ゲスト情報を保存しました:', guestData);
+							}
+						}
 					};
 				}}>
 					<div class="input-group">
