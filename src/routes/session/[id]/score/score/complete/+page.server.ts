@@ -30,8 +30,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw error(404, '検定が見つかりません。');
 	}
 
-	// 大会モードでない場合はエラー
-	if (!sessionDetails.is_tournament_mode) {
+	// 大会モードの場合はエラー（このページは検定モード用）
+	if (sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament') {
 		throw redirect(303, `/session/${sessionId}`);
 	}
 
@@ -64,8 +64,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	}
 
 	const isChief = user.id === sessionDetails.chief_judge_id;
-	// 大会モードは常に複数検定員モードON
-	const isMultiJudge = true;
+	// 検定モードの複数検定員モード設定を取得
+	const isMultiJudge = sessionDetails.is_multi_judge || false;
 
 	// プロフィールと組織情報を取得
 	const { data: profileData } = await supabase
@@ -114,7 +114,7 @@ export const actions: Actions = {
 		// セッション情報を取得して主任検定員かチェック
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
-			.select('chief_judge_id')
+			.select('chief_judge_id, is_multi_judge')
 			.eq('id', sessionId)
 			.single();
 
@@ -123,8 +123,8 @@ export const actions: Actions = {
 		}
 
 		const isChief = user.id === sessionData.chief_judge_id;
-		// 大会モードは常に複数検定員モードON
-		const isMultiJudge = true;
+		// 検定モードの複数検定員モード設定を取得
+		const isMultiJudge = sessionData.is_multi_judge || false;
 
 		if (!isChief && isMultiJudge) {
 			return { success: false, error: 'セッションを終了する権限がありません。' };
