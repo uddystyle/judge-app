@@ -131,19 +131,86 @@
 		margin-bottom: 20px;
 	}
 
+	/* モバイル最適化: 画面の高さに応じて調整 */
+	@media (max-height: 700px) {
+		.container {
+			padding: 20px 20px;
+		}
+		.instruction {
+			font-size: 20px;
+			margin-bottom: 16px;
+		}
+		.scoring-info {
+			margin-bottom: 16px;
+		}
+		.numeric-display {
+			font-size: 42px !important;
+			min-height: 70px !important;
+			margin-bottom: 20px !important;
+		}
+		.nav-buttons {
+			margin-top: 20px !important;
+		}
+	}
+
+	@media (max-height: 650px) {
+		.container {
+			padding: 16px 20px;
+		}
+		.instruction {
+			font-size: 18px;
+			margin-bottom: 12px;
+		}
+		.scoring-info {
+			margin-bottom: 12px;
+		}
+		.numeric-display {
+			font-size: 38px !important;
+			min-height: 60px !important;
+			margin-bottom: 16px !important;
+		}
+		.nav-buttons {
+			margin-top: 16px !important;
+		}
+	}
+
+	@media (max-height: 600px) {
+		.container {
+			padding: 12px 20px;
+		}
+		.instruction {
+			font-size: 16px;
+			margin-bottom: 10px;
+		}
+		.scoring-info {
+			margin-bottom: 10px;
+		}
+		.numeric-display {
+			font-size: 34px !important;
+			min-height: 50px !important;
+			margin-bottom: 12px !important;
+		}
+		.nav-buttons {
+			margin-top: 12px !important;
+		}
+	}
+
 	.scoring-badge {
 		display: inline-block;
-		background: var(--ios-blue);
-		color: white;
-		padding: 6px 16px;
-		border-radius: 100px;
-		font-size: 14px;
-		font-weight: 600;
+		background: transparent;
+		color: #6b7280;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		font-size: 12px;
+		font-weight: 500;
 		margin-bottom: 8px;
+		letter-spacing: 0.01em;
 	}
 
 	.scoring-badge.advanced {
-		background: #2d7a3e;
+		color: #6b7280;
+		border-color: #d1d5db;
 	}
 
 	.scoring-description {

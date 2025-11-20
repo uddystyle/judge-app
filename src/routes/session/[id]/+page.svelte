@@ -934,23 +934,24 @@
 
 	.settings-badge {
 		display: inline-block;
-		padding: 8px 16px;
-		border-radius: 100px;
-		font-size: 15px;
-		font-weight: 600;
+		padding: 4px 12px;
+		border-radius: 6px;
+		font-size: 12px;
+		font-weight: 500;
+		letter-spacing: 0.01em;
 		transition: all 0.2s;
 	}
 
 	.settings-badge.multi-judge-on {
-		background: #fff3e0;
-		color: #ff9800;
-		border: 2px solid #ff9800;
+		background: transparent;
+		color: #6b7280;
+		border: 1px solid #d1d5db;
 	}
 
 	.settings-badge.multi-judge-off {
-		background: #e3f2fd;
-		color: #2196f3;
-		border: 2px solid #2196f3;
+		background: transparent;
+		color: #6b7280;
+		border: 1px solid #d1d5db;
 	}
 
 	/* ゲストユーザー待機画面 */

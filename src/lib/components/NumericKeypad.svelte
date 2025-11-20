@@ -110,8 +110,42 @@
 		pointer-events: none;
 	}
 
+	/* モバイル最適化: 画面の高さに応じて調整 */
+	@media (max-height: 700px) {
+		.numeric-keypad {
+			gap: 14px;
+			margin: 20px auto;
+		}
+		.numeric-key {
+			height: 70px;
+			font-size: 28px;
+		}
+	}
+
+	@media (max-height: 650px) {
+		.numeric-keypad {
+			gap: 12px;
+			margin: 16px auto;
+		}
+		.numeric-key {
+			height: 60px;
+			font-size: 26px;
+		}
+	}
+
+	@media (max-height: 600px) {
+		.numeric-keypad {
+			gap: 10px;
+			margin: 12px auto;
+		}
+		.numeric-key {
+			height: 52px;
+			font-size: 24px;
+		}
+	}
+
 	/* PC対応: タブレット以上 */
-	@media (min-width: 768px) {
+	@media (min-width: 768px) and (min-height: 701px) {
 		.numeric-keypad {
 			gap: 20px;
 			margin: 32px auto;
@@ -124,7 +158,7 @@
 	}
 
 	/* PC対応: デスクトップ */
-	@media (min-width: 1024px) {
+	@media (min-width: 1024px) and (min-height: 701px) {
 		.numeric-key {
 			height: 120px;
 			font-size: 48px;

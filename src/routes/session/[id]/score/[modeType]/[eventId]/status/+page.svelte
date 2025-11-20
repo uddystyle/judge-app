@@ -563,24 +563,29 @@
 	}
 	.scoring-badge {
 		display: inline-block;
-		background: var(--ios-blue);
-		color: white;
-		padding: 6px 16px;
-		border-radius: 100px;
-		font-size: 14px;
-		font-weight: 600;
+		background: transparent;
+		color: #6b7280;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		font-size: 12px;
+		font-weight: 500;
+		letter-spacing: 0.01em;
 	}
 	.scoring-badge.advanced {
-		background: #2d7a3e;
+		color: #6b7280;
+		border-color: #d1d5db;
 	}
 	.score-diff-badge {
 		display: inline-block;
-		background: var(--ios-orange);
-		color: white;
-		padding: 6px 16px;
-		border-radius: 100px;
-		font-size: 14px;
-		font-weight: 600;
+		background: transparent;
+		color: #6b7280;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		font-size: 12px;
+		font-weight: 500;
+		letter-spacing: 0.01em;
 	}
 	.form-container {
 		margin-bottom: 1.5rem;

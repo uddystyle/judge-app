@@ -148,13 +148,15 @@
 	}
 	.scoring-badge {
 		display: inline-block;
-		background: #ff9800;
-		color: white;
-		padding: 6px 16px;
-		border-radius: 100px;
-		font-size: 14px;
-		font-weight: 600;
+		background: transparent;
+		color: #6b7280;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		font-size: 12px;
+		font-weight: 500;
 		margin-bottom: 8px;
+		letter-spacing: 0.01em;
 	}
 	.scoring-description {
 		font-size: 14px;
@@ -187,8 +189,72 @@
 		font-size: 14px;
 	}
 
+	/* モバイル最適化: 画面の高さに応じて調整 */
+	@media (max-height: 700px) {
+		.container {
+			padding: 20px 20px;
+		}
+		.instruction {
+			font-size: 20px;
+			margin-bottom: 20px;
+		}
+		.scoring-info {
+			margin-bottom: 16px;
+		}
+		.numeric-display {
+			font-size: 52px;
+			min-height: 80px;
+			margin-bottom: 20px;
+		}
+		.nav-buttons {
+			margin-top: 20px;
+		}
+	}
+
+	@media (max-height: 650px) {
+		.container {
+			padding: 16px 20px;
+		}
+		.instruction {
+			font-size: 18px;
+			margin-bottom: 16px;
+		}
+		.scoring-info {
+			margin-bottom: 12px;
+		}
+		.numeric-display {
+			font-size: 46px;
+			min-height: 70px;
+			margin-bottom: 16px;
+		}
+		.nav-buttons {
+			margin-top: 16px;
+		}
+	}
+
+	@media (max-height: 600px) {
+		.container {
+			padding: 12px 20px;
+		}
+		.instruction {
+			font-size: 16px;
+			margin-bottom: 12px;
+		}
+		.scoring-info {
+			margin-bottom: 10px;
+		}
+		.numeric-display {
+			font-size: 40px;
+			min-height: 60px;
+			margin-bottom: 12px;
+		}
+		.nav-buttons {
+			margin-top: 12px;
+		}
+	}
+
 	/* PC対応: タブレット以上 */
-	@media (min-width: 768px) {
+	@media (min-width: 768px) and (min-height: 701px) {
 		.container {
 			padding: 60px 40px;
 			max-width: 800px;

@@ -150,8 +150,7 @@
 						on:keydown={(e) => e.key === 'Enter' && handleSessionClick(session)}
 					>
 						<div class="session-info-wrapper">
-							<div class="session-name">
-								{session.name}
+							<div class="badges-container">
 								{#if session.mode === 'tournament'}
 									<span class="mode-badge tournament">大会</span>
 									{#if canStart}
@@ -170,6 +169,9 @@
 										{session.isMultiJudge ? '合同採点' : '個別採点'}
 									</span>
 								{/if}
+							</div>
+							<div class="session-name">
+								{session.name}
 							</div>
 							{#if isTournament && !canStart}
 								<div class="participant-count">
@@ -302,6 +304,8 @@
 		font-weight: 600;
 		text-align: center;
 		color: var(--text-primary);
+	}
+	.badges-container {
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -336,43 +340,52 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 11px;
-		font-weight: 600;
-		color: white;
-		background: var(--gray-700);
-		padding: 4px 10px;
-		border-radius: 100px;
+		font-size: 12px;
+		font-weight: 500;
+		color: #6b7280;
+		background: transparent;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		letter-spacing: 0.01em;
 	}
 	.mode-badge.tournament {
-		background: var(--gray-800);
+		color: #6b7280;
+		border-color: #d1d5db;
 	}
 	.mode-badge.training {
-		background: var(--gray-600);
+		color: #6b7280;
+		border-color: #d1d5db;
 	}
 	.scoring-method-badge {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 11px;
-		font-weight: 600;
-		color: white;
-		background: #2d7a3e;
-		padding: 4px 10px;
-		border-radius: 100px;
+		font-size: 12px;
+		font-weight: 500;
+		color: #6b7280;
+		background: transparent;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		letter-spacing: 0.01em;
 	}
 	.judge-mode-badge {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 11px;
-		font-weight: 600;
-		color: white;
-		background: var(--ios-blue);
-		padding: 4px 10px;
-		border-radius: 100px;
+		font-size: 12px;
+		font-weight: 500;
+		color: #6b7280;
+		background: transparent;
+		padding: 4px 12px;
+		border-radius: 6px;
+		border: 1px solid #d1d5db;
+		letter-spacing: 0.01em;
 	}
 	.judge-mode-badge.individual {
-		background: #ff9800;
+		color: #6b7280;
+		border-color: #d1d5db;
 	}
 	.join-code-wrapper {
 		display: flex;
