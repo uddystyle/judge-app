@@ -40,34 +40,46 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
 	}
 
-	// セッション情報を取得
-	const { data: sessionDetails, error: sessionError } = await supabase
-		.from('sessions')
-		.select('*')
-		.eq('id', sessionId)
-		.single();
+	// セッション情報、参加者情報を並列取得（高速化）
+	const [sessionResult, participantResult] = await Promise.all([
+		supabase.from('sessions').select('*').eq('id', sessionId).single(),
+		supabase.from('participants').select('*').eq('id', participantId).single()
+	]);
 
-	if (sessionError) {
+	if (sessionResult.error) {
 		throw error(404, '検定が見つかりません。');
 	}
 
-	// モードに応じて種目情報を取得
+	const sessionDetails = sessionResult.data;
+	const participant = participantResult.data;
+
+	// モード判定
+	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
+
+	// モードに応じて種目情報とトレーニングセッション情報を並列取得
 	let eventInfo: any = null;
-	let isTrainingMode = false;
+	let isMultiJudge = false;
 
-	if (modeType === 'training' || sessionDetails.mode === 'training') {
-		isTrainingMode = true;
-		const { data: trainingEvent, error: eventError } = await supabase
-			.from('training_events')
-			.select('*')
-			.eq('id', eventId)
-			.eq('session_id', sessionId)
-			.single();
+	if (isTrainingMode) {
+		const [eventResult, trainingSessionResult] = await Promise.all([
+			supabase
+				.from('training_events')
+				.select('*')
+				.eq('id', eventId)
+				.eq('session_id', sessionId)
+				.single(),
+			supabase
+				.from('training_sessions')
+				.select('is_multi_judge')
+				.eq('session_id', sessionId)
+				.maybeSingle()
+		]);
 
-		if (eventError) {
+		if (eventResult.error) {
 			throw error(404, '種目が見つかりません。');
 		}
-		eventInfo = trainingEvent;
+		eventInfo = eventResult.data;
+		isMultiJudge = trainingSessionResult.data?.is_multi_judge || false;
 	} else {
 		const { data: customEvent, error: eventError } = await supabase
 			.from('custom_events')
@@ -80,29 +92,13 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			throw error(404, '種目が見つかりません。');
 		}
 		eventInfo = customEvent;
-	}
 
-	// 参加者情報を取得
-	const { data: participant } = await supabase
-		.from('participants')
-		.select('*')
-		.eq('id', participantId)
-		.single();
-
-	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
-	let isMultiJudge = false;
-	if (isTrainingMode) {
-		const { data: trainingSession } = await supabase
-			.from('training_sessions')
-			.select('is_multi_judge')
-			.eq('session_id', sessionId)
-			.maybeSingle();
-		isMultiJudge = trainingSession?.is_multi_judge || false;
-	} else if (modeType === 'tournament') {
-		// 大会モードは常に複数検定員モードON
-		isMultiJudge = true;
-	} else {
-		isMultiJudge = sessionDetails.is_multi_judge || false;
+		if (modeType === 'tournament') {
+			// 大会モードは常に複数検定員モードON
+			isMultiJudge = true;
+		} else {
+			isMultiJudge = sessionDetails.is_multi_judge || false;
+		}
 	}
 
 	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;

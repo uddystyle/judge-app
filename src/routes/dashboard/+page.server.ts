@@ -44,16 +44,17 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	// 組織経由のセッションとゲスト参加セッションを並列取得
 	const [orgSessionsResult, participantsResult] = await Promise.all([
-		// 組織経由のセッション
+		// 組織経由のセッション（最新100件に制限）
 		organizationIds.length > 0
 			? supabase
 					.from('sessions')
 					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes')
 					.in('organization_id', organizationIds)
 					.order('created_at', { ascending: false })
+					.limit(100)
 			: Promise.resolve({ data: [], error: null }),
 		// ゲスト参加のセッションID取得
-		supabase.from('session_participants').select('session_id').eq('user_id', user.id)
+		supabase.from('session_participants').select('session_id').eq('user_id', user.id).limit(100)
 	]);
 
 	if (orgSessionsResult.error) {

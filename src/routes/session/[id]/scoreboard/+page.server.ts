@@ -40,11 +40,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(500, '種目情報の取得に失敗しました。');
 	}
 
-	// 全ての採点結果を取得
+	// 全ての採点結果を取得（必要なカラムのみ、上限5000件）
 	const { data: results, error: resultsError } = await supabase
 		.from('results')
-		.select('*')
-		.eq('session_id', sessionId);
+		.select('bib, score, discipline, level, event_name')
+		.eq('session_id', sessionId)
+		.limit(5000);
 
 	if (resultsError) {
 		throw error(500, '採点結果の取得に失敗しました。');

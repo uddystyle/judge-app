@@ -115,7 +115,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 		trainingSession = trainingSessionData;
 
-		// 研修モードの採点結果を取得
+		// 研修モードの採点結果を取得（最新1000件に制限）
 		const { data: scores } = await supabase
 			.from('training_scores')
 			.select(
@@ -126,7 +126,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			`
 			)
 			.eq('training_events.session_id', sessionId)
-			.order('created_at', { ascending: false });
+			.order('created_at', { ascending: false })
+			.limit(1000);
 
 		// 検定員の情報を一括取得してマージ（N+1問題を解決）
 		if (scores && scores.length > 0) {
@@ -156,18 +157,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		}
 	}
 
-	// ユーザーのプロフィール情報を取得
-	const { data: profile } = await supabase
-		.from('profiles')
-		.select('full_name')
-		.eq('id', user.id)
-		.single();
+	// ユーザーのプロフィール情報と所属組織を並列取得（高速化）
+	const [profileResult, membershipResult] = await Promise.all([
+		supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+		supabase.from('organization_members').select('organization_id, role').eq('user_id', user.id)
+	]);
 
-	// ユーザーの所属組織を取得
-	const { data: membershipData } = await supabase
-		.from('organization_members')
-		.select('organization_id, role')
-		.eq('user_id', user.id);
+	const profile = profileResult.data;
+	const membershipData = membershipResult.data;
 
 	let organizations: any[] = [];
 	if (membershipData && membershipData.length > 0) {
