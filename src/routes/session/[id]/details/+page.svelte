@@ -1799,9 +1799,8 @@
 	}
 
 	.code-input {
-		font-size: 18px;
 		font-weight: 700;
-		letter-spacing: 3px;
+		letter-spacing: 2px;
 		text-align: center;
 		color: var(--text-primary);
 	}
