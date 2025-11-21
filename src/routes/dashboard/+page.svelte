@@ -122,10 +122,6 @@
 					<div
 						class="key select-item"
 						class:disabled={!canStart}
-						on:click={() => handleSessionClick(session)}
-						role="button"
-						tabindex="0"
-						on:keydown={(e) => e.key === 'Enter' && handleSessionClick(session)}
 					>
 						<div class="session-info-wrapper">
 							<div class="badges-container">
@@ -160,13 +156,21 @@
 									<span class="warning-text">(3人または5人必要)</span>
 								</div>
 							{/if}
-							<a
-								href="/session/{session.id}/details"
-								class="details-btn"
-								on:click={(e) => e.stopPropagation()}
-							>
-								詳細
-							</a>
+							<div class="session-buttons">
+								<a
+									href="/session/{session.id}/details"
+									class="details-btn"
+								>
+									詳細
+								</a>
+								<button
+									class="start-btn"
+									class:disabled={!canStart}
+									on:click={() => handleSessionClick(session)}
+								>
+									セッションを開始
+								</button>
+							</div>
 						</div>
 					</div>
 				{/each}
@@ -212,6 +216,13 @@
 		margin-right: auto;
 		width: 100%;
 	}
+	.session-buttons {
+		display: flex;
+		gap: 10px;
+		margin-top: 12px;
+		justify-content: center;
+		flex-wrap: wrap;
+	}
 	.details-btn {
 		display: inline-flex;
 		align-items: center;
@@ -228,7 +239,6 @@
 		text-decoration: none;
 		min-height: 40px;
 		letter-spacing: 0.02em;
-		margin-top: 12px;
 	}
 	.details-btn:hover {
 		background: var(--accent-primary);
@@ -237,6 +247,38 @@
 	}
 	.details-btn:active {
 		transform: translateY(0);
+	}
+	.start-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--accent-primary);
+		color: white;
+		border: 1.5px solid var(--accent-primary);
+		border-radius: 8px;
+		padding: 8px 20px;
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		min-height: 40px;
+		letter-spacing: 0.02em;
+	}
+	.start-btn:hover {
+		background: var(--accent-hover);
+		border-color: var(--accent-hover);
+		transform: translateY(-1px);
+	}
+	.start-btn:active {
+		transform: translateY(0);
+	}
+	.start-btn.disabled {
+		background: #ccc;
+		border-color: #ccc;
+		cursor: not-allowed;
+	}
+	.start-btn.disabled:hover {
+		transform: none;
 	}
 	.key.select-item {
 		display: flex;
@@ -256,24 +298,6 @@
 		font-weight: 600;
 		text-align: center;
 		border: 1px solid var(--border-light);
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-	.key.select-item:hover {
-		border-color: var(--border-dark);
-		transform: translateY(-2px);
-	}
-	.key.select-item:active {
-		background-color: var(--bg-hover);
-		transform: translateY(0);
-	}
-	.key.select-item.disabled {
-		cursor: not-allowed;
-		background: #f5f5f5;
-	}
-	.key.select-item.disabled:hover {
-		border-color: var(--border-light);
-		transform: none;
 	}
 	.key.select-item.disabled .session-info-wrapper {
 		opacity: 0.6;
@@ -408,10 +432,14 @@
 		.list-keypad {
 			gap: 20px;
 		}
-		.details-btn {
+		.session-buttons {
+			gap: 12px;
+			margin-top: 16px;
+		}
+		.details-btn,
+		.start-btn {
 			font-size: 14px;
 			padding: 10px 24px;
-			margin-top: 16px;
 		}
 		.key.select-item {
 			min-height: 180px;
@@ -436,10 +464,14 @@
 			gap: 24px;
 			max-width: 600px;
 		}
-		.details-btn {
+		.session-buttons {
+			gap: 14px;
+			margin-top: 20px;
+		}
+		.details-btn,
+		.start-btn {
 			font-size: 15px;
 			padding: 10px 28px;
-			margin-top: 20px;
 		}
 		.key.select-item {
 			min-height: 140px;

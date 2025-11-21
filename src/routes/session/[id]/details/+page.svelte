@@ -362,7 +362,7 @@
 					</button>
 				</div>
 			</div>
-			<p class="invite-note">※ ログイン済みのユーザーがこのコードを使用してセッションに参加できます</p>
+			<p class="invite-note">※ ログイン済みのユーザーが<br class="mobile-break" />このコードを使用してセッションに参加できます</p>
 		</div>
 	</div>
 
@@ -1859,6 +1859,17 @@
 		margin: 0;
 		padding-top: 8px;
 		border-top: 1px solid var(--border-light);
+	}
+
+	/* モバイル用改行 */
+	.mobile-break {
+		display: none;
+	}
+
+	@media (max-width: 480px) {
+		.mobile-break {
+			display: block;
+		}
 	}
 
 	/* QRコードモーダル */
