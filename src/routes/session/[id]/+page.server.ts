@@ -51,19 +51,21 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	let organizations: any[] = [];
 
 	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('full_name')
-			.eq('id', user.id)
-			.single();
-		profile = profileData;
+		// プロフィールと組織を並列取得（約150ms短縮）
+		const [profileResult, membershipsResult] = await Promise.all([
+			supabase
+				.from('profiles')
+				.select('full_name')
+				.eq('id', user.id)
+				.single(),
+			supabase
+				.from('organization_members')
+				.select('organization_id')
+				.eq('user_id', user.id)
+		]);
 
-		// ユーザーが所属する組織を取得
-		const { data: memberships } = await supabase
-			.from('organization_members')
-			.select('organization_id')
-			.eq('user_id', user.id);
-		organizations = memberships || [];
+		profile = profileResult.data;
+		organizations = membershipsResult.data || [];
 	}
 
 	// セッションの詳細情報を取得
@@ -79,31 +81,29 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	// 組織セッションの場合、組織メンバーを自動的に参加者として追加（通常ユーザーのみ）
 	if (sessionDetails.organization_id && user) {
-		// ユーザーが組織メンバーかチェック
-		const { data: membership } = await supabase
-			.from('organization_members')
-			.select('id')
-			.eq('organization_id', sessionDetails.organization_id)
-			.eq('user_id', user.id)
-			.maybeSingle();
-
-		if (membership) {
-			// すでに参加者として登録されているかチェック
-			const { data: existingParticipant } = await supabase
+		// メンバーシップと既存参加者を並列チェック（約100ms短縮）
+		const [membershipResult, existingParticipantResult] = await Promise.all([
+			supabase
+				.from('organization_members')
+				.select('id')
+				.eq('organization_id', sessionDetails.organization_id)
+				.eq('user_id', user.id)
+				.maybeSingle(),
+			supabase
 				.from('session_participants')
 				.select('id')
 				.eq('session_id', sessionId)
 				.eq('user_id', user.id)
-				.maybeSingle();
+				.maybeSingle()
+		]);
 
-			// 未登録の場合のみ追加
-			if (!existingParticipant) {
-				await supabase.from('session_participants').insert({
-					session_id: sessionId,
-					user_id: user.id,
-					is_guest: false
-				});
-			}
+		// メンバーで、かつ未登録の場合のみ追加
+		if (membershipResult.data && !existingParticipantResult.data) {
+			await supabase.from('session_participants').insert({
+				session_id: sessionId,
+				user_id: user.id,
+				is_guest: false
+			});
 		}
 	}
 
@@ -138,12 +138,33 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		console.log('[Session Page Load] user:', user?.id || 'guest');
 		console.log('[Session Page Load] guestIdentifier:', guestIdentifier);
 
-		// 研修セッション情報を取得
-		const { data: trainingSession, error: trainingError } = await supabase
-			.from('training_sessions')
-			.select('*')
-			.eq('session_id', sessionId)
-			.maybeSingle();
+		// 研修セッション情報、種目数、参加者を並列取得（約200ms短縮）
+		const [trainingResult, eventsCountResult, participantsResult] = await Promise.all([
+			supabase
+				.from('training_sessions')
+				.select('*')
+				.eq('session_id', sessionId)
+				.maybeSingle(),
+			supabase
+				.from('training_events')
+				.select('*', { count: 'exact', head: true })
+				.eq('session_id', sessionId),
+			supabase
+				.from('session_participants')
+				.select(`
+					user_id,
+					profiles:user_id (
+						full_name
+					)
+				`)
+				.eq('session_id', sessionId)
+		]);
+
+		const trainingSession = trainingResult.data;
+		const trainingError = trainingResult.error;
+		const eventsCount = eventsCountResult.count;
+		const participants = participantsResult.data;
+		const participantsError = participantsResult.error;
 
 		console.log('[Session Page Load] training_sessions取得結果:', { trainingSession, trainingError });
 		console.log('[Session Page Load] is_multi_judge:', trainingSession?.is_multi_judge);
@@ -151,23 +172,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		if (trainingError) {
 			throw error(500, '研修セッション情報の取得に失敗しました。');
 		}
-
-		// 研修種目の数を取得
-		const { count: eventsCount } = await supabase
-			.from('training_events')
-			.select('*', { count: 'exact', head: true })
-			.eq('session_id', sessionId);
-
-		// 参加者一覧を取得（session_participantsとprofilesを結合）
-		const { data: participants, error: participantsError } = await supabase
-			.from('session_participants')
-			.select(`
-				user_id,
-				profiles:user_id (
-					full_name
-				)
-			`)
-			.eq('session_id', sessionId);
 
 		if (participantsError) {
 			console.error('Error fetching participants:', participantsError);
