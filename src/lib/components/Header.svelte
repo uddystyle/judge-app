@@ -127,7 +127,17 @@
 				</div>
 			{:else}
 				<!-- 通常ユーザー: メニュー付き -->
-				<button class="account-button" on:click={toggleMenu}>
+				<!-- モバイル: ハンバーガーメニュー -->
+				<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu}>
+					<div class="hamburger-icon">
+						<span class="line line-1"></span>
+						<span class="line line-2"></span>
+						<span class="line line-3"></span>
+					</div>
+				</button>
+
+				<!-- タブレット・PC: プロフィールボタン -->
+				<button class="account-button desktop-only" on:click={toggleMenu}>
 					{#if hasOrganization}
 						<span class="org-badge">
 							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -354,8 +364,84 @@
 		display: block;
 	}
 
+	/* ハンバーガーメニューボタン（モバイルのみ） */
+	.hamburger-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: none;
+		padding: 10px;
+		cursor: pointer;
+		min-width: 44px;
+		min-height: 44px;
+		border-radius: 8px;
+		transition: background 0.2s ease;
+	}
+	.hamburger-button:hover {
+		background: var(--bg-hover);
+	}
+	.hamburger-button:active {
+		background: var(--gray-200);
+	}
+
+	/* ハンバーガーアイコン */
+	.hamburger-icon {
+		width: 24px;
+		height: 20px;
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+	}
+
+	/* ハンバーガーの線 */
+	.line {
+		display: block;
+		width: 100%;
+		height: 2px;
+		background-color: var(--text-primary);
+		border-radius: 2px;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		transform-origin: center;
+	}
+
+	/* デフォルト状態（閉じている） */
+	.line {
+		transform: none;
+	}
+
+	/* 開いた状態のアニメーション（Xマーク） */
+	.hamburger-button.active .line-1 {
+		transform: translateY(9px) rotate(45deg);
+	}
+
+	.hamburger-button.active .line-2 {
+		opacity: 0;
+		transform: scaleX(0);
+	}
+
+	.hamburger-button.active .line-3 {
+		transform: translateY(-9px) rotate(-45deg);
+	}
+
+	/* モバイルとデスクトップの表示切り替え */
+	.mobile-only {
+		display: flex;
+	}
+	.desktop-only {
+		display: none;
+	}
+
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
+		.mobile-only {
+			display: none;
+		}
+		.desktop-only {
+			display: flex;
+		}
+
 		.header {
 			padding: 16px 40px;
 		}
