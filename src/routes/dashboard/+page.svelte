@@ -13,28 +13,6 @@
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
 
-	// どのセッションコードがコピーされたかを追跡
-	let copiedSessionId: string | null = null;
-
-	function copyJoinCode(event: MouseEvent, code: string, sessionId: string) {
-		// イベントが親要素に伝播してページ遷移が起きるのを防ぐ
-		event.stopPropagation();
-
-		navigator.clipboard.writeText(code).then(
-			() => {
-				copiedSessionId = sessionId;
-				// 1.5秒後にもとに戻す
-				setTimeout(() => {
-					copiedSessionId = null;
-				}, 1500);
-			},
-			(err) => {
-				console.error('コピーに失敗しました:', err);
-				alert('コピーに失敗しました。');
-			}
-		);
-	}
-
 	// リアルタイム更新用
 	let realtimeChannel: any;
 
@@ -182,29 +160,13 @@
 									<span class="warning-text">(3人または5人必要)</span>
 								</div>
 							{/if}
-						</div>
-						<div class="join-code-wrapper">
-							<div class="join-code-display">
-								<span class="join-code-label">コード:</span>
-								<span class="join-code-value">{session.join_code}</span>
-							</div>
-							<button
-								class="copy-btn"
-								on:click={(e) => copyJoinCode(e, session.join_code, session.id)}
-							>
-								{#if copiedSessionId === session.id}
-									✓ コピー済
-								{:else}
-									COPY
-								{/if}
-							</button>
 							<a
-								href={`/session/${session.id}/details`}
+								href="/session/{session.id}/details"
 								class="details-btn"
-								data-sveltekit-preload-data="hover"
-								on:click|stopPropagation
-								>詳細</a
+								on:click={(e) => e.stopPropagation()}
 							>
+								詳細
+							</a>
 						</div>
 					</div>
 				{/each}
@@ -250,6 +212,32 @@
 		margin-right: auto;
 		width: 100%;
 	}
+	.details-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		color: var(--accent-primary);
+		border: 1.5px solid var(--accent-primary);
+		border-radius: 8px;
+		padding: 8px 20px;
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+		text-decoration: none;
+		min-height: 40px;
+		letter-spacing: 0.02em;
+		margin-top: 12px;
+	}
+	.details-btn:hover {
+		background: var(--accent-primary);
+		color: white;
+		transform: translateY(-1px);
+	}
+	.details-btn:active {
+		transform: translateY(0);
+	}
 	.key.select-item {
 		display: flex;
 		flex-direction: column;
@@ -289,9 +277,6 @@
 	}
 	.key.select-item.disabled .session-info-wrapper {
 		opacity: 0.6;
-	}
-	.key.select-item.disabled .join-code-wrapper {
-		opacity: 1;
 	}
 	.session-info-wrapper {
 		display: flex;
@@ -387,56 +372,6 @@
 		color: #6b7280;
 		border-color: #d1d5db;
 	}
-	.join-code-wrapper {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex-wrap: wrap;
-		justify-content: center;
-	}
-	.join-code-display {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		background-color: var(--bg-secondary);
-		padding: 6px 12px;
-		border-radius: 8px;
-		border: 1px solid var(--border-light);
-	}
-	.join-code-label {
-		font-size: 13px;
-		font-weight: 500;
-		color: var(--text-secondary);
-	}
-	.join-code-value {
-		font-size: 14px;
-		font-weight: 700;
-		color: var(--text-primary);
-		letter-spacing: 2px;
-	}
-	.copy-btn {
-		font-size: 12px;
-		font-weight: 600;
-		color: white;
-		background-color: var(--accent-primary);
-		padding: 10px 16px;
-		border-radius: 8px;
-		border: none;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		white-space: nowrap;
-		min-width: 85px;
-		min-height: 44px;
-		text-align: center;
-		letter-spacing: -0.01em;
-	}
-	.copy-btn:hover {
-		background-color: var(--accent-hover);
-	}
-	.copy-btn:active {
-		background-color: var(--accent-active);
-		transform: scale(0.95);
-	}
 
 	/* セクション区切り */
 	.section {
@@ -464,29 +399,6 @@
 		margin-left: auto;
 		margin-right: auto;
 	}
-	.details-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background-color: var(--gray-700);
-		color: white;
-		border: none;
-		border-radius: 8px;
-		padding: 10px 16px;
-		font-size: 14px;
-		font-weight: 500;
-		cursor: pointer;
-		text-decoration: none;
-		transition: all 0.15s ease;
-		letter-spacing: -0.01em;
-		min-height: 44px;
-	}
-	.details-btn:hover {
-		background-color: var(--gray-600);
-	}
-	.details-btn:active {
-		background-color: var(--gray-800);
-	}
 
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
@@ -496,6 +408,11 @@
 		.list-keypad {
 			gap: 20px;
 		}
+		.details-btn {
+			font-size: 14px;
+			padding: 10px 24px;
+			margin-top: 16px;
+		}
 		.key.select-item {
 			min-height: 180px;
 			padding: 32px;
@@ -504,32 +421,6 @@
 		.session-name {
 			font-size: 22px;
 			margin-bottom: 8px;
-		}
-		.join-code-wrapper {
-			flex-wrap: nowrap;
-			gap: 16px;
-			width: 100%;
-		}
-		.join-code-display {
-			padding: 10px 20px;
-			flex-shrink: 0;
-		}
-		.join-code-label {
-			font-size: 13px;
-		}
-		.join-code-value {
-			font-size: 15px;
-		}
-		.copy-btn {
-			font-size: 13px;
-			padding: 8px 16px;
-			min-width: 100px;
-			flex-shrink: 0;
-		}
-		.details-btn {
-			font-size: 13px;
-			padding: 8px 16px;
-			white-space: nowrap;
 		}
 		.section-title {
 			font-size: 20px;
@@ -544,6 +435,11 @@
 		.list-keypad {
 			gap: 24px;
 			max-width: 600px;
+		}
+		.details-btn {
+			font-size: 15px;
+			padding: 10px 28px;
+			margin-top: 20px;
 		}
 		.key.select-item {
 			min-height: 140px;

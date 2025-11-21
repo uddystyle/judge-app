@@ -98,6 +98,24 @@
 	let guestToRemove: { identifier: string; name: string } | null = null;
 	let removeGuestForms: { [key: string]: HTMLFormElement } = {};
 
+	// 参加コードコピー機能
+	let copiedCode = false;
+
+	function copyJoinCode() {
+		navigator.clipboard.writeText(data.sessionDetails.join_code).then(
+			() => {
+				copiedCode = true;
+				setTimeout(() => {
+					copiedCode = false;
+				}, 2000);
+			},
+			(err) => {
+				console.error('コピーに失敗しました:', err);
+				alert('コピーに失敗しました。');
+			}
+		);
+	}
+
 	function openRemoveGuestDialog(guestIdentifier: string, guestName: string) {
 		guestToRemove = { identifier: guestIdentifier, name: guestName };
 		showRemoveGuestDialog = true;
@@ -325,6 +343,27 @@
 				{/if}
 			</div>
 		{/if}
+	</div>
+
+	<!-- ユーザーを招待セクション -->
+	<div class="settings-section">
+		<h3 class="settings-title">ユーザーを招待</h3>
+		<div class="invite-container">
+			<div class="invite-item">
+				<span class="invite-label">参加コード</span>
+				<div class="code-display">
+					<input type="text" value={data.sessionDetails.join_code} readonly class="code-input" />
+					<button class="copy-btn" on:click={copyJoinCode}>
+						{#if copiedCode}
+							✓ コピー済
+						{:else}
+							コピー
+						{/if}
+					</button>
+				</div>
+			</div>
+			<p class="invite-note">※ ログイン済みのユーザーがこのコードを使用してセッションに参加できます</p>
+		</div>
 	</div>
 
 	<!-- ゲスト招待セクション -->
@@ -961,6 +1000,7 @@
 		max-width: 500px;
 		margin: 0 auto;
 	}
+
 	.settings-section {
 		margin-bottom: 1.5rem;
 	}
@@ -1733,13 +1773,15 @@
 		color: var(--text-primary);
 	}
 
-	.url-display {
+	.url-display,
+	.code-display {
 		display: flex;
 		gap: 8px;
 		align-items: center;
 	}
 
-	.url-input {
+	.url-input,
+	.code-input {
 		flex: 1;
 		padding: 12px;
 		border: 2px solid var(--border-medium);
@@ -1750,9 +1792,18 @@
 		font-family: monospace;
 	}
 
-	.url-input:focus {
+	.url-input:focus,
+	.code-input:focus {
 		outline: none;
 		border-color: var(--accent-primary);
+	}
+
+	.code-input {
+		font-size: 18px;
+		font-weight: 700;
+		letter-spacing: 3px;
+		text-align: center;
+		color: var(--text-primary);
 	}
 
 	.copy-btn {
