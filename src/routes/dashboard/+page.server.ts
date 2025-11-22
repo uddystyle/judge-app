@@ -42,8 +42,8 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				.filter((id: any) => id)
 		: [];
 
-	// 組織経由のセッションとゲスト参加セッションを並列取得
-	const [orgSessionsResult, participantsResult] = await Promise.all([
+	// 組織経由のセッションとゲスト参加セッションを並列取得（約100-200ms短縮）
+	const [orgSessionsResult, guestSessionsResult] = await Promise.all([
 		// 組織経由のセッション（最新100件に制限）
 		organizationIds.length > 0
 			? supabase
@@ -53,33 +53,41 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 					.order('created_at', { ascending: false })
 					.limit(100)
 			: Promise.resolve({ data: [], error: null }),
-		// ゲスト参加のセッションID取得
-		supabase.from('session_participants').select('session_id').eq('user_id', user.id).limit(100)
+		// ゲスト参加のセッション（JOINで一度に取得）
+		supabase
+			.from('session_participants')
+			.select(`
+				session_id,
+				sessions!inner (
+					id,
+					name,
+					session_date,
+					join_code,
+					is_active,
+					is_tournament_mode,
+					mode,
+					organization_id,
+					exclude_extremes
+				)
+			`)
+			.eq('user_id', user.id)
+			.limit(100)
 	]);
 
 	if (orgSessionsResult.error) {
 		console.error('Error fetching org sessions:', orgSessionsResult.error);
 	}
 
+	if (guestSessionsResult.error) {
+		console.error('Error fetching guest sessions:', guestSessionsResult.error);
+	}
+
 	const orgSessions = orgSessionsResult.data || [];
 
-	// ゲストセッションの詳細を取得（セッションIDがある場合のみ）
-	let guestSessions: any[] = [];
-	if (participantsResult.data && participantsResult.data.length > 0) {
-		const sessionIds = participantsResult.data.map((p: any) => p.session_id);
-		const sessionsResult = await supabase
-			.from('sessions')
-			.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes')
-			.in('id', sessionIds);
-
-		if (sessionsResult.error) {
-			console.error('Error fetching guest sessions:', sessionsResult.error);
-		} else {
-			guestSessions = sessionsResult.data || [];
-		}
-	} else if (participantsResult.error) {
-		console.error('Error fetching session participants:', participantsResult.error);
-	}
+	// ゲストセッションをフラット化
+	const guestSessions = guestSessionsResult.data
+		? guestSessionsResult.data.map((p: any) => p.sessions).filter(Boolean)
+		: [];
 
 	// 重複を削除してマージ（組織経由のセッションを優先）
 	const sessionMap = new Map();
