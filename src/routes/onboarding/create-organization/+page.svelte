@@ -510,7 +510,7 @@
 		background: var(--bg-secondary);
 		border-radius: 12px;
 		padding: 20px;
-		text-align: left;
+		text-align: center;
 	}
 
 	.info-note p {
