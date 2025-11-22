@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		organizationIds.length > 0
 			? supabase
 					.from('sessions')
-					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes')
+					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes, is_multi_judge')
 					.in('organization_id', organizationIds)
 					.order('created_at', { ascending: false })
 					.limit(100)
@@ -67,7 +67,8 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 					is_tournament_mode,
 					mode,
 					organization_id,
-					exclude_extremes
+					exclude_extremes,
+					is_multi_judge
 				)
 			`)
 			.eq('user_id', user.id)
@@ -140,7 +141,10 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	const sessionsWithParticipantCount = sessions.map((session: any) => ({
 		...session,
 		participantCount: participantCountMap.get(session.id) || 0,
-		isMultiJudge: trainingSettingsMap.get(session.id) || false
+		// 研修モードは training_sessions から、それ以外は sessions.is_multi_judge を使用
+		isMultiJudge: session.mode === 'training'
+			? (trainingSettingsMap.get(session.id) ?? false)
+			: (session.is_multi_judge ?? false)
 	}));
 
 	// 組織配列を作成（UIが期待する形式）
