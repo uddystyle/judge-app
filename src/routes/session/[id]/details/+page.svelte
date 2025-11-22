@@ -546,7 +546,7 @@
 							type="text"
 							name="eventName"
 							bind:value={eventName}
-							placeholder="種目名を入力"
+							placeholder="種目名 (例: 大回り)"
 							required
 						/>
 						<button type="submit" class="add-event-btn">追加</button>

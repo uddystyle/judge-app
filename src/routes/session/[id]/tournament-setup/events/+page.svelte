@@ -116,7 +116,7 @@
 				<input
 					type="text"
 					name="eventName"
-					placeholder="種目名 (例: 大回転)"
+					placeholder="種目名 (例: 大回り)"
 					bind:value={eventName}
 					required
 				/>
