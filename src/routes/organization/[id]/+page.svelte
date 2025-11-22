@@ -54,6 +54,22 @@
 	let generatingInvite = false;
 	let inviteUrl = '';
 	let copiedInvite = false;
+	let copiedInviteCode = false;
+
+	function copyInviteCode() {
+		navigator.clipboard.writeText(data.organization.invite_code).then(
+			() => {
+				copiedInviteCode = true;
+				setTimeout(() => {
+					copiedInviteCode = false;
+				}, 2000);
+			},
+			(err) => {
+				console.error('コピーに失敗しました:', err);
+				alert('コピーに失敗しました');
+			}
+		);
+	}
 
 	function toggleInviteSection() {
 		showInviteSection = !showInviteSection;
@@ -199,6 +215,15 @@
 			<div class="info-row">
 				<span class="info-label">現在のメンバー数</span>
 				<span class="info-value">{data.members.length}名</span>
+			</div>
+			<div class="info-row">
+				<span class="info-label">招待コード</span>
+				<div class="info-value-with-action">
+					<span class="invite-code-display">{data.organization.invite_code}</span>
+					<button class="copy-code-btn" on:click={copyInviteCode}>
+						{copiedInviteCode ? '✓ コピー済' : 'コピー'}
+					</button>
+				</div>
 			</div>
 			{#if isAdmin}
 				<div class="info-row">
@@ -383,6 +408,41 @@
 		padding: 4px 12px;
 		border-radius: 6px;
 		font-size: 14px;
+	}
+	.info-value-with-action {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.invite-code-display {
+		font-family: 'Courier New', monospace;
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--text-primary);
+		letter-spacing: 0.15em;
+		background: var(--bg-secondary);
+		padding: 6px 12px;
+		border-radius: 6px;
+		border: 1px solid var(--border-light);
+	}
+	.copy-code-btn {
+		padding: 6px 14px;
+		font-size: 13px;
+		font-weight: 600;
+		background: var(--ios-blue);
+		color: white;
+		border: none;
+		border-radius: 6px;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+	}
+	.copy-code-btn:hover {
+		background: #0051d5;
+		box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
+	}
+	.copy-code-btn:active {
+		transform: scale(0.96);
 	}
 	.members-list {
 		display: flex;
