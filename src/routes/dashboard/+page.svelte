@@ -190,6 +190,12 @@
 		{/if}
 		<NavButton on:click={() => goto('/session/join')}>コードでセッションに参加</NavButton>
 	</div>
+
+	<div class="help-link-section">
+		<a href="/modes" class="help-link">
+			セッションモードについて →
+		</a>
+	</div>
 </div>
 
 <AlertDialog
@@ -424,6 +430,26 @@
 		margin-right: auto;
 	}
 
+	.help-link-section {
+		text-align: center;
+		margin-top: 24px;
+	}
+
+	.help-link {
+		display: inline-flex;
+		align-items: center;
+		color: var(--accent-primary);
+		font-size: 14px;
+		font-weight: 500;
+		text-decoration: none;
+		transition: all 0.15s ease;
+	}
+
+	.help-link:hover {
+		color: var(--accent-hover);
+		text-decoration: underline;
+	}
+
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
 		.container {
@@ -455,6 +481,9 @@
 		}
 		.divider {
 			margin: 56px auto;
+		}
+		.help-link {
+			font-size: 15px;
 		}
 	}
 
