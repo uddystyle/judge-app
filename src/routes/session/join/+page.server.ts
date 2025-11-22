@@ -72,7 +72,7 @@ export const actions: Actions = {
 			});
 		}
 
-		// 成功したら、ダッシュボードへリダイレクト
-		throw redirect(303, '/dashboard');
+		// 成功したら、セッション待機画面へリダイレクト
+		throw redirect(303, `/session/${sessionData.id}`);
 	}
 };
