@@ -33,7 +33,7 @@
 	{#if step === 0}
 		<!-- Step 0: 選択画面 -->
 		<div class="header">
-			<h1 class="title">TENTOへようこそ</h1>
+			<h1 class="title"><span class="app-name">TENTO</span>へようこそ</h1>
 			<p class="subtitle">
 				次のステップを選択してください
 			</p>
@@ -46,7 +46,6 @@
 					スキークラブや団体として<br />
 					セッションを管理します
 				</p>
-				<div class="choice-badge">推奨</div>
 			</button>
 
 			<button class="choice-card secondary" on:click={() => goto('/session/join')}>
@@ -233,6 +232,12 @@
 		font-weight: 700;
 		color: var(--primary-text);
 		margin-bottom: 12px;
+	}
+
+	.app-name {
+		font-family: 'M PLUS Rounded 1c', sans-serif;
+		font-weight: 800;
+		letter-spacing: 0.05em;
 	}
 
 	.subtitle {

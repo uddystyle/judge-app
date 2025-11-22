@@ -110,7 +110,7 @@
 			loading = false;
 		} else {
 			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
-			if (sessionDetails?.is_multi_judge) {
+			if (isMultiJudge) {
 				goto(`/session/${id}/${discipline}/${level}/${eventParam}/score/status?bib=${bib}${guestParam}`);
 			} else {
 				goto(
