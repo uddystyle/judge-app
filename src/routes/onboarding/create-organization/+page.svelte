@@ -48,18 +48,18 @@
 				</p>
 			</button>
 
-			<button class="choice-card secondary" on:click={() => goto('/session/join')}>
-				<h2 class="choice-title">セッションに参加する</h2>
+			<button class="choice-card secondary" on:click={() => goto('/organization/join')}>
+				<h2 class="choice-title">組織に参加する</h2>
 				<p class="choice-description">
 					招待コードを使って<br />
-					既存のセッションに参加します
+					既存の組織に参加します
 				</p>
 			</button>
 		</div>
 
 		<div class="info-note">
 			<p>組織を作成すると、セッションの作成や管理ができるようになります。</p>
-			<p>セッションに参加する場合は、主催者から招待コードを受け取ってください。</p>
+			<p>組織に参加する場合は、組織の管理者から招待コードを受け取ってください。</p>
 		</div>
 	{:else if step === 1}
 		<!-- Step 1: 組織名入力 -->
