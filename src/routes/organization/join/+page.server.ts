@@ -11,7 +11,27 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		throw redirect(303, '/login');
 	}
 
-	return { user };
+	// プロフィール情報を取得
+	const { data: profile } = await supabase
+		.from('profiles')
+		.select('full_name, id')
+		.eq('id', user.id)
+		.single();
+
+	// 組織メンバーシップ情報を取得
+	const { data: memberships } = await supabase
+		.from('organization_members')
+		.select('role, organizations (id, name)')
+		.eq('user_id', user.id);
+
+	const organizations = memberships
+		? memberships.map((m: any) => ({
+				...m.organizations,
+				userRole: m.role
+		  }))
+		: [];
+
+	return { user, profile, organizations };
 };
 
 export const actions: Actions = {

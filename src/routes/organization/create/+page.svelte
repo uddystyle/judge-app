@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -270,6 +271,8 @@
 		</div>
 	</div>
 </div>
+
+<Footer />
 
 <style>
 	.container {

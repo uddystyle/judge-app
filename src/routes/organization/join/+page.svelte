@@ -1,13 +1,23 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 
 	// サーバーアクションから返されるデータ（エラーメッセージなど）を保持
 	export let form: ActionData;
+	export let data: PageData;
 </script>
+
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.organizations.length > 0}
+	pageOrganizations={data.organizations}
+/>
 
 <div class="container">
 	<div class="instruction">組織に参加</div>
@@ -39,12 +49,15 @@
 	</div>
 </div>
 
+<Footer />
+
 <style>
 	.container {
-		padding: 28px 20px;
+		padding: 80px 20px 60px;
 		text-align: center;
 		max-width: 400px;
 		margin: 0 auto;
+		min-height: calc(100vh - 140px);
 	}
 	.instruction {
 		font-size: 24px;
@@ -77,7 +90,7 @@
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
 		.container {
-			padding: 60px 40px;
+			padding: 100px 40px 80px;
 			max-width: 600px;
 		}
 		.instruction {
