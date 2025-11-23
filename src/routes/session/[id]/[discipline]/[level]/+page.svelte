@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import Header from '$lib/components/Header.svelte';
 	import { page } from '$app/stores';
-	import { currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
+	import { currentSession, currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
 	import { onMount } from 'svelte';
 
 	export let data: PageData;
@@ -14,6 +14,10 @@
 	$: guestIdentifier = $page.url.searchParams.get('guest');
 
 	onMount(() => {
+		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
 		// 種別と級を設定、種目以降をクリア
 		currentDiscipline.set(discipline);
 		currentLevel.set(level);

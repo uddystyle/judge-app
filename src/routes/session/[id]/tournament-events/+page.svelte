@@ -4,7 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
+	import { currentSession, currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
 	import { onMount } from 'svelte';
 
 	export let data: PageData;
@@ -14,6 +14,10 @@
 	$: customEvents = data.customEvents;
 
 	onMount(() => {
+		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
 		// 大会モードでは級がないので、種別以降をクリア
 		currentDiscipline.set(null);
 		currentLevel.set(null);

@@ -7,7 +7,7 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
-	import { currentBib, userProfile } from '$lib/stores';
+	import { currentBib, userProfile, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import { get } from 'svelte/store';
 
 	export let data: PageData;
@@ -60,6 +60,14 @@
 		level = $page.params.level || '';
 		event = $page.params.event || '';
 		bib = $page.url.searchParams.get('bib');
+
+		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
+		currentDiscipline.set(discipline);
+		currentLevel.set(level);
+		currentEvent.set(event);
 
 		fetchStatus();
 		pollingInterval = setInterval(fetchStatus, 1000); // Poll every 1 second (for debugging)

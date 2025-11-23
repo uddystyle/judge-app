@@ -42,7 +42,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// セッション情報を取得（複数検定員モードか確認）
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('is_multi_judge, required_judges, chief_judge_id, is_tournament_mode')
+		.select('id, name, is_multi_judge, required_judges, chief_judge_id, is_tournament_mode, session_date')
 		.eq('id', id)
 		.single();
 
@@ -95,6 +95,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		scores: scores || [],
 		isChief,
 		isTournamentMode: sessionDetails.is_tournament_mode,
+		sessionDetails,
 		user,
 		guestIdentifier,
 		guestParticipant,

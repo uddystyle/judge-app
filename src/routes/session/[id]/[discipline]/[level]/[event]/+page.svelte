@@ -3,7 +3,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
-	import { currentBib as bibStore, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
+	import { currentBib as bibStore, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 	import { enhance } from '$app/forms';
@@ -29,7 +29,10 @@
 	onMount(() => {
 		currentBib = '';
 		bibStore.set(null);
-		// 種別、級、種目を設定
+		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
 		currentDiscipline.set(discipline);
 		currentLevel.set(level);
 		currentEvent.set(event);

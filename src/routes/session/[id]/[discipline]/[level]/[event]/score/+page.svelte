@@ -127,6 +127,9 @@
 		const { discipline, level, event } = $page.params;
 
 		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
 		currentDiscipline.set(discipline);
 		currentLevel.set(level);
 		currentEvent.set(event);

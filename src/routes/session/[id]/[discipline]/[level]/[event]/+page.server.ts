@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	// セッション情報を取得して、主任検定員かどうかを確認
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('chief_judge_id, is_tournament_mode, is_multi_judge')
+		.select('id, name, chief_judge_id, is_tournament_mode, is_multi_judge, session_date')
 		.eq('id', sessionId)
 		.single();
 
@@ -85,6 +85,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		isTournamentMode: sessionDetails.is_tournament_mode,
 		isMultiJudge: sessionDetails.is_multi_judge,
 		isChief,
+		sessionDetails,
 		user,
 		guestIdentifier,
 		guestParticipant,

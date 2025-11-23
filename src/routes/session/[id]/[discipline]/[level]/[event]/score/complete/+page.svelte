@@ -3,7 +3,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { currentBib as bibStore } from '$lib/stores';
+	import { currentBib as bibStore, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import type { PageData } from './$types';
 	import { enhance } from '$app/forms';
 	import { getContext, onMount, onDestroy } from 'svelte';
@@ -42,6 +42,14 @@
 	}
 
 	onMount(() => {
+		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
+		currentDiscipline.set($page.params.discipline);
+		currentLevel.set($page.params.level);
+		currentEvent.set($page.params.event);
+
 		// 一般検定員の場合、セッション終了を監視
 		if (!data.isChief) {
 			const sessionId = $page.params.id;
