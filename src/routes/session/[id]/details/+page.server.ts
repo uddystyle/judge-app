@@ -309,6 +309,64 @@ export const actions: Actions = {
 		return { success: true, message: 'ゲストユーザーを削除しました。' };
 	},
 
+	removeParticipant: async ({ request, params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			throw redirect(303, '/login');
+		}
+
+		const formData = await request.formData();
+		const participantUserId = formData.get('userId') as string;
+
+		if (!participantUserId) {
+			return fail(400, { error: 'ユーザーIDが指定されていません。' });
+		}
+
+		// セッションの詳細を取得（作成者と主任検定員を確認）
+		const { data: session, error: sessionError } = await supabase
+			.from('sessions')
+			.select('created_by, chief_judge_id')
+			.eq('id', params.id)
+			.single();
+
+		if (sessionError || !session) {
+			return fail(404, { error: 'セッションが見つかりません。' });
+		}
+
+		// 作成者のみが検定員を削除できる
+		if (session.created_by !== user.id) {
+			return fail(403, { error: '検定員を削除する権限がありません。' });
+		}
+
+		// 自分自身を削除しようとしている場合はエラー
+		if (participantUserId === user.id) {
+			return fail(400, { error: '自分自身を削除することはできません。' });
+		}
+
+		// 主任検定員を削除しようとしている場合はエラー
+		if (participantUserId === session.chief_judge_id) {
+			return fail(400, { error: '主任検定員を削除することはできません。先に主任を解除してください。' });
+		}
+
+		// 検定員をsession_participantsから削除
+		const { error: deleteError } = await supabase
+			.from('session_participants')
+			.delete()
+			.eq('session_id', params.id)
+			.eq('user_id', participantUserId)
+			.eq('is_guest', false);
+
+		if (deleteError) {
+			return fail(500, { error: '検定員の削除に失敗しました。' });
+		}
+
+		return { success: true, message: '検定員を削除しました。' };
+	},
+
 	updateTrainingSettings: async ({ request, params, locals: { supabase } }) => {
 		const {
 			data: { user },

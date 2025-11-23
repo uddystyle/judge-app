@@ -74,16 +74,20 @@
 		background-color: var(--accent-active);
 	}
 
-	/* Danger - Dark gray for destructive actions */
+	/* Danger - Red background for destructive actions */
 	.nav-btn.danger {
-		background-color: var(--bg-primary);
-		color: var(--color-error);
-		border-color: var(--gray-400);
+		background-color: #dc3545;
+		color: white;
+		border-color: #dc3545;
 	}
 
 	.nav-btn.danger:hover:not(:disabled) {
-		background-color: var(--gray-100);
-		border-color: var(--gray-500);
+		background-color: #c82333;
+		border-color: #c82333;
+	}
+
+	.nav-btn.danger:active:not(:disabled) {
+		background-color: #bd2130;
 	}
 
 	/* Disabled state */

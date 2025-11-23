@@ -103,6 +103,11 @@
 	let guestToRemove: { identifier: string; name: string } | null = null;
 	let removeGuestForms: { [key: string]: HTMLFormElement } = {};
 
+	// 一般検定員削除確認ダイアログ
+	let showRemoveParticipantDialog = false;
+	let participantToRemove: { userId: string; name: string } | null = null;
+	let removeParticipantForms: { [key: string]: HTMLFormElement } = {};
+
 	// 参加コードコピー機能
 	let copiedCode = false;
 
@@ -137,6 +142,24 @@
 	function handleRemoveGuestCancel() {
 		showRemoveGuestDialog = false;
 		guestToRemove = null;
+	}
+
+	function openRemoveParticipantDialog(userId: string, participantName: string) {
+		participantToRemove = { userId, name: participantName };
+		showRemoveParticipantDialog = true;
+	}
+
+	function handleRemoveParticipantConfirm() {
+		if (participantToRemove && removeParticipantForms[participantToRemove.userId]) {
+			removeParticipantForms[participantToRemove.userId].requestSubmit();
+		}
+		showRemoveParticipantDialog = false;
+		participantToRemove = null;
+	}
+
+	function handleRemoveParticipantCancel() {
+		showRemoveParticipantDialog = false;
+		participantToRemove = null;
 	}
 
 	// 参加者リスト更新
@@ -427,40 +450,60 @@
 							{/if}
 						</span>
 
-						{#if !p.is_guest && data.currentUserId === data.sessionDetails.created_by}
-							<form method="POST" action="?/appointChief" use:enhance>
-								<input type="hidden" name="userId" value={p.user_id} />
-								<button
-									type="submit"
-									class="appoint-btn"
-									class:danger={data.sessionDetails.chief_judge_id === p.user_id}
-								>
-									{#if data.sessionDetails.chief_judge_id === p.user_id}
-										主任を解除
-									{:else}
-										主任に任命
-									{/if}
-								</button>
-							</form>
-						{/if}
+						<div class="participant-actions">
+							{#if !p.is_guest && data.currentUserId === data.sessionDetails.created_by}
+								<form method="POST" action="?/appointChief" use:enhance>
+									<input type="hidden" name="userId" value={p.user_id} />
+									<button
+										type="submit"
+										class="appoint-btn"
+										class:danger={data.sessionDetails.chief_judge_id === p.user_id}
+									>
+										{#if data.sessionDetails.chief_judge_id === p.user_id}
+											主任を解除
+										{:else}
+											主任に任命
+										{/if}
+									</button>
+								</form>
 
-						{#if p.is_guest && data.currentUserId === data.sessionDetails.created_by}
-							<form
-								bind:this={removeGuestForms[p.guest_identifier]}
-								method="POST"
-								action="?/removeGuest"
-								use:enhance
-							>
-								<input type="hidden" name="guestIdentifier" value={p.guest_identifier} />
-								<button
-									type="button"
-									class="appoint-btn danger"
-									on:click={() => openRemoveGuestDialog(p.guest_identifier, p.guest_name)}
+								{#if p.user_id !== data.currentUserId && p.user_id !== data.sessionDetails.chief_judge_id}
+									<form
+										bind:this={removeParticipantForms[p.user_id]}
+										method="POST"
+										action="?/removeParticipant"
+										use:enhance
+									>
+										<input type="hidden" name="userId" value={p.user_id} />
+										<button
+											type="button"
+											class="appoint-btn danger"
+											on:click={() => openRemoveParticipantDialog(p.user_id, p.profiles?.full_name || 'プロフィール未設定')}
+										>
+											削除
+										</button>
+									</form>
+								{/if}
+							{/if}
+
+							{#if p.is_guest && data.currentUserId === data.sessionDetails.created_by}
+								<form
+									bind:this={removeGuestForms[p.guest_identifier]}
+									method="POST"
+									action="?/removeGuest"
+									use:enhance
 								>
-									削除
-								</button>
-							</form>
-						{/if}
+									<input type="hidden" name="guestIdentifier" value={p.guest_identifier} />
+									<button
+										type="button"
+										class="appoint-btn danger"
+										on:click={() => openRemoveGuestDialog(p.guest_identifier, p.guest_name)}
+									>
+										削除
+									</button>
+								</form>
+							{/if}
+						</div>
 					</div>
 				{/each}
 			{:else}
@@ -970,7 +1013,7 @@
 				variant="danger"
 				on:click={() => goto(`/session/${data.sessionDetails.id}/details/delete`)}
 			>
-				この{data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除
+				この{data.isTrainingMode ? '研修' : data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除
 			</NavButton>
 		</div>
 	{/if}
@@ -1017,6 +1060,18 @@
 	variant="danger"
 	on:confirm={handleRemoveGuestConfirm}
 	on:cancel={handleRemoveGuestCancel}
+/>
+
+<!-- 一般検定員削除確認ダイアログ -->
+<ConfirmDialog
+	bind:isOpen={showRemoveParticipantDialog}
+	title="検定員を削除"
+	message={participantToRemove ? `検定員「${participantToRemove.name}」をセッションから削除しますか？\n\nこの操作は取り消せません。` : ''}
+	confirmText="削除"
+	cancelText="キャンセル"
+	variant="danger"
+	on:confirm={handleRemoveParticipantConfirm}
+	on:cancel={handleRemoveParticipantCancel}
 />
 
 <AlertDialog
@@ -1132,6 +1187,11 @@
 	}
 	.participant-name {
 		font-weight: 500;
+	}
+	.participant-actions {
+		display: flex;
+		gap: 8px;
+		align-items: center;
 	}
 	.chief-badge {
 		font-size: 12px;
@@ -1461,8 +1521,9 @@
 		color: white;
 	}
 	.delete-btn-small {
-		background: #dc3545;
-		color: white;
+		background: var(--bg-primary);
+		color: var(--color-error);
+		border: 1.5px solid var(--gray-400);
 	}
 	.save-btn-small {
 		background: #2d7a3e;
