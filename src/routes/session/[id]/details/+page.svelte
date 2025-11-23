@@ -457,7 +457,6 @@
 									<button
 										type="submit"
 										class="appoint-btn"
-										class:danger={data.sessionDetails.chief_judge_id === p.user_id}
 									>
 										{#if data.sessionDetails.chief_judge_id === p.user_id}
 											主任を解除
@@ -1255,6 +1254,17 @@
 		cursor: default;
 		opacity: 0.7;
 	}
+	.appoint-btn.danger {
+		background-color: transparent;
+		color: #dc3545;
+		border: 1.5px solid #dc3545;
+	}
+	.appoint-btn.danger:hover {
+		background-color: #ffe6e6;
+	}
+	.appoint-btn.danger:active {
+		background-color: #ffcccc;
+	}
 	.settings-section {
 		text-align: left;
 	}
@@ -1521,9 +1531,17 @@
 		color: white;
 	}
 	.delete-btn-small {
-		background: var(--bg-primary);
-		color: var(--color-error);
-		border: 1.5px solid var(--gray-400);
+		background: transparent;
+		color: #dc3545;
+		border: 1.5px solid #dc3545;
+	}
+	.delete-btn-small:hover {
+		background: #ffe6e6;
+		opacity: 1;
+	}
+	.delete-btn-small:active {
+		background: #ffcccc;
+		opacity: 1;
 	}
 	.save-btn-small {
 		background: #2d7a3e;
