@@ -94,13 +94,6 @@
 <div class="container">
 	<div class="instruction">ゼッケン番号を入力してください</div>
 
-	{#if isMultiJudge}
-		<div class="scoring-info">
-			<div class="scoring-badge training">複数検定員モード</div>
-			<p class="scoring-description">主任が採点を指示します</p>
-		</div>
-	{/if}
-
 	<div class="numeric-display">{currentBib || '0'}</div>
 
 	<form method="POST" action="?/setPrompt" use:enhance bind:this={formElement}>

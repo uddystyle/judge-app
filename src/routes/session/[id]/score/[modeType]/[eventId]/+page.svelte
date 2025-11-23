@@ -92,21 +92,6 @@
 <div class="container">
 	<div class="instruction">ゼッケン番号を入力してください</div>
 
-	{#if !isTrainingMode}
-		<div class="scoring-info">
-			{#if excludeExtremes}
-				<div class="scoring-badge advanced">5審3採</div>
-			{:else}
-				<div class="scoring-badge">3審3採</div>
-			{/if}
-		</div>
-	{:else if isMultiJudge}
-		<div class="scoring-info">
-			<div class="scoring-badge training">複数検定員モード</div>
-			<p class="scoring-description">主任が採点を指示します</p>
-		</div>
-	{/if}
-
 	{#if form?.error}
 		<div class="error-message">{form.error}</div>
 	{/if}
