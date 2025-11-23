@@ -93,6 +93,11 @@
 	// 研修モード設定
 	let isMultiJudgeTraining = data.trainingSession?.is_multi_judge || false;
 
+	// ローディング状態
+	let isSavingTournamentSettings = false;
+	let isSavingTrainingSettings = false;
+	let isSavingCertificationSettings = false;
+
 	// ゲストユーザー削除確認ダイアログ
 	let showRemoveGuestDialog = false;
 	let guestToRemove: { identifier: string; name: string } | null = null;
@@ -599,8 +604,10 @@
 					method="POST"
 					action="?/updateTournamentSettings"
 					use:enhance={() => {
+						isSavingTournamentSettings = true;
 						return async ({ update }) => {
 							await update({ reset: false });
+							isSavingTournamentSettings = false;
 						};
 					}}
 				>
@@ -685,7 +692,14 @@
 					</div>
 
 					<div class="form-actions">
-						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges}>設定を保存</button>
+						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges || isSavingTournamentSettings}>
+							{#if isSavingTournamentSettings}
+								<span class="loading-spinner"></span>
+								保存中...
+							{:else}
+								設定を保存
+							{/if}
+						</button>
 					</div>
 				</form>
 			{:else}
@@ -727,8 +741,10 @@
 					method="POST"
 					action="?/updateTrainingSettings"
 					use:enhance={() => {
+						isSavingTrainingSettings = true;
 						return async ({ update }) => {
 							await update({ reset: false });
+							isSavingTrainingSettings = false;
 						};
 					}}
 				>
@@ -755,7 +771,14 @@
 					</div>
 
 					<div class="form-actions">
-						<button type="submit" class="save-btn">設定を保存</button>
+						<button type="submit" class="save-btn" disabled={isSavingTrainingSettings}>
+							{#if isSavingTrainingSettings}
+								<span class="loading-spinner"></span>
+								保存中...
+							{:else}
+								設定を保存
+							{/if}
+						</button>
 					</div>
 				</form>
 			{:else}
@@ -790,8 +813,10 @@
 					method="POST"
 					action="?/updateSettings"
 					use:enhance={() => {
+						isSavingCertificationSettings = true;
 						return async ({ update }) => {
 							await update({ reset: false });
+							isSavingCertificationSettings = false;
 						};
 					}}
 				>
@@ -843,7 +868,14 @@
 					{/if}
 
 					<div class="form-actions">
-						<button type="submit" class="save-btn">設定を保存</button>
+						<button type="submit" class="save-btn" disabled={isSavingCertificationSettings}>
+							{#if isSavingCertificationSettings}
+								<span class="loading-spinner"></span>
+								保存中...
+							{:else}
+								設定を保存
+							{/if}
+						</button>
 					</div>
 				</form>
 			{:else}
@@ -1343,6 +1375,30 @@
 		background: #ccc;
 		cursor: not-allowed;
 		opacity: 0.6;
+	}
+
+	/* ローディングスピナー */
+	.loading-spinner {
+		display: inline-block;
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: white;
+		border-radius: 50%;
+		animation: spinner-rotate 0.6s linear infinite;
+		margin-right: 8px;
+		vertical-align: middle;
+	}
+
+	@keyframes spinner-rotate {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.save-btn:disabled .loading-spinner {
+		border-color: rgba(0, 0, 0, 0.2);
+		border-top-color: rgba(0, 0, 0, 0.5);
 	}
 
 	/* 種目管理のスタイル */
