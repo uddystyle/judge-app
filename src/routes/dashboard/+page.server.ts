@@ -30,6 +30,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		`
 			)
 			.eq('user_id', user.id)
+			.is('removed_at', null)
 	]);
 
 	const profile = profileResult.data;
@@ -44,16 +45,17 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	// 組織経由のセッションとゲスト参加セッションを並列取得（約100-200ms短縮）
 	const [orgSessionsResult, guestSessionsResult] = await Promise.all([
-		// 組織経由のセッション（最新100件に制限）
+		// 組織経由のアクティブなセッション（最新100件に制限）
 		organizationIds.length > 0
 			? supabase
 					.from('sessions')
 					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes, is_multi_judge')
 					.in('organization_id', organizationIds)
+					.is('deleted_at', null)
 					.order('created_at', { ascending: false })
 					.limit(100)
 			: Promise.resolve({ data: [], error: null }),
-		// ゲスト参加のセッション（JOINで一度に取得）
+		// ゲスト参加のアクティブなセッション（JOINで一度に取得）
 		supabase
 			.from('session_participants')
 			.select(`
@@ -72,6 +74,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				)
 			`)
 			.eq('user_id', user.id)
+			.is('sessions.deleted_at', null)
 			.limit(100)
 	]);
 

@@ -50,13 +50,28 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		? await supabase.from('profiles').select('id, full_name').in('id', userIds)
 		: { data: [] };
 
+	// 全ユーザーの organization_members 情報を一度に取得（removed_at を含む）
+	const { data: orgMembers } = userIds.length > 0 && sessionDetails.organization_id
+		? await supabase
+			.from('organization_members')
+			.select('user_id, removed_at')
+			.eq('organization_id', sessionDetails.organization_id)
+			.in('user_id', userIds)
+		: { data: [] };
+
 	// プロフィールをマップ化
 	const profileMap = new Map();
 	(profiles || []).forEach((profile) => {
 		profileMap.set(profile.id, profile);
 	});
 
-	// 参加者データにプロフィールをマージ
+	// organization_members をマップ化
+	const orgMemberMap = new Map();
+	(orgMembers || []).forEach((member) => {
+		orgMemberMap.set(member.user_id, member);
+	});
+
+	// 参加者データにプロフィールとメンバー情報をマージ
 	const participants = (participantData || []).map((p) => {
 		// ゲストユーザーの場合
 		if (p.is_guest) {
@@ -65,16 +80,19 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 				is_guest: true,
 				guest_name: p.guest_name,
 				guest_identifier: p.guest_identifier,
-				profiles: null
+				profiles: null,
+				removed_at: null
 			};
 		}
 
 		// 通常ユーザーの場合
+		const orgMember = orgMemberMap.get(p.user_id);
 		return {
 			user_id: p.user_id,
 			is_guest: false,
 			guest_name: null,
-			profiles: profileMap.get(p.user_id) || null
+			profiles: profileMap.get(p.user_id) || null,
+			removed_at: orgMember?.removed_at || null
 		};
 	});
 

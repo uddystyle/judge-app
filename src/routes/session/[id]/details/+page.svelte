@@ -406,7 +406,7 @@
 		<div class="participants-container">
 			{#if data.participants && data.participants.length > 0}
 				{#each data.participants as p}
-					<div class="participant-item">
+					<div class="participant-item" class:removed={p.removed_at}>
 						<span class="participant-name">
 							{#if p.is_guest}
 								{p.guest_name}
@@ -415,6 +415,9 @@
 								{p.profiles?.full_name || 'プロフィール未設定'}
 								{#if data.sessionDetails.chief_judge_id === p.user_id}
 									<span class="chief-badge">(主任)</span>
+								{/if}
+								{#if p.removed_at}
+									<span class="removed-badge">(退会済み)</span>
 								{/if}
 							{/if}
 						</span>
@@ -1109,6 +1112,21 @@
 		font-weight: 600;
 		color: #666;
 		margin-left: 8px;
+	}
+	.removed-badge {
+		font-size: 12px;
+		font-weight: 600;
+		color: #999;
+		background: #f0f0f0;
+		padding: 2px 6px;
+		border-radius: 4px;
+		margin-left: 8px;
+	}
+	.participant-item.removed {
+		opacity: 0.6;
+	}
+	.participant-item.removed .participant-name {
+		color: #666;
 	}
 	.nav-buttons {
 		display: flex;

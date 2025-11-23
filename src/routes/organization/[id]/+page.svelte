@@ -56,6 +56,11 @@
 	let copiedInvite = false;
 	let copiedInviteCode = false;
 
+	// メンバー削除用の状態
+	let showDeleteConfirm = false;
+	let memberToDelete: any = null;
+	let deletingMember = false;
+
 	function copyInviteCode() {
 		navigator.clipboard.writeText(data.organization.invite_code).then(
 			() => {
@@ -122,6 +127,46 @@
 				alert('コピーに失敗しました');
 			}
 		);
+	}
+
+	function confirmDeleteMember(member: any) {
+		memberToDelete = member;
+		showDeleteConfirm = true;
+	}
+
+	function cancelDeleteMember() {
+		showDeleteConfirm = false;
+		memberToDelete = null;
+	}
+
+	async function deleteMember() {
+		if (!memberToDelete) return;
+
+		deletingMember = true;
+
+		try {
+			const response = await fetch(
+				`/api/organization/${data.organization.id}/members/${memberToDelete.id}`,
+				{
+					method: 'DELETE'
+				}
+			);
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				throw new Error(result.error || 'メンバーの削除に失敗しました');
+			}
+
+			// 成功したらページをリロード
+			showDeleteConfirm = false;
+			memberToDelete = null;
+			location.reload();
+		} catch (err: any) {
+			alert(err.message || 'メンバーの削除に失敗しました');
+		} finally {
+			deletingMember = false;
+		}
 	}
 </script>
 
@@ -253,8 +298,19 @@
 							{roleNames[member.role]}
 						</span>
 					</div>
-					<div class="member-meta">
-						<span class="joined-date">参加: {formatDate(member.joined_at)}</span>
+					<div class="member-actions">
+						<div class="member-meta">
+							<span class="joined-date">参加: {formatDate(member.joined_at)}</span>
+						</div>
+						{#if isAdmin && member.user_id !== data.user.id}
+							<button
+								class="delete-member-btn"
+								on:click={() => confirmDeleteMember(member)}
+								title="メンバーを削除"
+							>
+								削除
+							</button>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -321,11 +377,60 @@
 		<hr class="divider" />
 	{/if}
 
+	<!-- 管理者向けリンク -->
+	{#if isAdmin}
+		<div class="admin-links-section">
+			<h3 class="admin-section-title">管理機能</h3>
+			<div class="admin-links">
+				<a href="/organization/{data.organization.id}/archive" class="admin-link">
+					<span class="admin-link-text">セッションアーカイブ</span>
+				</a>
+				<a href="/organization/{data.organization.id}/members/archive" class="admin-link">
+					<span class="admin-link-text">削除されたメンバー</span>
+				</a>
+			</div>
+		</div>
+
+		<hr class="divider" />
+	{/if}
+
 	<!-- ナビゲーションボタン -->
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>ダッシュボードに戻る</NavButton>
 	</div>
 </div>
+
+<!-- メンバー削除確認ダイアログ -->
+{#if showDeleteConfirm && memberToDelete}
+	<div class="modal-overlay" on:click={cancelDeleteMember}>
+		<div class="modal-content" on:click|stopPropagation>
+			<h3 class="modal-title">メンバーを削除しますか？</h3>
+			<p class="modal-message">
+				<strong>{memberToDelete.profiles?.full_name || '名前未設定'}</strong> を組織から削除します。
+			</p>
+			<p class="modal-warning">
+				※ 過去のセッションデータは保持され、「退会済み」として表示されます。
+			</p>
+
+			<div class="modal-actions">
+				<button
+					class="modal-btn cancel-btn"
+					on:click={cancelDeleteMember}
+					disabled={deletingMember}
+				>
+					キャンセル
+				</button>
+				<button
+					class="modal-btn delete-btn"
+					on:click={deleteMember}
+					disabled={deletingMember}
+				>
+					{deletingMember ? '削除中...' : '削除'}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <Footer />
 
@@ -476,9 +581,34 @@
 		font-weight: 600;
 		color: var(--text-primary);
 	}
+	.member-actions {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
 	.member-meta {
 		display: flex;
 		align-items: center;
+	}
+	.delete-member-btn {
+		padding: 6px 12px;
+		font-size: 13px;
+		font-weight: 600;
+		background: transparent;
+		color: #dc3545;
+		border: 1px solid #dc3545;
+		border-radius: 6px;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+	}
+	.delete-member-btn:hover {
+		background: #dc3545;
+		color: white;
+		box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+	}
+	.delete-member-btn:active {
+		transform: scale(0.96);
 	}
 	.role-badge {
 		background: var(--ios-blue);
@@ -555,6 +685,53 @@
 		border-top: 1px solid var(--separator-gray);
 		margin: 32px 0;
 	}
+
+	/* 管理者向けリンク */
+	.admin-links-section {
+		margin-bottom: 24px;
+	}
+
+	.admin-section-title {
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0 0 16px 0;
+		text-align: center;
+	}
+
+	.admin-links {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		max-width: 600px;
+		margin: 0 auto;
+	}
+
+	.admin-link {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 16px 20px;
+		background: var(--bg-primary);
+		border: 2px solid var(--border-light);
+		border-radius: 12px;
+		text-decoration: none;
+		transition: all 0.2s;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	}
+
+	.admin-link:hover {
+		border-color: var(--accent-primary);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+		transform: translateY(-1px);
+	}
+
+	.admin-link-text {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
@@ -720,6 +897,87 @@
 		margin-bottom: 16px;
 		font-size: 14px;
 		font-weight: 600;
+	}
+
+	/* モーダルダイアログ */
+	.modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.5);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		z-index: 1000;
+		padding: 20px;
+	}
+	.modal-content {
+		background: var(--bg-primary);
+		border-radius: 16px;
+		padding: 32px;
+		max-width: 480px;
+		width: 100%;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+	}
+	.modal-title {
+		font-size: 20px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0 0 16px 0;
+	}
+	.modal-message {
+		font-size: 16px;
+		color: var(--text-primary);
+		margin: 0 0 12px 0;
+		line-height: 1.5;
+	}
+	.modal-warning {
+		font-size: 14px;
+		color: var(--text-secondary);
+		margin: 0 0 24px 0;
+		line-height: 1.5;
+		padding: 12px;
+		background: var(--bg-secondary);
+		border-radius: 8px;
+	}
+	.modal-actions {
+		display: flex;
+		gap: 12px;
+		justify-content: flex-end;
+	}
+	.modal-btn {
+		padding: 12px 24px;
+		font-size: 15px;
+		font-weight: 600;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.modal-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.cancel-btn {
+		background: var(--bg-secondary);
+		color: var(--text-primary);
+		border: 2px solid var(--border-light);
+	}
+	.cancel-btn:hover:not(:disabled) {
+		background: var(--bg-tertiary);
+	}
+	.delete-btn {
+		background: #dc3545;
+		color: white;
+	}
+	.delete-btn:hover:not(:disabled) {
+		background: #c82333;
+		box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+	}
+	.delete-btn:active:not(:disabled) {
+		transform: scale(0.98);
 	}
 
 	@media (min-width: 768px) {

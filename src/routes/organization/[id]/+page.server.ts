@@ -25,23 +25,25 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		throw error(404, '組織が見つかりません');
 	}
 
-	// ユーザーがこの組織のメンバーかチェック
+	// ユーザーがこの組織のメンバーかチェック（アクティブなメンバーのみ）
 	const { data: membership } = await locals.supabase
 		.from('organization_members')
 		.select('role')
 		.eq('organization_id', organizationId)
 		.eq('user_id', user.id)
+		.is('removed_at', null)
 		.single();
 
 	if (!membership) {
 		throw error(403, '組織にアクセスする権限がありません。');
 	}
 
-	// 組織のメンバー一覧を取得（2段階クエリ）
+	// 組織のアクティブなメンバー一覧を取得（2段階クエリ）
 	const { data: membershipsData, error: membershipsError } = await locals.supabase
 		.from('organization_members')
 		.select('id, role, joined_at, user_id')
 		.eq('organization_id', organizationId)
+		.is('removed_at', null)
 		.order('joined_at', { ascending: true });
 
 	if (membershipsError) {
@@ -115,12 +117,13 @@ export const actions = {
 			return fail(401, { error: 'ログインが必要です。' });
 		}
 
-		// ユーザーがこの組織の管理者かチェック
+		// ユーザーがこの組織の管理者かチェック（アクティブなメンバーのみ）
 		const { data: membership } = await supabase
 			.from('organization_members')
 			.select('role')
 			.eq('organization_id', organizationId)
 			.eq('user_id', user.id)
+			.is('removed_at', null)
 			.single();
 
 		if (!membership || membership.role !== 'admin') {
