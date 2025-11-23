@@ -17,6 +17,9 @@
 		? '5judges'
 		: '3judges';
 
+	// ローディング状態
+	let isSaving = false;
+
 	// 検定員数に基づいて選択可能かどうかを判定（厳密に一致する必要がある）
 	$: canSelect3Judges = judgeCount === 3;
 	$: canSelect5Judges = judgeCount === 5;
@@ -61,7 +64,17 @@
 		<div class="error-message">{form.error}</div>
 	{/if}
 
-	<form method="POST" action="?/updateScoringMethod" use:enhance>
+	<form
+		method="POST"
+		action="?/updateScoringMethod"
+		use:enhance={() => {
+			isSaving = true;
+			return async ({ update }) => {
+				await update();
+				isSaving = false;
+			};
+		}}
+	>
 		<div class="scoring-options">
 			<!-- 3審3採 -->
 			<label class="scoring-option" class:selected={selectedMethod === '3judges'} class:disabled={!canSelect3Judges}>
@@ -102,7 +115,14 @@
 		</div>
 
 		<div class="form-actions">
-			<button type="submit" class="save-btn">設定を保存</button>
+			<button type="submit" class="save-btn" disabled={isSaving}>
+				{#if isSaving}
+					<span class="loading-spinner"></span>
+					保存中...
+				{:else}
+					設定を保存
+				{/if}
+			</button>
 		</div>
 	</form>
 
@@ -275,5 +295,29 @@
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
+	}
+
+	/* ローディングスピナー */
+	.loading-spinner {
+		display: inline-block;
+		width: 16px;
+		height: 16px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: white;
+		border-radius: 50%;
+		animation: spinner-rotate 0.6s linear infinite;
+		margin-right: 8px;
+		vertical-align: middle;
+	}
+
+	@keyframes spinner-rotate {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.save-btn:disabled .loading-spinner {
+		border-color: rgba(0, 0, 0, 0.2);
+		border-top-color: rgba(0, 0, 0, 0.5);
 	}
 </style>
