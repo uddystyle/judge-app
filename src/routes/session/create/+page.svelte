@@ -104,6 +104,12 @@
 				</label>
 			</div>
 
+			<div class="help-link-section">
+				<a href="/modes" class="help-link">
+					セッションモードについて →
+				</a>
+			</div>
+
 			{#if selectedMode === 'training'}
 				<div class="training-settings">
 					<h4>研修モード設定</h4>
@@ -342,6 +348,23 @@
 		color: var(--secondary-text);
 		margin: 8px 0 0 0;
 		line-height: 1.5;
+	}
+	.help-link-section {
+		text-align: center;
+		margin-top: 16px;
+	}
+	.help-link {
+		display: inline-flex;
+		align-items: center;
+		color: var(--accent-primary);
+		font-size: 14px;
+		font-weight: 500;
+		text-decoration: none;
+		transition: all 0.15s ease;
+	}
+	.help-link:hover {
+		color: var(--accent-hover);
+		text-decoration: underline;
 	}
 
 	/* PC対応: タブレット以上 */
