@@ -44,14 +44,17 @@
 			{#if data.organizations.length > 1}
 				<div class="organization-selection">
 					<h3>組織選択</h3>
-					<select name="organizationId" bind:value={selectedOrganization} class="org-select" disabled={isSubmitting}>
+					<select
+						name="organizationId"
+						bind:value={selectedOrganization}
+						class="org-select"
+						disabled={isSubmitting}
+					>
 						{#each data.organizations as org}
 							<option value={org.id}>{org.name}</option>
 						{/each}
 					</select>
-					<p class="help-text">
-						セッションを作成する組織を選択してください
-					</p>
+					<p class="help-text">セッションを作成する組織を選択してください</p>
 				</div>
 			{:else}
 				<!-- 組織が1つだけの場合は非表示のinputで送信 -->
@@ -67,7 +70,7 @@
 						name="mode"
 						value="kentei"
 						bind:group={selectedMode}
-					disabled={isSubmitting}
+						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
 						<div class="mode-title">検定モード</div>
@@ -81,7 +84,7 @@
 						name="mode"
 						value="tournament"
 						bind:group={selectedMode}
-					disabled={isSubmitting}
+						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
 						<div class="mode-title">大会モード</div>
@@ -95,7 +98,7 @@
 						name="mode"
 						value="training"
 						bind:group={selectedMode}
-					disabled={isSubmitting}
+						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
 						<div class="mode-title">研修モード</div>
@@ -105,9 +108,7 @@
 			</div>
 
 			<div class="help-link-section">
-				<a href="/modes" class="help-link">
-					セッションモードについて →
-				</a>
+				<a href="/modes" class="help-link"> セッションモードについて → </a>
 			</div>
 
 			{#if selectedMode === 'training'}
@@ -122,7 +123,7 @@
 							min="1"
 							max="100"
 							bind:value={maxJudges}
-						disabled={isSubmitting}
+							disabled={isSubmitting}
 						/>
 					</div>
 					<p class="info-text">
@@ -136,11 +137,7 @@
 				<div class="error-container">
 					<p class="error-message">{form.error}</p>
 					{#if form?.upgradeUrl}
-						<button
-							type="button"
-							class="upgrade-btn"
-							on:click={() => goto(form.upgradeUrl)}
-						>
+						<button type="button" class="upgrade-btn" on:click={() => goto(form.upgradeUrl)}>
 							プランをアップグレード
 						</button>
 					{/if}
@@ -253,7 +250,7 @@
 		border-color: var(--ios-blue);
 		background: #e8f4ff;
 	}
-	.mode-option input[type="radio"] {
+	.mode-option input[type='radio'] {
 		margin-top: 2px;
 		width: 20px;
 		height: 20px;
@@ -298,7 +295,7 @@
 		color: var(--primary-text);
 		margin-bottom: 6px;
 	}
-	.setting-item input[type="number"] {
+	.setting-item input[type='number'] {
 		width: 100%;
 		background: white;
 		border: 1px solid var(--separator-gray);
@@ -351,7 +348,7 @@
 	}
 	.help-link-section {
 		text-align: center;
-		margin-top: 16px;
+		margin-top: 0px;
 	}
 	.help-link {
 		display: inline-flex;
