@@ -30,7 +30,7 @@
 				<h2 class="mode-title">検定モード</h2>
 			</div>
 			<p class="mode-description">
-				体操の級位認定など、既定の種目・レベルで検定を実施するモードです。
+				既定の種目・レベルで検定を実施するモードです。
 			</p>
 			<div class="mode-features">
 				<h3>主な特徴</h3>
