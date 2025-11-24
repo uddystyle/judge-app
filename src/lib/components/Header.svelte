@@ -376,6 +376,8 @@
 		min-width: 44px;
 		min-height: 44px;
 		border-radius: 8px;
+		-webkit-tap-highlight-color: transparent;
+		outline: none;
 	}
 
 	/* ハンバーガーアイコン */
