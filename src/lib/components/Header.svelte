@@ -376,13 +376,6 @@
 		min-width: 44px;
 		min-height: 44px;
 		border-radius: 8px;
-		transition: background 0.2s ease;
-	}
-	.hamburger-button:hover {
-		background: var(--bg-hover);
-	}
-	.hamburger-button:active {
-		background: var(--gray-200);
 	}
 
 	/* ハンバーガーアイコン */
