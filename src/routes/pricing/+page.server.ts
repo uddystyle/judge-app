@@ -1,6 +1,9 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
+	// URLパラメータから組織IDを取得
+	const orgIdParam = url.searchParams.get('org');
+
 	// ユーザーが認証されているか確認（任意）
 	const {
 		data: { user }
@@ -26,12 +29,22 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 			)
 			.eq('user_id', user.id);
 
-		// 組織に所属している場合、最初の組織のプランを使用
+		// 組織に所属している場合、指定された組織または最初の組織のプランを使用
 		if (memberships && memberships.length > 0) {
-			const org = memberships[0].organizations as any;
-			const orgId = memberships[0].organization_id;
-			currentPlan = org?.plan_type || 'free';
 			organizations = memberships;
+
+			// URLパラメータで指定された組織があれば、その組織のプランを使用
+			let targetMembership = memberships[0];
+			if (orgIdParam) {
+				const specifiedOrg = memberships.find(m => m.organization_id === orgIdParam);
+				if (specifiedOrg) {
+					targetMembership = specifiedOrg;
+				}
+			}
+
+			const org = targetMembership.organizations as any;
+			const orgId = targetMembership.organization_id;
+			currentPlan = org?.plan_type || 'free';
 
 			// 組織のサブスクリプション情報を取得して請求間隔を確認
 			if (orgId) {

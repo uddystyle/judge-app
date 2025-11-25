@@ -3,11 +3,15 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 
 	export let data: PageData;
 
 	let billingInterval: 'month' | 'year' = 'month';
 	let portalLoading = false;
+
+	// URLパラメータから組織IDを取得
+	$: orgId = $page.url.searchParams.get('org');
 
 	// プラン定義（組織向け）
 	// 料金プランページは情報提供が目的のため、アクションボタンは配置しない
@@ -106,6 +110,9 @@
 			return;
 		}
 
+		// URLパラメータで指定された組織ID、または最初の組織IDを使用
+		const targetOrgId = orgId || data.organizations[0].organization_id;
+
 		portalLoading = true;
 		try {
 			const response = await fetch('/api/stripe/customer-portal', {
@@ -114,7 +121,7 @@
 					'Content-Type': 'application/json'
 				},
 				body: JSON.stringify({
-					organizationId: data.organizations[0].organization_id,
+					organizationId: targetOrgId,
 					returnUrl: window.location.href
 				})
 			});
@@ -368,7 +375,8 @@
 			{#if data.currentPlan === 'free'}
 				<!-- フリープランのユーザー: プラン変更ページへ -->
 				{#if data.organizations && data.organizations.length > 0}
-					<button class="back-btn" on:click={() => goto(`/organization/${data.organizations[0].organization_id}/change-plan`)}>
+					{@const targetOrgId = orgId || data.organizations[0].organization_id}
+					<button class="back-btn" on:click={() => goto(`/organization/${targetOrgId}/change-plan`)}>
 						プランを変更する
 					</button>
 				{:else}

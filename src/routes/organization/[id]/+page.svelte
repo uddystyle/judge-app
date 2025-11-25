@@ -285,7 +285,7 @@
 
 		<!-- プラン管理ボタン -->
 		<div class="plan-actions">
-			<NavButton on:click={() => goto('/pricing')}>
+			<NavButton on:click={() => goto(`/pricing?org=${data.organization.id}`)}>
 				プランの詳細を確認
 			</NavButton>
 			{#if isAdmin}
