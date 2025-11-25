@@ -282,6 +282,18 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- プラン管理ボタン -->
+		<div class="plan-actions">
+			<NavButton on:click={() => goto('/pricing')}>
+				プランの詳細を確認
+			</NavButton>
+			{#if isAdmin}
+				<NavButton variant="primary" on:click={() => goto(`/organization/${data.organization.id}/change-plan`)}>
+					プランを変更
+				</NavButton>
+			{/if}
+		</div>
 	</div>
 
 	<hr class="divider" />
@@ -732,6 +744,18 @@
 		color: var(--text-primary);
 	}
 
+	.plan-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin-top: 20px;
+	}
+
+	.plan-actions :global(button) {
+		min-height: 48px;
+		height: auto;
+	}
+
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
@@ -989,6 +1013,9 @@
 		}
 		.member-card {
 			padding: 20px;
+		}
+		.plan-actions {
+			flex-direction: row;
 		}
 	}
 </style>

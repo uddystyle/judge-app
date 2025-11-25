@@ -159,14 +159,6 @@
 						<button class="menu-item" on:click={() => handleMenuClick('/account')}>
 							<span class="menu-label">プロフィール</span>
 						</button>
-						<button class="menu-item" on:click={() => handleMenuClick('/pricing')}>
-							<span class="menu-label">プランの確認</span>
-						</button>
-						{#if pageOrganizations.length > 0}
-							<button class="menu-item" on:click={() => handleMenuClick(`/organization/${pageOrganizations[0].id || pageOrganizations[0].organization_id}/change-plan`)}>
-								<span class="menu-label">プランの変更</span>
-							</button>
-						{/if}
 						<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
 							<span class="menu-label">組織</span>
 						</button>

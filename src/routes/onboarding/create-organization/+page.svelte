@@ -27,13 +27,13 @@
 	let selectedPlan = 'free';
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} pageOrganizations={data.organizations || []} />
 
 <div class="container">
 	{#if step === 0}
 		<!-- Step 0: 選択画面 -->
 		<div class="header">
-			<h1 class="title"><span class="app-name">TENTO</span>へようこそ</h1>
+			<h1 class="title welcome-title">TENTOへようこそ</h1>
 			<p class="subtitle">
 				次のステップを選択してください
 			</p>
@@ -235,6 +235,12 @@
 	}
 
 	.app-name {
+		font-family: 'M PLUS Rounded 1c', sans-serif;
+		font-weight: 800;
+		letter-spacing: 0.05em;
+	}
+
+	.welcome-title {
 		font-family: 'M PLUS Rounded 1c', sans-serif;
 		font-weight: 800;
 		letter-spacing: 0.05em;
