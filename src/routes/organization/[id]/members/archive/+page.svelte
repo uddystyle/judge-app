@@ -61,7 +61,7 @@
 	showAppName={true}
 	pageUser={data.user}
 	pageProfile={data.profile}
-	hasOrganization={true}
+	hasOrganization={data.hasOrganization}
 	pageOrganizations={[data.organization]}
 />
 

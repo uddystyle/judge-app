@@ -75,12 +75,25 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		}
 	}
 
+	// 組織所属チェック（軽量クエリ - カウントのみ）
+	let hasOrganization = false;
+	if (user) {
+		const { count } = await supabaseAdmin
+			.from('organization_members')
+			.select('*', { count: 'exact', head: true })
+			.eq('user_id', user.id)
+			.is('removed_at', null);
+
+		hasOrganization = (count || 0) > 0;
+	}
+
 	return {
 		invitation,
 		organization: invitation.organizations,
 		isLoggedIn: !!user,
 		user,
-		profile
+		profile,
+		hasOrganization
 	};
 };
 

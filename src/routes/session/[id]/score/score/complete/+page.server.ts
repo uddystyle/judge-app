@@ -67,7 +67,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// 検定モードの複数検定員モード設定を取得
 	const isMultiJudge = sessionDetails.is_multi_judge || false;
 
-	// プロフィールと組織情報を取得
+	// プロフィール情報を取得
 	const { data: profileData } = await supabase
 		.from('profiles')
 		.select('*')
@@ -75,13 +75,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		.single();
 
 	const profile = profileData;
-
-	const { data: orgData } = await supabase
-		.from('organization_members')
-		.select('organization_id, organizations(id, name)')
-		.eq('user_id', user.id);
-
-	const organizations = orgData || [];
 
 	return {
 		sessionDetails,
@@ -93,8 +86,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		isMultiJudge,
 		excludeExtremes: sessionDetails.exclude_extremes,
 		user,
-		profile,
-		organizations
+		profile
 	};
 };
 

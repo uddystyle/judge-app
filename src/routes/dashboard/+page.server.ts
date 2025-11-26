@@ -158,6 +158,9 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		  }))
 		: [];
 
+	// 組織所属チェック（軽量 - カウントのみ）
+	const hasOrganization = organizations.length > 0;
+
 	// 組織もセッションもない場合のみ、オンボーディング画面へリダイレクト
 	if ((!organizations || organizations.length === 0) && sessionsWithParticipantCount.length === 0) {
 		throw redirect(303, '/onboarding/create-organization');
@@ -167,6 +170,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		user,
 		organizations,
 		sessions: sessionsWithParticipantCount,
-		profile
+		profile,
+		hasOrganization
 	};
 };

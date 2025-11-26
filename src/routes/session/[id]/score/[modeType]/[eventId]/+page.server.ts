@@ -46,9 +46,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
 
-	// プロフィールと組織情報を取得（認証ユーザーの場合のみ）
+	// プロフィール情報を取得（認証ユーザーの場合のみ）
 	let profile = null;
-	let organizations = [];
 
 	if (user) {
 		const { data: profileData } = await supabase
@@ -58,13 +57,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.single();
 
 		profile = profileData;
-
-		const { data: orgData } = await supabase
-			.from('organization_members')
-			.select('organization_id, organizations(id, name)')
-			.eq('user_id', user.id);
-
-		organizations = orgData || [];
 	}
 
 	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
@@ -147,8 +139,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		guestParticipant,
 		guestIdentifier,
 		user,
-		profile,
-		organizations
+		profile
 	};
 };
 

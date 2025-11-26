@@ -21,7 +21,7 @@
 	};
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
 
 <div class="container">
 	<div class="invitation-header">

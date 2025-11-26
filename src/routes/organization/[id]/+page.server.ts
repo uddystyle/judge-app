@@ -92,13 +92,17 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.eq('id', user.id)
 		.single();
 
+	// 組織所属チェック（このページは既に組織ページなので常にtrue）
+	const hasOrganization = true;
+
 	return {
 		user,
 		profile,
 		organization,
 		userRole: membership.role,
 		members: members || [],
-		invitations
+		invitations,
+		hasOrganization
 	};
 };
 

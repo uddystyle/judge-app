@@ -175,29 +175,16 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		}
 	}
 
-	// ユーザーのプロフィール情報と所属組織を並列取得（高速化）
-	const [profileResult, membershipResult] = await Promise.all([
-		supabase.from('profiles').select('full_name').eq('id', user.id).single(),
-		supabase.from('organization_members').select('organization_id, role').eq('user_id', user.id)
-	]);
-
-	const profile = profileResult.data;
-	const membershipData = membershipResult.data;
-
-	let organizations: any[] = [];
-	if (membershipData && membershipData.length > 0) {
-		const orgIds = membershipData.map((m: any) => m.organization_id);
-		const { data: orgsData } = await supabase
-			.from('organizations')
-			.select('id, name')
-			.in('id', orgIds);
-		organizations = orgsData || [];
-	}
+	// ユーザーのプロフィール情報を取得
+	const { data: profile } = await supabase
+		.from('profiles')
+		.select('full_name')
+		.eq('id', user.id)
+		.single();
 
 	return {
 		user,
 		profile,
-		organizations,
 		currentUserId: user.id,
 		sessionDetails,
 		participants,

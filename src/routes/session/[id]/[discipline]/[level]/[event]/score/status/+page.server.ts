@@ -44,9 +44,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		throw error(404, '検定が見つかりません。');
 	}
 
-	// プロフィールと組織情報を取得（認証ユーザーの場合のみ）
+	// プロフィール情報を取得（認証ユーザーの場合のみ）
 	let profile = null;
-	let organizations = [];
 
 	if (user) {
 		const { data: profileData } = await supabase
@@ -56,13 +55,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 			.single();
 
 		profile = profileData;
-
-		const { data: orgData } = await supabase
-			.from('organization_members')
-			.select('organization_id, organizations(id, name)')
-			.eq('user_id', user.id);
-
-		organizations = orgData || [];
 	}
 
 	return {
@@ -70,8 +62,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		sessionDetails,
 		guestIdentifier,
 		guestParticipant,
-		profile,
-		organizations
+		profile
 	};
 };
 

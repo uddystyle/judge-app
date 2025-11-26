@@ -68,37 +68,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		.eq('id', user.id)
 		.single();
 
-	// 7. ユーザーが所属する組織を取得
-	const { data: organizations } = await supabase
-		.from('organization_members')
-		.select(`
-			organization_id,
-			role,
-			organizations (
-				id,
-				name,
-				plan_type
-			)
-		`)
-		.eq('user_id', user.id)
-		.is('removed_at', null);
-
-	// 組織情報を整形
-	const userOrganizations = (organizations || []).map((om: any) => ({
-		id: om.organizations.id,
-		organization_id: om.organizations.id,
-		name: om.organizations.name,
-		plan_type: om.organizations.plan_type,
-		role: om.role
-	}));
-
 	return {
 		user,
 		profile,
 		organization,
 		subscription,
-		plans: plans || [],
-		organizations: userOrganizations
+		plans: plans || []
+	,
+		hasOrganization: true
 	};
 };
 

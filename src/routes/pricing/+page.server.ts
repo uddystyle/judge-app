@@ -79,11 +79,15 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 		profile = profileData;
 	}
 
+	// 組織所属チェック（軽量 - カウントのみ）
+	const hasOrganization = user ? organizations.length > 0 : false;
+
 	return {
 		user,
 		profile,
 		currentPlan,
 		currentBillingInterval,
-		organizations
+		organizations,
+		hasOrganization
 	};
 };

@@ -28,35 +28,20 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		.eq('id', user.id)
 		.single();
 
-	// ユーザーが所属する組織を取得
-	const { data: organizations } = await supabase
+	// 組織所属チェック（軽量クエリ - カウントのみ）
+	const { count } = await supabase
 		.from('organization_members')
-		.select(`
-			organization_id,
-			role,
-			organizations (
-				id,
-				name,
-				plan_type
-			)
-		`)
+		.select('*', { count: 'exact', head: true })
 		.eq('user_id', user.id)
 		.is('removed_at', null);
 
-	// 組織情報を整形
-	const userOrganizations = (organizations || []).map((om: any) => ({
-		id: om.organizations.id,
-		organization_id: om.organizations.id,
-		name: om.organizations.name,
-		plan_type: om.organizations.plan_type,
-		role: om.role
-	}));
+	const hasOrganization = (count || 0) > 0;
 
 	return {
 		user,
 		profile,
 		plans: plans || [],
-		organizations: userOrganizations
+		hasOrganization
 	};
 };
 

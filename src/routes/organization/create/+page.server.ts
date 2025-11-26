@@ -30,6 +30,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		.eq('id', user.id)
 		.single();
 
+	// 組織所属チェック（軽量クエリ - カウントのみ）
+	const { count } = await locals.supabase
+		.from('organization_members')
+		.select('*', { count: 'exact', head: true })
+		.eq('user_id', user.id)
+		.is('removed_at', null);
+
+	const hasOrganization = (count || 0) > 0;
+
 	// URLパラメータからクーポンコードを取得
 	const couponCode = url.searchParams.get('coupon');
 	let validCoupon = null;
@@ -56,6 +65,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		user,
 		profile,
 		subscription,
-		coupon: validCoupon
+		coupon: validCoupon,
+		hasOrganization
 	};
 };

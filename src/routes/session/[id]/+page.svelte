@@ -40,6 +40,9 @@
 
 	// このページが表示されたら、グローバルなストアを更新する
 	onMount(async () => {
+		console.log('[Session Detail] hasOrganization:', data.hasOrganization);
+		console.log('[Session Detail] user:', data.user);
+		console.log('[Session Detail] profile:', data.profile);
 		currentSession.set(data.sessionDetails);
 
 		// セッション選択画面に戻ったので、種目情報をクリア
@@ -498,7 +501,7 @@
 	}
 </script>
 
-<Header pageUser={data.user} pageProfile={data.profile} hasOrganization={data.organizations && data.organizations.length > 0} pageOrganizations={data.organizations || []} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
+<Header pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} isGuest={!!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	{#if isSessionEnded}

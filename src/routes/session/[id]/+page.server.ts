@@ -48,24 +48,27 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	// ユーザーのプロフィール情報を取得（ゲストの場合はスキップ）
 	let profile = null;
-	let organizations: any[] = [];
+	let hasOrganization = false;
 
 	if (user) {
-		// プロフィールと組織を並列取得（約150ms短縮）
-		const [profileResult, membershipsResult] = await Promise.all([
-			supabase
-				.from('profiles')
-				.select('full_name')
-				.eq('id', user.id)
-				.single(),
-			supabase
-				.from('organization_members')
-				.select('organization_id')
-				.eq('user_id', user.id)
-		]);
+		const { data: profileData } = await supabase
+			.from('profiles')
+			.select('full_name')
+			.eq('id', user.id)
+			.single();
 
-		profile = profileResult.data;
-		organizations = membershipsResult.data || [];
+		profile = profileData;
+
+		// 組織所属チェック（軽量クエリ - カウントのみ）
+		const { count, error: orgCheckError } = await supabase
+			.from('organization_members')
+			.select('*', { count: 'exact', head: true })
+			.eq('user_id', user.id)
+			.is('removed_at', null);
+
+		console.log('[Session Server] Organization check:', { userId: user.id, count, orgCheckError });
+		hasOrganization = (count || 0) > 0;
+		console.log('[Session Server] hasOrganization:', hasOrganization);
 	}
 
 	// セッションの詳細情報を取得
@@ -195,7 +198,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		const returnData = {
 			user,
 			profile,
-			organizations,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			isTrainingMode: true,
@@ -228,7 +231,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		return {
 			user,
 			profile,
-			organizations,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			isTournamentMode: true,
@@ -254,7 +257,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		return {
 			user,
 			profile,
-			organizations,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -281,7 +284,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		return {
 			user,
 			profile,
-			organizations,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -311,7 +314,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	return {
 		user,
 		profile,
-		organizations,
+		hasOrganization,
 		isChief,
 		sessionDetails,
 		isTournamentMode,

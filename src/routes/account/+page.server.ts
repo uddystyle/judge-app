@@ -108,10 +108,14 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		})
 	);
 
+	// 組織所属チェック（軽量 - カウントのみ）
+	const hasOrganization = organizationsWithUsage.length > 0;
+
 	// 取得したプロフィール情報と組織情報をページに渡す
 	return {
 		user,
 		profile,
-		organizations: organizationsWithUsage
+		organizations: organizationsWithUsage,
+		hasOrganization
 	};
 };

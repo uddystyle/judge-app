@@ -40,9 +40,13 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		  }))
 		: [];
 
+	// 組織所属チェック（軽量 - カウントのみ）
+	const hasOrganization = organizations.length > 0;
+
 	return {
 		user,
 		profile,
-		organizations
+		organizations,
+		hasOrganization
 	};
 };
