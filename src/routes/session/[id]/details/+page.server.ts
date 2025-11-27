@@ -189,13 +189,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			.is('removed_at', null)
 	]);
 
-	if (profileResult.error) {
-		console.error('Profile fetch error:', profileResult.error);
-	}
-	if (userOrgMembersResult.error) {
-		console.error('Organization members fetch error:', userOrgMembersResult.error);
-	}
-
 	const profile = profileResult.data;
 	const userOrgMembers = userOrgMembersResult.data || [];
 	const hasOrganization = userOrgMembers.length > 0;

@@ -24,17 +24,6 @@
 	$: event = $currentEvent;
 	$: bib = $currentBib;
 
-	// デバッグ: hasOrganizationの値を確認
-	$: {
-		console.log('[Header] Props:', {
-			hasOrganization,
-			pageOrganizations: pageOrganizations?.length,
-			isGuest,
-			user: !!user,
-			profile: profile?.full_name
-		});
-	}
-
 	// ドロップダウンメニューの表示状態
 	let showMenu = false;
 

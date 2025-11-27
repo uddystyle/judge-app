@@ -50,10 +50,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	let profile = null;
 	let hasOrganization = false;
 
-	console.log('[Session Server] User check:', { hasUser: !!user, userId: user?.id, guestIdentifier });
-
 	if (user) {
-		console.log('[Session Server] Fetching profile and organization...');
 		const [profileResult, orgMembersResult] = await Promise.all([
 			supabase
 				.from('profiles')
@@ -69,17 +66,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		profile = profileResult.data;
 		const orgMembers = orgMembersResult.data || [];
-
-		console.log('[Session Server] Profile:', profile);
-		console.log('[Session Server] Organization members:', { count: orgMembers.length, data: orgMembers, error: orgMembersResult.error });
-
 		hasOrganization = orgMembers.length > 0;
-		console.log('[Session Server] hasOrganization:', hasOrganization);
-		console.log('[Session Server] FORCE CHECK - orgMembers.length:', orgMembers.length);
-		console.log('[Session Server] FORCE CHECK - hasOrganization value:', hasOrganization);
-		console.log('[Session Server] FORCE CHECK - hasOrganization type:', typeof hasOrganization);
-	} else {
-		console.log('[Session Server] No user, skipping organization check');
 	}
 
 	// セッションの詳細情報を取得
@@ -206,10 +193,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			}
 		}
 
-		const returnData = {
+		return {
 			user,
 			profile,
-			hasOrganization: true, // テスト用に強制的にtrueに設定
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			isTrainingMode: true,
@@ -220,24 +207,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: trainingSession?.is_multi_judge || false,
 			guestParticipant,
-			guestIdentifier,
-			// デバッグ情報
-			_debug: {
-				userId: user?.id,
-				hasUser: !!user,
-				hasOrganization,
-				actualValue: hasOrganization,
-				forcedValue: true,
-				guestIdentifier
-			}
+			guestIdentifier
 		};
-
-		console.log('[Session Page Load] ========== 返却データ ==========');
-		console.log('[Session Page Load] isMultiJudge:', returnData.isMultiJudge);
-		console.log('[Session Page Load] isChief:', returnData.isChief);
-		console.log('[Session Page Load] guestIdentifier:', returnData.guestIdentifier);
-
-		return returnData;
 	}
 
 	// 大会モードの場合
@@ -251,7 +222,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		return {
 			user,
 			profile,
-			hasOrganization: true, // テスト用に強制的にtrueに設定
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			isTournamentMode: true,
@@ -260,8 +231,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: true,
 			guestParticipant,
-			guestIdentifier,
-			_debug: { userId: user?.id, hasUser: !!user, actualValue: hasOrganization, forcedValue: true, guestIdentifier }
+			guestIdentifier
 		};
 	}
 
@@ -278,7 +248,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		return {
 			user,
 			profile,
-			hasOrganization: true, // テスト用に強制的にtrueに設定
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -287,8 +257,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: sessionDetails.is_multi_judge || false,
 			guestParticipant,
-			guestIdentifier,
-			_debug: { userId: user?.id, hasUser: !!user, actualValue: hasOrganization, forcedValue: true, guestIdentifier }
+			guestIdentifier
 		};
 	}
 
@@ -306,7 +275,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		return {
 			user,
 			profile,
-			hasOrganization: true, // テスト用に強制的にtrueに設定
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -315,8 +284,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: sessionDetails.is_multi_judge || false,
 			guestParticipant,
-			guestIdentifier,
-			_debug: { userId: user?.id, hasUser: !!user, actualValue: hasOrganization, forcedValue: true, guestIdentifier }
+			guestIdentifier
 		};
 	}
 
@@ -337,7 +305,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	return {
 		user,
 		profile,
-		hasOrganization: true, // テスト用に強制的にtrueに設定
+		hasOrganization,
 		isChief,
 		sessionDetails,
 		isTournamentMode,
@@ -346,8 +314,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		guestParticipant,
 		guestIdentifier,
 		disciplines,
-		isMultiJudge,
-		_debug: { userId: user?.id, hasUser: !!user, actualValue: hasOrganization, forcedValue: true, guestIdentifier }
+		isMultiJudge
 	};
 };
 

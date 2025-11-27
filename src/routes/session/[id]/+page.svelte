@@ -40,13 +40,6 @@
 
 	// このページが表示されたら、グローバルなストアを更新する
 	onMount(async () => {
-		console.log('[Session Detail] ========== FULL DATA ==========');
-		console.log('[Session Detail] hasOrganization:', data.hasOrganization);
-		console.log('[Session Detail] user:', data.user);
-		console.log('[Session Detail] profile:', data.profile);
-		console.log('[Session Detail] _debug:', data._debug);
-		console.log('[Session Detail] ALL KEYS:', Object.keys(data));
-		console.log('[Session Detail] FULL DATA:', data);
 		currentSession.set(data.sessionDetails);
 
 		// セッション選択画面に戻ったので、種目情報をクリア
@@ -506,21 +499,6 @@
 </script>
 
 <Header pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} isGuest={!data.user && !!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
-
-<!-- デバッグ情報 -->
-{#if data._debug}
-<div style="position: fixed; top: 80px; right: 20px; background: #fff; border: 2px solid #f00; padding: 10px; z-index: 9999; font-size: 12px; max-width: 300px;">
-	<strong style="color: #f00;">DEBUG INFO</strong><br>
-	userId: {data._debug.userId || 'none'}<br>
-	hasUser: {data._debug.hasUser}<br>
-	hasOrganization: {data._debug.hasOrganization}<br>
-	guestIdentifier: {data._debug.guestIdentifier || 'none'}<br>
-	<br>
-	<strong>Header receives:</strong><br>
-	hasOrganization: {data.hasOrganization}<br>
-	isGuest: {!data.user && !!data.guestIdentifier}
-</div>
-{/if}
 
 <div class="container">
 	{#if isSessionEnded}
