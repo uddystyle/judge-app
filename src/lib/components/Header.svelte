@@ -24,6 +24,17 @@
 	$: event = $currentEvent;
 	$: bib = $currentBib;
 
+	// デバッグ: hasOrganizationの値を確認
+	$: {
+		console.log('[Header] Props:', {
+			hasOrganization,
+			pageOrganizations: pageOrganizations?.length,
+			isGuest,
+			user: !!user,
+			profile: profile?.full_name
+		});
+	}
+
 	// ドロップダウンメニューの表示状態
 	let showMenu = false;
 
@@ -128,23 +139,13 @@
 			{:else}
 				<!-- 通常ユーザー: メニュー付き -->
 				<!-- モバイル: ハンバーガーメニュー -->
-				<div class="mobile-account mobile-only">
-					{#if hasOrganization}
-						<span class="org-badge">
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
-								<path d="M5 8L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</span>
-					{/if}
-					<button class="hamburger-button" on:click={toggleMenu} class:active={showMenu}>
-						<div class="hamburger-icon">
-							<span class="line line-1"></span>
-							<span class="line line-2"></span>
-							<span class="line line-3"></span>
-						</div>
-					</button>
-				</div>
+				<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu}>
+					<div class="hamburger-icon">
+						<span class="line line-1"></span>
+						<span class="line line-2"></span>
+						<span class="line line-3"></span>
+					</div>
+				</button>
 
 				<!-- タブレット・PC: プロフィールボタン -->
 				<button class="account-button desktop-only" on:click={toggleMenu}>
@@ -364,13 +365,6 @@
 	}
 	.org-badge svg {
 		display: block;
-	}
-
-	/* モバイルアカウント表示 */
-	.mobile-account {
-		display: flex;
-		align-items: center;
-		gap: 8px;
 	}
 
 	/* ハンバーガーメニューボタン（モバイルのみ） */

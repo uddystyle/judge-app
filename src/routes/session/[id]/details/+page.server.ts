@@ -175,16 +175,35 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		}
 	}
 
-	// ユーザーのプロフィール情報を取得
-	const { data: profile } = await supabase
-		.from('profiles')
-		.select('full_name')
-		.eq('id', user.id)
-		.single();
+	// ユーザーのプロフィール情報と組織所属チェック
+	const [profileResult, userOrgMembersResult] = await Promise.all([
+		supabase
+			.from('profiles')
+			.select('full_name')
+			.eq('id', user.id)
+			.single(),
+		supabase
+			.from('organization_members')
+			.select('organization_id')
+			.eq('user_id', user.id)
+			.is('removed_at', null)
+	]);
+
+	if (profileResult.error) {
+		console.error('Profile fetch error:', profileResult.error);
+	}
+	if (userOrgMembersResult.error) {
+		console.error('Organization members fetch error:', userOrgMembersResult.error);
+	}
+
+	const profile = profileResult.data;
+	const userOrgMembers = userOrgMembersResult.data || [];
+	const hasOrganization = userOrgMembers.length > 0;
 
 	return {
 		user,
 		profile,
+		hasOrganization,
 		currentUserId: user.id,
 		sessionDetails,
 		participants,
