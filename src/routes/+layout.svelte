@@ -5,14 +5,7 @@
 	import { navigating } from '$app/stores';
 	import type { LayoutData } from './$types';
 	import '../app.css';
-	import { userProfile } from '$lib/stores';
-
 	export let data: LayoutData;
-	$: ({ profile } = data);
-
-	$: if (profile) {
-		userProfile.set(profile);
-	}
 
 	// サーバーから渡されたURLとキーを使って、ブラウザ用のSupabaseクライアントを作成
 	const supabase = createBrowserClient(data.supabaseUrl, data.supabaseAnonKey);
