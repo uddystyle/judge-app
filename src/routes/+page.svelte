@@ -150,7 +150,7 @@
 					<ul class="plan-features">
 						<li>組織メンバー: 1名</li>
 						<li>検定員: 3名まで</li>
-						<li>月間セッション: 3回まで</li>
+						<li>月間セッション: 3個まで</li>
 						<li>検定モードのみ</li>
 						<li>Excelエクスポート</li>
 					</ul>

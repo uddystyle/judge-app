@@ -27,7 +27,7 @@
 			features: [
 				'組織メンバー: 1名のみ',
 				'検定員: 3名まで',
-				'月間セッション: 3回まで',
+				'月間セッション: 3個まで',
 				'検定モードのみ',
 				'Excelエクスポート',
 				'メールサポート'
@@ -239,7 +239,7 @@
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">月間セッション</span>
-							<span class="card-value">{plan.id === 'free' ? '3回' : '無制限'}</span>
+							<span class="card-value">{plan.id === 'free' ? '3個' : '無制限'}</span>
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">検定モード</span>
@@ -310,7 +310,7 @@
 					</tr>
 					<tr>
 						<td>月間セッション</td>
-						<td>3回</td>
+						<td>3個</td>
 						<td>無制限</td>
 						<td>無制限</td>
 						<td>無制限</td>
