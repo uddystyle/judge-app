@@ -13,7 +13,8 @@
 <Header
 	pageUser={data.user}
 	pageProfile={data.profile}
-	isGuest={false}
+	hasOrganization={data.hasOrganization}
+	isGuest={!data.user && !!data.guestIdentifier}
 	guestName={null}
 />
 

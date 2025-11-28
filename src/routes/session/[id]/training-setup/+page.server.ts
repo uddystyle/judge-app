@@ -1,13 +1,16 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	if (userError || !user) {
+	const guestIdentifier = url.searchParams.get('guest');
+
+	// 通常ユーザーでもゲストユーザーでもない場合はログインへ
+	if (userError || (!user && !guestIdentifier)) {
 		throw redirect(303, '/login');
 	}
 
@@ -41,24 +44,36 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.select('*', { count: 'exact', head: true })
 		.eq('session_id', sessionId);
 
-	// プロフィール情報を取得
+	// プロフィール情報と組織所属チェック
 	let profile = null;
+	let hasOrganization = false;
 
 	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
+		const [profileResult, userOrgMembersResult] = await Promise.all([
+			supabase
+				.from('profiles')
+				.select('full_name')
+				.eq('id', user.id)
+				.single(),
+			supabase
+				.from('organization_members')
+				.select('organization_id')
+				.eq('user_id', user.id)
+				.is('removed_at', null)
+		]);
 
-		profile = profileData;
+		profile = profileResult.data;
+		const userOrgMembers = userOrgMembersResult.data || [];
+		hasOrganization = userOrgMembers.length > 0;
 	}
 
 	return {
 		user,
 		profile,
+		hasOrganization,
 		sessionDetails,
 		eventsCount: eventsCount || 0,
-		participantsCount: participantsCount || 0
+		participantsCount: participantsCount || 0,
+		guestIdentifier
 	};
 };
