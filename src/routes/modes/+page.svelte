@@ -29,9 +29,7 @@
 			<div class="mode-header">
 				<h2 class="mode-title">検定モード</h2>
 			</div>
-			<p class="mode-description">
-				既定の種目・レベルで検定を実施するモードです。
-			</p>
+			<p class="mode-description">既定の種目・レベルで検定を実施するモードです。</p>
 			<div class="mode-features">
 				<h3>主な特徴</h3>
 				<ul>
@@ -43,7 +41,7 @@
 			</div>
 			<div class="mode-usage">
 				<h3>こんな時に使います</h3>
-				<p>バッジテスト</p>
+				<p>プライズテスト、バッジテスト</p>
 			</div>
 		</div>
 
@@ -67,7 +65,7 @@
 			</div>
 			<div class="mode-usage">
 				<h3>こんな時に使います</h3>
-				<p>公式大会、コンテスト、競技会</p>
+				<p>公式大会、コンテスト</p>
 			</div>
 		</div>
 
@@ -153,9 +151,7 @@
 
 	<!-- 戻るボタン -->
 	<div class="nav-buttons">
-		<button class="back-btn" on:click={() => goto('/dashboard')}>
-			ダッシュボードに戻る
-		</button>
+		<button class="back-btn" on:click={() => goto('/dashboard')}> ダッシュボードに戻る </button>
 	</div>
 </div>
 
