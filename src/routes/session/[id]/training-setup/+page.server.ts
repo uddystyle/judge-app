@@ -2,19 +2,40 @@ import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
+	const { id: sessionId } = params;
+	const guestIdentifier = url.searchParams.get('guest');
+
 	const {
 		data: { user },
 		error: userError
 	} = await supabase.auth.getUser();
 
-	const guestIdentifier = url.searchParams.get('guest');
+	// ゲストユーザーの情報を保持
+	let guestParticipant = null;
 
-	// 通常ユーザーでもゲストユーザーでもない場合はログインへ
-	if (userError || (!user && !guestIdentifier)) {
-		throw redirect(303, '/login');
+	// ゲストユーザーの場合
+	if (!user && guestIdentifier) {
+		// ゲスト参加者情報を取得して検証
+		const { data: guestData, error: guestError } = await supabase
+			.from('session_participants')
+			.select('*')
+			.eq('session_id', sessionId)
+			.eq('guest_identifier', guestIdentifier)
+			.eq('is_guest', true)
+			.single();
+
+		if (guestError || !guestData) {
+			// ゲスト情報が見つからない場合は招待ページへリダイレクト
+			throw redirect(303, '/session/join');
+		}
+
+		guestParticipant = guestData;
 	}
 
-	const { id: sessionId } = params;
+	// 通常ユーザーでログインしていない場合はログインページへ
+	if (!user && !guestIdentifier) {
+		throw redirect(303, '/login');
+	}
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -44,7 +65,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		.select('*', { count: 'exact', head: true })
 		.eq('session_id', sessionId);
 
-	// プロフィール情報と組織所属チェック
+	// ユーザーのプロフィール情報を取得（ゲストの場合はスキップ）
 	let profile = null;
 	let hasOrganization = false;
 
@@ -74,6 +95,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		sessionDetails,
 		eventsCount: eventsCount || 0,
 		participantsCount: participantsCount || 0,
-		guestIdentifier
+		guestIdentifier,
+		guestParticipant
 	};
 };
