@@ -1,7 +1,13 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 
-export const load: PageServerLoad = async ({ locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ locals: { supabase }, setHeaders }) => {
+	// 動的コンテンツだが短期キャッシュ（30秒）
+	// stale-while-revalidateで古いデータを表示しつつバックグラウンドで更新
+	setHeaders({
+		'cache-control': 'private, max-age=30, stale-while-revalidate=60'
+	});
+
 	const {
 		data: { user },
 		error: userError

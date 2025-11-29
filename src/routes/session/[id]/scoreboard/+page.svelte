@@ -48,8 +48,9 @@
 </script>
 
 <Header
+	showAppName={true}
 	pageUser={data.user}
-	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
 	isGuest={false}
 	guestName={null}
 />

@@ -9,8 +9,6 @@
 	export let showAppName = false; // 料金プランページなどで使用
 	export let pageUser: any = null; // ページから渡されるユーザー情報（料金ページなど）
 	export let pageProfile: any = null; // ページから渡されるプロフィール情報
-	export let hasOrganization = false; // 組織に属しているかどうか
-	export let pageOrganizations: any[] = []; // ページから渡される組織情報
 	export let isGuest = false; // ゲストユーザーかどうか
 	export let guestName: string | null = null; // ゲストユーザーの名前
 
@@ -138,14 +136,6 @@
 
 				<!-- タブレット・PC: プロフィールボタン -->
 				<button class="account-button desktop-only" on:click={toggleMenu}>
-					{#if hasOrganization}
-						<span class="org-badge">
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
-								<path d="M5 8L7 10L11 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</span>
-					{/if}
 					{profile?.full_name || 'アカウント'}
 					<span class="menu-icon" class:rotated={showMenu}>
 						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -345,15 +335,6 @@
 		height: 1px;
 		background: var(--border-light);
 		margin: 4px 0;
-	}
-	.org-badge {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: var(--accent-primary);
-	}
-	.org-badge svg {
-		display: block;
 	}
 
 	/* ハンバーガーメニューボタン（モバイルのみ） */

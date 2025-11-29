@@ -177,7 +177,7 @@
 	<title>よくある質問 - TENTO</title>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={data.user} />
 
 <div class="container">
 	<div class="header-section">

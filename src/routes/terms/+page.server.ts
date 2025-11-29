@@ -1,23 +1,17 @@
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, setHeaders }) => {
 	const { supabase } = locals;
+
+	// 静的コンテンツのため長期キャッシュ（1時間）
+	setHeaders({
+		'cache-control': 'public, max-age=3600, stale-while-revalidate=7200'
+	});
 
 	// getUser()を使用してセキュアにユーザー情報を取得
 	const { data: { user } } = await supabase.auth.getUser();
 
-	let profile = null;
-	if (user) {
-		const { data } = await supabase
-			.from('profiles')
-			.select('id, full_name, avatar_url')
-			.eq('id', user.id)
-			.single();
-		profile = data;
-	}
-
 	return {
-		user,
-		profile
+		user
 	};
 };

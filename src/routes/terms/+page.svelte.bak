@@ -11,7 +11,7 @@
 	<title>利用規約 - TENTO</title>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
 	<div class="header-section">

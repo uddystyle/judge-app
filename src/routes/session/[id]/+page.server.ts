@@ -46,27 +46,17 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw redirect(303, '/login');
 	}
 
-	// ユーザーのプロフィール情報を取得（ゲストの場合はスキップ）
-	let profile = null;
+	// 組織所属チェック（組織バッジ表示用）
 	let hasOrganization = false;
 
 	if (user) {
-		const [profileResult, orgMembersResult] = await Promise.all([
-			supabase
-				.from('profiles')
-				.select('full_name')
-				.eq('id', user.id)
-				.single(),
-			supabase
-				.from('organization_members')
-				.select('organization_id')
-				.eq('user_id', user.id)
-				.is('removed_at', null)
-		]);
+		const { data: orgMembers } = await supabase
+			.from('organization_members')
+			.select('organization_id')
+			.eq('user_id', user.id)
+			.is('removed_at', null);
 
-		profile = profileResult.data;
-		const orgMembers = orgMembersResult.data || [];
-		hasOrganization = orgMembers.length > 0;
+		hasOrganization = (orgMembers || []).length > 0;
 	}
 
 	// セッションの詳細情報を取得
@@ -195,8 +185,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-			profile,
-			hasOrganization,
+				hasOrganization,
 			isChief,
 			sessionDetails,
 			isTrainingMode: true,
@@ -221,8 +210,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-			profile,
-			hasOrganization,
+				hasOrganization,
 			isChief,
 			sessionDetails,
 			isTournamentMode: true,
@@ -247,8 +235,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-			profile,
-			hasOrganization,
+				hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -274,8 +261,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-			profile,
-			hasOrganization,
+				hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -304,7 +290,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	}
 	return {
 		user,
-		profile,
 		hasOrganization,
 		isChief,
 		sessionDetails,

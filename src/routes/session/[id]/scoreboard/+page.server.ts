@@ -1,7 +1,12 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase }, setHeaders }) => {
+	// スコアボードは頻繁に更新されるため超短期キャッシュ（10秒）
+	setHeaders({
+		'cache-control': 'public, max-age=10, stale-while-revalidate=30'
+	});
+
 	const {
 		data: { user },
 		error: userError
@@ -13,14 +18,32 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	const sessionId = params.id;
 
-	// セッション情報を取得
-	const { data: sessionDetails, error: sessionError } = await supabase
-		.from('sessions')
-		.select('*')
-		.eq('id', sessionId)
-		.single();
+	// セッション情報、種目一覧、採点結果、組織情報を並列取得（パフォーマンス最適化）
+	const [sessionDetailsResult, eventsResult, resultsResult, orgMembersResult] = await Promise.all([
+		supabase.from('sessions').select('*').eq('id', sessionId).single(),
+		supabase
+			.from('custom_events')
+			.select('*')
+			.eq('session_id', sessionId)
+			.order('display_order', { ascending: true }),
+		supabase
+			.from('results')
+			.select('bib, score, discipline, level, event_name')
+			.eq('session_id', sessionId)
+			.limit(5000),
+		supabase
+			.from('organization_members')
+			.select('organization_id')
+			.eq('user_id', user.id)
+			.is('removed_at', null)
+	]);
 
-	if (sessionError) {
+	const sessionDetails = sessionDetailsResult.data;
+	const events = eventsResult.data;
+	const results = resultsResult.data;
+	const orgMembers = orgMembersResult.data || [];
+
+	if (sessionDetailsResult.error) {
 		throw error(404, '大会が見つかりません。');
 	}
 
@@ -29,27 +52,16 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(400, 'スコアボードは大会モードでのみ利用できます。');
 	}
 
-	// 種目一覧を取得
-	const { data: events, error: eventsError } = await supabase
-		.from('custom_events')
-		.select('*')
-		.eq('session_id', sessionId)
-		.order('display_order', { ascending: true });
-
-	if (eventsError) {
+	if (eventsResult.error) {
 		throw error(500, '種目情報の取得に失敗しました。');
 	}
 
-	// 全ての採点結果を取得（必要なカラムのみ、上限5000件）
-	const { data: results, error: resultsError } = await supabase
-		.from('results')
-		.select('bib, score, discipline, level, event_name')
-		.eq('session_id', sessionId)
-		.limit(5000);
-
-	if (resultsError) {
+	if (resultsResult.error) {
 		throw error(500, '採点結果の取得に失敗しました。');
 	}
+
+	// 組織所属チェック（組織バッジ表示用）
+	const hasOrganization = orgMembers.length > 0;
 
 	// ゼッケン番号ごとに得点を集計
 	const bibScores = new Map<number, { total: number; events: Map<string, number> }>();
@@ -120,22 +132,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		};
 	});
 
-	// プロフィール情報を取得
-	let profile = null;
-
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
-	}
-
 	return {
 		user,
-		profile,
+		hasOrganization,
 		sessionDetails,
 		events: events || [],
 		overallRanking,
