@@ -20,10 +20,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 
 	// セッション情報、種目一覧、採点結果、組織情報を並列取得（パフォーマンス最適化）
 	const [sessionDetailsResult, eventsResult, resultsResult, orgMembersResult] = await Promise.all([
-		supabase.from('sessions').select('*').eq('id', sessionId).single(),
+		supabase.from('sessions').select('id, name, is_tournament_mode').eq('id', sessionId).single(),
 		supabase
 			.from('custom_events')
-			.select('*')
+			.select('id, discipline, level, event_name')
 			.eq('session_id', sessionId)
 			.order('display_order', { ascending: true }),
 		supabase

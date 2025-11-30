@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		// ゲスト参加者情報を取得
 		const { data: guestData, error: guestError } = await supabase
 			.from('session_participants')
-			.select('*')
+			.select('guest_name, guest_identifier, is_guest')
 			.eq('session_id', sessionId)
 			.eq('guest_identifier', guestIdentifier)
 			.eq('is_guest', true)
@@ -62,7 +62,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// セッションの詳細情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('*')
+		.select('id, active_prompt_id, chief_judge_id, exclude_extremes, is_active, status, is_multi_judge, is_tournament_mode, mode, organization_id')
 		.eq('id', sessionId)
 		.single();
 

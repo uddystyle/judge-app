@@ -17,7 +17,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	// --- セッションの詳細情報を取得 ---
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('*')
+		.select('id, name, join_code, invite_token, created_by, chief_judge_id, is_multi_judge, required_judges, is_tournament_mode, mode, exclude_extremes, max_score_diff, organization_id')
 		.eq('id', sessionId)
 		.single();
 
@@ -105,7 +105,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		// 大会モード: custom_events
 		const { data: customEvents, error: eventsError } = await supabase
 			.from('custom_events')
-			.select('*')
+			.select('id, event_name')
 			.eq('session_id', sessionId)
 			.order('display_order', { ascending: true });
 
@@ -116,7 +116,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		// 研修モード: training_events
 		const { data: trainingEvents, error: eventsError } = await supabase
 			.from('training_events')
-			.select('*')
+			.select('id, name')
 			.eq('session_id', sessionId)
 			.order('order_index', { ascending: true });
 
@@ -127,7 +127,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		// 研修セッション情報を取得
 		const { data: trainingSessionData } = await supabase
 			.from('training_sessions')
-			.select('*')
+			.select('session_id, is_multi_judge')
 			.eq('session_id', sessionId)
 			.maybeSingle();
 
@@ -138,7 +138,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			.from('training_scores')
 			.select(
 				`
-				*,
+				score, judge_id, athlete_id,
 				training_events!inner(session_id, name),
 				athlete:athlete_id(bib_number, user_id, profiles:user_id(full_name))
 			`
