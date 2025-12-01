@@ -50,7 +50,7 @@
 <Header
 	showAppName={true}
 	pageUser={data.user}
-	hasOrganization={data.hasOrganization}
+	pageProfile={data.profile}
 	isGuest={false}
 	guestName={null}
 />

@@ -126,7 +126,7 @@
 			{:else}
 				<!-- 通常ユーザー: メニュー付き -->
 				<!-- モバイル: ハンバーガーメニュー -->
-				<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu}>
+				<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu} aria-label="メニューを開く">
 					<div class="hamburger-icon">
 						<span class="line line-1"></span>
 						<span class="line line-2"></span>
@@ -135,7 +135,7 @@
 				</button>
 
 				<!-- タブレット・PC: プロフィールボタン -->
-				<button class="account-button desktop-only" on:click={toggleMenu}>
+				<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
 					{profile?.full_name || 'アカウント'}
 					<span class="menu-icon" class:rotated={showMenu}>
 						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">

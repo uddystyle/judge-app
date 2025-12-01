@@ -498,7 +498,7 @@
 	}
 </script>
 
-<Header pageUser={data.user} hasOrganization={data.hasOrganization} isGuest={!data.user && !!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
+<Header pageUser={data.user} pageProfile={data.profile} isGuest={!data.user && !!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
 	{#if isSessionEnded}

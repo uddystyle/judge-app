@@ -12,12 +12,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	let profile = null;
 	if (user) {
-		const { data } = await supabase
+		const { data: profileData } = await supabase
 			.from('profiles')
-			.select('id, full_name, avatar_url')
+			.select('*')
 			.eq('id', user.id)
 			.single();
-		profile = data;
+		profile = profileData;
 	}
 
 	return {

@@ -48,15 +48,25 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 	// 組織所属チェック（組織バッジ表示用）
 	let hasOrganization = false;
+	let profile = null;
 
 	if (user) {
-		const { data: orgMembers } = await supabase
-			.from('organization_members')
-			.select('organization_id')
-			.eq('user_id', user.id)
-			.is('removed_at', null);
+		// 並列で組織メンバーシップとプロフィールを取得
+		const [orgMembersResult, profileResult] = await Promise.all([
+			supabase
+				.from('organization_members')
+				.select('organization_id')
+				.eq('user_id', user.id)
+				.is('removed_at', null),
+			supabase
+				.from('profiles')
+				.select('*')
+				.eq('id', user.id)
+				.single()
+		]);
 
-		hasOrganization = (orgMembers || []).length > 0;
+		hasOrganization = (orgMembersResult.data || []).length > 0;
+		profile = profileResult.data;
 	}
 
 	// セッションの詳細情報を取得
@@ -185,7 +195,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-				hasOrganization,
+			profile,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			isTrainingMode: true,
@@ -210,7 +221,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-				hasOrganization,
+			profile,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			isTournamentMode: true,
@@ -235,7 +247,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-				hasOrganization,
+			profile,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -261,7 +274,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		return {
 			user,
-				hasOrganization,
+			profile,
+			hasOrganization,
 			isChief,
 			sessionDetails,
 			disciplines,
@@ -290,6 +304,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	}
 	return {
 		user,
+		profile,
 		hasOrganization,
 		isChief,
 		sessionDetails,

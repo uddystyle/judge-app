@@ -11,7 +11,7 @@
 	<title>特定商取引法に基づく表記 - TENTO</title>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} />
+<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
 	<div class="header-section">
@@ -20,11 +20,11 @@
 	</div>
 
 	<div class="content">
-		<section class="section">
-			<p class="intro">
+		<div class="intro">
+			<p>
 				特定商取引法第11条（通信販売についての広告）の規定に基づき、以下のとおり表示いたします。
 			</p>
-		</section>
+		</div>
 
 		<section class="section">
 			<h2>販売業者</h2>
@@ -264,14 +264,17 @@
 	}
 
 	.intro {
-		font-size: 15px;
-		line-height: 1.8;
-		color: var(--primary-text);
-		margin-bottom: 32px;
+		margin-bottom: 40px;
 		padding: 16px;
 		background: var(--bg-secondary);
 		border-radius: 8px;
-		border-left: 4px solid var(--accent-primary);
+	}
+
+	.intro p {
+		font-size: 15px;
+		line-height: 1.8;
+		color: var(--primary-text);
+		margin: 0;
 	}
 
 	.section {

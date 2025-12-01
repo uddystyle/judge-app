@@ -63,6 +63,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 	// 組織所属チェック（組織バッジ表示用）
 	const hasOrganization = orgMembers.length > 0;
 
+	// プロフィール情報を取得
+	let profile = null;
+	if (user) {
+		const { data: profileData } = await supabase
+			.from('profiles')
+			.select('*')
+			.eq('id', user.id)
+			.single();
+		profile = profileData;
+	}
+
 	// ゼッケン番号ごとに得点を集計
 	const bibScores = new Map<number, { total: number; events: Map<string, number> }>();
 
@@ -134,6 +145,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 
 	return {
 		user,
+		profile,
 		hasOrganization,
 		sessionDetails,
 		events: events || [],

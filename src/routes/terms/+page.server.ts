@@ -11,7 +11,19 @@ export const load: PageServerLoad = async ({ locals, setHeaders }) => {
 	// getUser()を使用してセキュアにユーザー情報を取得
 	const { data: { user } } = await supabase.auth.getUser();
 
+	// プロフィール情報を取得
+	let profile = null;
+	if (user) {
+		const { data: profileData } = await supabase
+			.from('profiles')
+			.select('*')
+			.eq('id', user.id)
+			.single();
+		profile = profileData;
+	}
+
 	return {
-		user
+		user,
+		profile
 	};
 };
