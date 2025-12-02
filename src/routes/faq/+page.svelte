@@ -1,10 +1,23 @@
 <script lang="ts">
-	import type { PageData } from './$types';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 
-	export let data: PageData;
+	// クライアントサイドでユーザー情報を取得
+	let user: any = null;
+	let profile: any = null;
+
+	onMount(async () => {
+		try {
+			const response = await fetch('/api/me');
+			const data = await response.json();
+			user = data.user;
+			profile = data.profile;
+		} catch (error) {
+			console.error('Failed to fetch user info:', error);
+		}
+	});
 
 	// カテゴリー別のFAQ
 	const faqCategories = [
@@ -177,7 +190,7 @@
 	<title>よくある質問 - TENTO</title>
 </svelte:head>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
+<Header showAppName={true} pageUser={user} pageProfile={profile} />
 
 <div class="container">
 	<div class="header-section">
