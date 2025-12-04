@@ -20,7 +20,9 @@
 	<div class="hero">
 		<div class="hero-content">
 			<h1 class="title">TENTO</h1>
-			<p class="subtitle">スキー・スノーボード<br class="mobile-br" />検定・大会のための採点管理システム</p>
+			<p class="subtitle">
+				スキー・スノーボード<br class="mobile-br" />検定・大会のための<br class="mobile-br" />採点管理システム
+			</p>
 			<p class="description">
 				組織単位で複数の検定員が協力して<br class="mobile-br" />リアルタイムで採点を行える、<br />
 				シンプルで使いやすい<br class="mobile-br" />クラウドアプリケーションです。
@@ -250,22 +252,22 @@
 
 	.title {
 		font-family: 'M PLUS Rounded 1c', sans-serif;
-		font-size: 48px;
+		font-size: 56px;
 		font-weight: 800;
-		margin-bottom: 16px;
+		margin-bottom: 20px;
 		letter-spacing: 0.05em;
 		color: var(--text-primary);
 	}
 
 	.subtitle {
-		font-size: 24px;
-		font-weight: 500;
+		font-size: 28px;
+		font-weight: 600;
 		margin-bottom: 20px;
 		color: var(--text-secondary);
 	}
 
 	.description {
-		font-size: 18px;
+		font-size: 19px;
 		line-height: 1.6;
 		color: var(--text-secondary);
 		margin-bottom: 40px;
@@ -333,7 +335,7 @@
 
 	.section-title {
 		font-family: 'M PLUS Rounded 1c', sans-serif;
-		font-size: 36px;
+		font-size: 42px;
 		font-weight: 700;
 		text-align: center;
 		margin-bottom: 60px;
@@ -362,14 +364,14 @@
 	}
 
 	.feature-title {
-		font-size: 20px;
+		font-size: 22px;
 		font-weight: 600;
 		margin-bottom: 12px;
 		color: var(--text-primary);
 	}
 
 	.feature-description {
-		font-size: 15px;
+		font-size: 16px;
 		line-height: 1.6;
 		color: var(--text-secondary);
 		letter-spacing: -0.01em;
@@ -411,14 +413,14 @@
 	}
 
 	.step-title {
-		font-size: 22px;
+		font-size: 24px;
 		font-weight: 600;
-		margin-bottom: 8px;
+		margin-bottom: 10px;
 		color: var(--text-primary);
 	}
 
 	.step-description {
-		font-size: 16px;
+		font-size: 17px;
 		line-height: 1.6;
 		color: var(--text-secondary);
 		letter-spacing: -0.01em;
@@ -544,15 +546,15 @@
 
 	.cta-title {
 		font-family: 'M PLUS Rounded 1c', sans-serif;
-		font-size: 36px;
+		font-size: 40px;
 		font-weight: 700;
-		margin-bottom: 16px;
+		margin-bottom: 20px;
 		color: var(--text-primary);
 		letter-spacing: -0.01em;
 	}
 
 	.cta-description {
-		font-size: 18px;
+		font-size: 19px;
 		color: var(--text-secondary);
 		margin-bottom: 32px;
 		letter-spacing: -0.01em;
@@ -573,15 +575,15 @@
 		}
 
 		.title {
-			font-size: 72px;
+			font-size: 80px;
 		}
 
 		.subtitle {
-			font-size: 28px;
+			font-size: 32px;
 		}
 
 		.description {
-			font-size: 20px;
+			font-size: 21px;
 		}
 
 		.features,
@@ -592,7 +594,15 @@
 		}
 
 		.section-title {
-			font-size: 42px;
+			font-size: 48px;
+		}
+
+		.cta-title {
+			font-size: 48px;
+		}
+
+		.cta-description {
+			font-size: 21px;
 		}
 
 		.feature-grid {
