@@ -555,11 +555,11 @@
 		white-space: nowrap;
 	}
 	.copy-code-btn:hover {
-		background: #0051d5;
-		box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
+		opacity: 0.9;
+		transform: translateY(-1px);
 	}
 	.copy-code-btn:active {
-		transform: scale(0.96);
+		transform: translateY(0);
 	}
 	.members-list {
 		display: flex;
@@ -680,11 +680,11 @@
 		white-space: nowrap;
 	}
 	.copy-invite-btn:hover {
-		background: #0051d5;
-		box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+		opacity: 0.9;
+		transform: translateY(-1px);
 	}
 	.copy-invite-btn:active {
-		transform: scale(0.98);
+		transform: translateY(0);
 	}
 	.expire-text {
 		font-size: 12px;

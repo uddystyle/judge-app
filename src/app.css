@@ -29,10 +29,14 @@
     --text-muted: var(--gray-500);
     --text-disabled: var(--gray-400);
 
-    /* Accent color - Minimal black for primary actions */
+    /* Accent color - Solid colors for borders and text */
     --accent-primary: var(--gray-900);
     --accent-hover: var(--gray-800);
     --accent-active: var(--gray-700);
+
+    /* Gradient variants for backgrounds */
+    --gradient-primary: linear-gradient(135deg, #404040 0%, #262626 100%);
+    --gradient-primary-hover: linear-gradient(135deg, #525252 0%, #404040 100%);
 
     /* Semantic colors - Monochrome with subtle contrast */
     --color-success: var(--gray-700);
@@ -74,4 +78,31 @@ body {
     touch-action: manipulation;
     line-height: 1.6;
     letter-spacing: -0.01em;
+}
+
+/* Global button styles with gradient */
+button.primary,
+.btn-primary,
+button[type="submit"]:not(.secondary) {
+    background: linear-gradient(135deg, #404040 0%, #262626 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.15s ease;
+}
+
+button.primary:hover,
+.btn-primary:hover,
+button[type="submit"]:not(.secondary):hover {
+    background: linear-gradient(135deg, #525252 0%, #404040 100%);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px);
+}
+
+button.primary:active,
+.btn-primary:active,
+button[type="submit"]:not(.secondary):active {
+    background: linear-gradient(135deg, #404040 0%, #262626 100%);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    transform: translateY(0);
 }

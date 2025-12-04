@@ -144,16 +144,21 @@
 	}
 
 	.confirm-btn {
-		background: var(--accent-primary);
+		background: linear-gradient(135deg, #404040 0%, #262626 100%);
 		color: white;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 	}
 
 	.confirm-btn:hover {
-		background: var(--accent-hover);
+		background: linear-gradient(135deg, #525252 0%, #404040 100%);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+		transform: translateY(-1px);
 	}
 
 	.confirm-btn:active {
-		transform: scale(0.98);
+		background: linear-gradient(135deg, #404040 0%, #262626 100%);
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+		transform: translateY(0) scale(0.98);
 	}
 
 	.confirm-btn.danger {

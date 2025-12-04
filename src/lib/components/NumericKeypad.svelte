@@ -64,20 +64,20 @@
 		background: var(--gray-200);
 	}
 	.numeric-key.confirm {
-		background: var(--accent-primary);
+		background: linear-gradient(135deg, #404040 0%, #262626 100%);
 		color: white;
 		grid-column: span 3;
-		border: 2px solid var(--accent-primary);
-		box-shadow: none;
+		border: none;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 	}
 	.numeric-key.confirm:hover {
-		background: var(--accent-hover);
-		border-color: var(--accent-hover);
+		background: linear-gradient(135deg, #525252 0%, #404040 100%);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		transform: translateY(-2px);
 	}
 	.numeric-key.confirm:active {
-		background: var(--accent-active);
-		border-color: var(--accent-active);
+		background: linear-gradient(135deg, #404040 0%, #262626 100%);
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 		transform: translateY(0);
 	}
 	.numeric-key.clear {
