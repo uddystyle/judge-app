@@ -251,7 +251,7 @@
 	}
 
 	.title {
-		font-family: 'M PLUS Rounded 1c', sans-serif;
+		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
 		font-size: 56px;
 		font-weight: 800;
 		margin-bottom: 20px;
@@ -335,7 +335,7 @@
 	}
 
 	.section-title {
-		font-family: 'M PLUS Rounded 1c', sans-serif;
+		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
 		font-size: 42px;
 		font-weight: 700;
 		text-align: center;
@@ -546,7 +546,7 @@
 	}
 
 	.cta-title {
-		font-family: 'M PLUS Rounded 1c', sans-serif;
+		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
 		font-size: 40px;
 		font-weight: 700;
 		margin-bottom: 20px;

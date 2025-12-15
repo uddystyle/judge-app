@@ -8,17 +8,17 @@
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-		<!-- 非同期フォント読み込み: レンダリングをブロックしない -->
+		<!-- フォントを非ブロッキングで読み込み: media="print"トリックを使用 -->
 		<link
-			rel="preload"
-			as="style"
-			href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap&subset=japanese"
-			onload="this.onload=null;this.rel='stylesheet'"
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+			media="print"
+			onload="this.media='all'"
 		/>
 		<noscript>
 			<link
 				rel="stylesheet"
-				href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap&subset=japanese"
+				href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
 			/>
 		</noscript>
 
