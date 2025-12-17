@@ -87,13 +87,31 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 
 export const actions: Actions = {
 	// この'setPrompt'アクションは、ゼッケン番号確定フォームから呼び出される
-	setPrompt: async ({ request, params, locals: { supabase } }) => {
+	setPrompt: async ({ request, params, locals: { supabase }, url }) => {
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
-		if (userError || !user) {
+		const guestIdentifier = url.searchParams.get('guest');
+
+		// ゲストユーザーの場合
+		if (!user && guestIdentifier) {
+			// ゲスト参加者情報を検証
+			const { data: guestData, error: guestError } = await supabase
+				.from('session_participants')
+				.select('*')
+				.eq('session_id', params.id)
+				.eq('guest_identifier', guestIdentifier)
+				.eq('is_guest', true)
+				.single();
+
+			if (guestError || !guestData) {
+				return fail(401, { error: 'ゲスト認証が必要です。' });
+			}
+
+			// ゲストユーザーは権限チェックをスキップして続行
+		} else if (userError || !user) {
 			throw redirect(303, '/login');
 		}
 
@@ -108,11 +126,12 @@ export const actions: Actions = {
 			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
 		}
 
-		const isChief = user.id === sessionData.chief_judge_id;
+		const isChief = user ? user.id === sessionData.chief_judge_id : false;
 		const isMultiJudge = sessionData.is_multi_judge;
 
 		// 複数検定員モードONの場合、主任検定員のみがゼッケン番号を確定できる
-		if (!isChief && isMultiJudge) {
+		// ゲストユーザーは個別採点モードでのみアクセス可能
+		if (!isChief && isMultiJudge && !guestIdentifier) {
 			return fail(403, { error: 'ゼッケン番号を確定する権限がありません。' });
 		}
 
@@ -155,10 +174,11 @@ export const actions: Actions = {
 			return fail(500, { error: 'セッションの更新に失敗しました。' });
 		}
 
-		// 成功したら、主任検定員自身も得点入力ページへ移動
+		// 成功したら、得点入力ページへ移動（ゲストユーザーの場合はパラメータを引き継ぐ）
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
 		throw redirect(
 			303,
-			`/session/${params.id}/${params.discipline}/${params.level}/${params.event}/score`
+			`/session/${params.id}/${params.discipline}/${params.level}/${params.event}/score${guestParam}`
 		);
 	}
 };
