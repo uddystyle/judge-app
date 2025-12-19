@@ -459,7 +459,7 @@
 						{#if isChief}
 							<form
 								method="POST"
-								action="?/requestCorrection"
+								action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/requestCorrection"
 								use:enhance={({ formData }) => {
 									return async ({ result, update }) => {
 										await update({ reset: false });
@@ -521,7 +521,7 @@
 					>{scoreStatus.scores?.length || 0} / {scoreStatus.requiredJudges || 1} 人</strong
 				>
 			</p>
-			<form method="POST" action="?/finalizeScore" use:enhance>
+			<form method="POST" action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/finalizeScore" use:enhance>
 				<input type="hidden" name="bib" value={bib} />
 				<div class="nav-buttons">
 					<NavButton variant="primary" type="submit" disabled={!canSubmit}>

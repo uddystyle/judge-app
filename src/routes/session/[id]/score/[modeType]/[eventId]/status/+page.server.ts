@@ -343,7 +343,8 @@ export const actions: Actions = {
 
 		// 研修モードの場合はスコア計算なしで完了画面へ
 		if (isTrainingMode) {
-			throw redirect(303, `/session/${sessionId}/score/training/${eventId}/complete?bib=${bib}`);
+			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+			throw redirect(303, `/session/${sessionId}/score/training/${eventId}/complete?bib=${bib}${guestParam}`);
 		}
 
 		// 大会モードの場合はスコアを計算（合計点）
@@ -402,10 +403,11 @@ export const actions: Actions = {
 			finalScore = scoreValues.reduce((acc, s) => acc + s, 0);
 		}
 
-		// 完了画面へリダイレクト
+		// 完了画面へリダイレクト（ゲストパラメータを保持）
+		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
 		throw redirect(
 			303,
-			`/session/${sessionId}/score/tournament/${eventId}/complete?bib=${bib}&score=${finalScore}`
+			`/session/${sessionId}/score/tournament/${eventId}/complete?bib=${bib}&score=${finalScore}${guestParam}`
 		);
 	}
 };

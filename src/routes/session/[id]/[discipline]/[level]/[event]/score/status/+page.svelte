@@ -22,6 +22,7 @@
 	let level: string = '';
 	let event: string = '';
 	let bib: string | null = null;
+	let guestIdentifier: string | null = null;
 
 	let isChief = false;
 	$: isChief = data.user?.id === data.sessionDetails?.chief_judge_id;
@@ -60,6 +61,7 @@
 		level = $page.params.level || '';
 		event = $page.params.event || '';
 		bib = $page.url.searchParams.get('bib');
+		guestIdentifier = $page.url.searchParams.get('guest');
 
 		// ヘッダー情報を設定
 		if (data.sessionDetails) {
@@ -327,7 +329,7 @@
 						{#if isChief}
 							<form
 								method="POST"
-								action="?/requestCorrection"
+								action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/requestCorrection"
 								use:enhance={({ formData }) => {
 									return async ({ result, update }) => {
 										await update({ reset: false });
@@ -365,7 +367,7 @@
 			</p>
 			<form
 				method="POST"
-				action="?/finalizeScore"
+				action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/finalizeScore"
 				use:enhance
 			>
 				<input type="hidden" name="bib" value={bib} />

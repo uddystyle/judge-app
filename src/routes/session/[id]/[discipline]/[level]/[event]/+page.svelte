@@ -97,7 +97,7 @@
 
 	<div class="numeric-display">{currentBib || '0'}</div>
 
-	<form method="POST" action="?/setPrompt" use:enhance bind:this={formElement}>
+	<form method="POST" action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/setPrompt" use:enhance bind:this={formElement}>
 		<input type="hidden" name="bib" value={currentBib} />
 	</form>
 

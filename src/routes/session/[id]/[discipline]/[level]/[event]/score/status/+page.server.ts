@@ -269,9 +269,10 @@ export const actions: Actions = {
 		await supabase.from('sessions').update({ active_prompt_id: null }).eq('id', id);
 
 		// 完了画面へリダイレクト
+		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
 		throw redirect(
 			303,
-			`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${finalScore}`
+			`/session/${id}/${discipline}/${level}/${event}/score/complete?bib=${bib}&score=${finalScore}${guestParam}`
 		);
 	}
 };
