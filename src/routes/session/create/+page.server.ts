@@ -102,6 +102,7 @@ export const actions: Actions = {
 		const sessionNameRaw = formData.get('sessionName') as string;
 		const mode = formData.get('mode') as string;
 		const maxJudgesStr = formData.get('maxJudges') as string;
+		const isMultiJudgeStr = formData.get('isMultiJudge') as string;
 		const organizationIdRaw = formData.get('organizationId') as string;
 
 		// 組織IDのバリデーション（SQLインジェクション対策）
@@ -255,6 +256,7 @@ export const actions: Actions = {
 		// 研修モードの場合、training_sessions レコードを作成
 		if (isTrainingMode) {
 			const maxJudges = maxJudgesStr ? parseInt(maxJudgesStr, 10) : 100;
+			const isMultiJudge = isMultiJudgeStr === 'true';
 
 			// Validate maxJudges
 			if (isNaN(maxJudges) || maxJudges < 1 || maxJudges > 100) {
@@ -269,7 +271,8 @@ export const actions: Actions = {
 				max_judges: maxJudges,
 				show_individual_scores: true,
 				show_score_comparison: true,
-				show_deviation_analysis: false
+				show_deviation_analysis: false,
+				is_multi_judge: isMultiJudge
 			});
 
 			if (trainingError) {

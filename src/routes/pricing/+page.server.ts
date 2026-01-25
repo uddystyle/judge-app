@@ -63,6 +63,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 				.from('subscriptions')
 				.select('plan_type, billing_interval')
 				.eq('user_id', user.id)
+				.is('organization_id', null)
 				.maybeSingle();
 
 			currentPlan = subscription?.plan_type || 'free';

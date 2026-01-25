@@ -55,7 +55,21 @@ export const load: PageServerLoad = async ({ locals: { supabase }, setHeaders })
 		organizationIds.length > 0
 			? supabase
 					.from('sessions')
-					.select('id, name, session_date, join_code, is_active, is_tournament_mode, mode, organization_id, exclude_extremes, is_multi_judge')
+					.select(`
+						id,
+						name,
+						session_date,
+						join_code,
+						is_active,
+						is_tournament_mode,
+						mode,
+						organization_id,
+						exclude_extremes,
+						is_multi_judge,
+						organizations (
+							name
+						)
+					`)
 					.in('organization_id', organizationIds)
 					.is('deleted_at', null)
 					.order('created_at', { ascending: false })
@@ -76,7 +90,10 @@ export const load: PageServerLoad = async ({ locals: { supabase }, setHeaders })
 					mode,
 					organization_id,
 					exclude_extremes,
-					is_multi_judge
+					is_multi_judge,
+					organizations (
+						name
+					)
 				)
 			`)
 			.eq('user_id', user.id)
@@ -117,16 +134,21 @@ export const load: PageServerLoad = async ({ locals: { supabase }, setHeaders })
 	// 各セッションの検定員数と研修設定を取得（N+1問題を解決）
 	const sessionIds = sessions.map((s: any) => s.id);
 
+	// 研修モードのセッションのみ抽出
+	const trainingSessionIds = sessions
+		.filter((s: any) => s.mode === 'training')
+		.map((s: any) => s.id);
+
 	// 全セッションの参加者と研修設定を並列取得（1回のクエリで取得）
 	const [allParticipantsResult, trainingSettingsResult] = await Promise.all([
 		sessionIds.length > 0
 			? supabase.from('session_participants').select('session_id').in('session_id', sessionIds)
 			: Promise.resolve({ data: [], error: null }),
-		sessionIds.length > 0
+		trainingSessionIds.length > 0
 			? supabase
 					.from('training_sessions')
 					.select('session_id, is_multi_judge')
-					.in('session_id', sessionIds)
+					.in('session_id', trainingSessionIds)
 			: Promise.resolve({ data: [], error: null })
 	]);
 

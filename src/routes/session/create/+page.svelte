@@ -12,6 +12,7 @@
 
 	let selectedMode: 'kentei' | 'tournament' | 'training' = 'kentei';
 	let maxJudges = 100; // 研修モードのデフォルト最大検定員数
+	let isMultiJudge = false; // 複数検定員モードのデフォルト値
 	let selectedOrganization = data.organizations[0]?.id || ''; // デフォルトで最初の組織を選択
 	let isSubmitting = false;
 </script>
@@ -114,8 +115,9 @@
 			{#if selectedMode === 'training'}
 				<div class="training-settings">
 					<h4>研修モード設定</h4>
-					<div class="setting-item">
-						<label for="max-judges">最大検定員数（1〜100）</label>
+
+					<div class="setting-item number-item">
+						<label for="max-judges" class="setting-label">最大検定員数（1〜100）</label>
 						<input
 							type="number"
 							id="max-judges"
@@ -124,8 +126,33 @@
 							max="100"
 							bind:value={maxJudges}
 							disabled={isSubmitting}
+							class="number-input"
 						/>
 					</div>
+
+					<div class="setting-item toggle-item">
+						<label for="multi-judge-toggle" class="setting-label">複数検定員モード</label>
+						<div class="toggle-switch">
+							<input
+								type="checkbox"
+								id="multi-judge-toggle"
+								name="isMultiJudge"
+								bind:checked={isMultiJudge}
+								disabled={isSubmitting}
+								value="true"
+							/>
+							<label for="multi-judge-toggle"></label>
+						</div>
+					</div>
+
+					<div class="info-box">
+						{#if isMultiJudge}
+							<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+						{:else}
+							<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+						{/if}
+					</div>
+
 					<p class="info-text">
 						研修モードでは、検定員ごとの採点を個別に表示します。<br />
 						3審3採・5審3採のような集計は行いません。
@@ -288,20 +315,106 @@
 	.setting-item {
 		margin-bottom: 12px;
 	}
-	.setting-item label {
-		display: block;
-		font-size: 14px;
-		font-weight: 500;
-		color: var(--primary-text);
-		margin-bottom: 6px;
-	}
-	.setting-item input[type='number'] {
-		width: 100%;
+	.number-item {
 		background: white;
 		border: 1px solid var(--separator-gray);
 		border-radius: 8px;
+		padding: 12px 16px;
+	}
+	.number-item .setting-label {
+		display: block;
+		margin-bottom: 8px;
+	}
+	.number-input {
+		width: 100%;
+		background: #f8f9fa;
+		border: 1px solid var(--separator-gray);
+		border-radius: 6px;
 		padding: 10px;
 		font-size: 16px;
+		text-align: center;
+		font-weight: 600;
+	}
+	.number-input:focus {
+		outline: none;
+		border-color: var(--ios-blue);
+		background: white;
+	}
+	.toggle-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		background: white;
+		border: 1px solid var(--separator-gray);
+		border-radius: 8px;
+		padding: 12px 16px;
+	}
+	.setting-label {
+		font-size: 15px;
+		font-weight: 500;
+		color: var(--primary-text);
+		margin: 0;
+	}
+	.toggle-switch {
+		position: relative;
+		display: inline-block;
+		width: 51px;
+		height: 31px;
+	}
+	.toggle-switch input {
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
+	.toggle-switch label {
+		position: absolute;
+		cursor: pointer;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: #d1d1d6;
+		transition: 0.4s;
+		border-radius: 34px;
+	}
+	.toggle-switch label:before {
+		position: absolute;
+		content: '';
+		height: 27px;
+		width: 27px;
+		left: 2px;
+		bottom: 2px;
+		background-color: white;
+		transition: 0.4s;
+		border-radius: 50%;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	}
+	.toggle-switch input:checked + label {
+		background-color: #2d7a3e;
+	}
+	.toggle-switch input:checked + label:before {
+		transform: translateX(20px);
+	}
+	.toggle-switch input:disabled + label {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+	.info-box {
+		background: #f8f9fa;
+		border-left: 3px solid var(--ios-blue);
+		padding: 12px 16px;
+		border-radius: 6px;
+		margin-bottom: 12px;
+	}
+	.info-box p {
+		margin: 0;
+		font-size: 13px;
+		color: var(--secondary-text);
+		line-height: 1.5;
+	}
+	.info-box strong {
+		color: var(--primary-text);
+		font-weight: 600;
 	}
 	.info-text {
 		font-size: 13px;

@@ -23,11 +23,12 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		console.log('[Checkout API] ユーザー:', user.id, 'プライスID:', priceId);
 
-		// 3. 既存のサブスクリプション情報を確認
+		// 3. 既存のサブスクリプション情報を確認（個人用のみ）
 		const { data: existingSub } = await supabase
 			.from('subscriptions')
 			.select('stripe_customer_id, plan_type')
 			.eq('user_id', user.id)
+			.is('organization_id', null)
 			.single();
 
 		let customerId: string;

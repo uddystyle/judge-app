@@ -23,11 +23,12 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		console.log('[Portal API] ユーザー:', user.id);
 
-		// 3. subscriptionsテーブルからCustomer ID取得
+		// 3. subscriptionsテーブルからCustomer ID取得（個人用のみ）
 		const { data: subscription, error: subError } = await supabase
 			.from('subscriptions')
 			.select('stripe_customer_id')
 			.eq('user_id', user.id)
+			.is('organization_id', null)
 			.single();
 
 		if (subError || !subscription?.stripe_customer_id) {

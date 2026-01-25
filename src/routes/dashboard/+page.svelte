@@ -108,10 +108,14 @@
 	}
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
-
 	<div class="section">
 		<h2 class="section-title">参加中のセッション</h2>
 		<div class="list-keypad">
@@ -119,33 +123,37 @@
 				{#each data.sessions as session}
 					{@const isTournament = session.mode === 'tournament'}
 					{@const canStart = !isTournament || canStartTournament(session.participantCount)}
-					<div
-						class="key select-item"
-						class:disabled={!canStart}
-					>
+					<div class="key select-item" class:disabled={!canStart}>
 						<div class="session-info-wrapper">
-							<div class="badges-container">
-								{#if session.mode === 'tournament'}
-									<span class="mode-badge tournament">大会</span>
-									{#if canStart}
-										<span class="scoring-method-badge">
-											{session.exclude_extremes ? '5審3採' : '3審3採'}
+							<div class="session-left-section">
+								<div class="badges-container">
+									{#if session.mode === 'tournament'}
+										<span class="mode-badge tournament">大会</span>
+										{#if canStart}
+											<span class="scoring-method-badge">
+												{session.exclude_extremes ? '5審3採' : '3審3採'}
+											</span>
+										{/if}
+									{:else if session.mode === 'training'}
+										<span class="mode-badge training">研修</span>
+										<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
+											{session.isMultiJudge ? '合同採点' : '個別採点'}
+										</span>
+									{:else}
+										<span class="mode-badge">検定</span>
+										<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
+											{session.isMultiJudge ? '合同採点' : '個別採点'}
 										</span>
 									{/if}
-								{:else if session.mode === 'training'}
-									<span class="mode-badge training">研修</span>
-									<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-										{session.isMultiJudge ? '合同採点' : '個別採点'}
-									</span>
-								{:else}
-									<span class="mode-badge">検定</span>
-									<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-										{session.isMultiJudge ? '合同採点' : '個別採点'}
-									</span>
-								{/if}
-							</div>
-							<div class="session-name">
-								{session.name}
+									{#if session.organizations?.name}
+										<span class="organization-name">
+											{session.organizations.name}
+										</span>
+									{/if}
+								</div>
+								<div class="session-name">
+									{session.name}
+								</div>
 							</div>
 							{#if isTournament && !canStart}
 								<div class="participant-count">
@@ -157,12 +165,7 @@
 								</div>
 							{/if}
 							<div class="session-buttons">
-								<a
-									href="/session/{session.id}/details"
-									class="details-btn"
-								>
-									詳細
-								</a>
+								<a href="/session/{session.id}/details" class="details-btn"> 詳細 </a>
 								<button
 									class="start-btn"
 									class:disabled={!canStart}
@@ -192,9 +195,7 @@
 	</div>
 
 	<div class="help-link-section">
-		<a href="/modes" class="help-link">
-			セッションモードについて →
-		</a>
+		<a href="/modes" class="help-link"> セッションモードについて → </a>
 	</div>
 </div>
 
@@ -205,6 +206,8 @@
 	confirmText="OK"
 	on:confirm={() => {}}
 />
+
+<Footer />
 
 <style>
 	.container {
@@ -237,8 +240,7 @@
 		color: var(--gray-900);
 		border: 2px solid transparent;
 		background-image:
-			linear-gradient(white, white),
-			linear-gradient(135deg, #404040 0%, #262626 100%);
+			linear-gradient(white, white), linear-gradient(135deg, #404040 0%, #262626 100%);
 		background-origin: padding-box, border-box;
 		background-clip: padding-box, border-box;
 		border-radius: 8px;
@@ -322,6 +324,25 @@
 		flex-direction: column;
 		gap: 6px;
 		width: 100%;
+	}
+	.session-left-section {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		width: 100%;
+	}
+	.organization-name {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--text-secondary);
+		background: transparent;
+		padding: 4px 10px;
+		border-radius: 6px;
+		border: 1px solid #e5e7eb;
+		letter-spacing: 0.01em;
 	}
 	.session-name {
 		font-size: 18px;
@@ -465,25 +486,58 @@
 			padding: 60px 40px;
 		}
 		.list-keypad {
+			gap: 16px;
+			max-width: 700px;
+		}
+		.key.select-item {
+			min-height: auto;
+			padding: 20px 16px;
+			gap: 0;
+		}
+		.session-info-wrapper {
+			flex-direction: row;
+			align-items: center;
+			justify-content: space-between;
 			gap: 20px;
 		}
+		.session-left-section {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 6px;
+			flex: 0 1 auto;
+			min-width: 0;
+			max-width: 400px;
+		}
+		.badges-container {
+			justify-content: flex-start;
+			flex-shrink: 0;
+		}
+		.session-name {
+			font-size: 18px;
+			margin-bottom: 0;
+			text-align: left;
+			flex: 0 1 auto;
+			max-width: 300px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.participant-count {
+			justify-content: flex-start;
+			flex-shrink: 0;
+		}
 		.session-buttons {
-			gap: 12px;
-			margin-top: 16px;
+			gap: 10px;
+			margin-top: 0;
+			justify-content: flex-end;
+			flex-wrap: nowrap;
+			flex-shrink: 0;
 		}
 		.details-btn,
 		.start-btn {
 			font-size: 14px;
-			padding: 10px 24px;
-		}
-		.key.select-item {
-			min-height: 180px;
-			padding: 32px;
-			gap: 16px;
-		}
-		.session-name {
-			font-size: 22px;
-			margin-bottom: 8px;
+			padding: 8px 20px;
+			white-space: nowrap;
 		}
 		.section-title {
 			font-size: 20px;
@@ -499,29 +553,37 @@
 	/* PC対応: デスクトップ */
 	@media (min-width: 1024px) {
 		.list-keypad {
+			gap: 18px;
+			max-width: 800px;
+		}
+		.key.select-item {
+			padding: 24px 20px;
+		}
+		.session-info-wrapper {
 			gap: 24px;
-			max-width: 600px;
+		}
+		.session-left-section {
+			gap: 8px;
+			max-width: 450px;
+		}
+		.session-name {
+			font-size: 20px;
+			max-width: 400px;
 		}
 		.session-buttons {
-			gap: 14px;
-			margin-top: 20px;
+			gap: 12px;
 		}
 		.details-btn,
 		.start-btn {
-			font-size: 15px;
-			padding: 10px 28px;
-		}
-		.key.select-item {
-			min-height: 140px;
+			font-size: 14px;
+			padding: 10px 24px;
 		}
 		.section-title {
 			font-size: 24px;
 		}
 		.divider {
 			margin: 64px auto;
-			max-width: 600px;
+			max-width: 100%;
 		}
 	}
 </style>
-
-<Footer />

@@ -111,26 +111,29 @@ export const actions: Actions = {
 			return fail(404, { error: '組織が見つかりません。' });
 		}
 
-		// 現在のプランと同じ場合はエラー
-		if (organization.plan_type === newPlanType) {
-			return fail(400, { error: '既に同じプランを利用中です。' });
-		}
-
 		// フリープランからの変更の場合は、upgradeページへリダイレクト
 		if (organization.plan_type === 'free') {
 			throw redirect(303, `/organization/${params.id}/upgrade?plan=${newPlanType}`);
 		}
 
-		// サブスクリプション情報を取得
+		// サブスクリプション情報を取得（請求間隔も含む）
 		const { data: subscription } = await supabase
 			.from('subscriptions')
-			.select('stripe_subscription_id, plan_type')
+			.select('stripe_subscription_id, plan_type, billing_interval')
 			.eq('organization_id', params.id)
 			.in('status', ['active', 'trialing'])
 			.single();
 
 		if (!subscription || !subscription.stripe_subscription_id) {
 			return fail(400, { error: 'アクティブなサブスクリプションが見つかりません。' });
+		}
+
+		// プランタイプと請求間隔の両方が同じ場合はエラー
+		if (
+			organization.plan_type === newPlanType &&
+			subscription.billing_interval === billingInterval
+		) {
+			return fail(400, { error: '既に同じプラン・請求間隔を利用中です。' });
 		}
 
 		try {
@@ -160,6 +163,43 @@ export const actions: Actions = {
 			// サブスクリプションアイテムのIDを取得
 			const subscriptionItemId = stripeSubscription.items.data[0].id;
 
+			// 現在の請求間隔を取得
+			const currentBillingInterval =
+				stripeSubscription.items.data[0].price.recurring?.interval || 'month';
+
+			// 請求間隔の変更を検出
+			const isBillingIntervalChange = currentBillingInterval !== billingInterval;
+			const isMonthToYear = currentBillingInterval === 'month' && billingInterval === 'year';
+			const isYearToMonth = currentBillingInterval === 'year' && billingInterval === 'month';
+
+			// プロレーション動作を決定
+			// - プランアップグレード: 即座に請求
+			// - 月額→年額: 即座に請求（割引適用のため）
+			// - 上記以外（ダウングレード、年額→月額）: 次回請求時
+			let prorationBehavior: 'always_invoice' | 'none';
+			let billingCycleAnchor: 'now' | 'unchanged';
+
+			if (isUpgrade || isMonthToYear) {
+				// アップグレードまたは月額→年額の場合は即座に請求
+				prorationBehavior = 'always_invoice';
+				billingCycleAnchor = 'now';
+			} else {
+				// ダウングレードまたは年額→月額の場合は次回請求時
+				prorationBehavior = 'none';
+				billingCycleAnchor = 'unchanged';
+			}
+
+			console.log('[Change Plan] 請求設定:', {
+				currentBillingInterval,
+				newBillingInterval: billingInterval,
+				isBillingIntervalChange,
+				isMonthToYear,
+				isYearToMonth,
+				isUpgrade,
+				prorationBehavior,
+				billingCycleAnchor
+			});
+
 			// サブスクリプションを更新
 			const updatedSubscription = await stripe.subscriptions.update(
 				subscription.stripe_subscription_id,
@@ -170,9 +210,8 @@ export const actions: Actions = {
 							price: newPriceId
 						}
 					],
-					// アップグレード: 即座に請求、ダウングレード: 次回請求時
-					proration_behavior: isUpgrade ? 'always_invoice' : 'none',
-					billing_cycle_anchor: isUpgrade ? 'now' : 'unchanged'
+					proration_behavior: prorationBehavior,
+					billing_cycle_anchor: billingCycleAnchor
 				}
 			);
 

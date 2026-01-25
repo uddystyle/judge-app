@@ -43,6 +43,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			.eq('user_id', user.id)
 			.eq('plan_type', planType)
 			.eq('status', 'active')
+			.is('organization_id', null)
 			.single();
 
 		if (!subscription) {
@@ -52,62 +53,43 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			);
 		}
 
-		// すでに組織に紐づいているサブスクリプションでないかチェック
-		if (subscription.organization_id) {
-			return json(
-				{ error: 'このサブスクリプションはすでに組織に紐づいています。' },
-				{ status: 400 }
-			);
-		}
+		console.log('[Organization Create API] Creating organization with transaction');
+		console.log('[Organization Create API] User:', user.id);
+		console.log('[Organization Create API] Organization:', organizationName.trim());
+		console.log('[Organization Create API] Plan:', planType);
+		console.log('[Organization Create API] Subscription:', subscription.id);
 
-		// 組織を作成
-		const { data: organization, error: orgError } = await supabaseAdmin
-			.from('organizations')
-			.insert({
-				name: organizationName.trim(),
-				plan_type: planType,
-				max_members: MAX_MEMBERS[planType],
-				stripe_customer_id: subscription.stripe_customer_id,
-				stripe_subscription_id: subscription.stripe_subscription_id
-			})
-			.select()
-			.single();
+		// トランザクション処理を使用して組織を作成
+		// Postgres関数により、組織作成・メンバー追加・サブスクリプション更新が原子的に実行される
+		const { data: result, error: rpcError } = await supabaseAdmin.rpc(
+			'create_organization_with_subscription',
+			{
+				p_user_id: user.id,
+				p_organization_name: organizationName.trim(),
+				p_plan_type: planType,
+				p_max_members: MAX_MEMBERS[planType],
+				p_subscription_id: subscription.id
+			}
+		);
 
-		if (orgError) {
-			console.error('Error creating organization:', orgError);
+		if (rpcError) {
+			console.error('[Organization Create API] RPC Error:', rpcError);
+			console.error('[Organization Create API] Error details:', JSON.stringify(rpcError, null, 2));
 			return json({ error: '組織の作成に失敗しました' }, { status: 500 });
 		}
 
-		// 作成者を管理者として組織に追加
-		const { error: memberError } = await supabaseAdmin.from('organization_members').insert({
-			organization_id: organization.id,
-			user_id: user.id,
-			role: 'admin'
-		});
-
-		if (memberError) {
-			console.error('Error adding organization admin:', memberError);
-			// 組織は作成されているので、ロールバックせずエラーを返す
-			return json({ error: '組織の管理者設定に失敗しました' }, { status: 500 });
-		}
-
-		// サブスクリプションに組織IDを紐付け
-		const { error: updateError } = await supabaseAdmin
-			.from('subscriptions')
-			.update({ organization_id: organization.id })
-			.eq('id', subscription.id);
-
-		if (updateError) {
-			console.error('Error updating subscription:', updateError);
-			// エラーをログに記録するが、組織は作成できているので続行
+		if (result.already_exists) {
+			console.log('[Organization Create API] Organization already exists (idempotent):', result.organization_id);
+		} else {
+			console.log('[Organization Create API] Organization created successfully:', result.organization_id);
 		}
 
 		return json({
 			success: true,
 			organization: {
-				id: organization.id,
-				name: organization.name,
-				plan_type: organization.plan_type
+				id: result.organization_id,
+				name: result.organization_name,
+				plan_type: result.plan_type
 			}
 		});
 	} catch (error) {

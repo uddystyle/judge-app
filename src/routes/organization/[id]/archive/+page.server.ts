@@ -27,7 +27,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	// プラン情報を別途取得
 	const { data: planData, error: planError } = await supabase
-		.from('plans')
+		.from('plan_limits')
 		.select('archived_data_retention_days')
 		.eq('plan_type', organization.plan_type)
 		.single();

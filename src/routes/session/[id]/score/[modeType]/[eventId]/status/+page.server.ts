@@ -136,6 +136,7 @@ export const actions: Actions = {
 			const { data: guestData, error: guestError } = await supabase
 				.from('session_participants')
 				.select('*')
+				.eq('session_id', params.id)
 				.eq('guest_identifier', guestIdentifier)
 				.eq('is_guest', true)
 				.single();
@@ -286,6 +287,7 @@ export const actions: Actions = {
 			const { data: guestData, error: guestError } = await supabase
 				.from('session_participants')
 				.select('*')
+				.eq('session_id', params.id)
 				.eq('guest_identifier', guestIdentifier)
 				.eq('is_guest', true)
 				.single();

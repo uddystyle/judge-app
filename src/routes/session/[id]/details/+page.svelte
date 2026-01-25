@@ -981,24 +981,28 @@
 		<hr class="divider" />
 	{/if}
 
-	<div class="settings-section">
-		<h3 class="settings-title">データ管理</h3>
-		<div class="nav-buttons">
-			{#if data.sessionDetails.is_tournament_mode}
-				<NavButton
-					variant="primary"
-					on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}
-				>
-					スコアボードを表示
-				</NavButton>
-			{/if}
-			<NavButton on:click={handleExport} disabled={exportLoading}>
-				{exportLoading ? '準備中...' : '採点結果をエクスポート'}
-			</NavButton>
+	{#if data.sessionDetails.is_tournament_mode || data.currentUserId === data.sessionDetails.created_by}
+		<div class="settings-section">
+			<h3 class="settings-title">データ管理</h3>
+			<div class="nav-buttons">
+				{#if data.sessionDetails.is_tournament_mode}
+					<NavButton
+						variant="primary"
+						on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}
+					>
+						スコアボードを表示
+					</NavButton>
+				{/if}
+				{#if data.currentUserId === data.sessionDetails.created_by}
+					<NavButton on:click={handleExport} disabled={exportLoading}>
+						{exportLoading ? '準備中...' : '採点結果をエクスポート'}
+					</NavButton>
+				{/if}
+			</div>
 		</div>
-	</div>
 
-	<hr class="divider" />
+		<hr class="divider" />
+	{/if}
 
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>

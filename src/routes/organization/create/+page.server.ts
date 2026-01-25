@@ -13,12 +13,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const user = session.data.session.user;
 
 	// ユーザーのアクティブなサブスクリプション情報を取得
+	// 既に組織に紐づいているサブスクリプションは除外
 	const { data: subscription } = await locals.supabase
 		.from('subscriptions')
 		.select('*')
 		.eq('user_id', user.id)
 		.eq('status', 'active')
 		.in('plan_type', ['basic', 'standard', 'premium'])
+		.is('organization_id', null)
 		.order('created_at', { ascending: false })
 		.limit(1)
 		.single();

@@ -25,34 +25,27 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 
 	console.log('[Export API] ユーザーID:', user.id, 'セッションID:', sessionIdNum);
 
-	// ユーザーがこのセッションの参加者かどうかをチェック
-	const { data: participant, error: participantError } = await supabase
-		.from('session_participants')
-		.select('session_id, user_id')
-		.eq('session_id', sessionIdNum)
-		.eq('user_id', user.id)
-		.single();
-
-	console.log('[Export API] 参加者チェック:', { participant, error: participantError });
-
-	if (participantError || !participant) {
-		console.error('[Export API] Unauthorized export attempt:', { userId: user.id, sessionId: sessionIdNum });
-		throw error(403, 'セッションにアクセスする権限がありません。');
-	}
-
-	// セッション情報を取得してモードを確認
+	// セッション情報を取得して作成者を確認
 	const { data: session, error: sessionError } = await supabase
 		.from('sessions')
-		.select('mode, is_tournament_mode')
+		.select('created_by, mode, is_tournament_mode')
 		.eq('id', sessionIdNum)
 		.single();
 
 	console.log('[Export API] セッション情報:', { session, error: sessionError });
 
-	if (sessionError) {
+	if (sessionError || !session) {
 		console.error('[Export API] Failed to fetch session:', sessionError);
-		return json({ error: 'セッション情報の取得に失敗しました。' }, { status: 500 });
+		throw error(404, 'セッションが見つかりません。');
 	}
+
+	// 作成者のみがエクスポート可能
+	if (session.created_by !== user.id) {
+		console.error('[Export API] Unauthorized export attempt:', { userId: user.id, sessionId: sessionIdNum, createdBy: session.created_by });
+		throw error(403, 'データをエクスポートする権限がありません。セッションの作成者のみがデータをエクスポートできます。');
+	}
+
+	console.log('[Export API] 作成者チェック完了:', { userId: user.id, createdBy: session.created_by });
 
 	let exportData: any[] = [];
 
