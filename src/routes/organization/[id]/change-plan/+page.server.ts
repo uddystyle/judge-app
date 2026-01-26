@@ -45,12 +45,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	}
 
 	// 4. アクティブなサブスクリプション情報を取得
-	const { data: subscription } = await supabase
+	const { data: subscription, error: subError } = await supabase
 		.from('subscriptions')
 		.select('id, status, plan_type, billing_interval, stripe_subscription_id')
 		.eq('organization_id', params.id)
 		.in('status', ['active', 'trialing'])
-		.single();
+		.maybeSingle();
+
+	// エラーログ（デバッグ用）
+	if (subError) {
+		console.error('[Change Plan Load] サブスクリプション取得エラー:', subError);
+	}
 
 	// サブスクリプション情報（フリープランの場合はnull）
 
@@ -117,15 +122,43 @@ export const actions: Actions = {
 		}
 
 		// サブスクリプション情報を取得（請求間隔も含む）
-		const { data: subscription } = await supabase
+		const { data: subscription, error: subError } = await supabase
 			.from('subscriptions')
-			.select('stripe_subscription_id, plan_type, billing_interval')
+			.select('stripe_subscription_id, plan_type, billing_interval, status')
 			.eq('organization_id', params.id)
 			.in('status', ['active', 'trialing'])
-			.single();
+			.maybeSingle();
+
+		// デバッグログ
+		console.log('[Change Plan Action] サブスクリプション取得結果:', {
+			subscription,
+			error: subError,
+			organizationId: params.id
+		});
+
+		if (subError) {
+			console.error('[Change Plan Action] サブスクリプション取得エラー:', subError);
+			return fail(500, {
+				error: `サブスクリプション情報の取得に失敗しました。${subError.message || ''}`
+			});
+		}
 
 		if (!subscription || !subscription.stripe_subscription_id) {
-			return fail(400, { error: 'アクティブなサブスクリプションが見つかりません。' });
+			// より詳細なエラーメッセージ
+			const { data: allSubs } = await supabase
+				.from('subscriptions')
+				.select('status, stripe_subscription_id')
+				.eq('organization_id', params.id);
+
+			console.error('[Change Plan Action] アクティブなサブスクリプションが見つかりません:', {
+				organizationId: params.id,
+				allSubscriptions: allSubs
+			});
+
+			return fail(400, {
+				error:
+					'アクティブなサブスクリプションが見つかりません。現在のステータスを確認してください。'
+			});
 		}
 
 		// プランタイプと請求間隔の両方が同じ場合はエラー
