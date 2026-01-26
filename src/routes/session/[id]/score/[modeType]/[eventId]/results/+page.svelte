@@ -9,6 +9,14 @@
 
 	export let data: PageData;
 
+	// 選択された種目（デフォルトは最初の種目）
+	let selectedEventId = data.allEvents.length > 0 ? data.allEvents[0].id : null;
+
+	// 選択された種目のスコアをフィルタリング
+	$: filteredScores = selectedEventId
+		? data.myScores.filter(score => score.event_id === selectedEventId)
+		: data.myScores;
+
 	onMount(() => {
 		// ヘッダー情報を設定
 		currentSession.set({ name: data.sessionDetails?.name || '' });
@@ -19,6 +27,10 @@
 	function goBack() {
 		const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
 		goto(`/session/${$page.params.id}${guestParam}`);
+	}
+
+	function selectEvent(eventId: string) {
+		selectedEventId = eventId;
 	}
 </script>
 
@@ -36,11 +48,26 @@
 		<p>あなたが入力した採点結果を表示しています。</p>
 	</div>
 
+	<!-- 種目タブ -->
+	{#if data.allEvents && data.allEvents.length > 0}
+		<div class="tabs-container">
+			{#each data.allEvents as event}
+				<button
+					class="tab-button"
+					class:active={selectedEventId === event.id}
+					on:click={() => selectEvent(event.id)}
+				>
+					{event.name}
+				</button>
+			{/each}
+		</div>
+	{/if}
+
 	<div class="form-container">
 		<h3 class="settings-title">採点一覧</h3>
-		{#if data.myScores && data.myScores.length > 0}
+		{#if filteredScores && filteredScores.length > 0}
 			<div class="scores-list">
-				{#each data.myScores as score}
+				{#each filteredScores as score}
 					<div class="score-item">
 						<div class="score-info">
 							<span class="bib-number">{score.bib_number}番</span>
@@ -51,11 +78,11 @@
 			</div>
 
 			<div class="summary-box">
-				<p>合計 <strong>{data.myScores.length}件</strong> の採点を入力しました</p>
+				<p>この種目で <strong>{filteredScores.length}件</strong> の採点を入力しました</p>
 			</div>
 		{:else}
 			<div class="empty-state">
-				<p>まだ採点結果を入力していません。</p>
+				<p>この種目の採点結果はありません。</p>
 			</div>
 		{/if}
 	</div>
@@ -92,6 +119,62 @@
 		font-size: 14px;
 		color: #374151;
 		line-height: 1.6;
+	}
+
+	.tabs-container {
+		display: flex;
+		gap: 8px;
+		overflow-x: auto;
+		padding: 4px;
+		margin-bottom: 24px;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.tabs-container::-webkit-scrollbar {
+		height: 4px;
+	}
+
+	.tabs-container::-webkit-scrollbar-track {
+		background: #f1f1f1;
+		border-radius: 4px;
+	}
+
+	.tabs-container::-webkit-scrollbar-thumb {
+		background: #888;
+		border-radius: 4px;
+	}
+
+	.tabs-container::-webkit-scrollbar-thumb:hover {
+		background: #555;
+	}
+
+	.tab-button {
+		flex-shrink: 0;
+		padding: 10px 20px;
+		background: white;
+		border: 2px solid #e5e7eb;
+		border-radius: 8px;
+		font-size: 15px;
+		font-weight: 600;
+		color: #6b7280;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+	}
+
+	.tab-button:hover {
+		border-color: #d1d5db;
+		background: #f9fafb;
+	}
+
+	.tab-button.active {
+		background: var(--ios-blue);
+		border-color: var(--ios-blue);
+		color: white;
+	}
+
+	.tab-button.active:hover {
+		opacity: 0.9;
 	}
 
 	.form-container {

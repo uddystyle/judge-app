@@ -79,37 +79,69 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		profile = profileData;
 	}
 
+	// 種目一覧を取得
+	let allEvents: any[] = [];
+	if (isTrainingMode) {
+		const { data: trainingEvents } = await supabase
+			.from('training_events')
+			.select('id, name')
+			.eq('session_id', sessionId)
+			.order('order_index', { ascending: true });
+
+		allEvents = trainingEvents || [];
+	} else {
+		const { data: customEvents } = await supabase
+			.from('custom_events')
+			.select('id, event_name')
+			.eq('session_id', sessionId)
+			.order('display_order', { ascending: true });
+
+		allEvents = (customEvents || []).map((e: any) => ({ id: e.id, name: e.event_name }));
+	}
+
 	// 現在のユーザーが入力した得点を取得
 	let myScores: any[] = [];
 
 	if (isTrainingMode) {
-		// training_scoresから取得
-		let scoresQuery = supabase
-			.from('training_scores')
-			.select('*, participants(bib_number)')
-			.eq('event_id', eventId);
+		// セッションのtraining_eventsを取得
+		const { data: trainingEvents } = await supabase
+			.from('training_events')
+			.select('id')
+			.eq('session_id', sessionId);
 
-		if (guestIdentifier) {
-			// ゲストユーザーの場合
-			scoresQuery = scoresQuery.eq('guest_identifier', guestIdentifier);
-		} else if (currentUserId) {
-			// 認証ユーザーの場合
-			scoresQuery = scoresQuery.eq('judge_id', currentUserId);
-		}
+		if (trainingEvents && trainingEvents.length > 0) {
+			const eventIds = trainingEvents.map(e => e.id);
 
-		const { data: trainingScores, error: scoresError } = await scoresQuery;
+			// training_scoresから取得（種目情報も含む、全種目）
+			let scoresQuery = supabase
+				.from('training_scores')
+				.select('*, participants(bib_number), training_events(id, name)')
+				.in('event_id', eventIds);
 
-		console.log('[results/load] training_scores取得:', { trainingScores, scoresError, guestIdentifier, currentUserId });
+			if (guestIdentifier) {
+				// ゲストユーザーの場合
+				scoresQuery = scoresQuery.eq('guest_identifier', guestIdentifier);
+			} else if (currentUserId) {
+				// 認証ユーザーの場合
+				scoresQuery = scoresQuery.eq('judge_id', currentUserId);
+			}
 
-		if (trainingScores) {
-			myScores = trainingScores.map((s: any) => ({
-				bib_number: s.participants?.bib_number || 0,
-				score: s.score,
-				created_at: s.created_at
-			})).sort((a, b) => a.bib_number - b.bib_number);
+			const { data: trainingScores, error: scoresError } = await scoresQuery.order('created_at', { ascending: true });
+
+			console.log('[results/load] training_scores取得:', { trainingScores, scoresError, guestIdentifier, currentUserId });
+
+			if (trainingScores) {
+				myScores = trainingScores.map((s: any) => ({
+					bib_number: s.participants?.bib_number || 0,
+					score: s.score,
+					event_id: s.training_events?.id || '',
+					event_name: s.training_events?.name || '',
+					created_at: s.created_at
+				}));
+			}
 		}
 	} else {
-		// 大会モードの場合、resultsから取得
+		// 大会モードの場合、resultsから取得（全種目）
 		const judgeName = profile?.full_name || guestParticipant?.guest_name || '';
 
 		if (judgeName) {
@@ -117,19 +149,23 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				.from('results')
 				.select('*')
 				.eq('session_id', sessionId)
-				.eq('discipline', eventInfo?.discipline || '')
-				.eq('level', eventInfo?.level || '')
-				.eq('event_name', eventInfo?.event_name || '')
-				.eq('judge_name', judgeName);
+				.eq('judge_name', judgeName)
+				.order('created_at', { ascending: true });
 
 			console.log('[results/load] results取得:', { results, resultsError, judgeName });
 
 			if (results) {
-				myScores = results.map((r: any) => ({
-					bib_number: r.bib,
-					score: r.score,
-					created_at: r.created_at
-				})).sort((a, b) => a.bib_number - b.bib_number);
+				myScores = results.map((r: any) => {
+					// event_idを event_name から探す
+					const event = allEvents.find(e => e.name === r.event_name);
+					return {
+						bib_number: r.bib,
+						score: r.score,
+						event_id: event?.id || '',
+						event_name: r.event_name,
+						created_at: r.created_at
+					};
+				});
 			}
 		}
 	}
@@ -141,6 +177,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		eventInfo,
 		isTrainingMode,
 		myScores,
+		allEvents,
 		guestParticipant,
 		guestIdentifier
 	};

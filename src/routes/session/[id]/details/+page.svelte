@@ -997,6 +997,30 @@
 					<NavButton on:click={handleExport} disabled={exportLoading}>
 						{exportLoading ? '準備中...' : '採点結果をエクスポート'}
 					</NavButton>
+					{#if data.isTrainingMode}
+						<form method="POST" action="?/deleteTrainingData" use:enhance={() => {
+							return async ({ result, update }) => {
+								if (result.type === 'success') {
+									await update();
+									window.location.reload();
+								} else {
+									await update();
+								}
+							};
+						}}>
+							<NavButton
+								type="submit"
+								variant="danger"
+								on:click={(e) => {
+									if (!confirm('研修モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
+										e.preventDefault();
+									}
+								}}
+							>
+								採点データを削除
+							</NavButton>
+						</form>
+					{/if}
 				{/if}
 			</div>
 		</div>
