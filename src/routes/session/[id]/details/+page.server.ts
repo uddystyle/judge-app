@@ -813,14 +813,20 @@ export const actions: Actions = {
 	},
 
 	deleteTrainingData: async ({ params, locals: { supabase } }) => {
+		console.log('[deleteTrainingData] ========== 採点データ削除開始 ==========');
+		console.log('[deleteTrainingData] sessionId:', params.id);
+
 		const {
 			data: { user },
 			error: userError
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
+			console.error('[deleteTrainingData] ユーザー認証エラー:', userError);
 			throw redirect(303, '/login');
 		}
+
+		console.log('[deleteTrainingData] ユーザーID:', user.id);
 
 		const sessionId = params.id;
 
@@ -831,45 +837,70 @@ export const actions: Actions = {
 			.eq('id', sessionId)
 			.single();
 
+		console.log('[deleteTrainingData] セッション情報:', { sessionData, sessionError });
+
 		if (sessionError || !sessionData) {
+			console.error('[deleteTrainingData] セッション取得エラー:', sessionError);
 			return fail(404, { error: 'セッションが見つかりません。' });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
+			console.error('[deleteTrainingData] 権限エラー: 作成者ではない');
 			return fail(403, { error: 'データを削除する権限がありません。' });
 		}
 
 		// 研修モードのみデータ削除可能
 		if (sessionData.mode !== 'training') {
+			console.error('[deleteTrainingData] モードエラー:', sessionData.mode);
 			return fail(400, { error: '研修モードのセッションのみデータ削除が可能です。' });
 		}
 
-		console.log('[deleteTrainingData] セッションの採点データを削除:', { sessionId });
+		console.log('[deleteTrainingData] 権限チェック完了');
 
 		// training_eventsを取得
-		const { data: trainingEvents } = await supabase
+		const { data: trainingEvents, error: eventsError } = await supabase
 			.from('training_events')
 			.select('id')
 			.eq('session_id', sessionId);
 
+		console.log('[deleteTrainingData] training_events取得:', {
+			count: trainingEvents?.length || 0,
+			eventIds: trainingEvents?.map(e => e.id),
+			error: eventsError
+		});
+
+		if (eventsError) {
+			console.error('[deleteTrainingData] training_events取得エラー:', eventsError);
+			return fail(500, { error: '種目情報の取得に失敗しました。' });
+		}
+
 		if (trainingEvents && trainingEvents.length > 0) {
 			const eventIds = trainingEvents.map(e => e.id);
 
+			console.log('[deleteTrainingData] training_scores削除を実行...');
+
 			// training_scoresを削除
-			const { error: deleteScoresError } = await supabase
+			const { error: deleteScoresError, count } = await supabase
 				.from('training_scores')
-				.delete()
+				.delete({ count: 'exact' })
 				.in('event_id', eventIds);
+
+			console.log('[deleteTrainingData] 削除結果:', { count, error: deleteScoresError });
 
 			if (deleteScoresError) {
 				console.error('[deleteTrainingData] 採点データの削除エラー:', deleteScoresError);
-				return fail(500, { error: '採点データの削除に失敗しました。' });
+				return fail(500, {
+					error: `採点データの削除に失敗しました。${deleteScoresError.message || ''}`
+				});
 			}
 
-			console.log('[deleteTrainingData] 採点データを削除しました');
+			console.log('[deleteTrainingData] ✅ 採点データを削除しました:', count, '件');
+		} else {
+			console.log('[deleteTrainingData] 削除対象の種目がありません');
 		}
 
+		console.log('[deleteTrainingData] ========== 採点データ削除完了 ==========');
 		return { success: true, message: '研修モードの採点データを削除しました。' };
 	}
 };
