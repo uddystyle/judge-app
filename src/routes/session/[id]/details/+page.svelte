@@ -70,6 +70,7 @@
 	}
 
 	let exportLoading = false;
+	let deleteDataForm: HTMLFormElement;
 
 	// 種目管理用の変数
 	let eventName = '';
@@ -998,28 +999,18 @@
 						{exportLoading ? '準備中...' : '採点結果をエクスポート'}
 					</NavButton>
 					{#if data.isTrainingMode}
-						<form method="POST" action="?/deleteTrainingData" use:enhance={() => {
-							return async ({ result, update }) => {
-								if (result.type === 'success') {
-									await update();
-									window.location.reload();
-								} else {
-									await update();
-								}
-							};
-						}}>
-							<NavButton
-								type="submit"
-								variant="danger"
-								on:click={(e) => {
-									if (!confirm('研修モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
-										e.preventDefault();
+						<NavButton
+							variant="danger"
+							on:click={() => {
+								if (confirm('研修モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
+									if (deleteDataForm) {
+										deleteDataForm.requestSubmit();
 									}
-								}}
-							>
-								採点データを削除
-							</NavButton>
-						</form>
+								}
+							}}
+						>
+							採点データを削除
+						</NavButton>
 					{/if}
 				{/if}
 			</div>
@@ -1076,6 +1067,24 @@
 		</div>
 	</div>
 {/if}
+
+<!-- 非表示フォーム: 採点データ削除 -->
+<form
+	bind:this={deleteDataForm}
+	method="POST"
+	action="?/deleteTrainingData"
+	use:enhance={() => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') {
+				await update();
+				window.location.reload();
+			} else {
+				await update();
+			}
+		};
+	}}
+	style="display: none;"
+></form>
 
 <!-- ゲストユーザー削除確認ダイアログ -->
 <ConfirmDialog

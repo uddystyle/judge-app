@@ -9,18 +9,13 @@
 
 	export let data: PageData;
 
-	// 選択された種目（デフォルトは「全て」を表示）
-	let selectedEventId: string | null = null; // null = 全て表示
+	// 選択された種目（デフォルトは最初の種目）
+	let selectedEventId = data.allEvents.length > 0 ? data.allEvents[0].id : null;
 
 	// 選択された種目のスコアをフィルタリング
 	$: filteredScores = selectedEventId
 		? data.myScores.filter(score => score.event_id === selectedEventId)
 		: data.myScores;
-
-	// 選択された種目の名前を取得
-	$: selectedEventName = selectedEventId
-		? data.allEvents.find(e => e.id === selectedEventId)?.name || ''
-		: '全て';
 
 	onMount(() => {
 		// ヘッダー情報を設定
@@ -34,7 +29,7 @@
 		goto(`/session/${$page.params.id}${guestParam}`);
 	}
 
-	function selectEvent(eventId: string | null) {
+	function selectEvent(eventId: string) {
 		selectedEventId = eventId;
 	}
 </script>
@@ -56,13 +51,6 @@
 	<!-- 種目タブ -->
 	{#if data.allEvents && data.allEvents.length > 0}
 		<div class="tabs-container">
-			<button
-				class="tab-button"
-				class:active={selectedEventId === null}
-				on:click={() => selectEvent(null)}
-			>
-				全て
-			</button>
 			{#each data.allEvents as event}
 				<button
 					class="tab-button"
@@ -81,11 +69,6 @@
 			<div class="scores-list">
 				{#each filteredScores as score}
 					<div class="score-item">
-						{#if selectedEventId === null}
-							<div class="score-header">
-								<span class="event-badge">{score.event_name}</span>
-							</div>
-						{/if}
 						<div class="score-info">
 							<span class="bib-number">{score.bib_number}番</span>
 							<span class="score-value">{score.score} 点</span>
@@ -95,23 +78,11 @@
 			</div>
 
 			<div class="summary-box">
-				<p>
-					{#if selectedEventId === null}
-						合計 <strong>{filteredScores.length}件</strong> の採点を入力しました
-					{:else}
-						この種目で <strong>{filteredScores.length}件</strong> の採点を入力しました
-					{/if}
-				</p>
+				<p>この種目で <strong>{filteredScores.length}件</strong> の採点を入力しました</p>
 			</div>
 		{:else}
 			<div class="empty-state">
-				<p>
-					{#if selectedEventId === null}
-						まだ採点結果を入力していません。
-					{:else}
-						この種目の採点結果はありません。
-					{/if}
-				</p>
+				<p>この種目の採点結果はありません。</p>
 			</div>
 		{/if}
 	</div>
@@ -231,20 +202,6 @@
 
 	.score-item:last-child {
 		border-bottom: none;
-	}
-
-	.score-header {
-		margin-bottom: 8px;
-	}
-
-	.event-badge {
-		display: inline-block;
-		font-size: 13px;
-		font-weight: 600;
-		color: #6b7280;
-		background: #f3f4f6;
-		padding: 4px 10px;
-		border-radius: 6px;
 	}
 
 	.score-info {
