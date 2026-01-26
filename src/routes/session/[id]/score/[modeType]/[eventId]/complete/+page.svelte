@@ -41,6 +41,10 @@
 		}
 	}
 
+	function handleViewResults() {
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}/results${guestParam}`);
+	}
+
 	onMount(() => {
 		// 一般検定員かつ複数検定員モードの場合、セッション終了を監視
 		// 複数検定員モードがオフの場合は、各自が自由に操作できるため監視不要
@@ -177,6 +181,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={handleNextAthlete}>次の滑走者</NavButton>
+		<NavButton variant="secondary" on:click={handleViewResults}>結果を見る</NavButton>
 		{#if data.isChief || !data.isMultiJudge}
 			<NavButton on:click={handleChangeEvent}>種目を変更する</NavButton>
 			<NavButton on:click={handleEndSession}>

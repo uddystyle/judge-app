@@ -13,6 +13,10 @@
 	// URLパラメータから組織IDを取得
 	$: orgId = $page.url.searchParams.get('org');
 
+	// プラン変更の成功メッセージ
+	$: planChanged = $page.url.searchParams.get('changed') === 'true';
+	$: isScheduled = $page.url.searchParams.get('scheduled') === 'true';
+
 	// プラン定義（組織向け）
 	// 料金プランページは情報提供が目的のため、アクションボタンは配置しない
 	// 組織作成やプラン変更はダッシュボード/アカウントページから実行
@@ -144,6 +148,31 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
 
 <div class="container">
+	<!-- プラン変更の成功メッセージ -->
+	{#if planChanged}
+		<div class="success-message-container">
+			{#if isScheduled}
+				<div class="success-message scheduled">
+					<div class="message-icon">📅</div>
+					<div class="message-content">
+						<h3 class="message-title">プラン変更を予約しました</h3>
+						<p class="message-text">
+							プラン変更は次回の請求日から適用されます。現在の請求期間終了まで、引き続き現在のプランの機能をご利用いただけます。
+						</p>
+					</div>
+				</div>
+			{:else}
+				<div class="success-message">
+					<div class="message-icon">✅</div>
+					<div class="message-content">
+						<h3 class="message-title">プラン変更が完了しました</h3>
+						<p class="message-text">新しいプランの機能がすぐにご利用いただけます。</p>
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
+
 	<div class="header-section">
 		<h1 class="title">料金プラン</h1>
 		<p class="subtitle">あなたに最適なプランを選択してください</p>
@@ -409,6 +438,48 @@
 		padding: 28px 20px;
 		max-width: 1200px;
 		margin: 0 auto;
+	}
+
+	.success-message-container {
+		margin-bottom: 32px;
+	}
+
+	.success-message {
+		background: #e6f6e8;
+		border: 2px solid #2d7a3e;
+		border-radius: 12px;
+		padding: 20px;
+		display: flex;
+		gap: 16px;
+		align-items: flex-start;
+	}
+
+	.success-message.scheduled {
+		background: #e8f4ff;
+		border-color: #007bff;
+	}
+
+	.message-icon {
+		font-size: 24px;
+		flex-shrink: 0;
+	}
+
+	.message-content {
+		flex: 1;
+	}
+
+	.message-title {
+		font-size: 18px;
+		font-weight: 700;
+		margin: 0 0 8px 0;
+		color: var(--primary-text);
+	}
+
+	.message-text {
+		font-size: 14px;
+		line-height: 1.6;
+		margin: 0;
+		color: var(--secondary-text);
 	}
 
 	.header-section {

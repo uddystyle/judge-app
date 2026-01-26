@@ -253,54 +253,92 @@ export const actions: Actions = {
 				status: updatedSubscription.status
 			});
 
-			// データベースのorganizationsテーブルを更新
-			const { data: planLimits } = await supabase
-				.from('plan_limits')
-				.select('max_organization_members')
-				.eq('plan_type', newPlanType)
-				.single();
+			// アップグレードまたは月額→年額の場合のみ、データベースを即座に更新
+			// ダウングレードまたは年額→月額の場合は、webhookで更新されるのを待つ
+			if (isUpgrade || isMonthToYear) {
+				console.log('[Change Plan] 即座にデータベースを更新（アップグレード/月額→年額）');
 
-			const { error: orgUpdateError } = await supabase
-				.from('organizations')
-				.update({
-					plan_type: newPlanType,
-					max_members: planLimits?.max_organization_members || 10
-				})
-				.eq('id', params.id);
+				// データベースのorganizationsテーブルを更新
+				const { data: planLimits } = await supabase
+					.from('plan_limits')
+					.select('max_organization_members')
+					.eq('plan_type', newPlanType)
+					.single();
 
-			if (orgUpdateError) {
-				console.error('[Change Plan] 組織更新エラー:', orgUpdateError);
-				return fail(500, { error: '組織情報の更新に失敗しました。' });
-			}
+				const { error: orgUpdateError } = await supabase
+					.from('organizations')
+					.update({
+						plan_type: newPlanType,
+						max_members: planLimits?.max_organization_members || 10
+					})
+					.eq('id', params.id);
 
-			// データベースのsubscriptionsテーブルを更新
-			const { error: subUpdateError } = await supabase
-				.from('subscriptions')
-				.update({
-					plan_type: newPlanType,
-					billing_interval: billingInterval,
-					status: updatedSubscription.status,
-					current_period_start: new Date(
-						updatedSubscription.current_period_start * 1000
-					).toISOString(),
-					current_period_end: new Date(
-						updatedSubscription.current_period_end * 1000
-					).toISOString()
-				})
-				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
+				if (orgUpdateError) {
+					console.error('[Change Plan] 組織更新エラー:', orgUpdateError);
+					return fail(500, { error: '組織情報の更新に失敗しました。' });
+				}
 
-			if (subUpdateError) {
-				console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
-				return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
+				// データベースのsubscriptionsテーブルを更新
+				const { error: subUpdateError } = await supabase
+					.from('subscriptions')
+					.update({
+						plan_type: newPlanType,
+						billing_interval: billingInterval,
+						status: updatedSubscription.status,
+						current_period_start: new Date(
+							updatedSubscription.current_period_start * 1000
+						).toISOString(),
+						current_period_end: new Date(
+							updatedSubscription.current_period_end * 1000
+						).toISOString()
+					})
+					.eq('stripe_subscription_id', subscription.stripe_subscription_id);
+
+				if (subUpdateError) {
+					console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
+					return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
+				}
+
+				console.log('[Change Plan] データベース更新完了');
+			} else {
+				console.log(
+					'[Change Plan] データベース更新はスキップ（ダウングレード/年額→月額）- webhookで更新されます'
+				);
+
+				// 請求間隔のみ更新（プランタイプは次回請求日まで変更しない）
+				if (isBillingIntervalChange) {
+					const { error: subUpdateError } = await supabase
+						.from('subscriptions')
+						.update({
+							billing_interval: billingInterval,
+							current_period_start: new Date(
+								updatedSubscription.current_period_start * 1000
+							).toISOString(),
+							current_period_end: new Date(
+								updatedSubscription.current_period_end * 1000
+							).toISOString()
+						})
+						.eq('stripe_subscription_id', subscription.stripe_subscription_id);
+
+					if (subUpdateError) {
+						console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
+					}
+				}
 			}
 
 			console.log('[Change Plan] プラン変更完了:', {
 				organizationId: organization.id,
-				newPlan: newPlanType
+				newPlan: newPlanType,
+				immediateUpdate: isUpgrade || isMonthToYear
 			});
 
 			// 成功メッセージとともにpricingページへリダイレクト
-			throw redirect(303, '/pricing?changed=true');
+			// ダウングレードの場合は特別なパラメータを追加
+			if (isUpgrade || isMonthToYear) {
+				throw redirect(303, '/pricing?changed=true');
+			} else {
+				throw redirect(303, '/pricing?changed=true&scheduled=true');
+			}
 		} catch (err: any) {
 			console.error('[Change Plan] エラー:', err);
 			return fail(500, {

@@ -205,13 +205,9 @@
 		loading = true;
 		return async ({ update, result }) => {
 			console.log('[Change Plan] レスポンス受信:', result);
-			try {
-				await update();
-			} catch (error) {
-				console.error('[Change Plan] 更新エラー:', error);
-			} finally {
-				loading = false;
-			}
+			// updateを呼び出すとリダイレクトが自動的に処理される
+			await update();
+			loading = false;
 		};
 	}}>
 		<input type="hidden" name="billingInterval" value={billingInterval} />
