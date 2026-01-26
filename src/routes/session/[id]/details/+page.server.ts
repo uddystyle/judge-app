@@ -1,6 +1,9 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { validateSessionName } from '$lib/server/validation';
+import { createClient } from '@supabase/supabase-js';
+import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -880,8 +883,18 @@ export const actions: Actions = {
 
 			console.log('[deleteTrainingData] training_scores削除を実行...');
 
+			// RLSをバイパスするためにService Roleクライアントを使用
+			const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+				auth: {
+					autoRefreshToken: false,
+					persistSession: false
+				}
+			});
+
+			console.log('[deleteTrainingData] Service Roleクライアントを作成しました');
+
 			// training_scoresを削除
-			const { error: deleteScoresError, count } = await supabase
+			const { error: deleteScoresError, count } = await supabaseAdmin
 				.from('training_scores')
 				.delete({ count: 'exact' })
 				.in('event_id', eventIds);

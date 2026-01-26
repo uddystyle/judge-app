@@ -1002,10 +1002,17 @@
 						<NavButton
 							variant="danger"
 							on:click={() => {
+								console.log('[UI] 採点データ削除ボタンがクリックされました');
 								if (confirm('研修モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
+									console.log('[UI] 削除が確認されました。フォームを送信します...');
 									if (deleteDataForm) {
+										console.log('[UI] フォーム要素:', deleteDataForm);
 										deleteDataForm.requestSubmit();
+									} else {
+										console.error('[UI] ❌ フォーム要素が見つかりません');
 									}
+								} else {
+									console.log('[UI] 削除がキャンセルされました');
 								}
 							}}
 						>
@@ -1074,11 +1081,21 @@
 	method="POST"
 	action="?/deleteTrainingData"
 	use:enhance={() => {
+		console.log('[UI/enhance] フォーム送信が開始されました');
 		return async ({ result, update }) => {
+			console.log('[UI/enhance] サーバーからのレスポンス:', result);
 			if (result.type === 'success') {
+				console.log('[UI/enhance] ✅ 削除成功。ページをリロードします...');
 				await update();
 				window.location.reload();
+			} else if (result.type === 'failure') {
+				console.error('[UI/enhance] ❌ 削除失敗:', result.data);
+				await update();
+				if (result.data?.error) {
+					alert(`エラー: ${result.data.error}`);
+				}
 			} else {
+				console.log('[UI/enhance] その他の結果:', result.type);
 				await update();
 			}
 		};
