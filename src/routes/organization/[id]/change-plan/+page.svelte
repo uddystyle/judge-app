@@ -113,6 +113,20 @@
 		</div>
 	{/if}
 
+	<!-- デバッグ情報 -->
+	{#if import.meta.env.DEV}
+		<div class="debug-info">
+			<h4>デバッグ情報</h4>
+			<p>現在のプラン: {data.organization.plan_type}</p>
+			<p>現在の請求間隔: {currentBillingInterval}</p>
+			<p>選択されたプラン: {selectedPlan || 'なし'}</p>
+			<p>選択された請求間隔: {billingInterval}</p>
+			<p>isSamePlanAndInterval: {isSamePlanAndInterval}</p>
+			<p>ボタンdisabled: {!selectedPlan || isSamePlanAndInterval || loading}</p>
+			<p>サブスクリプション: {JSON.stringify(data.subscription)}</p>
+		</div>
+	{/if}
+
 	{#if isFree && selectedPlan}
 		<div class="info-box upgrade">
 			<div class="info-icon">⬆️</div>
@@ -182,10 +196,22 @@
 	{/if}
 
 	<form method="POST" action="?/changePlan" use:enhance={() => {
+		console.log('[Change Plan] フォーム送信開始', {
+			selectedPlan,
+			billingInterval,
+			currentPlan: data.organization.plan_type,
+			currentBillingInterval
+		});
 		loading = true;
-		return async ({ update }) => {
-			await update();
-			loading = false;
+		return async ({ update, result }) => {
+			console.log('[Change Plan] レスポンス受信:', result);
+			try {
+				await update();
+			} catch (error) {
+				console.error('[Change Plan] 更新エラー:', error);
+			} finally {
+				loading = false;
+			}
 		};
 	}}>
 		<input type="hidden" name="billingInterval" value={billingInterval} />
@@ -567,6 +593,25 @@
 		border: 1px solid var(--border-light);
 		cursor: not-allowed;
 		opacity: 0.6;
+	}
+
+	.debug-info {
+		background: #f0f0f0;
+		border: 2px solid #333;
+		border-radius: 8px;
+		padding: 16px;
+		margin-bottom: 20px;
+		font-size: 12px;
+		font-family: monospace;
+	}
+
+	.debug-info h4 {
+		margin: 0 0 12px 0;
+		font-size: 14px;
+	}
+
+	.debug-info p {
+		margin: 4px 0;
 	}
 
 	/* PC対応 */
