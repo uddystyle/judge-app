@@ -22,11 +22,25 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		.order('max_organization_members', { ascending: true });
 
 	// ユーザーのプロフィール情報を取得
-	const { data: profile } = await supabase
+	const { data: profile, error: profileError } = await supabase
 		.from('profiles')
 		.select('full_name')
 		.eq('id', user.id)
-		.single();
+		.maybeSingle();
+
+	// プロフィールがまだ作成されていない場合は作成
+	if (profileError || !profile) {
+		console.log('[onboarding/load] プロフィールが存在しないため作成します:', user.id);
+		const { error: createProfileError } = await supabase.from('profiles').insert({
+			id: user.id,
+			email: user.email || '',
+			full_name: user.user_metadata?.full_name || ''
+		});
+
+		if (createProfileError) {
+			console.error('[onboarding/load] プロフィール作成エラー:', createProfileError);
+		}
+	}
 
 	// 組織所属チェック（軽量クエリ - カウントのみ）
 	const { count } = await supabase
@@ -39,7 +53,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	return {
 		user,
-		profile,
+		profile: profile || { full_name: user.user_metadata?.full_name || '' },
 		plans: plans || [],
 		hasOrganization
 	};

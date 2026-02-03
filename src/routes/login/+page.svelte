@@ -14,9 +14,10 @@
 	let password = '';
 	let errorMessage = '';
 	let loading = false;
+	let checkingAuth = true;
 
-	// URLパラメータからエラーメッセージを取得
-	$: if ($page.url.searchParams.get('error')) {
+	// URLパラメータからエラーメッセージを取得（認証チェック後のみ）
+	$: if (!checkingAuth && $page.url.searchParams.get('error')) {
 		errorMessage = $page.url.searchParams.get('error') || '';
 	}
 
@@ -41,18 +42,28 @@
 	}
 
 	onMount(async () => {
+		console.log('[login/onMount] 認証状態をチェック中...');
 		const {
 			data: { user }
 		} = await supabase.auth.getUser();
 
 		if (user) {
+			console.log('[login/onMount] 既に認証済み。ダッシュボードへリダイレクト');
 			goto('/dashboard', { replaceState: true });
+		} else {
+			console.log('[login/onMount] 未認証。ログインページを表示');
+			checkingAuth = false;
 		}
 	});
 </script>
 
 <Header showAppName={true} pageUser={null} />
 
+{#if checkingAuth}
+	<div class="container">
+		<LoadingSpinner />
+	</div>
+{:else}
 <div class="container">
 	<div class="instruction">ログイン</div>
 

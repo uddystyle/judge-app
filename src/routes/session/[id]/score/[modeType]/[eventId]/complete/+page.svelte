@@ -23,6 +23,7 @@
 	let realtimeChannel: any;
 	let pollingInterval: any;
 	let previousIsActive: boolean | null = null;
+	let previousActivePromptId: string | null = null;
 
 	function handleNextAthlete() {
 		bibStore.set(null);
@@ -96,14 +97,16 @@
 
 							if (!error && sessionData) {
 								const isActive = sessionData.is_active;
+								const activePromptId = sessionData.active_prompt_id;
 
 								// 初回のポーリング
 								if (previousIsActive === null) {
 									previousIsActive = isActive;
+									previousActivePromptId = activePromptId;
 									return;
 								}
 
-								// 状態が変化した場合のみ処理
+								// セッション終了を検知（is_activeの変化）
 								if (previousIsActive !== isActive) {
 									// 終了した場合（true -> false）
 									if (isActive === false && previousIsActive === true) {
@@ -113,6 +116,15 @@
 									}
 									previousIsActive = isActive;
 								}
+
+								// 種目変更を検知（active_prompt_idがクリアされた）
+								if (previousActivePromptId !== null && activePromptId === null) {
+									console.log('[一般検定員/complete] ✅ 種目変更を検知（ポーリング）。待機画面に遷移します。');
+									goto(`/session/${sessionId}${guestParam}`);
+								}
+
+								// 前回の値を更新
+								previousActivePromptId = activePromptId;
 							}
 						}, 3000);
 					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -191,8 +203,8 @@
 	</div>
 
 	<!-- 非表示のフォーム -->
-	<form bind:this={endSessionForm} method="POST" action="?/endSession{guestParam ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
-	<form bind:this={changeEventForm} method="POST" action="?/changeEvent{guestParam ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
+	<form bind:this={endSessionForm} method="POST" action="?/endSession{guestIdentifier ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
+	<form bind:this={changeEventForm} method="POST" action="?/changeEvent{guestIdentifier ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
 </div>
 
 <style>

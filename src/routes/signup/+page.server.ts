@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
+import { PUBLIC_SITE_URL } from '$env/static/public';
 
 export const actions: Actions = {
 	signup: async ({ request, locals: { supabase } }) => {
@@ -28,8 +29,8 @@ export const actions: Actions = {
 				data: {
 					full_name: fullName
 				},
-				// メール確認後、認証コールバックへリダイレクト
-				emailRedirectTo: `${process.env.PUBLIC_SITE_URL || 'http://localhost:5173'}/auth/callback`
+				// メール確認後、認証コールバックへリダイレクト（オンボーディングへの遷移を指定）
+				emailRedirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/onboarding/create-organization`
 			}
 		});
 
@@ -53,17 +54,9 @@ export const actions: Actions = {
 			});
 		}
 
-		// プロフィールを作成（トリガーがないため手動で作成）
-		const { error: profileError } = await supabase.from('profiles').insert({
-			id: authData.user.id,
-			email: email,
-			full_name: fullName
-		});
-
-		if (profileError) {
-			console.error('Failed to create profile:', profileError);
-			// プロフィール作成に失敗してもサインアップは成功しているので、続行
-		}
+		// プロフィールはメール認証後のオンボーディング時に作成されます
+		// これにより、RLSポリシー（TO authenticated）に準拠し、
+		// Supabaseの設定に依存しない確実な動作を保証します
 
 		// --- Success ---
 		// On success, redirect the user to a page that tells them to check their email.

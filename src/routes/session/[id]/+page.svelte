@@ -71,10 +71,10 @@
 		console.log('[DEBUG] セッション読み取りテスト:', { sessionTest, sessionError });
 
 		// 一般検定員とゲストユーザーの場合、status変化を監視
-		// ただし、以下の場合は監視不要：
-		// - 終了画面として表示される場合（セッション再開ボタンで再参加）
+		// 注意: 終了画面でも監視をセットアップすることで、主任検定員がセッションを再開した時に自動的に待機画面に遷移できる
+		// 監視不要なのは以下の場合のみ：
 		// - ゲストユーザーの参加完了画面（セッションに参加ボタンで待機画面へ）
-		const shouldSetupMonitoring = !data.isChief && !isSessionEnded && (shouldShowJoinUI || !data.guestIdentifier);
+		const shouldSetupMonitoring = !data.isChief && (isSessionEnded || shouldShowJoinUI || !data.guestIdentifier);
 		console.log('[DEBUG] Realtime監視チェック:', {
 			isChief: data.isChief,
 			isSessionEnded,
@@ -346,8 +346,24 @@
 									}
 								}
 
+								// statusが 'active' に変化した場合（セッション再開）の検知
+								if (previousStatus === 'ended' && currentStatus === 'active') {
+									console.log('[一般検定員/polling] ✅ セッション再開を検知！待機画面に遷移します！');
+									if (!isPageActive) {
+										console.log('[一般検定員/polling] ⚠️ ページが非アクティブのため、遷移をスキップ');
+										return;
+									}
+									// ended=trueパラメータを削除して待機画面に遷移
+									const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
+									const targetUrl = `/session/${sessionId}${guestParam}`;
+									console.log('[一般検定員/polling] セッション再開により待機画面に遷移:', targetUrl);
+									await goto(targetUrl);
+									return;
+								}
+
 								// active_prompt_idの変化を検知
-								if (currentActivePromptId && currentActivePromptId !== previousActivePromptId) {
+								// previousActivePromptIdがnullの場合は初回ポーリングなので、変化とみなさない
+								if (currentActivePromptId && previousActivePromptId !== null && currentActivePromptId !== previousActivePromptId) {
 									console.log('[一般検定員/polling] ✅ 新しい採点指示を検知（ポーリング）:', currentActivePromptId);
 									// 新しい指示の詳細を取得
 									const { data: promptData, error: promptError } = await supabase
@@ -399,8 +415,9 @@
 						}, 2000);
 
 						// 接続成功後、ページロード時に既にactive_prompt_idが設定されているかチェック
+						// ただし、初回参加画面（join=true）の場合はスキップ
 						const currentPromptId = data.sessionDetails.active_prompt_id;
-						if (currentPromptId) {
+						if (currentPromptId && !shouldShowJoinUI) {
 							console.log('[一般検定員] 既存の採点指示を検知:', currentPromptId);
 							// 採点指示の詳細を取得
 							const { data: promptData, error } = await supabase
@@ -410,8 +427,7 @@
 								.single();
 
 							if (!error && promptData) {
-								console.log('[一般検定員] 採点指示データ取得成功。採点画面に遷移します:', promptData);
-								currentBib.set(promptData.bib_number);
+								console.log('[一般検定員] 採点指示データ取得成功:', promptData);
 
 								// discipline カラムの値でモードを判定
 								const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
@@ -427,6 +443,42 @@
 
 									if (participant) {
 										const eventId = promptData.level; // level カラムに eventId を保存している
+
+										// 既に採点済みかチェック
+										const scoreTable = mode === 'training' ? 'training_scores' : 'results';
+										let scoreQuery = supabase
+											.from(scoreTable)
+											.select('id');
+
+										if (mode === 'training') {
+											scoreQuery = scoreQuery
+												.eq('event_id', eventId)
+												.eq('athlete_id', participant.id);
+										} else {
+											// 大会モード
+											scoreQuery = scoreQuery
+												.eq('session_id', sessionId)
+												.eq('bib', promptData.bib_number);
+										}
+
+										// ユーザーまたはゲストの採点をチェック
+										if (data.guestIdentifier) {
+											scoreQuery = scoreQuery.eq('guest_identifier', data.guestIdentifier);
+										} else if (data.user) {
+											scoreQuery = scoreQuery.eq(mode === 'training' ? 'judge_id' : 'user_id', data.user.id);
+										}
+
+										const { data: existingScore } = await scoreQuery.maybeSingle();
+
+										if (existingScore) {
+											console.log('[一般検定員] 既に採点済みのため、待機画面に留まります');
+											return;
+										}
+
+										// まだ採点していない場合のみ遷移
+										console.log('[一般検定員] まだ採点していないため、採点画面に遷移します');
+										currentBib.set(promptData.bib_number);
+
 										const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
 										if (mode === 'tournament') {
 											console.log('[一般検定員/大会] 採点画面に遷移(既存):', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);

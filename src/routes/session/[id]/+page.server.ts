@@ -511,7 +511,8 @@ export const actions: Actions = {
 
 		// 同じページにリダイレクト（終了フラグを削除）
 		// restart=true パラメータを付けて、誤った終了検知を防ぐ
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '?restart=true';
+		// ゲストユーザーの場合もrestart=trueを追加して、isSessionEndedの判定が正しく動作するようにする
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true&restart=true` : '?restart=true';
 		throw redirect(303, `/session/${id}${guestParam}`);
 	}
 };
