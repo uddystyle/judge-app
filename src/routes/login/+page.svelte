@@ -106,6 +106,7 @@
 		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
 	</div>
 </div>
+{/if}
 
 <style>
 	.container {
