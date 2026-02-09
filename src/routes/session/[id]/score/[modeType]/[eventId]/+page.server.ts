@@ -1,5 +1,6 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { authenticateAction } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const {
@@ -145,32 +146,16 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 export const actions: Actions = {
 	submitBib: async ({ request, params, url, locals: { supabase } }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの認証
-		let guestParticipant = null;
-		if (!user && guestIdentifier) {
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('session_id', params.id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, params.id, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return fail(401, { error: 'ゲスト認証が必要です。' });
-			}
-
-			guestParticipant = guestData;
-		} else if (userError || !user) {
+		if (!authResult) {
 			return fail(401, { error: '認証が必要です。' });
 		}
+
+		const { user, guestParticipant } = authResult;
 
 		const { id: sessionId, modeType, eventId } = params;
 		const sessionIdInt = parseInt(sessionId);

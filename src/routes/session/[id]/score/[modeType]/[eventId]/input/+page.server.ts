@@ -1,39 +1,19 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
 	const { id: sessionId, modeType, eventId } = params;
 	const bibNumber = url.searchParams.get('bib');
 	const participantId = url.searchParams.get('participantId');
 	const guestIdentifier = url.searchParams.get('guest');
 
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		if (guestError || !guestData) {
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-	} else if (userError || !user) {
-		throw redirect(303, '/login');
-	}
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		sessionId,
+		guestIdentifier
+	);
 
 	if (!bibNumber || !participantId) {
 		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
@@ -43,11 +23,21 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// セッション情報、参加者情報を並列取得（高速化）
 	const [sessionResult, participantResult] = await Promise.all([
 		supabase.from('sessions').select('*').eq('id', sessionId).single(),
-		supabase.from('participants').select('*').eq('id', participantId).single()
+		supabase
+			.from('participants')
+			.select('*')
+			.eq('id', participantId)
+			.eq('session_id', sessionId)
+			.single()
 	]);
 
 	if (sessionResult.error) {
 		throw error(404, '検定が見つかりません。');
+	}
+
+	if (participantResult.error) {
+		console.error('[load] 参加者取得エラー:', participantResult.error);
+		throw error(404, '参加者が見つかりません。このセッションに所属していない可能性があります。');
 	}
 
 	const sessionDetails = sessionResult.data;
@@ -138,54 +128,36 @@ export const actions: Actions = {
 		console.log('[submitScore] URL:', url.toString());
 		console.log('[submitScore] URL search params:', Object.fromEntries(url.searchParams));
 
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
-		console.log('[submitScore] User check:', { hasUser: !!user, userError });
-
 		const guestIdentifier = url.searchParams.get('guest');
 		console.log('[submitScore] Guest identifier from URL:', guestIdentifier);
 
-		// ゲストユーザーの認証
-		let guestParticipant = null;
-		if (!user && guestIdentifier) {
-			console.log('[submitScore] Checking guest authentication...');
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('session_id', params.id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, params.id, guestIdentifier);
 
-			console.log('[submitScore] Guest data:', guestData);
-			console.log('[submitScore] Guest error:', guestError);
-
-			if (guestError || !guestData) {
-				console.error('[submitScore] Guest authentication failed');
-				return fail(401, { error: 'ゲスト認証が必要です。' });
-			}
-
-			guestParticipant = guestData;
-			console.log('[submitScore] Guest authenticated:', guestParticipant.guest_name);
-		} else if (userError || !user) {
-			console.error('[submitScore] No user and no valid guest identifier');
+		if (!authResult) {
+			console.error('[submitScore] Authentication failed');
 			return fail(401, { error: '認証が必要です。' });
 		}
 
+		const { user, guestParticipant } = authResult;
+		console.log('[submitScore] User check:', { hasUser: !!user, hasGuest: !!guestParticipant });
+
+		if (guestParticipant) {
+			console.log('[submitScore] Guest authenticated:', guestParticipant.guest_name);
+		}
+
 		const formData = await request.formData();
-		const score = parseFloat(formData.get('score') as string);
 		const participantId = formData.get('participantId') as string;
-		const bibNumber = parseInt(formData.get('bibNumber') as string);
+		const scoreRaw = formData.get('score') as string;
+		const bibNumberRaw = formData.get('bibNumber') as string;
 
 		const { id: sessionId, modeType, eventId } = params;
 		const sessionIdInt = parseInt(sessionId);
 
-		console.log('[submitScore] Score submission:', {
-			score,
-			bibNumber,
+		console.log('[submitScore] Score submission (raw):', {
+			scoreRaw,
+			bibNumberRaw,
+			participantId,
 			sessionId: sessionIdInt,
 			modeType,
 			eventId,
@@ -193,6 +165,126 @@ export const actions: Actions = {
 			hasGuest: !!guestParticipant,
 			guestName: guestParticipant?.guest_name
 		});
+
+		// ============================================================
+		// バリデーション
+		// ============================================================
+
+		// 1. participantId のバリデーション
+		if (!participantId || participantId.trim() === '') {
+			console.error('[submitScore] participantId が空です');
+			return fail(400, { error: '参加者IDが指定されていません。' });
+		}
+
+		// 2. bibNumber のバリデーション（部分パース防止 + NaN チェック）
+		// 正規表現で文字列全体が正の整数かチェック
+		if (!bibNumberRaw || !/^\d+$/.test(bibNumberRaw.trim())) {
+			console.error('[submitScore] bibNumber が不正な形式:', bibNumberRaw);
+			return fail(400, { error: 'ゼッケン番号は正の整数で入力してください。' });
+		}
+
+		const bibNumber = Number(bibNumberRaw);
+
+		if (isNaN(bibNumber) || bibNumber <= 0 || !Number.isInteger(bibNumber)) {
+			console.error('[submitScore] bibNumber が無効:', bibNumber);
+			return fail(400, { error: 'ゼッケン番号は正の整数である必要があります。' });
+		}
+
+		// 3. score のバリデーション（部分パース防止 + NaN・Infinity・整数チェック）
+		// 正規表現で文字列全体が数値（整数または小数）かチェック
+		if (!scoreRaw || !/^-?\d+(\.\d+)?$/.test(scoreRaw.trim())) {
+			console.error('[submitScore] score が不正な形式:', scoreRaw);
+			return fail(400, { error: '得点は数値で入力してください。' });
+		}
+
+		const score = Number(scoreRaw);
+
+		if (isNaN(score)) {
+			console.error('[submitScore] score が NaN です');
+			return fail(400, { error: '得点は数値で入力してください。' });
+		}
+
+		if (!isFinite(score)) {
+			console.error('[submitScore] score が無限大です:', score);
+			return fail(400, { error: '得点が無効です。' });
+		}
+
+		// UI仕様が整数前提なので整数チェック
+		if (!Number.isInteger(score)) {
+			console.error('[submitScore] score が整数ではありません:', score);
+			return fail(400, { error: '得点は整数で入力してください。' });
+		}
+
+		// 4. bibNumber と participantId の整合性チェック
+		const { data: participant, error: participantError } = await supabase
+			.from('participants')
+			.select('id, bib_number')
+			.eq('session_id', sessionId)
+			.eq('id', participantId)
+			.eq('bib_number', bibNumber)
+			.single();
+
+		if (participantError || !participant) {
+			console.error('[submitScore] participantId と bibNumber の整合性エラー:', {
+				participantId,
+				bibNumber,
+				error: participantError
+			});
+			return fail(400, {
+				error: 'ゼッケン番号と参加者IDが一致しません。不正なリクエストの可能性があります。'
+			});
+		}
+
+		console.log('[submitScore] 参加者確認成功:', participant);
+
+		// 5. イベント情報を取得して得点範囲をチェック
+		let minScore = 0;
+		let maxScore = 100;
+
+		if (modeType === 'training') {
+			// 研修モード: training_events から範囲を取得
+			const { data: eventData, error: eventError } = await supabase
+				.from('training_events')
+				.select('min_score, max_score')
+				.eq('id', eventId)
+				.eq('session_id', sessionId)
+				.single();
+
+			if (eventError || !eventData) {
+				console.error('[submitScore] training_events の取得エラー:', eventError);
+				return fail(404, { error: '種目情報が見つかりません。' });
+			}
+
+			minScore = eventData.min_score || 0;
+			maxScore = eventData.max_score || 100;
+		} else {
+			// 大会モード: custom_events を確認（範囲設定がないため 0-100 を使用）
+			const { data: eventData, error: eventError } = await supabase
+				.from('custom_events')
+				.select('id')
+				.eq('id', eventId)
+				.eq('session_id', sessionId)
+				.single();
+
+			if (eventError || !eventData) {
+				console.error('[submitScore] custom_events の取得エラー:', eventError);
+				return fail(404, { error: '種目情報が見つかりません。' });
+			}
+
+			// 大会モードは 0-100 の固定範囲
+			minScore = 0;
+			maxScore = 100;
+		}
+
+		// 6. 得点範囲チェック
+		if (score < minScore || score > maxScore) {
+			console.error('[submitScore] 得点範囲外:', { score, minScore, maxScore });
+			return fail(400, {
+				error: `得点は${minScore}～${maxScore}の範囲で入力してください。`
+			});
+		}
+
+		console.log('[submitScore] バリデーション完了。得点を保存します。');
 
 		// 得点をデータベースに保存
 		if (modeType === 'training') {
@@ -259,6 +351,7 @@ export const actions: Actions = {
 				.from('custom_events')
 				.select('*')
 				.eq('id', eventId)
+				.eq('session_id', sessionId)
 				.single();
 
 			if (!eventData) {

@@ -12,6 +12,7 @@
 	$: sessionId = $page.params.id;
 	$: sessionName = data.sessionDetails.name;
 	$: customEvents = data.customEvents;
+	$: guestIdentifier = data.guestIdentifier;
 
 	onMount(() => {
 		// ヘッダー情報を設定
@@ -27,15 +28,16 @@
 
 	function selectEvent(event: any) {
 		// 統一された採点画面へ遷移
-		goto(`/session/${sessionId}/score/tournament/${event.id}`);
+		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+		goto(`/session/${sessionId}/score/tournament/${event.id}${guestParam}`);
 	}
 </script>
 
 <Header
 	pageUser={data.user}
 	pageProfile={data.profile}
-	isGuest={false}
-	guestName={null}
+	isGuest={!!data.guestIdentifier}
+	guestName={data.guestParticipant?.guest_name || null}
 />
 
 <div class="container">
@@ -58,8 +60,11 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton variant="secondary" on:click={() => goto('/dashboard')}>
-			セッション選択画面に戻る
+		<NavButton variant="secondary" on:click={() => {
+			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+			goto(`/session/${sessionId}${guestParam}`);
+		}}>
+			待機画面に戻る
 		</NavButton>
 	</div>
 </div>

@@ -1,39 +1,19 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
 	const { id: sessionId, modeType, eventId } = params;
 	const bib = url.searchParams.get('bib');
 	const score = url.searchParams.get('score');
 	const guestIdentifier = url.searchParams.get('guest');
 
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		if (guestError || !guestData) {
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-	} else if (userError || !user) {
-		throw redirect(303, '/login');
-	}
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		sessionId,
+		guestIdentifier
+	);
 
 	if (!bib) {
 		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}`);
@@ -86,6 +66,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.from('training_events')
 			.select('*')
 			.eq('id', eventId)
+			.eq('session_id', sessionId)
 			.single();
 		eventInfo = trainingEvent;
 	} else {
@@ -93,6 +74,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.from('custom_events')
 			.select('*')
 			.eq('id', eventId)
+			.eq('session_id', sessionId)
 			.single();
 		eventInfo = customEvent;
 	}
@@ -212,33 +194,17 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 export const actions: Actions = {
 	endSession: async ({ params, url, locals: { supabase } }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
+		const { id: sessionId, modeType } = params;
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの認証
-		let guestParticipant = null;
-		if (!user && guestIdentifier) {
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, sessionId, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return { success: false, error: 'ゲスト認証が必要です。' };
-			}
-
-			guestParticipant = guestData;
-		} else if (userError || !user) {
+		if (!authResult) {
 			return { success: false, error: '認証が必要です。' };
 		}
 
-		const { id: sessionId, modeType } = params;
+		const { user, guestParticipant } = authResult;
 
 		// セッション情報を取得して権限確認
 		const { data: sessionDetails, error: sessionError } = await supabase
@@ -316,33 +282,17 @@ export const actions: Actions = {
 	},
 
 	changeEvent: async ({ params, url, locals: { supabase } }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
+		const { id: sessionId, modeType } = params;
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの認証
-		let guestParticipant = null;
-		if (!user && guestIdentifier) {
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, sessionId, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return { success: false, error: 'ゲスト認証が必要です。' };
-			}
-
-			guestParticipant = guestData;
-		} else if (userError || !user) {
+		if (!authResult) {
 			return { success: false, error: '認証が必要です。' };
 		}
 
-		const { id: sessionId, modeType } = params;
+		const { user, guestParticipant } = authResult;
 
 		// セッション情報を取得して権限確認
 		const { data: sessionDetails, error: sessionError } = await supabase

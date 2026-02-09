@@ -1,40 +1,19 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { authenticateSession } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
 	const { id: sessionId, modeType, eventId } = params;
 	const guestIdentifier = url.searchParams.get('guest');
 
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-	let currentUserId: string | null = null;
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		sessionId,
+		guestIdentifier
+	);
 
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.maybeSingle();
-
-		if (guestError || !guestData) {
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-	} else if (userError || !user) {
-		throw redirect(303, '/login');
-	} else {
-		currentUserId = user.id;
-	}
+	const currentUserId = user?.id || null;
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -56,6 +35,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.from('training_events')
 			.select('*')
 			.eq('id', eventId)
+			.eq('session_id', sessionId)
 			.single();
 		eventInfo = trainingEvent;
 	} else {
@@ -63,6 +43,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.from('custom_events')
 			.select('*')
 			.eq('id', eventId)
+			.eq('session_id', sessionId)
 			.single();
 		eventInfo = customEvent;
 	}

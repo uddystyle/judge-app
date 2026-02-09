@@ -1,39 +1,19 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
 	const { id, discipline, level, event } = params;
 	const bib = url.searchParams.get('bib');
 	const averageScore = url.searchParams.get('score');
 	const guestIdentifier = url.searchParams.get('guest');
 
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', id)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		if (guestError || !guestData) {
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-	} else if (userError || !user) {
-		throw redirect(303, '/login');
-	}
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		id,
+		guestIdentifier
+	);
 
 	if (!bib) {
 		throw error(400, 'ゼッケン番号が指定されていません。');
@@ -97,30 +77,17 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 export const actions: Actions = {
 	changeEvent: async ({ params, locals: { supabase }, url }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
 		const { id } = params;
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの場合
-		if (!user && guestIdentifier) {
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('session_id', id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, id, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return fail(401, { error: 'ゲスト認証が必要です。' });
-			}
-		} else if (userError || !user) {
+		if (!authResult) {
 			return fail(401, { error: '認証が必要です。' });
 		}
+
+		const { user } = authResult;
 
 		// セッション情報を取得して権限確認
 		const { data: session, error: sessionError } = await supabase
@@ -163,30 +130,17 @@ export const actions: Actions = {
 	},
 
 	endSession: async ({ params, locals: { supabase }, url }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
 		const { id } = params;
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの場合
-		if (!user && guestIdentifier) {
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('session_id', id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, id, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return fail(401, { error: 'ゲスト認証が必要です。' });
-			}
-		} else if (userError || !user) {
+		if (!authResult) {
 			return fail(401, { error: '認証が必要です。' });
 		}
+
+		const { user } = authResult;
 
 		// セッション情報を取得して権限確認
 		const { data: session, error: sessionError } = await supabase

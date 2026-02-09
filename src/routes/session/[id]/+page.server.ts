@@ -1,50 +1,18 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
+import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const sessionId = params.id;
 	const guestIdentifier = url.searchParams.get('guest');
 
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		console.log('[Session Page] Guest identifier:', guestIdentifier);
-		console.log('[Session Page] Session ID:', sessionId);
-
-		// ゲスト参加者情報を取得
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('guest_name, guest_identifier, is_guest')
-			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		console.log('[Session Page] Guest data:', guestData);
-		console.log('[Session Page] Guest error:', guestError);
-
-		if (guestError || !guestData) {
-			// ゲスト情報が見つからない場合は招待ページへリダイレクト
-			console.error('[Session Page] Guest not found, redirecting to join page');
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-		console.log('[Session Page] Guest authenticated successfully');
-	}
-
-	// 通常ユーザーでログインしていない場合はログインページへ
-	if (!user && !guestIdentifier) {
-		throw redirect(303, '/login');
-	}
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		sessionId,
+		guestIdentifier
+	);
 
 	// 組織所属チェック（組織バッジ表示用）
 	let hasOrganization = false;

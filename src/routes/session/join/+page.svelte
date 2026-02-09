@@ -7,13 +7,45 @@
 
 	// サーバーアクションから返されるデータ（エラーメッセージなど）を保持
 	export let form: ActionData;
+
+	let isGuestMode = true; // デフォルトはゲストモード
 </script>
 
 <div class="container">
 	<div class="instruction">参加コードで合流</div>
 
+	<!-- モード切り替え -->
+	<div class="mode-toggle">
+		<button
+			type="button"
+			class="mode-button"
+			class:active={isGuestMode}
+			on:click={() => (isGuestMode = true)}
+		>
+			ゲストとして参加
+		</button>
+		<button
+			type="button"
+			class="mode-button"
+			class:active={!isGuestMode}
+			on:click={() => (isGuestMode = false)}
+		>
+			会員として参加
+		</button>
+	</div>
+
 	<form method="POST" action="?/join" use:enhance>
 		<div class="form-container">
+			{#if isGuestMode}
+				<input
+					type="text"
+					name="guestName"
+					placeholder="お名前"
+					value={form?.guestName ?? ''}
+					required
+				/>
+			{/if}
+
 			<input
 				type="text"
 				name="joinCode"
@@ -22,7 +54,10 @@
 				maxlength="6"
 				style="text-transform: uppercase;"
 				value={form?.joinCode ?? ''}
+				required
 			/>
+
+			<input type="hidden" name="isGuest" value={isGuestMode ? 'true' : 'false'} />
 
 			{#if form?.error}
 				<p class="error-message">{form.error}</p>
@@ -35,7 +70,7 @@
 	</form>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/dashboard')}>セッション選択画面に戻る</NavButton>
+		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
 	</div>
 </div>
 
@@ -49,7 +84,32 @@
 	.instruction {
 		font-size: 24px;
 		font-weight: 700;
-		margin-bottom: 28px;
+		margin-bottom: 20px;
+	}
+	.mode-toggle {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 20px;
+		background: var(--bg-secondary);
+		padding: 4px;
+		border-radius: 12px;
+	}
+	.mode-button {
+		flex: 1;
+		padding: 10px;
+		border: none;
+		border-radius: 8px;
+		background: transparent;
+		color: var(--text-secondary);
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.mode-button.active {
+		background: white;
+		color: var(--accent-primary);
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	}
 	.form-container {
 		display: flex;

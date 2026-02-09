@@ -8,6 +8,8 @@
 	import { goto } from '$app/navigation';
 	import { currentBib, userProfile, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import { get } from 'svelte/store';
+	import { applyAction, deserialize } from '$app/forms';
+	import type { ActionResult } from '@sveltejs/kit';
 
 	export let data: PageData;
 
@@ -58,67 +60,47 @@
 		const { id, discipline, level, event: eventParam } = $page.params;
 
 		const bib = $currentBib;
-		const profile = get(userProfile);
-		const sessionDetails = get(currentSession);
 
 		if (!bib) {
 			loading = false;
 			return;
 		}
 
-		const {
-			data: { user }
-		} = await supabase.auth.getUser();
-
-		// ゲストユーザーの場合、名前を取得
-		let judgeName = profile?.full_name || user?.email;
 		const guestIdentifier = $page.url.searchParams.get('guest');
 
-		if (!user && guestIdentifier) {
-			const { data: guestData } = await supabase
-				.from('session_participants')
-				.select('guest_name')
-				.eq('session_id', id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// サーバーアクションを呼び出す
+		const formData = new FormData();
+		formData.append('score', score.toString());
+		formData.append('bib', bib.toString());
 
-			if (guestData?.guest_name) {
-				judgeName = guestData.guest_name;
+		try {
+			const response = await fetch(`?/submitScore${guestIdentifier ? `&guest=${guestIdentifier}` : ''}`, {
+				method: 'POST',
+				body: formData
+			});
+
+			const result: ActionResult = deserialize(await response.text());
+
+			if (result.type === 'failure') {
+				console.error('Failed to submit score:', result.data?.error);
+				// エラーメッセージを表示する場合はここで処理
+				alert(result.data?.error || '採点の保存に失敗しました。');
+				loading = false;
+			} else if (result.type === 'success') {
+				const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
+				if (isMultiJudge) {
+					goto(`/session/${id}/${discipline}/${level}/${eventParam}/score/status?bib=${bib}${guestParam}`);
+				} else {
+					goto(
+						`/session/${id}/${discipline}/${level}/${eventParam}/score/complete?bib=${bib}&score=${score}${guestParam}`
+					);
+				}
 			}
-		}
-
-		const { error } = await supabase.from('results').upsert(
-			{
-				session_id: id,
-				bib: bib,
-				score: score,
-				judge_name: judgeName,
-				discipline: discipline,
-				level: level,
-				event_name: eventParam
-			},
-			{
-				// このオプションが重要です。
-				// どの列の組み合わせが重複しているかをデータベースに教えます。
-				onConflict: 'session_id, bib, discipline, level, event_name, judge_name'
-			}
-		);
-
-		if (error) {
-			console.error('Failed to submit score:', error);
+		} catch (error) {
+			console.error('Error submitting score:', error);
+			alert('採点の送信中にエラーが発生しました。');
 			loading = false;
-		} else {
-			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
-			if (isMultiJudge) {
-				goto(`/session/${id}/${discipline}/${level}/${eventParam}/score/status?bib=${bib}${guestParam}`);
-			} else {
-				goto(
-					`/session/${id}/${discipline}/${level}/${eventParam}/score/complete?bib=${bib}&score=${score}${guestParam}`
-				);
-			}
 		}
-		loading = false;
 	}
 
 	// セッション終了を監視

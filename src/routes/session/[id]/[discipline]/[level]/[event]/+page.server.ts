@@ -1,37 +1,17 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
 	const { id: sessionId } = params;
 	const guestIdentifier = url.searchParams.get('guest');
 
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		if (guestError || !guestData) {
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-	} else if (userError || !user) {
-		throw redirect(303, '/login');
-	}
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		sessionId,
+		guestIdentifier
+	);
 
 	// セッション情報を取得して、主任検定員かどうかを確認
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -88,32 +68,16 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 export const actions: Actions = {
 	// この'setPrompt'アクションは、ゼッケン番号確定フォームから呼び出される
 	setPrompt: async ({ request, params, locals: { supabase }, url }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの場合
-		if (!user && guestIdentifier) {
-			// ゲスト参加者情報を検証
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('session_id', params.id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, params.id, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return fail(401, { error: 'ゲスト認証が必要です。' });
-			}
-
-			// ゲストユーザーは権限チェックをスキップして続行
-		} else if (userError || !user) {
-			throw redirect(303, '/login');
+		if (!authResult) {
+			return fail(401, { error: '認証が必要です。' });
 		}
+
+		const { user } = authResult;
 
 		// セッション情報を取得して権限をチェック
 		const { data: sessionData, error: sessionError } = await supabase
