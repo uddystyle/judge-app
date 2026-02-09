@@ -31,7 +31,19 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			throw error(404, '組織またはStripe顧客IDが見つかりません。');
 		}
 
-		// 3. Stripe Customer Portalセッションを作成
+		// 3. 組織の管理者権限を確認
+		const { data: member } = await supabase
+			.from('organization_members')
+			.select('role')
+			.eq('organization_id', organizationId)
+			.eq('user_id', user.id)
+			.single();
+
+		if (!member || member.role !== 'admin') {
+			throw error(403, '組織の管理者権限が必要です。');
+		}
+
+		// 4. Stripe Customer Portalセッションを作成
 		const session = await stripe.billingPortal.sessions.create({
 			customer: organization.stripe_customer_id,
 			return_url: returnUrl
@@ -39,11 +51,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		console.log('[Customer Portal API] セッション作成成功:', session.id);
 
-		// 4. Portal URLを返す
+		// 5. Portal URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
 		console.error('[Customer Portal API] エラー:', err);
 		console.error('[Customer Portal API] エラー詳細:', JSON.stringify(err, null, 2));
+		// 4xxのHttpErrorはそのまま返す
+		if (err?.status && err.status >= 400 && err.status < 500) {
+			throw err;
+		}
 		const message = err.message || 'Customer Portalセッションの作成に失敗しました。';
 		return json({ message }, { status: 500 });
 	}

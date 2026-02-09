@@ -1,41 +1,17 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { authenticateSession } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId } = params;
 	const guestIdentifier = url.searchParams.get('guest');
 
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
-	// ゲストユーザーの情報を保持
-	let guestParticipant = null;
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を取得して検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		if (guestError || !guestData) {
-			// ゲスト情報が見つからない場合は招待ページへリダイレクト
-			throw redirect(303, '/session/join');
-		}
-
-		guestParticipant = guestData;
-	}
-
-	// 通常ユーザーでログインしていない場合はログインページへ
-	if (!user && !guestIdentifier) {
-		throw redirect(303, '/login');
-	}
+	// セッション認証
+	const { user, guestParticipant } = await authenticateSession(
+		supabase,
+		sessionId,
+		guestIdentifier
+	);
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase

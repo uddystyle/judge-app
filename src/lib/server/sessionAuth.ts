@@ -39,11 +39,19 @@ export async function authenticateSession(
 	sessionId: string,
 	guestIdentifier: string | null
 ): Promise<AuthResult> {
-	// ユーザー認証を確認
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
+	// ユーザー認証を確認（例外をキャッチしてredirectに変換）
+	let user: User | null = null;
+	let userError: any = null;
+
+	try {
+		const result = await supabase.auth.getUser();
+		user = result.data.user;
+		userError = result.error;
+	} catch (error) {
+		// getUser() が throw した場合も認証エラーとして扱う
+		console.error('[authenticateSession] getUser() threw exception:', error);
+		throw redirect(303, '/login');
+	}
 
 	let guestParticipant: GuestParticipant | null = null;
 
@@ -93,11 +101,19 @@ export async function authenticateAction(
 	sessionId: string,
 	guestIdentifier: string | null
 ): Promise<AuthResult | null> {
-	// ユーザー認証を確認
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
+	// ユーザー認証を確認（例外をキャッチしてnullに変換）
+	let user: User | null = null;
+	let userError: any = null;
+
+	try {
+		const result = await supabase.auth.getUser();
+		user = result.data.user;
+		userError = result.error;
+	} catch (error) {
+		// getUser() が throw した場合も認証エラーとして扱う
+		console.error('[authenticateAction] getUser() threw exception:', error);
+		return null;
+	}
 
 	let guestParticipant: GuestParticipant | null = null;
 

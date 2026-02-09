@@ -507,9 +507,14 @@ describe('subscriptionLimits', () => {
 
 	describe('incrementSessionCount', () => {
 		it('既存のレコードがある場合は更新する', async () => {
+			// 実装と同じロジックで現在の月を計算
+			const currentMonth = new Date();
+			currentMonth.setDate(1);
+			const monthStr = currentMonth.toISOString().split('T')[0];
+
 			const existingUsage = {
 				user_id: 'user-123',
-				month: '2025-11-01',
+				month: monthStr,
 				sessions_count: 5
 			};
 
@@ -518,15 +523,38 @@ describe('subscriptionLimits', () => {
 				error: null
 			});
 
-			mocks.update.mockResolvedValue({
+			const mockUpdate = vi.fn().mockReturnThis();
+			const mockEq1 = vi.fn().mockReturnThis();
+			const mockEq2 = vi.fn().mockResolvedValue({
 				data: null,
 				error: null
 			});
 
+			// 2回のfrom呼び出し: 1) select+single, 2) update+eq+eq
+			mocks.from.mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				single: mocks.single
+			}).mockReturnValueOnce({
+				update: mockUpdate.mockReturnValue({
+					eq: mockEq1.mockReturnValue({
+						eq: mockEq2
+					})
+				})
+			});
+
 			await incrementSessionCount(mockSupabase, 'user-123');
 
-			expect(mocks.update).toHaveBeenCalled();
-			expect(mocks.eq).toHaveBeenCalledWith('user_id', 'user-123');
+			// 検証: usage_limitsテーブルが対象
+			expect(mocks.from).toHaveBeenCalledWith('usage_limits');
+			expect(mocks.from).toHaveBeenCalledTimes(2);
+
+			// 検証: updateが sessions_count: 6 (5 + 1) で呼ばれた
+			expect(mockUpdate).toHaveBeenCalledWith({ sessions_count: 6 });
+
+			// 検証: eqが user_id と month で呼ばれた
+			expect(mockEq1).toHaveBeenCalledWith('user_id', 'user-123');
+			expect(mockEq2).toHaveBeenCalledWith('month', monthStr);
 		});
 
 		it('既存のレコードがない場合は新規作成する', async () => {
@@ -535,14 +563,37 @@ describe('subscriptionLimits', () => {
 				error: { message: 'Not found' }
 			});
 
-			mocks.insert.mockResolvedValue({
+			const mockInsert = vi.fn().mockResolvedValue({
 				data: null,
 				error: null
 			});
 
+			// 実装と同じロジックで現在の月を計算
+			const currentMonth = new Date();
+			currentMonth.setDate(1);
+			const monthStr = currentMonth.toISOString().split('T')[0];
+
+			// 2回のfrom呼び出し: 1) select+single, 2) insert
+			mocks.from.mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				single: mocks.single
+			}).mockReturnValueOnce({
+				insert: mockInsert
+			});
+
 			await incrementSessionCount(mockSupabase, 'user-123');
 
-			expect(mocks.insert).toHaveBeenCalled();
+			// 検証: usage_limitsテーブルが対象
+			expect(mocks.from).toHaveBeenCalledWith('usage_limits');
+			expect(mocks.from).toHaveBeenCalledTimes(2);
+
+			// 検証: insertが正しいパラメータで呼ばれた
+			expect(mockInsert).toHaveBeenCalledWith({
+				user_id: 'user-123',
+				month: monthStr,
+				sessions_count: 1
+			});
 		});
 	});
 });

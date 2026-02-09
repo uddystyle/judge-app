@@ -171,10 +171,12 @@ describe('organizationLimits', () => {
 				eq: vi.fn().mockReturnThis(),
 				single: mocks.single
 			}).mockReturnValueOnce({
-				select: vi.fn().mockResolvedValue({
-					count: 10,
-					data: null,
-					error: null
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockResolvedValue({
+						count: 10,
+						data: null,
+						error: null
+					})
 				})
 			});
 
@@ -210,10 +212,12 @@ describe('organizationLimits', () => {
 				eq: vi.fn().mockReturnThis(),
 				single: mocks.single
 			}).mockReturnValueOnce({
-				select: vi.fn().mockResolvedValue({
-					count: 5,
-					data: null,
-					error: null
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockResolvedValue({
+						count: 5,
+						data: null,
+						error: null
+					})
 				})
 			});
 
@@ -460,15 +464,21 @@ describe('organizationLimits', () => {
 
 	describe('checkCanAddJudgeToSession', () => {
 		it('セッション情報が取得できない場合はfalseを返す', async () => {
-			mocks.single.mockResolvedValue({
+			mocks.maybeSingle.mockResolvedValue({
 				data: null,
 				error: { message: 'Session not found' }
+			});
+
+			mocks.from.mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				maybeSingle: mocks.maybeSingle
 			});
 
 			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
 
 			expect(result.allowed).toBe(false);
-			expect(result.reason).toBe('セッション情報の取得に失敗しました。');
+			expect(result.reason).toBe('セッション情報の取得に失敗しました。Session not found');
 		});
 
 		it('検定員数が上限に達している場合はfalseを返す', async () => {
@@ -480,10 +490,6 @@ describe('organizationLimits', () => {
 
 			mocks.single
 				.mockResolvedValueOnce({
-					data: mockSession,
-					error: null
-				})
-				.mockResolvedValueOnce({
 					data: mockOrganization,
 					error: null
 				})
@@ -492,11 +498,11 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-			// 3回目のfrom呼び出しはsession_participants用
+			// 4回のfrom呼び出し: 1) sessions (maybeSingle), 2-3) getOrganizationPlanLimits (single), 4) session_participants (count)
 			mocks.from.mockReturnValueOnce({
 				select: vi.fn().mockReturnThis(),
 				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
+				maybeSingle: mocks.maybeSingle
 			}).mockReturnValueOnce({
 				select: vi.fn().mockReturnThis(),
 				eq: vi.fn().mockReturnThis(),
@@ -506,11 +512,18 @@ describe('organizationLimits', () => {
 				eq: vi.fn().mockReturnThis(),
 				single: mocks.single
 			}).mockReturnValueOnce({
-				select: vi.fn().mockResolvedValue({
-					count: 5,
-					data: null,
-					error: null
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockResolvedValue({
+						count: 5,
+						data: null,
+						error: null
+					})
 				})
+			});
+
+			mocks.maybeSingle.mockResolvedValueOnce({
+				data: mockSession,
+				error: null
 			});
 
 			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
@@ -528,10 +541,6 @@ describe('organizationLimits', () => {
 
 			mocks.single
 				.mockResolvedValueOnce({
-					data: mockSession,
-					error: null
-				})
-				.mockResolvedValueOnce({
 					data: mockOrganization,
 					error: null
 				})
@@ -539,6 +548,26 @@ describe('organizationLimits', () => {
 					data: mockPlanLimits,
 					error: null
 				});
+
+			mocks.maybeSingle.mockResolvedValueOnce({
+				data: mockSession,
+				error: null
+			});
+
+			// 3回のfrom呼び出し: 1) sessions (maybeSingle), 2-3) getOrganizationPlanLimits (single)
+			mocks.from.mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				maybeSingle: mocks.maybeSingle
+			}).mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				single: mocks.single
+			}).mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				single: mocks.single
+			});
 
 			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
 

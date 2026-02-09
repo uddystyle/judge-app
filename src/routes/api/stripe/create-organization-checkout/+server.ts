@@ -136,6 +136,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		return json({ url: session.url });
 	} catch (err: any) {
 		console.error('[Organization Checkout API] エラー:', err);
+		// 4xxのHttpErrorはそのまま返す
+		if (err?.status && err.status >= 400 && err.status < 500) {
+			throw err;
+		}
 		throw error(500, err.message || 'Checkout Sessionの作成に失敗しました。');
 	}
 };

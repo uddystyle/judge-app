@@ -55,6 +55,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		console.error('  コード:', err.code);
 		console.error('  ステータスコード:', err.statusCode);
 		console.error('  完全なエラー:', JSON.stringify(err, null, 2));
+		// 4xxのHttpErrorはそのまま返す
+		if (err?.status && err.status >= 400 && err.status < 500) {
+			throw err;
+		}
 		throw error(500, err.message || 'Customer Portal Sessionの作成に失敗しました。');
 	}
 };

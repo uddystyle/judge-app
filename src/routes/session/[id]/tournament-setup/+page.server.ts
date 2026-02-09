@@ -1,17 +1,14 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { authenticateSession } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
-	if (userError || !user) {
-		throw redirect(303, '/login');
-	}
-
 	const { id: sessionId } = params;
+
+	// セッション認証（ログインユーザー専用）
+	const { user } = await authenticateSession(supabase, sessionId, null);
+
+	// 以降は従来通りの処理
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase

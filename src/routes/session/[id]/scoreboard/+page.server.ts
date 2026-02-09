@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { authenticateSession } from '$lib/server/sessionAuth';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, setHeaders }) => {
 	// スコアボードは頻繁に更新されるため超短期キャッシュ（10秒）
@@ -7,16 +8,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 		'cache-control': 'public, max-age=10, stale-while-revalidate=30'
 	});
 
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
-
-	if (userError || !user) {
-		throw redirect(303, '/login');
-	}
-
 	const sessionId = params.id;
+
+	// セッション認証（ログインユーザー専用）
+	const { user } = await authenticateSession(supabase, sessionId, null);
 
 	// セッション情報、種目一覧、採点結果、組織情報を並列取得（パフォーマンス最適化）
 	const [sessionDetailsResult, eventsResult, resultsResult, orgMembersResult] = await Promise.all([

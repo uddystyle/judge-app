@@ -289,16 +289,16 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 export const actions: Actions = {
 	// 主任検定員を設定
 	setChiefJudge: async ({ request, params, locals: { supabase } }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
+		const sessionId = params.id;
 
-		if (userError || !user) {
-			throw redirect(303, '/login');
+		// セッション認証（ログインユーザー専用）
+		const authResult = await authenticateAction(supabase, sessionId, null);
+
+		if (!authResult) {
+			return fail(401, { error: '認証が必要です。' });
 		}
 
-		const sessionId = params.id;
+		const { user } = authResult;
 		const formData = await request.formData();
 		const selectedUserId = formData.get('userId') as string;
 
@@ -410,30 +410,17 @@ export const actions: Actions = {
 
 	// セッションを再開
 	restartSession: async ({ params, locals: { supabase }, url }) => {
-		const {
-			data: { user },
-			error: userError
-		} = await supabase.auth.getUser();
-
 		const { id } = params;
 		const guestIdentifier = url.searchParams.get('guest');
 
-		// ゲストユーザーの場合
-		if (!user && guestIdentifier) {
-			const { data: guestData, error: guestError } = await supabase
-				.from('session_participants')
-				.select('*')
-				.eq('session_id', id)
-				.eq('guest_identifier', guestIdentifier)
-				.eq('is_guest', true)
-				.single();
+		// セッション認証
+		const authResult = await authenticateAction(supabase, id, guestIdentifier);
 
-			if (guestError || !guestData) {
-				return fail(401, { error: 'ゲスト認証が必要です。' });
-			}
-		} else if (userError || !user) {
+		if (!authResult) {
 			return fail(401, { error: '認証が必要です。' });
 		}
+
+		const { user } = authResult;
 
 		// セッション情報を取得して権限確認
 		const { data: session, error: sessionError } = await supabase
