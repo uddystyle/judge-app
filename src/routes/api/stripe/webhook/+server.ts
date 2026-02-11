@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
 import {
 	STRIPE_WEBHOOK_SECRET,
+	STRIPE_SECRET_KEY,
 	SUPABASE_SERVICE_ROLE_KEY,
 	STRIPE_PRICE_BASIC_MONTH,
 	STRIPE_PRICE_BASIC_YEAR,
@@ -68,6 +69,24 @@ export const POST: RequestHandler = async ({ request }) => {
 	} catch (err: any) {
 		console.error('[Webhook] 署名検証エラー:', err.message);
 		throw error(400, `Webhook署名検証エラー: ${err.message}`);
+	}
+
+	// T14: livemode検証 - 環境とイベントのlivemode不一致を検出
+	// event.livemodeが明示的に存在する場合のみチェック（テストモック互換性のため）
+	if (event.livemode !== undefined) {
+		const expectedLivemode = STRIPE_SECRET_KEY.startsWith('sk_live_');
+		const eventLivemode = event.livemode;
+
+		if (expectedLivemode !== eventLivemode) {
+			const envType = expectedLivemode ? '本番' : 'テスト';
+			const eventType = eventLivemode ? '本番' : 'テスト';
+			console.warn(
+				`[Webhook] T14: livemode不一致を検出 - 環境: ${envType}, イベント: ${eventType}, event.id: ${event.id}`
+			);
+			console.warn('[Webhook] T14: 不一致イベントはDB更新をスキップします');
+			// 不一致イベントは200で応答してStripeに再送させない（ログのみ記録）
+			return json({ received: true, skipped: true, reason: 'livemode_mismatch' });
+		}
 	}
 
 	// 3. イベントタイプに応じて処理
@@ -151,7 +170,7 @@ async function handleCheckoutCompleted(session: any) {
 	const userId = session.metadata?.user_id;
 	const customerId = session.customer;
 	const subscriptionId = session.subscription;
-	const isOrganization = session.metadata?.is_organization === 'true';
+	const isOrganizationStr = session.metadata?.is_organization;
 
 	// 必須データの検証（リトライ不要なエラー）
 	if (!userId || !customerId) {
@@ -166,6 +185,15 @@ async function handleCheckoutCompleted(session: any) {
 		throw new NonRetryableError(errMsg);
 	}
 
+	// is_organization の検証（T1）
+	if (!isOrganizationStr || (isOrganizationStr !== 'true' && isOrganizationStr !== 'false')) {
+		const errMsg = 'is_organizationは"true"または"false"である必要があります';
+		console.error('[Webhook]', errMsg, '値:', isOrganizationStr);
+		throw new NonRetryableError(errMsg);
+	}
+
+	const isOrganization = isOrganizationStr === 'true';
+
 	// Stripe Subscriptionの詳細を取得（リトライ可能なエラー）
 	let subscription;
 	try {
@@ -176,17 +204,31 @@ async function handleCheckoutCompleted(session: any) {
 		throw new RetryableError(`Stripe API呼び出しエラー: ${err.message}`);
 	}
 
-	const priceId = subscription.items.data[0].price.id;
-	const planType = getPlanTypeFromPrice(priceId);
-	const billingInterval = subscription.items.data[0].price.recurring?.interval || 'month';
-
-	console.log('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
-
-	// 組織向けサブスクリプションの場合
+	// 組織向けサブスクリプションの場合（metadata検証を先に行う）
 	if (isOrganization) {
-		await handleOrganizationCheckout(session, subscription, planType, billingInterval);
+		await handleOrganizationCheckout(session, subscription);
 	} else {
 		// 個人向けサブスクリプション
+		// T10: Stripe Subscriptionレスポンスの異常データ検証
+		if (!subscription.items?.data || subscription.items.data.length === 0) {
+			const errMsg = 'subscription.items.dataが空です';
+			console.error('[Webhook]', errMsg);
+			throw new RetryableError(errMsg);
+		}
+
+		const item = subscription.items.data[0];
+		if (!item.price || !item.price.id) {
+			const errMsg = 'subscription.items.data[0].priceが見つかりません';
+			console.error('[Webhook]', errMsg);
+			throw new RetryableError(errMsg);
+		}
+
+		const priceId = item.price.id;
+		const planType = getPlanTypeFromPrice(priceId);
+		const billingInterval = item.price.recurring?.interval || 'month';
+
+		console.log('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
+
 		const { error: upsertError } = await supabaseAdmin
 			.from('subscriptions')
 			.upsert(
@@ -216,19 +258,14 @@ async function handleCheckoutCompleted(session: any) {
 /**
  * 組織向けCheckout処理
  */
-async function handleOrganizationCheckout(
-	session: any,
-	subscription: any,
-	planType: string,
-	billingInterval: string
-) {
+async function handleOrganizationCheckout(session: any, subscription: any) {
 	const userId = session.metadata?.user_id;
 	const organizationId = session.metadata?.organization_id;
 	const organizationName = session.metadata?.organization_name;
-	const maxMembers = parseInt(session.metadata?.max_members || '10');
+	const maxMembersStr = session.metadata?.max_members || '10';
 	const customerId = session.customer;
 	const subscriptionId = subscription.id;
-	const isUpgrade = session.metadata?.is_upgrade === 'true';
+	const isUpgradeStr = session.metadata?.is_upgrade;
 
 	// 必須データの検証（リトライ不要なエラー）
 	if (!organizationName) {
@@ -236,6 +273,51 @@ async function handleOrganizationCheckout(
 		console.error('[Webhook]', errMsg);
 		throw new NonRetryableError(errMsg);
 	}
+
+	// max_members の検証（T1）
+	const maxMembers = parseInt(maxMembersStr);
+	if (isNaN(maxMembers) || maxMembers <= 0) {
+		const errMsg = 'max_membersは正の整数である必要があります';
+		console.error('[Webhook]', errMsg, '値:', maxMembersStr);
+		throw new NonRetryableError(errMsg);
+	}
+
+	// is_upgrade の検証（T1）
+	if (isUpgradeStr && isUpgradeStr !== 'true' && isUpgradeStr !== 'false') {
+		const errMsg = 'is_upgradeは"true"または"false"である必要があります';
+		console.error('[Webhook]', errMsg, '値:', isUpgradeStr);
+		throw new NonRetryableError(errMsg);
+	}
+
+	const isUpgrade = isUpgradeStr === 'true';
+
+	// T9: is_upgrade=trueの場合はorganization_idが必須
+	if (isUpgrade && !organizationId) {
+		const errMsg = 'is_upgrade=trueの場合はorganization_idが必須です';
+		console.error('[Webhook]', errMsg);
+		throw new NonRetryableError(errMsg);
+	}
+
+	// metadata検証後に price/plan情報を取得（T2）
+	// T10: Stripe Subscriptionレスポンスの異常データ検証
+	if (!subscription.items?.data || subscription.items.data.length === 0) {
+		const errMsg = 'subscription.items.dataが空です';
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
+	}
+
+	const item = subscription.items.data[0];
+	if (!item.price || !item.price.id) {
+		const errMsg = 'subscription.items.data[0].priceが見つかりません';
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
+	}
+
+	const priceId = item.price.id;
+	const planType = getPlanTypeFromPrice(priceId);
+	const billingInterval = item.price.recurring?.interval || 'month';
+
+	console.log('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
 
 	try {
 		// アップグレードの場合
@@ -430,8 +512,23 @@ async function handleSubscriptionCreated(subscription: any) {
 		throw new NonRetryableError(errMsg);
 	}
 
-	const planType = getPlanTypeFromPrice(subscription.items.data[0].price.id);
-	const billingInterval = subscription.items.data[0].price.recurring?.interval || 'month';
+	// T10/T11: Stripe Subscriptionレスポンスの異常データ検証
+	if (!subscription.items?.data || subscription.items.data.length === 0) {
+		const errMsg = 'subscription.items.dataが空です';
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
+	}
+
+	const item = subscription.items.data[0];
+	if (!item.price || !item.price.id) {
+		const errMsg = 'subscription.items.data[0].priceが見つかりません';
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
+	}
+
+	// T10/T11: getPlanTypeFromPriceは未知price IDでRetryableErrorを投げる（T2で実装済み）
+	const planType = getPlanTypeFromPrice(item.price.id);
+	const billingInterval = item.price.recurring?.interval || 'month';
 
 	// 1. subscriptionsテーブルを更新
 	const { error: updateError } = await supabaseAdmin
@@ -509,13 +606,28 @@ async function handleSubscriptionCreated(subscription: any) {
 async function handleSubscriptionUpdated(subscription: any) {
 	console.log('[Webhook] Subscription更新:', subscription.id);
 
-	const planType = getPlanTypeFromPrice(subscription.items.data[0].price.id);
-	const billingInterval = subscription.items.data[0].price.recurring?.interval || 'month';
+	// T11: Stripe Subscriptionレスポンスの異常データ検証（T10と同様）
+	if (!subscription.items?.data || subscription.items.data.length === 0) {
+		const errMsg = 'subscription.items.dataが空です';
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
+	}
 
-	// 1. subscriptionsテーブルから組織IDを取得
+	const item = subscription.items.data[0];
+	if (!item.price || !item.price.id) {
+		const errMsg = 'subscription.items.data[0].priceが見つかりません';
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
+	}
+
+	// T11: getPlanTypeFromPriceは未知price IDでRetryableErrorを投げる（T2で実装済み）
+	const planType = getPlanTypeFromPrice(item.price.id);
+	const billingInterval = item.price.recurring?.interval || 'month';
+
+	// T13: subscriptionsテーブルから組織IDと現在の期間を取得
 	const { data: subscriptionData, error: fetchError } = await supabaseAdmin
 		.from('subscriptions')
-		.select('organization_id')
+		.select('organization_id, current_period_end, status, cancel_at_period_end, plan_type, billing_interval')
 		.eq('stripe_subscription_id', subscription.id)
 		.single();
 
@@ -527,6 +639,33 @@ async function handleSubscriptionUpdated(subscription: any) {
 	}
 
 	const organizationId = subscriptionData.organization_id;
+
+	// T13: リプレイ防御 - イベントの方が古い場合はスキップ
+	// 同一期間内の状態変化（プラン変更、status変化など）は許可するため、< を使用
+	const eventPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+	if (subscriptionData.current_period_end) {
+		const currentPeriodEnd = new Date(subscriptionData.current_period_end).getTime();
+		const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
+
+		if (eventPeriodEndTime < currentPeriodEnd) {
+			console.log('[Webhook] 古いイベントを検出 - 更新をスキップ');
+			console.log('[Webhook] 現在のcurrent_period_end:', subscriptionData.current_period_end);
+			console.log('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+			return; // T13: 古いイベントはスキップ
+		}
+
+		// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
+		if (
+			eventPeriodEndTime === currentPeriodEnd &&
+			subscriptionData.status === subscription.status &&
+			subscriptionData.cancel_at_period_end === subscription.cancel_at_period_end &&
+			subscriptionData.plan_type === planType &&
+			subscriptionData.billing_interval === billingInterval
+		) {
+			console.log('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
+			return;
+		}
+	}
 
 	// 2. subscriptionsテーブルを更新
 	const { error: updateError } = await supabaseAdmin
@@ -712,13 +851,53 @@ async function handlePaymentSucceeded(invoice: any) {
 		// Stripe Subscriptionの詳細を取得
 		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
+		// T13: リプレイ防御 - 現在のDBの状態を取得
+		const { data: currentSub, error: fetchError } = await supabaseAdmin
+			.from('subscriptions')
+			.select('current_period_end, status, cancel_at_period_end')
+			.eq('stripe_subscription_id', subscriptionId)
+			.single();
+
+		if (fetchError && fetchError.code !== 'PGRST116') {
+			// PGRST116 = レコードが見つからない（新規作成の場合は問題ない）
+			console.error('[Webhook] 現在のsubscription取得エラー:', fetchError);
+			throw new RetryableError(`subscription取得エラー: ${fetchError.message}`);
+		}
+
+		const eventPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+
+		// T13: 既存レコードがあり、イベントの方が古い場合はスキップ
+		// 同一期間内の状態変化（past_due -> active など）は許可するため、< を使用
+		if (currentSub?.current_period_end) {
+			const currentPeriodEnd = new Date(currentSub.current_period_end).getTime();
+			const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
+
+			if (eventPeriodEndTime < currentPeriodEnd) {
+				console.log('[Webhook] 古いイベントを検出 - 更新をスキップ');
+				console.log('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
+				console.log('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+				return; // T13: 古いイベントはスキップ
+			}
+
+			// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
+			if (
+				eventPeriodEndTime === currentPeriodEnd &&
+				currentSub.status === 'active' &&
+				currentSub.cancel_at_period_end === subscription.cancel_at_period_end
+			) {
+				console.log('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
+				return;
+			}
+		}
+
 		// subscriptionsテーブルを更新
 		const { error: updateError } = await supabaseAdmin
 			.from('subscriptions')
 			.update({
 				status: 'active',
 				current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-				current_period_end: new Date(subscription.current_period_end * 1000).toISOString()
+				current_period_end: eventPeriodEnd,
+				cancel_at_period_end: subscription.cancel_at_period_end
 			})
 			.eq('stripe_subscription_id', subscriptionId);
 
@@ -754,6 +933,42 @@ async function handlePaymentFailed(invoice: any) {
 	}
 
 	try {
+		// T13: Stripe Subscriptionの詳細を取得（期間情報のため）
+		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+		// T13: リプレイ防御 - 現在のDBの状態を取得
+		const { data: currentSub, error: fetchError } = await supabaseAdmin
+			.from('subscriptions')
+			.select('current_period_end, status')
+			.eq('stripe_subscription_id', subscriptionId)
+			.single();
+
+		if (fetchError && fetchError.code !== 'PGRST116') {
+			console.error('[Webhook] 現在のsubscription取得エラー:', fetchError);
+			throw new RetryableError(`subscription取得エラー: ${fetchError.message}`);
+		}
+
+		const eventPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+
+		// T13: 既存レコードがあり、イベントの方が古い場合はスキップ
+		if (currentSub?.current_period_end) {
+			const currentPeriodEnd = new Date(currentSub.current_period_end).getTime();
+			const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
+
+			if (eventPeriodEndTime < currentPeriodEnd) {
+				console.log('[Webhook] 古いイベントを検出 - 更新をスキップ');
+				console.log('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
+				console.log('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+				return; // T13: 古いイベントはスキップ
+			}
+
+			// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
+			if (eventPeriodEndTime === currentPeriodEnd && currentSub.status === 'past_due') {
+				console.log('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
+				return;
+			}
+		}
+
 		// subscriptionsテーブルを更新
 		const { error: updateError } = await supabaseAdmin
 			.from('subscriptions')
@@ -786,7 +1001,7 @@ async function handlePaymentFailed(invoice: any) {
 // ============================================================
 
 /**
- * Price IDからプランタイプを判定
+ * Price IDからプランタイプを判定（T2: 未知IDは明示エラー化）
  */
 function getPlanTypeFromPrice(
 	priceId: string
@@ -825,7 +1040,9 @@ function getPlanTypeFromPrice(
 	} else if (PRO_PRICES.includes(priceId)) {
 		return 'pro';
 	} else {
-		console.warn('[Webhook] 不明なPrice ID:', priceId, '- デフォルトでfreeを返します');
-		return 'free';
+		// T2: 未知のprice IDは明示的にエラーとして扱う（誤った plan_type 保存を防止）
+		const errMsg = `未知のprice ID: ${priceId}。正しいプランタイプを判定できません`;
+		console.error('[Webhook]', errMsg);
+		throw new RetryableError(errMsg);
 	}
 }

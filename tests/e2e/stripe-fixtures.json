@@ -1,0 +1,66 @@
+{
+  "_meta": {
+    "template_version": 0
+  },
+  "fixtures": [
+    {
+      "name": "customer_individual",
+      "path": "/v1/customers",
+      "method": "post",
+      "params": {
+        "email": "test-individual@example.com",
+        "name": "Test Individual User",
+        "metadata": {
+          "user_id": "test-user-individual-001"
+        }
+      }
+    },
+    {
+      "name": "subscription_individual",
+      "path": "/v1/subscriptions",
+      "method": "post",
+      "params": {
+        "customer": "${customer_individual:id}",
+        "items": [
+          {
+            "price": "${_STRIPE_PRICE_STANDARD_MONTH}"
+          }
+        ],
+        "metadata": {
+          "user_id": "test-user-individual-001"
+        }
+      }
+    },
+    {
+      "name": "customer_organization",
+      "path": "/v1/customers",
+      "method": "post",
+      "params": {
+        "email": "test-org@example.com",
+        "name": "Test Organization",
+        "metadata": {
+          "organization_id": "test-org-001"
+        }
+      }
+    },
+    {
+      "name": "subscription_organization",
+      "path": "/v1/subscriptions",
+      "method": "post",
+      "params": {
+        "customer": "${customer_organization:id}",
+        "items": [
+          {
+            "price": "${_STRIPE_PRICE_BASIC_MONTH}"
+          }
+        ],
+        "metadata": {
+          "user_id": "test-user-org-admin-001",
+          "organization_id": "test-org-001",
+          "organization_name": "Test Organization",
+          "max_members": "10"
+        }
+      }
+    }
+  ]
+}
