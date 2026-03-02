@@ -1,4 +1,4 @@
-import { redirect } from '@sveltejs/kit';
+import { redirect, isRedirect, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
@@ -84,8 +84,10 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 			console.log('[auth/callback] リダイレクト先:', next);
 			throw redirect(303, next);
 		} catch (error: any) {
-			// redirectのthrowは正常な動作なので再スロー
-			if (error?.status === 303) throw error;
+			// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
+			if (isRedirect(error) || isHttpError(error)) {
+				throw error;
+			}
 
 			console.error('[auth/callback] コード交換処理エラー:', error);
 			console.error('[auth/callback] エラータイプ:', typeof error);
@@ -111,8 +113,10 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 			console.log('[auth/callback] 認証成功、リダイレクト:', next);
 			throw redirect(303, next);
 		} catch (error: any) {
-			// redirectのthrowは正常な動作なので再スロー
-			if (error?.status === 303) throw error;
+			// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
+			if (isRedirect(error) || isHttpError(error)) {
+				throw error;
+			}
 
 			console.error('[auth/callback] トークン検証処理エラー:', error);
 			throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました')}`);

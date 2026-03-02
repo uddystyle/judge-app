@@ -15,7 +15,6 @@
 
 	// プラン変更の成功メッセージ
 	$: planChanged = $page.url.searchParams.get('changed') === 'true';
-	$: isScheduled = $page.url.searchParams.get('scheduled') === 'true';
 
 	// プラン定義（組織向け）
 	// 料金プランページは情報提供が目的のため、アクションボタンは配置しない
@@ -151,25 +150,13 @@
 	<!-- プラン変更の成功メッセージ -->
 	{#if planChanged}
 		<div class="success-message-container">
-			{#if isScheduled}
-				<div class="success-message scheduled">
-					<div class="message-icon">📅</div>
-					<div class="message-content">
-						<h3 class="message-title">プラン変更を予約しました</h3>
-						<p class="message-text">
-							プラン変更は次回の請求日から適用されます。現在の請求期間終了まで、引き続き現在のプランの機能をご利用いただけます。
-						</p>
-					</div>
+			<div class="success-message">
+				<div class="message-icon">✅</div>
+				<div class="message-content">
+					<h3 class="message-title">プラン変更が完了しました</h3>
+					<p class="message-text">新しいプランが即座に適用されました。</p>
 				</div>
-			{:else}
-				<div class="success-message">
-					<div class="message-icon">✅</div>
-					<div class="message-content">
-						<h3 class="message-title">プラン変更が完了しました</h3>
-						<p class="message-text">新しいプランの機能がすぐにご利用いただけます。</p>
-					</div>
-				</div>
-			{/if}
+			</div>
 		</div>
 	{/if}
 
@@ -452,11 +439,6 @@
 		display: flex;
 		gap: 16px;
 		align-items: flex-start;
-	}
-
-	.success-message.scheduled {
-		background: #e8f4ff;
-		border-color: #007bff;
 	}
 
 	.message-icon {

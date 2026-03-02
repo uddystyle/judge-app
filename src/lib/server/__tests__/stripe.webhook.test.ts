@@ -2084,7 +2084,8 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 		// Verify organizations was downgraded to free
 		expect(mockUpdate2).toHaveBeenCalledWith({
 			plan_type: 'free',
-			max_members: 5
+			max_members: 5,
+			stripe_subscription_id: null
 		});
 		expect(mockEq5).toHaveBeenCalledWith('id', 'org_123');
 	});
@@ -2253,7 +2254,8 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 		});
 		expect(mockUpdate2).toHaveBeenCalledWith({
 			plan_type: 'free',
-			max_members: 5
+			max_members: 5,
+			stripe_subscription_id: null
 		});
 
 		// Second deletion event (duplicate)

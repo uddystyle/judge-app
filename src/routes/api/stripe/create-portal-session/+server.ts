@@ -1,4 +1,4 @@
-import { json, redirect, error } from '@sveltejs/kit';
+import { json, redirect, error, isRedirect, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
 
@@ -49,16 +49,16 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// 5. Portal URLを返す
 		return json({ url: portalSession.url });
 	} catch (err: any) {
+		// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
+		if (isRedirect(err) || isHttpError(err)) {
+			throw err;
+		}
 		console.error('[Portal API] エラー詳細:');
 		console.error('  メッセージ:', err.message);
 		console.error('  タイプ:', err.type);
 		console.error('  コード:', err.code);
 		console.error('  ステータスコード:', err.statusCode);
 		console.error('  完全なエラー:', JSON.stringify(err, null, 2));
-		// 4xxのHttpErrorはそのまま返す
-		if (err?.status && err.status >= 400 && err.status < 500) {
-			throw err;
-		}
 		throw error(500, err.message || 'Customer Portal Sessionの作成に失敗しました。');
 	}
 };

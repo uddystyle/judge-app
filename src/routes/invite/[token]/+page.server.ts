@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import { error, redirect, fail } from '@sveltejs/kit';
+import { error, redirect, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
@@ -185,8 +185,8 @@ export const actions: Actions = {
 			// 組織ページにリダイレクト
 			throw redirect(303, `/organization/${invitation.organization_id}`);
 		} catch (err: any) {
-			if (err.status === 303) {
-				throw err; // リダイレクトはそのまま投げる
+			if (isRedirect(err) || isHttpError(err)) {
+				throw err;
 			}
 			console.error('Signup error:', err);
 			return fail(500, { error: 'エラーが発生しました' });
@@ -257,7 +257,7 @@ export const actions: Actions = {
 			// 組織ページにリダイレクト
 			throw redirect(303, `/organization/${invitation.organization_id}`);
 		} catch (err: any) {
-			if (err.status === 303) {
+			if (isRedirect(err) || isHttpError(err)) {
 				throw err;
 			}
 			console.error('Join error:', err);

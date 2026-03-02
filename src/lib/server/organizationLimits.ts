@@ -62,6 +62,7 @@ export async function getCurrentMonthSessionCount(
 		.from('sessions')
 		.select('*', { count: 'exact', head: true })
 		.eq('organization_id', organizationId)
+		.is('deleted_at', null) // 削除済みセッションを除外
 		.gte('created_at', currentMonth.toISOString());
 
 	return count || 0;
@@ -83,11 +84,12 @@ export async function checkCanAddMember(
 		};
 	}
 
-	// 2. 現在のメンバー数を取得
+	// 2. 現在のメンバー数を取得（削除済みメンバーを除外）
 	const { count } = await supabase
 		.from('organization_members')
 		.select('*', { count: 'exact', head: true })
-		.eq('organization_id', organizationId);
+		.eq('organization_id', organizationId)
+		.is('removed_at', null); // 退会済みメンバーを除外
 
 	const currentMemberCount = count || 0;
 

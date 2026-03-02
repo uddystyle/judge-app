@@ -250,30 +250,6 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-
-		// Query execution order: 1) organizations, 2) plan_limits, 3) organization_members count
-		mocks.from.mockReturnValueOnce({
-			select: vi.fn().mockReturnThis(),
-			eq: vi.fn().mockReturnThis(),
-			single: mocks.single
-		}).mockReturnValueOnce({
-			select: vi.fn().mockReturnThis(),
-			eq: vi.fn().mockReturnThis(),
-			single: mocks.single
-		}).mockReturnValueOnce({
-			select: vi.fn().mockReturnValue({
-				eq: vi.fn().mockReturnValue({
-					is: vi.fn().mockResolvedValue({
-						count: 10,
-						data: null,
-						error: null
-					})
-				})
-			})
-		});
-
-
-
 			const result = await checkCanAddMember(mockSupabase, 'org-123');
 
 			expect(result.allowed).toBe(true);
@@ -544,11 +520,6 @@ describe('organizationLimits', () => {
 				max_judges_per_session: 5
 			};
 
-			mocks.maybeSingle.mockResolvedValueOnce({
-				data: mockSession,
-				error: null
-			});
-
 			mocks.single
 				.mockResolvedValueOnce({
 					data: mockOrganization,
@@ -572,27 +543,22 @@ describe('organizationLimits', () => {
 				select: vi.fn().mockReturnThis(),
 				eq: vi.fn().mockReturnThis(),
 				single: mocks.single
-
-		}).mockReturnValueOnce({
-			select: vi.fn().mockReturnValue({
-				eq: vi.fn().mockResolvedValue({
-					count: 5,
-					data: null,
-					error: null
+			}).mockReturnValueOnce({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						is: vi.fn().mockResolvedValue({
+							count: 5,
+							data: null,
+							error: null
+						})
+					})
 				})
-			})
-		});
+			});
 
-
-
-
-
-
-
-
-
-
-
+			mocks.maybeSingle.mockResolvedValueOnce({
+				data: mockSession,
+				error: null
+			});
 
 			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
 

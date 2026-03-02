@@ -1,4 +1,4 @@
-import { json, redirect, error } from '@sveltejs/kit';
+import { json, redirect, error, isRedirect, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
 
@@ -80,16 +80,16 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			success_url: successUrl,
 			cancel_url: cancelUrl,
 			metadata: {
-				user_id: user.id
+				user_id: user.id,
+				is_organization: 'false' // 個人プランであることを明示
 			},
-			// 既存のサブスクリプションがある場合は更新
-			...(existingSub?.stripe_customer_id && {
-				subscription_data: {
-					metadata: {
-						user_id: user.id
-					}
+			// subscription_data.metadata は常に設定（customer.subscription.* イベントでの参照に備える）
+			subscription_data: {
+				metadata: {
+					user_id: user.id,
+					is_organization: 'false' // 個人プランであることを明示
 				}
-			})
+			}
 		});
 
 		console.log('[Checkout API] Checkout Session作成成功:', session.id);
@@ -97,11 +97,11 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// 6. Checkout URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
-		console.error('[Checkout API] エラー:', err);
-		// 4xxのHttpErrorはそのまま返す
-		if (err?.status && err.status >= 400 && err.status < 500) {
+		// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
+		if (isRedirect(err) || isHttpError(err)) {
 			throw err;
 		}
+		console.error('[Checkout API] エラー:', err);
 		throw error(500, err.message || 'Checkout Sessionの作成に失敗しました。');
 	}
 };

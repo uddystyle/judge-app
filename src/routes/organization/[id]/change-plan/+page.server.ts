@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import { redirect, error, fail } from '@sveltejs/kit';
+import { redirect, error, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
 import {
 	STRIPE_PRICE_BASIC_MONTH,
@@ -206,9 +206,9 @@ export const actions: Actions = {
 			const isYearToMonth = currentBillingInterval === 'year' && billingInterval === 'month';
 
 			// プロレーション動作を決定
-			// - プランアップグレード: 即座に請求
-			// - 月額→年額: 即座に請求（割引適用のため）
-			// - 上記以外（ダウングレード、年額→月額）: 次回請求時
+			// - プランアップグレード: 即座に請求、プラン制限も即時適用
+			// - 月額→年額: 即座に請求（割引適用のため）、プラン制限も即時適用
+			// - 上記以外（ダウングレード、年額→月額）: 追加請求なし、プラン制限は即時適用
 			let prorationBehavior: 'always_invoice' | 'none';
 			let billingCycleAnchor: 'now' | 'unchanged';
 
@@ -217,7 +217,7 @@ export const actions: Actions = {
 				prorationBehavior = 'always_invoice';
 				billingCycleAnchor = 'now';
 			} else {
-				// ダウングレードまたは年額→月額の場合は次回請求時
+				// ダウングレードまたは年額→月額の場合は追加請求なし（プラン制限は即時適用）
 				prorationBehavior = 'none';
 				billingCycleAnchor = 'unchanged';
 			}
@@ -253,93 +253,64 @@ export const actions: Actions = {
 				status: updatedSubscription.status
 			});
 
-			// アップグレードまたは月額→年額の場合のみ、データベースを即座に更新
-			// ダウングレードまたは年額→月額の場合は、webhookで更新されるのを待つ
-			if (isUpgrade || isMonthToYear) {
-				console.log('[Change Plan] 即座にデータベースを更新（アップグレード/月額→年額）');
+			// データベースを即座に更新（アップグレード・ダウングレード共通）
+			console.log('[Change Plan] データベースを即座に更新');
 
-				// データベースのorganizationsテーブルを更新
-				const { data: planLimits } = await supabase
-					.from('plan_limits')
-					.select('max_organization_members')
-					.eq('plan_type', newPlanType)
-					.single();
+			// データベースのorganizationsテーブルを更新
+			const { data: planLimits } = await supabase
+				.from('plan_limits')
+				.select('max_organization_members')
+				.eq('plan_type', newPlanType)
+				.single();
 
-				const { error: orgUpdateError } = await supabase
-					.from('organizations')
-					.update({
-						plan_type: newPlanType,
-						max_members: planLimits?.max_organization_members || 10
-					})
-					.eq('id', params.id);
+			const { error: orgUpdateError } = await supabase
+				.from('organizations')
+				.update({
+					plan_type: newPlanType,
+					max_members: planLimits?.max_organization_members || 10
+				})
+				.eq('id', params.id);
 
-				if (orgUpdateError) {
-					console.error('[Change Plan] 組織更新エラー:', orgUpdateError);
-					return fail(500, { error: '組織情報の更新に失敗しました。' });
-				}
-
-				// データベースのsubscriptionsテーブルを更新
-				const { error: subUpdateError } = await supabase
-					.from('subscriptions')
-					.update({
-						plan_type: newPlanType,
-						billing_interval: billingInterval,
-						status: updatedSubscription.status,
-						current_period_start: new Date(
-							updatedSubscription.current_period_start * 1000
-						).toISOString(),
-						current_period_end: new Date(
-							updatedSubscription.current_period_end * 1000
-						).toISOString()
-					})
-					.eq('stripe_subscription_id', subscription.stripe_subscription_id);
-
-				if (subUpdateError) {
-					console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
-					return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
-				}
-
-				console.log('[Change Plan] データベース更新完了');
-			} else {
-				console.log(
-					'[Change Plan] データベース更新はスキップ（ダウングレード/年額→月額）- webhookで更新されます'
-				);
-
-				// 請求間隔のみ更新（プランタイプは次回請求日まで変更しない）
-				if (isBillingIntervalChange) {
-					const { error: subUpdateError } = await supabase
-						.from('subscriptions')
-						.update({
-							billing_interval: billingInterval,
-							current_period_start: new Date(
-								updatedSubscription.current_period_start * 1000
-							).toISOString(),
-							current_period_end: new Date(
-								updatedSubscription.current_period_end * 1000
-							).toISOString()
-						})
-						.eq('stripe_subscription_id', subscription.stripe_subscription_id);
-
-					if (subUpdateError) {
-						console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
-					}
-				}
+			if (orgUpdateError) {
+				console.error('[Change Plan] 組織更新エラー:', orgUpdateError);
+				return fail(500, { error: '組織情報の更新に失敗しました。' });
 			}
 
+			// データベースのsubscriptionsテーブルを更新
+			const { error: subUpdateError } = await supabase
+				.from('subscriptions')
+				.update({
+					plan_type: newPlanType,
+					billing_interval: billingInterval,
+					status: updatedSubscription.status,
+					current_period_start: new Date(
+						updatedSubscription.current_period_start * 1000
+					).toISOString(),
+					current_period_end: new Date(
+						updatedSubscription.current_period_end * 1000
+					).toISOString()
+				})
+				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
+
+			if (subUpdateError) {
+				console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
+				return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
+			}
+
+			console.log('[Change Plan] データベース更新完了');
 			console.log('[Change Plan] プラン変更完了:', {
 				organizationId: organization.id,
 				newPlan: newPlanType,
-				immediateUpdate: isUpgrade || isMonthToYear
+				billingInterval
 			});
 
 			// 成功メッセージとともにpricingページへリダイレクト
-			// ダウングレードの場合は特別なパラメータを追加
-			if (isUpgrade || isMonthToYear) {
-				throw redirect(303, '/pricing?changed=true');
-			} else {
-				throw redirect(303, '/pricing?changed=true&scheduled=true');
-			}
+			throw redirect(303, '/pricing?changed=true');
 		} catch (err: any) {
+			// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
+			if (isRedirect(err) || isHttpError(err)) {
+				throw err;
+			}
 			console.error('[Change Plan] エラー:', err);
 			return fail(500, {
 				error: `プラン変更に失敗しました。${err.message || ''}`

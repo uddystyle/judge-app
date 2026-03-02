@@ -537,6 +537,7 @@ describe('Customer Portal API（P2-1）', () => {
 			// Mock organization_members not found (second from() call)
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2 = vi.fn().mockReturnThis();
+			const mockIs = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: null,
 				error: { code: 'PGRST116' }
@@ -551,6 +552,7 @@ describe('Customer Portal API（P2-1）', () => {
 				.mockReturnValueOnce({
 					select: mockSelect2,
 					eq: mockEq2,
+					is: mockIs,
 					single: mockSingle2
 				} as any);
 
@@ -589,6 +591,7 @@ describe('Customer Portal API（P2-1）', () => {
 			// Mock organization_members with member role (not admin) (second from() call)
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2 = vi.fn().mockReturnThis();
+			const mockIs = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: { role: 'member' },
 				error: null
@@ -603,6 +606,7 @@ describe('Customer Portal API（P2-1）', () => {
 				.mockReturnValueOnce({
 					select: mockSelect2,
 					eq: mockEq2,
+					is: mockIs,
 					single: mockSingle2
 				} as any);
 
@@ -641,6 +645,7 @@ describe('Customer Portal API（P2-1）', () => {
 			// Mock organization_members with admin role (second from() call)
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2 = vi.fn().mockReturnThis();
+			const mockIs = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: { role: 'admin' },
 				error: null
@@ -655,6 +660,7 @@ describe('Customer Portal API（P2-1）', () => {
 				.mockReturnValueOnce({
 					select: mockSelect2,
 					eq: mockEq2,
+					is: mockIs,
 					single: mockSingle2
 				} as any);
 
@@ -699,10 +705,12 @@ describe('Customer Portal API（P2-1）', () => {
 				error: null
 			});
 
-			// T21: Mock organization_members query returns null (RLS filters out removed member)
-			// When removed_at IS NOT NULL, RLS policy prevents SELECT
+			// T21: Mock organization_members query returns null
+			// Server code explicitly filters .is('removed_at', null), so removed members are excluded
+			// This ensures protection even if RLS policies change
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2 = vi.fn().mockReturnThis();
+			const mockIs = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: null,
 				error: { code: 'PGRST116', message: 'No rows found' }
@@ -717,6 +725,7 @@ describe('Customer Portal API（P2-1）', () => {
 				.mockReturnValueOnce({
 					select: mockSelect2,
 					eq: mockEq2,
+					is: mockIs,
 					single: mockSingle2
 				} as any);
 
@@ -724,10 +733,13 @@ describe('Customer Portal API（P2-1）', () => {
 				await customerPortal(event);
 				expect.fail('Expected error');
 			} catch (err: any) {
-				// T21: 退会済みメンバーはアクセス拒否（403）
+				// T21: 退会済みメンバーはサーバー側で明示的に拒否（403）
 				expect(err.status).toBe(403);
 				expect(err.body?.message).toContain('管理者権限');
 			}
+
+			// T21: .is('removed_at', null) が呼ばれたことを確認
+			expect(mockIs).toHaveBeenCalledWith('removed_at', null);
 		});
 	});
 
@@ -985,6 +997,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2 = vi.fn().mockReturnThis();
 			const mockEq3 = vi.fn().mockReturnThis();
+			const mockIs = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: { role: 'admin' },
 				error: null
@@ -1003,7 +1016,8 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 
 			mockSelect2.mockReturnValue({ eq: mockEq2 } as any);
 			mockEq2.mockReturnValue({ eq: mockEq3 } as any);
-			mockEq3.mockReturnValue({ single: mockSingle2 } as any);
+			mockEq3.mockReturnValue({ is: mockIs } as any);
+			mockIs.mockReturnValue({ single: mockSingle2 } as any);
 
 			// Mock Stripe API failure
 			(stripe.billingPortal.sessions.create as any).mockRejectedValue(
@@ -1192,6 +1206,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2a = vi.fn().mockReturnThis();
 			const mockEq2b = vi.fn().mockReturnThis();
+			const mockIs = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: { role: 'admin' },
 				error: null
@@ -1209,7 +1224,12 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				} as any);
 
 			mockEq2a.mockReturnValue({
-				eq: mockEq2b,
+				eq: mockEq2b
+			} as any);
+			mockEq2b.mockReturnValue({
+				is: mockIs
+			} as any);
+			mockIs.mockReturnValue({
 				single: mockSingle2
 			} as any);
 		};
@@ -1327,5 +1347,167 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect(err.body?.message).toContain('An error occurred with our API');
 			}
 		});
+	});
+});
+
+describe('create-checkout-session: メタデータ設定の検証', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const createMockRequest = (body: any) => {
+		return new Request('http://localhost/api/stripe/create-checkout-session', {
+			method: 'POST',
+			headers: {
+				'content-type': 'application/json'
+			},
+			body: JSON.stringify(body)
+		});
+	};
+
+	it('新規ユーザーの場合、metadata と subscription_data.metadata に user_id と is_organization="false" を設定する', async () => {
+		const request = createMockRequest({
+			priceId: 'price_test_123',
+			successUrl: 'http://localhost/success',
+			cancelUrl: 'http://localhost/cancel'
+		});
+		const event = {
+			request,
+			locals: { supabase: mockSupabaseClient }
+		} as unknown as RequestEvent;
+
+		mockSupabaseClient.auth.getUser.mockResolvedValue({
+			data: { user: { id: 'user_123', email: 'test@example.com' } },
+			error: null
+		});
+
+		// 既存のサブスクリプションなし（新規ユーザー）
+		const mockSelect1 = vi.fn().mockReturnThis();
+		const mockEq1 = vi.fn().mockReturnThis();
+		const mockIs1 = vi.fn().mockReturnThis();
+		const mockSingle1 = vi.fn().mockResolvedValue({
+			data: null,
+			error: { code: 'PGRST116' }
+		});
+
+		// プロフィール取得
+		const mockSelect2 = vi.fn().mockReturnThis();
+		const mockEq2 = vi.fn().mockReturnThis();
+		const mockSingle2 = vi.fn().mockResolvedValue({
+			data: { full_name: 'Test User', email: 'test@example.com' },
+			error: null
+		});
+
+		// subscriptions.insert のモック
+		const mockInsert = vi.fn().mockResolvedValue({
+			data: null,
+			error: null
+		});
+
+		mockSupabaseClient.from
+			.mockReturnValueOnce({
+				select: mockSelect1,
+				eq: mockEq1,
+				is: mockIs1,
+				single: mockSingle1
+			} as any)
+			.mockReturnValueOnce({
+				select: mockSelect2,
+				eq: mockEq2,
+				single: mockSingle2
+			} as any)
+			.mockReturnValueOnce({
+				insert: mockInsert
+			} as any);
+
+		// Stripe Customerの作成をモック
+		vi.mocked(stripe.customers.create).mockResolvedValue({
+			id: 'cus_new_123',
+			email: 'test@example.com'
+		} as any);
+
+		// Stripe Checkout Sessionの作成をモック
+		vi.mocked(stripe.checkout.sessions.create).mockResolvedValue({
+			id: 'cs_test_123',
+			url: 'https://checkout.stripe.com/test_123'
+		} as any);
+
+		await createCheckoutSession(event);
+
+		// stripe.checkout.sessions.create が呼ばれたことを確認
+		expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				metadata: {
+					user_id: 'user_123',
+					is_organization: 'false'
+				},
+				subscription_data: {
+					metadata: {
+						user_id: 'user_123',
+						is_organization: 'false'
+					}
+				}
+			})
+		);
+	});
+
+	it('既存ユーザーの場合も、metadata と subscription_data.metadata に user_id と is_organization="false" を設定する', async () => {
+		const request = createMockRequest({
+			priceId: 'price_test_456',
+			successUrl: 'http://localhost/success',
+			cancelUrl: 'http://localhost/cancel'
+		});
+		const event = {
+			request,
+			locals: { supabase: mockSupabaseClient }
+		} as unknown as RequestEvent;
+
+		mockSupabaseClient.auth.getUser.mockResolvedValue({
+			data: { user: { id: 'user_existing', email: 'existing@example.com' } },
+			error: null
+		});
+
+		// 既存のサブスクリプションあり
+		const mockSelect = vi.fn().mockReturnThis();
+		const mockEq = vi.fn().mockReturnThis();
+		const mockIs = vi.fn().mockReturnThis();
+		const mockSingle = vi.fn().mockResolvedValue({
+			data: {
+				stripe_customer_id: 'cus_existing_123',
+				plan_type: 'free'
+			},
+			error: null
+		});
+
+		mockSupabaseClient.from.mockReturnValue({
+			select: mockSelect,
+			eq: mockEq,
+			is: mockIs,
+			single: mockSingle
+		} as any);
+
+		// Stripe Checkout Sessionの作成をモック
+		vi.mocked(stripe.checkout.sessions.create).mockResolvedValue({
+			id: 'cs_test_456',
+			url: 'https://checkout.stripe.com/test_456'
+		} as any);
+
+		await createCheckoutSession(event);
+
+		// stripe.checkout.sessions.create が呼ばれたことを確認
+		expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+			expect.objectContaining({
+				metadata: {
+					user_id: 'user_existing',
+					is_organization: 'false'
+				},
+				subscription_data: {
+					metadata: {
+						user_id: 'user_existing',
+						is_organization: 'false'
+					}
+				}
+			})
+		);
 	});
 });

@@ -574,7 +574,8 @@ async function handleSubscriptionCreated(subscription: any) {
 			.from('organizations')
 			.update({
 				plan_type: planType,
-				max_members: maxMembers
+				max_members: maxMembers,
+				stripe_subscription_id: subscription.id
 			})
 			.eq('id', subData.organization_id);
 
@@ -812,7 +813,9 @@ async function handleSubscriptionDeleted(subscription: any) {
 				.from('organizations')
 				.update({
 					plan_type: 'free',
-					max_members: maxMembers
+					max_members: maxMembers,
+					stripe_subscription_id: null
+					// stripe_customer_id は保持（再アップグレード時に同じカスタマーIDを使用）
 				})
 				.eq('id', organizationId);
 
@@ -822,7 +825,7 @@ async function handleSubscriptionDeleted(subscription: any) {
 				throw new RetryableError(`organizations更新エラー: ${orgUpdateError.message}`);
 			}
 
-			console.log('[Webhook] organizations更新成功:', organizationId, 'フリープランに降格 max_members:', maxMembers);
+			console.log('[Webhook] organizations更新成功 - フリープランに降格:', { organizationId, max_members: maxMembers, stripe_subscription_id: 'cleared' });
 		} else {
 			console.log('[Webhook] 削除されたサブスクリプションは古いものです（アップグレード時の旧サブスクリプション）。組織は更新しません。');
 			console.log('[Webhook] 組織の現在のサブスクリプション:', currentOrg?.stripe_subscription_id);
