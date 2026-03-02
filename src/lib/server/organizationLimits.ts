@@ -98,7 +98,7 @@ export async function checkCanAddMember(
 		return {
 			allowed: false,
 			reason: `組織メンバー数の上限（${limits.max_organization_members}人）に達しています。`,
-			upgradeUrl: '/settings/billing'
+			upgradeUrl: `/organization/${organizationId}/change-plan`
 		};
 	}
 
@@ -132,7 +132,7 @@ export async function checkCanCreateSession(
 		return {
 			allowed: false,
 			reason: `今月のセッション数が上限（${planLimits.max_sessions_per_month}回）に達しました。`,
-			upgradeUrl: '/settings/billing'
+			upgradeUrl: `/organization/${organizationId}/change-plan`
 		};
 	}
 
@@ -158,7 +158,7 @@ export async function checkCanUseTournamentMode(
 		return {
 			allowed: false,
 			reason: '大会モードは有料プランでのみ利用できます。',
-			upgradeUrl: '/settings/billing'
+			upgradeUrl: `/organization/${organizationId}/change-plan`
 		};
 	}
 
@@ -184,7 +184,7 @@ export async function checkCanUseTrainingMode(
 		return {
 			allowed: false,
 			reason: '研修モードは有料プランでのみ利用できます。',
-			upgradeUrl: '/settings/billing'
+			upgradeUrl: `/organization/${organizationId}/change-plan`
 		};
 	}
 
@@ -255,7 +255,7 @@ export async function checkCanAddJudgeToSession(
 		return {
 			allowed: false,
 			reason: `セッションの検定員数上限（${limits.max_judges_per_session}人）に達しています。`,
-			upgradeUrl: '/settings/billing'
+			upgradeUrl: `/organization/${session.organization_id}/change-plan`
 		};
 	}
 
@@ -282,7 +282,7 @@ export async function checkCanUseScoreboard(
 		return {
 			allowed: false,
 			reason: 'スコアボード公開機能は有料プランでのみ利用できます。',
-			upgradeUrl: '/settings/billing'
+			upgradeUrl: `/organization/${organizationId}/change-plan`
 		};
 	}
 

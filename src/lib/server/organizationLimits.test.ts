@@ -190,7 +190,7 @@ describe('organizationLimits', () => {
 
 			expect(result.allowed).toBe(false);
 			expect(result.reason).toContain('組織メンバー数の上限');
-			expect(result.upgradeUrl).toBe('/settings/billing');
+			expect(result.upgradeUrl).toBe('/organization/org-123/change-plan');
 		});
 
 		it('メンバー数が上限未満の場合はtrueを返す', async () => {
@@ -335,7 +335,7 @@ describe('organizationLimits', () => {
 
 			expect(result.allowed).toBe(false);
 			expect(result.reason).toContain('今月のセッション数が上限');
-			expect(result.upgradeUrl).toBe('/settings/billing');
+			expect(result.upgradeUrl).toBe('/organization/org-123/change-plan');
 		});
 
 		it('無制限プラン(-1)の場合は常にtrueを返す', async () => {
@@ -403,7 +403,7 @@ describe('organizationLimits', () => {
 
 			expect(result.allowed).toBe(false);
 			expect(result.reason).toBe('大会モードは有料プランでのみ利用できます。');
-			expect(result.upgradeUrl).toBe('/settings/billing');
+			expect(result.upgradeUrl).toBe('/organization/org-123/change-plan');
 		});
 
 		it('大会モードが利用可能な場合はtrueを返す', async () => {
