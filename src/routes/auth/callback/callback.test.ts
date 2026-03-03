@@ -143,6 +143,39 @@ describe('auth/callback', () => {
 				expect(err.location).toBe('/dashboard');
 			}
 		});
+
+		it('コード使用済みで未認証の場合、適切なエラーメッセージ付きでloginにredirect', async () => {
+			mockUrl.searchParams.set('code', 'used_code');
+
+			mockSupabase.auth.exchangeCodeForSession.mockResolvedValue({
+				data: null,
+				error: {
+					message: 'Code has already been used',
+					code: 'invalid_grant'
+				}
+			});
+
+			mockSupabase.auth.getUser.mockResolvedValue({
+				data: { user: null },
+				error: null
+			});
+
+			try {
+				await GET({
+					url: mockUrl,
+					locals: mockLocals
+				} as any);
+				expect.fail('Expected redirect to be thrown');
+			} catch (err: any) {
+				expect(isRedirect(err)).toBe(true);
+				expect(err.status).toBe(303);
+				expect(err.location).toContain('/login?error=');
+				// URL-encoded error message should be decoded before assertion
+				const decodedLocation = decodeURIComponent(err.location);
+				expect(decodedLocation).toContain('認証リンクが既に使用済みか無効です');
+				expect(decodedLocation).toContain('登録済みの場合はそのままログインしてください');
+			}
+		});
 	});
 
 	describe('トークンハッシュフロー (token_hash parameter)', () => {

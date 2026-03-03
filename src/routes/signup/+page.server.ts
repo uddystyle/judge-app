@@ -35,6 +35,11 @@ export const actions: Actions = {
 		});
 
 		if (authError) {
+			console.error('[signup] signUp error:', {
+				message: authError.message,
+				status: (authError as any).status,
+				code: (authError as any).code
+			});
 			// Handle specific errors, like if the user already exists
 			if (authError.message.includes('User already registered')) {
 				return fail(409, { fullName, email, error: 'このメールアドレスは既に使用されています。' });
@@ -43,6 +48,16 @@ export const actions: Actions = {
 				fullName,
 				email,
 				error: 'サーバーエラー: アカウントの作成に失敗しました。'
+			});
+		}
+
+		// Supabaseは既存ユーザーの場合、エラーなしで匿名化ユーザーを返す場合がある
+		// identitiesが空なら既存登録済みとして扱う
+		if (authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+			return fail(409, {
+				fullName,
+				email,
+				error: 'このメールアドレスは既に登録されています。ログインしてください。'
 			});
 		}
 

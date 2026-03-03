@@ -63,17 +63,22 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 				console.error('[auth/callback] エラー詳細:', JSON.stringify(error));
 
 				// 既に使用済みのコードの場合、既存セッションを確認
-				if (error.message.includes('code verifier') || error.message.includes('invalid') || error.message.includes('already been used')) {
-					console.log('[auth/callback] コードが使用済みまたは無効。現在のセッションを確認...');
-					// 既に認証済みかチェック
-					const { data: { user: currentUser } } = await supabase.auth.getUser();
-					if (currentUser) {
-						console.log('[auth/callback] コードは使用済みだが、ユーザーは認証済み。ダッシュボードへリダイレクト');
-						throw redirect(303, '/dashboard');
+					if (error.message.includes('code verifier') || error.message.includes('invalid') || error.message.includes('already been used')) {
+						console.log('[auth/callback] コードが使用済みまたは無効。現在のセッションを確認...');
+						// 既に認証済みかチェック
+						const { data: { user: currentUser } } = await supabase.auth.getUser();
+						if (currentUser) {
+							console.log('[auth/callback] コードは使用済みだが、ユーザーは認証済み。ダッシュボードへリダイレクト');
+							throw redirect(303, '/dashboard');
+						}
+						console.log('[auth/callback] セッションも存在しない。ログインへリダイレクト（再利用リンク案内）');
+						throw redirect(
+							303,
+							`/login?error=${encodeURIComponent(
+								'認証リンクが既に使用済みか無効です。登録済みの場合はそのままログインしてください。'
+							)}`
+						);
 					}
-					console.log('[auth/callback] セッションも存在しない。ログインへリダイレクト');
-					throw redirect(303, '/login');
-				}
 
 				console.error('[auth/callback] 予期しないエラー。ログインページへリダイレクト');
 				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました: ' + error.message)}`);
