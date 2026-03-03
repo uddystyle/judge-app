@@ -106,6 +106,11 @@
 		<NavButton on:click={() => goto(backUrl)}>
 			種目選択に戻る
 		</NavButton>
+		{#if isTrainingMode}
+			<NavButton variant="secondary" on:click={() => goto(`/session/${sessionId}/score/${modeType}/${eventId}/results${guestIdentifier ? `?guest=${guestIdentifier}` : ''}`)}>
+				結果を見る
+			</NavButton>
+		{/if}
 	</div>
 </div>
 
