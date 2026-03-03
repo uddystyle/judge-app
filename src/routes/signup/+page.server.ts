@@ -22,6 +22,11 @@ export const actions: Actions = {
 
 		// --- Create User in Supabase Auth ---
 		// Pass full_name in metadata so the database trigger can use it
+		console.log('[signup] サインアップ開始:', {
+			email,
+			emailRedirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/onboarding/create-organization`
+		});
+
 		const { data: authData, error: authError } = await supabase.auth.signUp({
 			email: email,
 			password: password,
@@ -34,15 +39,40 @@ export const actions: Actions = {
 			}
 		});
 
+		console.log('[signup] Supabase signUp レスポンス:', {
+			hasUser: !!authData.user,
+			userId: authData.user?.id,
+			email: authData.user?.email,
+			hasError: !!authError,
+			errorMessage: authError?.message,
+			// 完全なレスポンスをログ出力
+			fullResponse: JSON.stringify(authData, null, 2)
+		});
+
 		if (authError) {
 			console.error('[signup] signUp error:', {
 				message: authError.message,
 				status: (authError as any).status,
 				code: (authError as any).code
 			});
-			// Handle specific errors, like if the user already exists
-			if (authError.message.includes('User already registered')) {
+			// 既存ユーザー
+			if (
+				authError.message.includes('User already registered') ||
+				authError.message.toLowerCase().includes('already registered')
+			) {
 				return fail(409, { fullName, email, error: 'このメールアドレスは既に使用されています。' });
+			}
+			// メール送信レート制限
+			if (
+				(authError as any).status === 429 ||
+				authError.message.toLowerCase().includes('rate limit')
+			) {
+				return fail(429, {
+					fullName,
+					email,
+					error:
+						'確認メールの送信回数が上限に達しました。しばらく待ってから再度お試しください。'
+				});
 			}
 			return fail(500, {
 				fullName,
@@ -51,14 +81,42 @@ export const actions: Actions = {
 			});
 		}
 
+		// --- メール送信状態の診断ログ ---
+		console.log('[signup] signUp 成功:', {
+			userId: authData.user?.id,
+			email: authData.user?.email,
+			hasSession: !!authData.session,
+			emailConfirmedAt: authData.user?.email_confirmed_at,
+			identitiesCount: authData.user?.identities?.length || 0,
+			userMetadata: authData.user?.user_metadata
+		});
+
+		// セッションが即座に作成されている場合は、メール確認がスキップされている（Autoconfirm有効）
+		if (authData.session) {
+			console.warn('[signup] ⚠️ メール確認なしでセッションが作成されました。Supabase設定でAutoconfirmが有効になっている可能性があります。');
+		} else {
+			console.log('[signup] ✓ メール確認が必要です。確認メールが送信されているはずです。');
+		}
+
 		// Supabaseは既存ユーザーの場合、エラーなしで匿名化ユーザーを返す場合がある
 		// identitiesが空なら既存登録済みとして扱う
 		if (authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+			console.warn('[signup] ⚠️ 既存ユーザーを検出（identitiesが空）:', {
+				email: authData.user.email,
+				userId: authData.user.id,
+				reason: 'このケースではメールは送信されません'
+			});
 			return fail(409, {
 				fullName,
 				email,
 				error: 'このメールアドレスは既に登録されています。ログインしてください。'
 			});
+		}
+
+		// Autoconfirm有効時はセッションが作成されるため、確認メール待ち画面へは遷移しない
+		if (authData.session || authData.user?.email_confirmed_at) {
+			console.log('[signup] Autoconfirmまたは既にメール確認済み。オンボーディングへ遷移します');
+			throw redirect(303, '/onboarding/create-organization');
 		}
 
 		if (!authData.user) {

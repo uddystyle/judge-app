@@ -62,7 +62,7 @@ describe('signup action', () => {
 			});
 		});
 
-		it('identitiesが存在する場合、正常にサインアップ処理を継続', async () => {
+			it('identitiesが存在する場合、正常にサインアップ処理を継続', async () => {
 			const request = createMockRequest({
 				fullName: 'New User',
 				email: 'new@example.com',
@@ -97,7 +97,7 @@ describe('signup action', () => {
 			}
 		});
 
-		it('authErrorがある場合は従来通りエラーハンドリング', async () => {
+			it('authErrorがある場合は従来通りエラーハンドリング', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'error@example.com',
@@ -117,15 +117,48 @@ describe('signup action', () => {
 				}
 			});
 
-			const result = await actions.signup(event);
+				const result = await actions.signup(event);
 
-			expect(result).toMatchObject({
-				status: 409,
-				data: {
-					error: 'このメールアドレスは既に使用されています。'
+				expect(result).toMatchObject({
+					status: 409,
+					data: {
+						error: 'このメールアドレスは既に使用されています。'
+					}
+				});
+			});
+
+			it('sessionが返る場合（Autoconfirm）はオンボーディングへリダイレクトする', async () => {
+				const request = createMockRequest({
+					fullName: 'Auto User',
+					email: 'auto@example.com',
+					password: 'password123'
+				});
+
+				const event = {
+					request,
+					locals: { supabase: mockSupabaseClient }
+				} as unknown as RequestEvent;
+
+				mockSupabaseClient.auth.signUp.mockResolvedValue({
+					data: {
+						user: {
+							id: 'user-auto-1',
+							email: 'auto@example.com',
+							identities: [{ provider: 'email' }]
+						},
+						session: { access_token: 'token' }
+					},
+					error: null
+				});
+
+				try {
+					await actions.signup(event);
+					expect.fail('Expected redirect to be thrown');
+				} catch (err: any) {
+					expect(err.status).toBe(303);
+					expect(err.location).toBe('/onboarding/create-organization');
 				}
 			});
-		});
 	});
 
 	describe('バリデーション', () => {
