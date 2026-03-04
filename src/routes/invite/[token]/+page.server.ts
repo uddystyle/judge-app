@@ -175,16 +175,24 @@ export const actions: Actions = {
 			});
 
 			if (authError) {
-				console.error('[Invite Signup] signUp error:', authError);
+				console.error('[Invite Signup] signUp error:', {
+					code: authError.code,
+					message: authError.message,
+					status: (authError as any).status
+				});
 
-				// 既存ユーザーの場合
-				if (authError.message.includes('User already registered') ||
-				    authError.message.toLowerCase().includes('already registered')) {
+				// エラーコードベースの判定（文字列マッチングではなくコード判定）
+				// Supabase Auth Error Codes: https://supabase.com/docs/guides/auth/debugging/error-codes
+				if (authError.code === 'user_already_exists' ||
+				    authError.code === 'email_exists') {
+					// 既存ユーザー: メールアドレスが既に登録されている
 					return fail(409, {
 						error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 					});
 				}
 
+				// その他のエラー
+				console.error('[Invite Signup] Unexpected error code:', authError.code);
 				return fail(500, { error: 'アカウントの作成に失敗しました' });
 			}
 

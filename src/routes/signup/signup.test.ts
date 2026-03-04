@@ -112,6 +112,7 @@ describe('signup action', () => {
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
 				data: { user: null, session: null },
 				error: {
+					code: 'user_already_exists',
 					message: 'User already registered',
 					status: 400
 				}
@@ -127,7 +128,7 @@ describe('signup action', () => {
 				});
 			});
 
-			it('sessionが返る場合（Autoconfirm）はオンボーディングへリダイレクトする', async () => {
+			it('sessionが返る場合（設定エラー）は500エラーを返す', async () => {
 				const request = createMockRequest({
 					fullName: 'Auto User',
 					email: 'auto@example.com',
@@ -151,13 +152,14 @@ describe('signup action', () => {
 					error: null
 				});
 
-				try {
-					await actions.signup(event);
-					expect.fail('Expected redirect to be thrown');
-				} catch (err: any) {
-					expect(err.status).toBe(303);
-					expect(err.location).toBe('/onboarding/create-organization');
-				}
+				const result = await actions.signup(event);
+
+				expect(result).toMatchObject({
+					status: 500,
+					data: {
+						error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
+					}
+				});
 			});
 	});
 

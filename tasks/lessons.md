@@ -435,6 +435,94 @@ throw redirect(303, `/invite/${token}/check-email`);
 
 ---
 
+### ✅ Signup Flow Consistency (SECURITY & MAINTAINABILITY)
+**Rule**: 通常のサインアップと招待サインアップは同じセキュリティパターンを使用し、一貫性を保つ
+
+**Key Principles:**
+1. **Email Normalization**: 両方のフローで `normalizeEmail()` を使用
+2. **Error Code-Based Detection**: 文字列マッチングではなく `error.code` で判定
+3. **Session Null Check**: `signUp()` 後に `session === null` を検証
+4. **Normalized Email in signUp()**: 正規化後のメールを `signUp()` に渡す
+
+**Implementation Pattern (Both Flows):**
+```typescript
+// メール正規化関数（両フローで共通）
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// バリデーション後、正規化したメールを作成
+const normalizedEmail = normalizeEmail(email);
+
+// サインアップ（正規化後のメールを使用）
+const { data: authData, error: authError } = await supabase.auth.signUp({
+  email: normalizedEmail,  // ← 正規化後のメールを使用
+  password,
+  options: {
+    data: { full_name: fullName },
+    emailRedirectTo: '...'
+  }
+});
+
+// エラーコードベースの判定（両フローで共通）
+if (authError) {
+  if (authError.code === 'user_already_exists' ||
+      authError.code === 'email_exists') {
+    return fail(409, { error: '既存ユーザーエラー' });
+  }
+
+  if (authError.code === 'over_email_send_rate_limit' ||
+      (authError as any).status === 429) {
+    return fail(429, { error: 'レート制限エラー' });
+  }
+
+  // その他のエラーコードをログ出力
+  console.error('Unexpected error code:', authError.code);
+  return fail(500, { error: 'サーバーエラー' });
+}
+
+// 既存ユーザー検出（identitiesが空）
+if (authData.user && Array.isArray(authData.user.identities) &&
+    authData.user.identities.length === 0) {
+  return fail(409, { error: '既存ユーザーエラー' });
+}
+
+// セキュリティチェック: session が null であることを確認
+if (authData.session) {
+  console.error('SECURITY WARNING: Session was returned immediately after signup.');
+  return fail(500, {
+    error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
+  });
+}
+
+// 成功: メール確認画面へリダイレクト
+throw redirect(303, '/signup/success');
+```
+
+**Why Consistency Matters:**
+- **セキュリティ**: 両フローで同じセキュリティチェックを適用
+- **保守性**: パターンが統一されていると、バグ修正や改善が容易
+- **テスト**: 同じテストパターンを両フローに適用可能
+- **信頼性**: 一方のフローで見つかった問題は他方にも適用される
+
+**Common Mistakes**:
+- ❌ 一方のフローだけにセキュリティ改善を適用し、もう一方を忘れる
+- ❌ 招待サインアップでは正規化するが、通常サインアップでは正規化しない
+- ❌ 一方のフローではエラーコードベース、もう一方では文字列マッチング
+- ❌ session チェックを一方のフローだけに実装
+- ✅ 正しいパターン:
+  - 両フローで同じヘルパー関数を使用（または同じ実装を使用）
+  - セキュリティ改善は必ず両フローに適用
+  - テストパターンも両フローで統一
+
+**Affected Files**:
+- `/src/routes/signup/+page.server.ts` (通常のサインアップ)
+- `/src/routes/invite/[token]/+page.server.ts` (招待サインアップ)
+- `/src/routes/signup/signup.test.ts` (通常のサインアップテスト - 7テスト)
+- `/src/routes/invite/[token]/invite.test.ts` (招待サインアップテスト - 12テスト)
+
+---
+
 ## Organization & Plan Management
 
 ### ✅ Dynamic Organization URLs
@@ -661,6 +749,9 @@ if (guestIdentifier) {
 11. **Always** validate invitation email matches input email when creating pre-confirmed users
 12. **Always** use specific error codes instead of broad string matching for better reliability
 13. **Never** use loose regex patterns like `[a-f0-9-]+` for UUID validation → Use strict UUID v4 format
+14. **Always** validate `session === null` after `signUp()` to detect Supabase configuration errors **CRITICAL SECURITY**
+15. **Always** normalize emails before passing to `signUp()`, not just for comparison **DATA INTEGRITY**
+16. **Always** apply security improvements to both regular signup and invitation signup flows **CONSISTENCY & SECURITY**
 
 ---
 
