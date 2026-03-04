@@ -6,6 +6,14 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SITE_URL } from '$env/static/public';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+/**
+ * メールアドレスを正規化（小文字化 + トリム）
+ * 大文字小文字の違いや前後の空白を吸収し、比較の一貫性を保つ
+ */
+function normalizeEmail(email: string): string {
+	return email.trim().toLowerCase();
+}
+
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const token = params.token;
 
@@ -122,11 +130,14 @@ export const actions: Actions = {
 		}
 
 		// 【セキュリティ】招待メールが指定されている場合、入力メールと一致するかチェック
-		// admin.createUser({ email_confirm: true })で即有効化するため、この検証は必須
-		if (invitation.email && invitation.email !== email) {
+		// 正規化して比較することで、大文字小文字の違いや空白による回避を防ぐ
+		// メール確認フローを使用しているが、事前チェックとして招待メールとの一致も必須
+		if (invitation.email && normalizeEmail(invitation.email) !== normalizeEmail(email)) {
 			console.warn('[Invite Signup] Email mismatch detected:', {
 				invitationEmail: invitation.email,
 				inputEmail: email,
+				normalizedInvitation: normalizeEmail(invitation.email),
+				normalizedInput: normalizeEmail(email),
 				token
 			});
 			return fail(403, {
@@ -137,6 +148,7 @@ export const actions: Actions = {
 		console.log('[Invite Signup] Email validation passed:', {
 			hasInvitationEmail: !!invitation.email,
 			email,
+			normalizedEmail: normalizeEmail(email),
 			token
 		});
 

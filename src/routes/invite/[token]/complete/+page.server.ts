@@ -6,6 +6,14 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+/**
+ * メールアドレスを正規化（小文字化 + トリム）
+ * 大文字小文字の違いや前後の空白を吸収し、比較の一貫性を保つ
+ */
+function normalizeEmail(email: string): string {
+	return email.trim().toLowerCase();
+}
+
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const token = params.token;
 
@@ -57,10 +65,13 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	// 招待メールが指定されている場合、ユーザーのメールアドレスと一致するかチェック
-	if (invitation.email && invitation.email !== user.email) {
+	// 正規化して比較することで、大文字小文字の違いや空白による回避を防ぐ
+	if (invitation.email && user.email && normalizeEmail(invitation.email) !== normalizeEmail(user.email)) {
 		console.error('[Invite Complete] Email mismatch:', {
 			invitationEmail: invitation.email,
-			userEmail: user.email
+			userEmail: user.email,
+			normalizedInvitation: normalizeEmail(invitation.email),
+			normalizedUser: normalizeEmail(user.email)
 		});
 		throw error(403, 'この招待は別のメールアドレス宛です');
 	}

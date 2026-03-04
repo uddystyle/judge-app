@@ -301,6 +301,193 @@ describe('invite/[token] - signup action', () => {
 				}
 			});
 		});
+
+		it('大文字小文字が異なる場合でも一致と判定される（正規化）', async () => {
+			const request = createMockRequest({
+				email: 'INVITED@EXAMPLE.COM', // 大文字
+				password: 'password123',
+				fullName: 'Test User'
+			});
+
+			const event = {
+				request,
+				params: { token: 'test-token' },
+				locals: { supabase: mockSupabase }
+			} as unknown as RequestEvent;
+
+			// 招待情報（小文字）
+			const mockInvitation = {
+				id: 'invite-123',
+				email: 'invited@example.com', // 小文字
+				organization_id: 'org-123',
+				role: 'member',
+				expires_at: new Date(Date.now() + 86400000).toISOString(),
+				used_count: 0,
+				organizations: {
+					id: 'org-123',
+					name: 'Test Organization'
+				}
+			};
+
+			mockSupabaseAdmin.from.mockReturnValue({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({
+							data: mockInvitation,
+							error: null
+						})
+					})
+				})
+			});
+
+			mockSupabase.auth.signUp.mockResolvedValue({
+				data: {
+					user: {
+						id: 'user-123',
+						email: 'INVITED@EXAMPLE.COM',
+						identities: [{ provider: 'email' }]
+					},
+					session: null
+				},
+				error: null
+			});
+
+			try {
+				await actions.signup(event);
+				expect.fail('Expected redirect to be thrown');
+			} catch (err: any) {
+				// メール確認画面にリダイレクト（一致と判定）
+				expect(err.status).toBe(303);
+				expect(err.location).toBe('/invite/test-token/check-email');
+			}
+
+			// signUpが呼ばれることを確認
+			expect(mockSupabase.auth.signUp).toHaveBeenCalled();
+		});
+
+		it('前後に空白がある場合でも一致と判定される（正規化）', async () => {
+			const request = createMockRequest({
+				email: '  invited@example.com  ', // 前後に空白
+				password: 'password123',
+				fullName: 'Test User'
+			});
+
+			const event = {
+				request,
+				params: { token: 'test-token' },
+				locals: { supabase: mockSupabase }
+			} as unknown as RequestEvent;
+
+			const mockInvitation = {
+				id: 'invite-123',
+				email: 'invited@example.com',
+				organization_id: 'org-123',
+				role: 'member',
+				expires_at: new Date(Date.now() + 86400000).toISOString(),
+				used_count: 0,
+				organizations: {
+					id: 'org-123',
+					name: 'Test Organization'
+				}
+			};
+
+			mockSupabaseAdmin.from.mockReturnValue({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({
+							data: mockInvitation,
+							error: null
+						})
+					})
+				})
+			});
+
+			mockSupabase.auth.signUp.mockResolvedValue({
+				data: {
+					user: {
+						id: 'user-123',
+						email: '  invited@example.com  ',
+						identities: [{ provider: 'email' }]
+					},
+					session: null
+				},
+				error: null
+			});
+
+			try {
+				await actions.signup(event);
+				expect.fail('Expected redirect to be thrown');
+			} catch (err: any) {
+				// メール確認画面にリダイレクト（一致と判定）
+				expect(err.status).toBe(303);
+				expect(err.location).toBe('/invite/test-token/check-email');
+			}
+
+			// signUpが呼ばれることを確認
+			expect(mockSupabase.auth.signUp).toHaveBeenCalled();
+		});
+
+		it('大文字小文字と空白の両方が異なる場合でも一致と判定される（正規化）', async () => {
+			const request = createMockRequest({
+				email: '  INVITED@EXAMPLE.COM  ', // 大文字 + 空白
+				password: 'password123',
+				fullName: 'Test User'
+			});
+
+			const event = {
+				request,
+				params: { token: 'test-token' },
+				locals: { supabase: mockSupabase }
+			} as unknown as RequestEvent;
+
+			const mockInvitation = {
+				id: 'invite-123',
+				email: 'invited@example.com', // 小文字 + 空白なし
+				organization_id: 'org-123',
+				role: 'member',
+				expires_at: new Date(Date.now() + 86400000).toISOString(),
+				used_count: 0,
+				organizations: {
+					id: 'org-123',
+					name: 'Test Organization'
+				}
+			};
+
+			mockSupabaseAdmin.from.mockReturnValue({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({
+							data: mockInvitation,
+							error: null
+						})
+					})
+				})
+			});
+
+			mockSupabase.auth.signUp.mockResolvedValue({
+				data: {
+					user: {
+						id: 'user-123',
+						email: '  INVITED@EXAMPLE.COM  ',
+						identities: [{ provider: 'email' }]
+					},
+					session: null
+				},
+				error: null
+			});
+
+			try {
+				await actions.signup(event);
+				expect.fail('Expected redirect to be thrown');
+			} catch (err: any) {
+				// メール確認画面にリダイレクト（一致と判定）
+				expect(err.status).toBe(303);
+				expect(err.location).toBe('/invite/test-token/check-email');
+			}
+
+			// signUpが呼ばれることを確認
+			expect(mockSupabase.auth.signUp).toHaveBeenCalled();
+		});
 	});
 
 	describe('バリデーション', () => {

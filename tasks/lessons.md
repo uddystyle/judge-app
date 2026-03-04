@@ -266,6 +266,11 @@ await supabaseAdmin.auth.admin.createUser({
 
 **Correct (CURRENT IMPLEMENTATION):**
 ```typescript
+// メール正規化関数（大文字小文字、空白対応）
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 // 招待情報を取得
 const { data: invitation } = await supabaseAdmin
   .from('invitations')
@@ -273,8 +278,8 @@ const { data: invitation } = await supabaseAdmin
   .eq('token', token)
   .single();
 
-// ✅ 招待メールが指定されている場合、入力メールと一致するかチェック
-if (invitation.email && invitation.email !== email) {
+// ✅ 招待メールが指定されている場合、正規化して入力メールと一致するかチェック
+if (invitation.email && normalizeEmail(invitation.email) !== normalizeEmail(email)) {
   return fail(403, {
     error: 'この招待は別のメールアドレス宛です。招待されたメールアドレスを使用してください。'
   });
@@ -312,15 +317,26 @@ throw redirect(303, `/invite/${token}/check-email`);
 - `admin.createUser({ email_confirm: true })`は管理者による手動アカウント作成用であり、ユーザー自身のサインアップには不適切
 - 通常のサインアップフローに寄せることで、セキュリティと一貫性が向上
 
+**Email Normalization (IMPORTANT):**
+- メール比較時は必ず正規化する（大文字小文字、空白対応）
+- `normalizeEmail(email)` で `.trim().toLowerCase()` を実施
+- 理由: `User@Example.com` と `user@example.com` は同一メールアドレスとして扱うべき
+- 適用箇所:
+  - サインアップ時の招待メールとの照合
+  - メール確認後（completeページ）の再検証
+
 **Security Impact**: CRITICAL - メール所有確認なしでは、攻撃者が他人のメールアドレスで組織に参加可能
 
 **Test Coverage**: 必須 - メール確認フローは必ずテストで保護すること
+- メール一致/不一致のテスト
+- 大文字小文字の違いのテスト
+- 前後の空白のテスト
 
 **Affected Files**:
 - `/src/routes/invite/[token]/+page.server.ts` (signup action)
 - `/src/routes/invite/[token]/check-email/+page.svelte` (メール確認画面)
 - `/src/routes/invite/[token]/complete/+page.server.ts` (メール確認後の処理)
-- `/src/routes/invite/[token]/invite.test.ts` (テスト)
+- `/src/routes/invite/[token]/invite.test.ts` (テスト - 11テストケース)
 
 ---
 
