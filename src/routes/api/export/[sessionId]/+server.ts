@@ -62,6 +62,7 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 				created_at,
 				score,
 				judge_id,
+				guest_identifier,
 				athlete:athlete_id(bib_number),
 				training_events!inner(session_id, name)
 			`
@@ -78,18 +79,43 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 
 		// 検定員名を一括取得してマージ（N+1クエリを回避）
 		if (trainingScores && trainingScores.length > 0) {
-			// ユニークな検定員IDを抽出
-			const judgeIds = [...new Set(trainingScores.map(score => score.judge_id))];
+			// ユニークな検定員ID（認証ユーザー）を抽出
+			const judgeIds = [...new Set(trainingScores.map(score => score.judge_id).filter(id => id))];
 
-			// 検定員名を一括取得
-			const { data: judgeProfiles } = await supabase
-				.from('profiles')
-				.select('id, full_name')
-				.in('id', judgeIds);
+			// ユニークなゲストIDを抽出
+			const guestIdentifiers = [...new Set(trainingScores.map(score => score.guest_identifier).filter(id => id))];
+
+			// 認証ユーザーの検定員名を一括取得
+			const { data: judgeProfiles } = judgeIds.length > 0
+				? await supabase
+					.from('profiles')
+					.select('id, full_name')
+					.in('id', judgeIds)
+				: { data: [] };
+
+			// ゲストユーザーの名前を一括取得
+			const { data: guestParticipants } = guestIdentifiers.length > 0
+				? await supabase
+					.from('session_participants')
+					.select('guest_identifier, guest_name')
+					.eq('session_id', sessionIdNum)
+					.eq('is_guest', true)
+					.in('guest_identifier', guestIdentifiers)
+				: { data: [] };
+
+			console.log('[Export API] 検定員情報取得:', {
+				judgeCount: judgeProfiles?.length || 0,
+				guestCount: guestParticipants?.length || 0
+			});
 
 			// 検定員IDから名前へのマップを作成
 			const judgeMap = new Map(
 				(judgeProfiles || []).map(profile => [profile.id, profile.full_name])
+			);
+
+			// ゲストIDから名前へのマップを作成
+			const guestMap = new Map(
+				(guestParticipants || []).map(guest => [guest.guest_identifier, guest.guest_name])
 			);
 
 			// スコアデータに検定員名をマージ
@@ -100,7 +126,9 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 				discipline: '研修',
 				level: '',
 				event_name: score.training_events?.name || '',
-				judge_name: judgeMap.get(score.judge_id) || '不明'
+				judge_name: score.guest_identifier
+					? (guestMap.get(score.guest_identifier) || '不明')
+					: (judgeMap.get(score.judge_id) || '不明')
 			}));
 		}
 	} else {

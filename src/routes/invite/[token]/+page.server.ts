@@ -2,7 +2,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { error, redirect, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
-import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { PUBLIC_SUPABASE_URL, PUBLIC_SITE_URL } from '$env/static/public';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -121,69 +121,75 @@ export const actions: Actions = {
 			return fail(400, { error: '無効な招待です' });
 		}
 
+		// 【セキュリティ】招待メールが指定されている場合、入力メールと一致するかチェック
+		// admin.createUser({ email_confirm: true })で即有効化するため、この検証は必須
+		if (invitation.email && invitation.email !== email) {
+			console.warn('[Invite Signup] Email mismatch detected:', {
+				invitationEmail: invitation.email,
+				inputEmail: email,
+				token
+			});
+			return fail(403, {
+				error: 'この招待は別のメールアドレス宛です。招待されたメールアドレスを使用してください。'
+			});
+		}
+
+		console.log('[Invite Signup] Email validation passed:', {
+			hasInvitationEmail: !!invitation.email,
+			email,
+			token
+		});
+
 		try {
-			// ユーザーアカウントを作成
-			const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+			// 【セキュリティ改善】通常のサインアップフローを使用してメール所有を確認
+			// email_confirm: false により、メール確認が必須となる
+			const { data: authData, error: authError } = await locals.supabase.auth.signUp({
 				email,
 				password,
-				email_confirm: true
+				options: {
+					data: {
+						full_name: fullName,
+						// 招待トークンをuser_metadataに保存（メール確認後に使用）
+						invitation_token: token
+					},
+					// メール確認後、招待完了ページにリダイレクト
+					emailRedirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/invite/${token}/complete`
+				}
 			});
 
-			if (authError || !authData.user) {
-				console.error('Error creating user:', authError);
+			if (authError) {
+				console.error('[Invite Signup] signUp error:', authError);
+
+				// 既存ユーザーの場合
+				if (authError.message.includes('User already registered') ||
+				    authError.message.toLowerCase().includes('already registered')) {
+					return fail(409, {
+						error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+					});
+				}
+
 				return fail(500, { error: 'アカウントの作成に失敗しました' });
 			}
 
-			const userId = authData.user.id;
-
-			// プロフィールを作成
-			const { error: profileError } = await supabaseAdmin.from('profiles').insert({
-				id: userId,
-				email,
-				full_name: fullName
-			});
-
-			if (profileError) {
-				console.error('Error creating profile:', profileError);
+			// Supabaseは既存ユーザーの場合、エラーなしで匿名化ユーザーを返す場合がある
+			if (authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+				return fail(409, {
+					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+				});
 			}
 
-			// 組織メンバーとして追加
-			const { error: memberError } = await supabaseAdmin.from('organization_members').insert({
-				organization_id: invitation.organization_id,
-				user_id: userId,
-				role: invitation.role
-			});
-
-			if (memberError) {
-				console.error('Error adding member:', memberError);
-				return fail(500, { error: '組織への追加に失敗しました' });
+			if (!authData.user) {
+				return fail(500, { error: 'アカウントの作成に失敗しました' });
 			}
 
-			// 招待の使用回数を更新
-			await supabaseAdmin
-				.from('invitations')
-				.update({ used_count: invitation.used_count + 1 })
-				.eq('id', invitation.id);
-
-			// 招待使用履歴を記録
-			await supabaseAdmin.from('invitation_uses').insert({
-				invitation_id: invitation.id,
-				user_id: userId
+			console.log('[Invite Signup] User created, email confirmation required:', {
+				userId: authData.user.id,
+				email: authData.user.email,
+				hasSession: !!authData.session
 			});
 
-			// ログイン処理
-			const { error: signInError } = await locals.supabase.auth.signInWithPassword({
-				email,
-				password
-			});
-
-			if (signInError) {
-				console.error('Error signing in:', signInError);
-				return fail(500, { error: 'ログインに失敗しました' });
-			}
-
-			// 組織ページにリダイレクト
-			throw redirect(303, `/organization/${invitation.organization_id}`);
+			// メール確認ページにリダイレクト
+			throw redirect(303, `/invite/${token}/check-email`);
 		} catch (err: any) {
 			if (isRedirect(err) || isHttpError(err)) {
 				throw err;

@@ -14,10 +14,20 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 		'/account'
 	];
 
-	// 組織ページへのリダイレクトを許可（/organization/[id]）
-	const isOrganizationPath = /^\/organization\/[a-f0-9-]+$/.test(nextParam);
+	// 組織ページへのリダイレクトを許可（/organization/[uuid]）
+	// UUID v4形式に厳密化：xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+	// - x: 16進数 (0-9a-f)
+	// - 4: バージョン4固定
+	// - y: バリアント (8, 9, a, b のいずれか)
+	const UUID_V4_PATTERN = /^\/organization\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+	const isOrganizationPath = UUID_V4_PATTERN.test(nextParam);
 
-	const next = (allowedPaths.includes(nextParam) || isOrganizationPath)
+	// 招待完了ページへのリダイレクトを許可（/invite/[token]/complete）
+	// トークンは英数字とハイフンのみ（最大64文字）
+	const INVITE_COMPLETE_PATTERN = /^\/invite\/[a-zA-Z0-9-]{1,64}\/complete$/;
+	const isInviteCompletePath = INVITE_COMPLETE_PATTERN.test(nextParam);
+
+	const next = (allowedPaths.includes(nextParam) || isOrganizationPath || isInviteCompletePath)
 		? nextParam
 		: '/onboarding/create-organization';
 
@@ -57,31 +67,44 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 			const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
 			if (error) {
-				console.error('[auth/callback] コード交換エラー:', error);
-				console.error('[auth/callback] エラーコード:', error.code);
-				console.error('[auth/callback] エラーメッセージ:', error.message);
-				console.error('[auth/callback] エラー詳細:', JSON.stringify(error));
+				console.error('[auth/callback] コード交換エラー:', {
+					code: error.code,
+					message: error.message,
+					status: (error as any).status,
+					details: error
+				});
 
-				// 既に使用済みのコードの場合、既存セッションを確認
-					if (error.message.includes('code verifier') || error.message.includes('invalid') || error.message.includes('already been used')) {
-						console.log('[auth/callback] コードが使用済みまたは無効。現在のセッションを確認...');
-						// 既に認証済みかチェック
-						const { data: { user: currentUser } } = await supabase.auth.getUser();
-						if (currentUser) {
-							console.log('[auth/callback] コードは使用済みだが、ユーザーは認証済み。ダッシュボードへリダイレクト');
-							throw redirect(303, '/dashboard');
-						}
-						console.log('[auth/callback] セッションも存在しない。ログインへリダイレクト（再利用リンク案内）');
-						throw redirect(
-							303,
-							`/login?error=${encodeURIComponent(
-								'認証リンクが既に使用済みか無効です。登録済みの場合はそのままログインしてください。'
-							)}`
-						);
+				// エラーコードベースの判定（文字列マッチングではなくコード判定）
+				// Supabase Auth エラーコード: https://supabase.com/docs/reference/javascript/auth-error-codes
+				if (error.code === 'invalid_grant') {
+					// invalid_grant: コードが無効、期限切れ、または既に使用済み
+					console.log('[auth/callback] invalid_grant検出。コードが使用済み/無効/期限切れ。現在のセッションを確認...');
+
+					// 既に認証済みかチェック
+					const { data: { user: currentUser } } = await supabase.auth.getUser();
+					if (currentUser) {
+						console.log('[auth/callback] コードは使用済みだが、ユーザーは認証済み。ダッシュボードへリダイレクト');
+						throw redirect(303, '/dashboard');
 					}
 
-				console.error('[auth/callback] 予期しないエラー。ログインページへリダイレクト');
-				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました: ' + error.message)}`);
+					console.log('[auth/callback] セッションも存在しない。ログインへリダイレクト（再利用リンク案内）');
+					throw redirect(
+						303,
+						`/login?error=${encodeURIComponent(
+							'認証リンクが既に使用済みか無効です。登録済みの場合はそのままログインしてください。'
+						)}`
+					);
+				}
+
+				if (error.code === 'otp_expired') {
+					// OTP/コードが期限切れ
+					console.error('[auth/callback] otp_expired検出。コードが期限切れ');
+					throw redirect(303, `/login?error=${encodeURIComponent('認証リンクの有効期限が切れています。再度サインアップしてください。')}`);
+				}
+
+				// その他の予期しないエラー
+				console.error('[auth/callback] 予期しないエラーコード:', error.code);
+				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました。再度お試しください。')}`);
 			}
 
 			console.log('[auth/callback] 認証成功、ユーザー:', data.user?.email);
