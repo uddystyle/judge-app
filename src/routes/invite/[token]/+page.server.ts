@@ -129,15 +129,19 @@ export const actions: Actions = {
 			return fail(400, { error: '無効な招待です' });
 		}
 
+		// メールアドレスを正規化（大文字小文字、空白を統一）
+		// signUp()にも正規化後のメールを渡すことで、データの一貫性を保つ
+		const normalizedEmail = normalizeEmail(email);
+
 		// 【セキュリティ】招待メールが指定されている場合、入力メールと一致するかチェック
 		// 正規化して比較することで、大文字小文字の違いや空白による回避を防ぐ
 		// メール確認フローを使用しているが、事前チェックとして招待メールとの一致も必須
-		if (invitation.email && normalizeEmail(invitation.email) !== normalizeEmail(email)) {
+		if (invitation.email && normalizeEmail(invitation.email) !== normalizedEmail) {
 			console.warn('[Invite Signup] Email mismatch detected:', {
 				invitationEmail: invitation.email,
 				inputEmail: email,
 				normalizedInvitation: normalizeEmail(invitation.email),
-				normalizedInput: normalizeEmail(email),
+				normalizedInput: normalizedEmail,
 				token
 			});
 			return fail(403, {
@@ -147,16 +151,17 @@ export const actions: Actions = {
 
 		console.log('[Invite Signup] Email validation passed:', {
 			hasInvitationEmail: !!invitation.email,
-			email,
-			normalizedEmail: normalizeEmail(email),
+			originalEmail: email,
+			normalizedEmail,
 			token
 		});
 
 		try {
 			// 【セキュリティ改善】通常のサインアップフローを使用してメール所有を確認
-			// email_confirm: false により、メール確認が必須となる
+			// Supabase設定で "Confirm email" が有効な場合、session は null となりメール確認が必須
+			// 正規化後のメールアドレスを使用することで、データの一貫性を保つ
 			const { data: authData, error: authError } = await locals.supabase.auth.signUp({
-				email,
+				email: normalizedEmail,
 				password,
 				options: {
 					data: {
@@ -194,10 +199,25 @@ export const actions: Actions = {
 				return fail(500, { error: 'アカウントの作成に失敗しました' });
 			}
 
+			// 【セキュリティチェック】session が null であることを確認
+			// session が存在する場合、Supabase設定でメール確認が無効になっている可能性がある
+			if (authData.session) {
+				console.error('[Invite Signup] SECURITY WARNING: Session was returned immediately after signup.', {
+					userId: authData.user.id,
+					email: authData.user.email,
+					emailConfirmedAt: authData.user.email_confirmed_at,
+					message: 'Supabase "Confirm email" setting may be disabled. Email ownership verification is required for security.'
+				});
+				return fail(500, {
+					error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
+				});
+			}
+
 			console.log('[Invite Signup] User created, email confirmation required:', {
 				userId: authData.user.id,
 				email: authData.user.email,
-				hasSession: !!authData.session
+				hasSession: false,
+				emailConfirmedAt: authData.user.email_confirmed_at
 			});
 
 			// メール確認ページにリダイレクト

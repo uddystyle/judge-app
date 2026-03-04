@@ -164,7 +164,7 @@ describe('invite/[token] - signup action', () => {
 				expect(err.location).toBe('/invite/test-token/check-email');
 			}
 
-			// signUpが呼ばれたことを確認（email_confirm: falseがデフォルト）
+			// signUpが呼ばれたことを確認（Supabase設定で "Confirm email" が有効な場合、session は null）
 			expect(mockSupabase.auth.signUp).toHaveBeenCalledWith({
 				email: 'invited@example.com',
 				password: 'password123',
@@ -361,8 +361,18 @@ describe('invite/[token] - signup action', () => {
 				expect(err.location).toBe('/invite/test-token/check-email');
 			}
 
-			// signUpが呼ばれることを確認
-			expect(mockSupabase.auth.signUp).toHaveBeenCalled();
+			// signUpが正規化後のメール（小文字）で呼ばれることを確認
+			expect(mockSupabase.auth.signUp).toHaveBeenCalledWith({
+				email: 'invited@example.com', // 正規化後（小文字）
+				password: 'password123',
+				options: {
+					data: {
+						full_name: 'Test User',
+						invitation_token: 'test-token'
+					},
+					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+				}
+			});
 		});
 
 		it('前後に空白がある場合でも一致と判定される（正規化）', async () => {
@@ -423,8 +433,18 @@ describe('invite/[token] - signup action', () => {
 				expect(err.location).toBe('/invite/test-token/check-email');
 			}
 
-			// signUpが呼ばれることを確認
-			expect(mockSupabase.auth.signUp).toHaveBeenCalled();
+			// signUpが正規化後のメール（空白除去）で呼ばれることを確認
+			expect(mockSupabase.auth.signUp).toHaveBeenCalledWith({
+				email: 'invited@example.com', // 正規化後（空白除去）
+				password: 'password123',
+				options: {
+					data: {
+						full_name: 'Test User',
+						invitation_token: 'test-token'
+					},
+					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+				}
+			});
 		});
 
 		it('大文字小文字と空白の両方が異なる場合でも一致と判定される（正規化）', async () => {
@@ -485,8 +505,84 @@ describe('invite/[token] - signup action', () => {
 				expect(err.location).toBe('/invite/test-token/check-email');
 			}
 
-			// signUpが呼ばれることを確認
-			expect(mockSupabase.auth.signUp).toHaveBeenCalled();
+			// signUpが正規化後のメール（小文字 + 空白除去）で呼ばれることを確認
+			expect(mockSupabase.auth.signUp).toHaveBeenCalledWith({
+				email: 'invited@example.com', // 正規化後（小文字 + 空白除去）
+				password: 'password123',
+				options: {
+					data: {
+						full_name: 'Test User',
+						invitation_token: 'test-token'
+					},
+					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+				}
+			});
+		});
+
+		it('signUp時にsessionが返された場合、500エラーを返す（設定ミス検出）', async () => {
+			const request = createMockRequest({
+				email: 'invited@example.com',
+				password: 'password123',
+				fullName: 'Test User'
+			});
+
+			const event = {
+				request,
+				params: { token: 'test-token' },
+				locals: { supabase: mockSupabase }
+			} as unknown as RequestEvent;
+
+			const mockInvitation = {
+				id: 'invite-123',
+				email: 'invited@example.com',
+				organization_id: 'org-123',
+				role: 'member',
+				expires_at: new Date(Date.now() + 86400000).toISOString(),
+				used_count: 0,
+				organizations: {
+					id: 'org-123',
+					name: 'Test Organization'
+				}
+			};
+
+			mockSupabaseAdmin.from.mockReturnValue({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({
+							data: mockInvitation,
+							error: null
+						})
+					})
+				})
+			});
+
+			// 【設定ミス】Supabase "Confirm email" が無効な場合、session が即座に返される
+			mockSupabase.auth.signUp.mockResolvedValue({
+				data: {
+					user: {
+						id: 'user-123',
+						email: 'invited@example.com',
+						email_confirmed_at: new Date().toISOString(),
+						identities: [{ provider: 'email' }]
+					},
+					session: {
+						access_token: 'token',
+						refresh_token: 'refresh',
+						user: { id: 'user-123' }
+					} // session が存在する = 設定ミス
+				},
+				error: null
+			});
+
+			const result = await actions.signup(event);
+
+			// 500エラーが返されることを確認
+			expect(result).toMatchObject({
+				status: 500,
+				data: {
+					error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
+				}
+			});
 		});
 	});
 

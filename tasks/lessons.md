@@ -19,6 +19,8 @@ if (error.message.includes('invalid') ||
 ```
 
 **Correct (エラーコードベース):**
+
+PKCEフロー（`exchangeCodeForSession`）:
 ```typescript
 if (error.code === 'invalid_grant') {
   // ✅ コードが無効、期限切れ、または既に使用済み
@@ -36,6 +38,19 @@ if (error.code === 'invalid_grant') {
 if (error.code === 'otp_expired') {
   // ✅ OTP/コードが期限切れ
   throw redirect(303, '/login?error=期限切れメッセージ');
+}
+
+// その他の予期しないエラー
+console.error('[auth/callback] 予期しないエラーコード:', error.code);
+throw redirect(303, '/login?error=汎用エラーメッセージ');
+```
+
+トークンハッシュフロー（`verifyOtp`）:
+```typescript
+if (error.code === 'invalid_grant' || error.code === 'otp_expired') {
+  // ✅ トークンが無効、期限切れ、または既に使用済み
+  console.log('[auth/callback] トークンが使用済み/無効/期限切れ');
+  throw redirect(303, '/login?error=...');
 }
 
 // その他の予期しないエラー
@@ -61,6 +76,48 @@ throw redirect(303, '/login?error=汎用エラーメッセージ');
 
 **References**:
 - [Supabase Auth Error Codes](https://supabase.com/docs/reference/javascript/auth-error-codes)
+
+---
+
+### ✅ User-Facing Error Messages (SECURITY)
+**Rule**: ユーザーに表示するエラーメッセージは固定文言を使用し、内部エラーメッセージを露出しない
+
+**Wrong (内部エラーの露出):**
+```typescript
+} catch (error: any) {
+  // ❌ 内部エラーメッセージをそのまま表示（セキュリティリスク）
+  throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました: ' + (error?.message || '不明なエラー'))}`);
+}
+```
+
+**Correct (固定文言):**
+```typescript
+} catch (error: any) {
+  // SvelteKitのredirect/errorは再throw
+  if (isRedirect(error) || isHttpError(error)) {
+    throw error;
+  }
+
+  // 詳細なエラー情報はログに記録（内部用）
+  console.error('[auth/callback] コード交換処理エラー:', error);
+  console.error('[auth/callback] エラータイプ:', typeof error);
+  console.error('[auth/callback] エラー内容:', JSON.stringify(error, null, 2));
+
+  // ✅ ユーザーには固定文言を表示（内部エラーメッセージを露出しない）
+  throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました。再度お試しください。')}`);
+}
+```
+
+**Why**:
+- 内部エラーメッセージの露出はセキュリティリスク（システム情報の漏洩）
+- 攻撃者にシステムの内部実装を推測される可能性がある
+- ユーザーフレンドリーな固定文言の方が理解しやすい
+- 詳細なエラーはサーバーログで確認すればよい
+
+**Security Impact**: MEDIUM - 情報漏洩のリスク、攻撃者による偵察の材料となる
+
+**Affected Files**:
+- `/src/routes/auth/callback/+server.ts`
 
 ---
 
@@ -278,16 +335,22 @@ const { data: invitation } = await supabaseAdmin
   .eq('token', token)
   .single();
 
+// メールアドレスを正規化（大文字小文字、空白を統一）
+// signUp()にも正規化後のメールを渡すことで、データの一貫性を保つ
+const normalizedEmail = normalizeEmail(email);
+
 // ✅ 招待メールが指定されている場合、正規化して入力メールと一致するかチェック
-if (invitation.email && normalizeEmail(invitation.email) !== normalizeEmail(email)) {
+if (invitation.email && normalizeEmail(invitation.email) !== normalizedEmail) {
   return fail(403, {
     error: 'この招待は別のメールアドレス宛です。招待されたメールアドレスを使用してください。'
   });
 }
 
 // ✅ 通常のサインアップフローを使用（メール確認必須）
+// Supabase設定で "Confirm email" が有効な場合、session は null となる
+// 正規化後のメールアドレスを使用することで、データの一貫性を保つ
 const { data: authData, error: authError } = await locals.supabase.auth.signUp({
-  email,
+  email: normalizedEmail,  // ← 正規化後のメールを使用
   password,
   options: {
     data: {
@@ -298,13 +361,26 @@ const { data: authData, error: authError } = await locals.supabase.auth.signUp({
   }
 });
 
+// 【セキュリティチェック】session が null であることを確認
+// session が存在する場合、Supabase設定でメール確認が無効になっている可能性がある
+if (authData.session) {
+  console.error('[Invite Signup] SECURITY WARNING: Session was returned immediately after signup.', {
+    message: 'Supabase "Confirm email" setting may be disabled. Email ownership verification is required for security.'
+  });
+  return fail(500, {
+    error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
+  });
+}
+
 // メール確認画面にリダイレクト
 throw redirect(303, `/invite/${token}/check-email`);
 ```
 
 **Email Confirmation Flow:**
 1. ユーザーがサインアップフォームを送信
-2. 通常の`signUp()`でアカウント作成（`email_confirm: false`がデフォルト）
+2. 通常の`signUp()`でアカウント作成
+   - Supabase設定 "Confirm email" が有効な場合、`session` は `null` となる
+   - アプリケーションレベルで `session` が `null` であることを検証（設定ミス検出）
 3. メール確認リンクを送信
 4. ユーザーがメールリンクをクリック
 5. `/auth/callback?next=/invite/${token}/complete`にリダイレクト
@@ -316,13 +392,31 @@ throw redirect(303, `/invite/${token}/check-email`);
 - 招待制であっても、メールアドレスの所有を証明する必要がある
 - `admin.createUser({ email_confirm: true })`は管理者による手動アカウント作成用であり、ユーザー自身のサインアップには不適切
 - 通常のサインアップフローに寄せることで、セキュリティと一貫性が向上
+- **重要**: `session` が存在する場合は設定ミスの可能性があるため、アプリケーションレベルで検証が必須
+
+**Common Mistakes**:
+- ❌ `admin.createUser({ email_confirm: true })` を使用する（メール所有確認をスキップ）
+- ❌ `signUp()` の戻り値で `session` の有無をチェックしない（Supabase設定に盲目的に依存）
+- ❌ メール比較で正規化を行わない（大文字小文字、空白による回避のリスク）
+- ❌ 正規化比較後に未正規化メールを `signUp()` に渡す（データ整合性の問題）
+- ❌ メール確認フローのテストを書かない
+- ✅ 正しいパターン:
+  - 通常の `signUp()` を使用
+  - `session === null` を検証（メール確認必須を保証）
+  - メール比較時は必ず正規化
+  - **`signUp()` には正規化後のメールを渡す**
+  - 設定ミス時のエラーを返す
 
 **Email Normalization (IMPORTANT):**
 - メール比較時は必ず正規化する（大文字小文字、空白対応）
 - `normalizeEmail(email)` で `.trim().toLowerCase()` を実施
 - 理由: `User@Example.com` と `user@example.com` は同一メールアドレスとして扱うべき
+- **重要**: 正規化後のメールアドレスを `signUp()` に渡す
+  - 比較だけでなく、実際に使用するメールも正規化する
+  - `" invited@example.com "` のような空白付きメールがSupabaseに保存されることを防ぐ
 - 適用箇所:
   - サインアップ時の招待メールとの照合
+  - **`signUp()` 呼び出し時（正規化後のメールを使用）** ← NEW
   - メール確認後（completeページ）の再検証
 
 **Security Impact**: CRITICAL - メール所有確認なしでは、攻撃者が他人のメールアドレスで組織に参加可能
@@ -331,12 +425,13 @@ throw redirect(303, `/invite/${token}/check-email`);
 - メール一致/不一致のテスト
 - 大文字小文字の違いのテスト
 - 前後の空白のテスト
+- **session 存在時のテスト（設定ミス検出）** ← NEW
 
 **Affected Files**:
 - `/src/routes/invite/[token]/+page.server.ts` (signup action)
 - `/src/routes/invite/[token]/check-email/+page.svelte` (メール確認画面)
 - `/src/routes/invite/[token]/complete/+page.server.ts` (メール確認後の処理)
-- `/src/routes/invite/[token]/invite.test.ts` (テスト - 11テストケース)
+- `/src/routes/invite/[token]/invite.test.ts` (テスト - 12テストケース)
 
 ---
 
@@ -554,8 +649,9 @@ if (guestIdentifier) {
 
 1. **Never** use `err?.status === 303` to detect redirects → Use `isRedirect(err)`
 2. **Never** use `error.message.includes()` for auth error handling → Use `error.code` **SECURITY & RELIABILITY**
-3. **Never** hardcode `/settings/billing` → Use `/organization/${organizationId}/change-plan`
-4. **Never** assume Supabase returns errors for existing users → Check `identities.length === 0`
+3. **Never** expose internal error messages to users → Use fixed user-facing messages **SECURITY**
+4. **Never** hardcode `/settings/billing` → Use `/organization/${organizationId}/change-plan`
+5. **Never** assume Supabase returns errors for existing users → Check `identities.length === 0`
 5. **Never** forget to decode URL-encoded error messages in tests
 6. **Never** mix training mode and tournament mode data sources without checking `isTrainingMode`
 7. **Never** use `admin.createUser({ email_confirm: true })` for user-initiated signups → Use normal `signUp()` with email confirmation **CRITICAL SECURITY**

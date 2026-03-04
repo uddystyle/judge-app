@@ -261,13 +261,14 @@ describe('auth/callback', () => {
 			});
 		});
 
-		it('トークン検証エラー時にloginにredirect', async () => {
+		it('トークン検証エラー（invalid_grant）時にloginにredirect', async () => {
 			mockUrl.searchParams.set('token_hash', 'invalid_hash');
 			mockUrl.searchParams.set('type', 'signup');
 
 			mockSupabase.auth.verifyOtp.mockResolvedValue({
 				data: null,
 				error: {
+					code: 'invalid_grant',
 					message: 'Invalid token'
 				}
 			});
@@ -282,6 +283,59 @@ describe('auth/callback', () => {
 				expect(isRedirect(err)).toBe(true);
 				expect(err.status).toBe(303);
 				expect(err.location).toContain('/login?error=');
+				expect(err.location).toContain(encodeURIComponent('認証リンクが既に使用済みか無効です'));
+			}
+		});
+
+		it('トークン検証エラー（otp_expired）時にloginにredirect', async () => {
+			mockUrl.searchParams.set('token_hash', 'expired_hash');
+			mockUrl.searchParams.set('type', 'signup');
+
+			mockSupabase.auth.verifyOtp.mockResolvedValue({
+				data: null,
+				error: {
+					code: 'otp_expired',
+					message: 'Token expired'
+				}
+			});
+
+			try {
+				await GET({
+					url: mockUrl,
+					locals: mockLocals
+				} as any);
+				expect.fail('Expected redirect to be thrown');
+			} catch (err: any) {
+				expect(isRedirect(err)).toBe(true);
+				expect(err.status).toBe(303);
+				expect(err.location).toContain('/login?error=');
+				expect(err.location).toContain(encodeURIComponent('認証リンクが既に使用済みか無効です'));
+			}
+		});
+
+		it('予期しないエラーコード時にloginにredirect', async () => {
+			mockUrl.searchParams.set('token_hash', 'some_hash');
+			mockUrl.searchParams.set('type', 'signup');
+
+			mockSupabase.auth.verifyOtp.mockResolvedValue({
+				data: null,
+				error: {
+					code: 'unknown_error',
+					message: 'Something went wrong'
+				}
+			});
+
+			try {
+				await GET({
+					url: mockUrl,
+					locals: mockLocals
+				} as any);
+				expect.fail('Expected redirect to be thrown');
+			} catch (err: any) {
+				expect(isRedirect(err)).toBe(true);
+				expect(err.status).toBe(303);
+				expect(err.location).toContain('/login?error=');
+				expect(err.location).toContain(encodeURIComponent('認証に失敗しました'));
 			}
 		});
 	});

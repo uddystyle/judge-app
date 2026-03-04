@@ -117,10 +117,13 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 				throw error;
 			}
 
+			// 詳細なエラー情報はログに記録（内部用）
 			console.error('[auth/callback] コード交換処理エラー:', error);
 			console.error('[auth/callback] エラータイプ:', typeof error);
 			console.error('[auth/callback] エラー内容:', JSON.stringify(error, null, 2));
-			throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました: ' + (error?.message || '不明なエラー'))}`);
+
+			// ユーザーには固定文言を表示（内部エラーメッセージを露出しない）
+			throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました。再度お試しください。')}`);
 		}
 	}
 
@@ -134,8 +137,28 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 			});
 
 			if (error) {
-				console.error('[auth/callback] トークン検証エラー:', error);
-				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました: ' + error.message)}`);
+				console.error('[auth/callback] トークン検証エラー:', {
+					code: error.code,
+					message: error.message,
+					status: (error as any).status,
+					details: error
+				});
+
+				// エラーコードベースの判定（文字列マッチングではなくコード判定）
+				if (error.code === 'invalid_grant' || error.code === 'otp_expired') {
+					// invalid_grant/otp_expired: トークンが無効、期限切れ、または既に使用済み
+					console.log('[auth/callback] トークンが使用済み/無効/期限切れ');
+					throw redirect(
+						303,
+						`/login?error=${encodeURIComponent(
+							'認証リンクが既に使用済みか無効です。登録済みの場合はそのままログインしてください。'
+						)}`
+					);
+				}
+
+				// その他の予期しないエラー
+				console.error('[auth/callback] 予期しないエラーコード:', error.code);
+				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました。再度お試しください。')}`);
 			}
 
 			console.log('[auth/callback] 認証成功、リダイレクト:', next);
