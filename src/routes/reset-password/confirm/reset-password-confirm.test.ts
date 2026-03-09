@@ -12,7 +12,8 @@ describe('/reset-password/confirm', () => {
 		mockSupabase = {
 			auth: {
 				getUser: vi.fn(),
-				updateUser: vi.fn()
+				updateUser: vi.fn(),
+				signOut: vi.fn()
 			}
 		};
 
@@ -83,6 +84,7 @@ describe('/reset-password/confirm', () => {
 			});
 
 			mockSupabase.auth.updateUser.mockResolvedValue({ error: null });
+			mockSupabase.auth.signOut.mockResolvedValue({ error: null });
 
 			const result = actions.default({
 				request: mockRequest,
@@ -97,6 +99,7 @@ describe('/reset-password/confirm', () => {
 			expect(mockSupabase.auth.updateUser).toHaveBeenCalledWith({
 				password: 'newpassword123'
 			});
+			expect(mockSupabase.auth.signOut).toHaveBeenCalled();
 		});
 
 		it('should reject when passwords do not match', async () => {

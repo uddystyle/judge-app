@@ -78,6 +78,10 @@ export const actions: Actions = {
 
 		console.log('[reset-password/confirm] パスワード更新成功');
 
+		// パスワード変更後、セキュリティのためセッションをクリアしてログインページにリダイレクト
+		// これにより、ユーザーは新しいパスワードで再ログインする必要がある
+		await supabase.auth.signOut();
+
 		// ログインページにリダイレクト
 		throw redirect(303, '/login?success=password-reset');
 	}
