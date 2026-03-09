@@ -41,26 +41,26 @@
 			</div>
 		</div>
 	{:else}
-		<div class="form-container">
-			<p class="description">
-				新しいパスワードを入力してください。<br/>
-				パスワードは6文字以上72文字以内で設定してください。
-			</p>
+		<p class="description">
+			新しいパスワードを入力してください。<br/>
+			パスワードは6文字以上72文字以内で設定してください。
+		</p>
 
-			<form method="POST" use:enhance={() => {
-				loading = true;
-				return async ({ update }) => {
-					await update();
-					loading = false;
-				};
-			}}>
+		<form method="POST" use:enhance={() => {
+			loading = true;
+			return async ({ update }) => {
+				await update();
+				loading = false;
+			};
+		}}>
+			<div class="form-container">
 				<div class="password-field-wrapper">
 					<input
 						type={showPassword ? 'text' : 'password'}
 						name="password"
 						bind:value={password}
 						placeholder="新しいパスワード"
-						class="input-field"
+						autocomplete="new-password"
 						disabled={loading}
 						required
 					/>
@@ -89,7 +89,7 @@
 						name="confirmPassword"
 						bind:value={confirmPassword}
 						placeholder="新しいパスワード（確認）"
-						class="input-field"
+						autocomplete="new-password"
 						disabled={loading}
 						required
 					/>
@@ -127,26 +127,29 @@
 							パスワードを更新
 						{/if}
 					</NavButton>
-					<NavButton on:click={() => goto('/login')}>ログインページに戻る</NavButton>
 				</div>
-			</form>
+			</div>
+		</form>
+
+		<div class="nav-buttons">
+			<NavButton on:click={() => goto('/login')}>ログインページに戻る</NavButton>
 		</div>
 	{/if}
 </div>
 
 <style>
 	.container {
-		padding: 28px 20px;
+		padding: 50px 20px 60px;
 		text-align: center;
 		max-width: 440px;
 		margin: 0 auto;
 		min-height: calc(100vh - 80px);
 	}
 	.instruction {
-		font-size: 24px;
+		font-size: 32px;
 		font-weight: 700;
 		color: var(--text-primary);
-		margin-bottom: 28px;
+		margin-bottom: 40px;
 	}
 	.description {
 		font-size: 14px;
@@ -159,28 +162,29 @@
 		flex-direction: column;
 		gap: 16px;
 		background: var(--bg-primary);
-		padding: 24px;
-		border-radius: 16px;
+		padding: 32px;
+		border-radius: 20px;
 		border: 2px solid var(--border-light);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+		margin-bottom: 16px;
 	}
 	.password-field-wrapper {
 		position: relative;
 		display: flex;
 		align-items: center;
 	}
-	.input-field {
+	.form-container input {
 		width: 100%;
-		padding: 15px;
+		padding: 16px;
 		padding-right: 48px;
-		font-size: 16px;
+		font-size: 17px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
 		background: var(--bg-primary);
 		color: var(--text-primary);
 		transition: all 0.2s;
 	}
-	.input-field:focus {
+	.form-container input:focus {
 		outline: none;
 		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
@@ -220,7 +224,7 @@
 	.error-container {
 		background: var(--bg-primary);
 		padding: 32px 24px;
-		border-radius: 16px;
+		border-radius: 20px;
 		border: 2px solid #ffdddd;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 	}
@@ -253,14 +257,14 @@
 			margin-bottom: 40px;
 		}
 		.description {
-			font-size: 16px;
+			font-size: 15px;
 			margin-bottom: 24px;
 		}
 		.form-container {
 			padding: 40px;
 			gap: 20px;
 		}
-		.input-field {
+		.form-container input {
 			padding: 18px;
 			padding-right: 52px;
 			font-size: 18px;

@@ -41,25 +41,25 @@
 			</div>
 		</div>
 	{:else}
-		<div class="form-container">
-			<p class="description">
-				登録されているメールアドレスを入力してください。<br/>
-				パスワードリセット用のリンクをお送りします。
-			</p>
+		<p class="description">
+			登録されているメールアドレスを入力してください。<br/>
+			パスワードリセット用のリンクをお送りします。
+		</p>
 
-			<form method="POST" use:enhance={() => {
-				loading = true;
-				return async ({ update }) => {
-					await update();
-					loading = false;
-				};
-			}}>
+		<form method="POST" use:enhance={() => {
+			loading = true;
+			return async ({ update }) => {
+				await update();
+				loading = false;
+			};
+		}}>
+			<div class="form-container">
 				<input
 					type="email"
 					name="email"
 					bind:value={email}
 					placeholder="メールアドレス"
-					class="input-field"
+					autocomplete="email"
 					disabled={loading}
 					required
 				/>
@@ -79,26 +79,29 @@
 							リセットリンクを送信
 						{/if}
 					</NavButton>
-					<NavButton on:click={() => goto('/login')}>ログインページに戻る</NavButton>
 				</div>
-			</form>
+			</div>
+		</form>
+
+		<div class="nav-buttons">
+			<NavButton on:click={() => goto('/login')}>ログインページに戻る</NavButton>
 		</div>
 	{/if}
 </div>
 
 <style>
 	.container {
-		padding: 28px 20px;
+		padding: 50px 20px 60px;
 		text-align: center;
 		max-width: 440px;
 		margin: 0 auto;
 		min-height: calc(100vh - 80px);
 	}
 	.instruction {
-		font-size: 24px;
+		font-size: 32px;
 		font-weight: 700;
 		color: var(--text-primary);
-		margin-bottom: 28px;
+		margin-bottom: 40px;
 	}
 	.description {
 		font-size: 14px;
@@ -111,21 +114,22 @@
 		flex-direction: column;
 		gap: 16px;
 		background: var(--bg-primary);
-		padding: 24px;
-		border-radius: 16px;
+		padding: 32px;
+		border-radius: 20px;
 		border: 2px solid var(--border-light);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+		margin-bottom: 16px;
 	}
-	.input-field {
-		padding: 15px;
-		font-size: 16px;
+	.form-container input {
+		padding: 16px;
+		font-size: 17px;
 		border: 2px solid var(--border-light);
 		border-radius: 12px;
 		background: var(--bg-primary);
 		color: var(--text-primary);
 		transition: all 0.2s;
 	}
-	.input-field:focus {
+	.form-container input:focus {
 		outline: none;
 		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
@@ -149,7 +153,7 @@
 	.success-container {
 		background: var(--bg-primary);
 		padding: 32px 24px;
-		border-radius: 16px;
+		border-radius: 20px;
 		border: 2px solid var(--border-light);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 	}
@@ -188,14 +192,14 @@
 			margin-bottom: 40px;
 		}
 		.description {
-			font-size: 16px;
+			font-size: 15px;
 			margin-bottom: 24px;
 		}
 		.form-container {
 			padding: 40px;
 			gap: 20px;
 		}
-		.input-field {
+		.form-container input {
 			padding: 18px;
 			font-size: 18px;
 		}
