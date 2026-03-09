@@ -28,8 +28,9 @@ export const actions: Actions = {
 		const email = normalizeEmail(sanitizedEmail);
 
 		// パスワードリセットメールを送信
+		// auth/callbackを経由してトークン交換を行い、confirmページへ遷移させる
 		const { error } = await supabase.auth.resetPasswordForEmail(email, {
-			redirectTo: `${PUBLIC_SITE_URL}/reset-password/confirm`
+			redirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/reset-password/confirm`
 		});
 
 		if (error) {
