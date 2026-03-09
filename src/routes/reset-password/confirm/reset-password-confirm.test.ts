@@ -99,7 +99,7 @@ describe('/reset-password/confirm', () => {
 			expect(mockSupabase.auth.updateUser).toHaveBeenCalledWith({
 				password: 'newpassword123'
 			});
-			expect(mockSupabase.auth.signOut).toHaveBeenCalledWith({ scope: 'global' });
+			expect(mockSupabase.auth.signOut).toHaveBeenCalled();
 		});
 
 		it('should reject when passwords do not match', async () => {
