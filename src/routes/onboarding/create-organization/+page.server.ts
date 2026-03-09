@@ -37,7 +37,8 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 			full_name: user.user_metadata?.full_name || ''
 		});
 
-		if (createProfileError) {
+		// エラーコード23505（unique constraint violation）は無視（既にプロフィールが存在する場合）
+		if (createProfileError && createProfileError.code !== '23505') {
 			console.error('[onboarding/load] プロフィール作成エラー:', createProfileError);
 		}
 	}

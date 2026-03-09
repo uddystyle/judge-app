@@ -71,6 +71,29 @@ export function validateName(name: string | null | undefined): {
 }
 
 /**
+ * パスワードのバリデーション
+ */
+export function validatePassword(password: string | null | undefined): {
+	valid: boolean;
+	error?: string;
+} {
+	if (!password) {
+		return { valid: false, error: 'パスワードを入力してください。' };
+	}
+
+	if (password.length < 6) {
+		return { valid: false, error: 'パスワードは6文字以上で入力してください。' };
+	}
+
+	if (password.length > 72) {
+		// bcrypt の制限（72バイト）に基づく
+		return { valid: false, error: 'パスワードは72文字以内で入力してください。' };
+	}
+
+	return { valid: true };
+}
+
+/**
  * 組織名のバリデーション
  */
 export function validateOrganizationName(name: string | null | undefined): {

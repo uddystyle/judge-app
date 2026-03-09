@@ -58,21 +58,62 @@ console.error('[auth/callback] 予期しないエラーコード:', error.code);
 throw redirect(303, '/login?error=汎用エラーメッセージ');
 ```
 
+**Correct with Fallback (エラーコードベース + messageフォールバック):**
+
+サインアップ（`signUp`）:
+```typescript
+// エラーコードベースの判定（推奨）
+if (authError.code === 'user_already_exists' ||
+    authError.code === 'email_exists') {
+  return fail(409, { error: '既存ユーザーエラー' });
+}
+
+// フォールバック: error.code が設定されていない場合、message で判定
+// code が設定されている場合は、このブロックは実行されない
+if (!authError.code || authError.code === '') {
+  const message = authError.message?.toLowerCase() || '';
+
+  // 既存ユーザーを示す具体的なメッセージパターン
+  if (message.includes('already registered') ||
+      message.includes('already exists') ||
+      message.includes('already been registered')) {
+    console.warn('Detected existing user via message fallback:', authError.message);
+    return fail(409, { error: '既存ユーザーエラー' });
+  }
+}
+
+// その他の予期しないエラー
+console.error('Unexpected error code:', authError.code);
+return fail(500, { error: 'サーバーエラー' });
+```
+
 **Common Supabase Auth Error Codes:**
 - `invalid_grant`: コードが無効、期限切れ、または既に使用済み
 - `otp_expired`: OTP/コードが期限切れ
+- `user_already_exists` / `email_exists`: 既存ユーザー
 - `validation_failed`: バリデーションエラー
 - `provider_email_needs_verification`: メール確認が必要
 
 **Why**:
-- エラーコードは安定したAPI仕様の一部
-- 文字列マッチングは広すぎて誤判定のリスクがある
+- エラーコードは安定したAPI仕様の一部（優先して使用）
+- 文字列マッチングは広すぎて誤判定のリスクがあるが、**code が設定されていない異常ケースのフォールバックとして使用**
 - メッセージ文言の変更や多言語化に対応できる
 - 意図しないエラーを捕捉しない
+- **重要**: code が設定されていない場合でも、既存ユーザーエラーを正しく処理できる
+
+**Message Fallback Pattern:**
+- エラーコードを優先（推奨される方法）
+- code が空または undefined の場合のみ、**限定的な** message フォールバックを使用
+- message 判定は非常に具体的な文字列に限定（"already registered", "already exists" など）
+- これにより、Supabase の応答が不完全な場合でも、既存ユーザーが 500 エラーではなく 409 エラーとして適切に処理される
 
 **Affected Files**:
-- `/src/routes/auth/callback/+server.ts`
-- `/src/routes/auth/callback/callback.test.ts`
+- `/src/routes/signup/+page.server.ts` (サインアップ + フォールバック)
+- `/src/routes/invite/[token]/+page.server.ts` (招待サインアップ + フォールバック)
+- `/src/routes/auth/callback/+server.ts` (認証コールバック)
+- `/src/routes/signup/signup.test.ts` (サインアップテスト - 10テスト、フォールバック含む)
+- `/src/routes/invite/[token]/invite.test.ts` (招待テスト - 14テスト、フォールバック含む)
+- `/src/routes/auth/callback/callback.test.ts` (認証コールバックテスト)
 
 **References**:
 - [Supabase Auth Error Codes](https://supabase.com/docs/reference/javascript/auth-error-codes)
@@ -435,18 +476,18 @@ throw redirect(303, `/invite/${token}/check-email`);
 
 ---
 
-### ✅ Signup Flow Consistency (SECURITY & MAINTAINABILITY)
-**Rule**: 通常のサインアップと招待サインアップは同じセキュリティパターンを使用し、一貫性を保つ
+### ✅ Auth Flow Consistency (SECURITY & MAINTAINABILITY)
+**Rule**: サインアップ、招待サインアップ、ログインは同じセキュリティパターンを使用し、一貫性を保つ
 
 **Key Principles:**
-1. **Email Normalization**: 両方のフローで `normalizeEmail()` を使用
+1. **Email Normalization**: すべてのフローで `normalizeEmail()` を使用
 2. **Error Code-Based Detection**: 文字列マッチングではなく `error.code` で判定
-3. **Session Null Check**: `signUp()` 後に `session === null` を検証
-4. **Normalized Email in signUp()**: 正規化後のメールを `signUp()` に渡す
+3. **Session Null Check**: `signUp()` 後に `session === null` を検証（サインアップのみ）
+4. **Normalized Email in Auth Calls**: 正規化後のメールを `signUp()` / `signInWithPassword()` に渡す
 
-**Implementation Pattern (Both Flows):**
+**Implementation Pattern - Signup:**
 ```typescript
-// メール正規化関数（両フローで共通）
+// メール正規化関数（すべてのフローで共通）
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -464,7 +505,7 @@ const { data: authData, error: authError } = await supabase.auth.signUp({
   }
 });
 
-// エラーコードベースの判定（両フローで共通）
+// エラーコードベースの判定（サインアップ）
 if (authError) {
   if (authError.code === 'user_already_exists' ||
       authError.code === 'email_exists') {
@@ -499,27 +540,236 @@ if (authData.session) {
 throw redirect(303, '/signup/success');
 ```
 
+**Implementation Pattern - Login:**
+```typescript
+// メール正規化関数（サインアップと同じ）
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// ログイン時に正規化を適用
+const normalizedEmail = normalizeEmail(email);
+
+const { error } = await supabase.auth.signInWithPassword({
+  email: normalizedEmail,  // ← 正規化後のメールを使用
+  password
+});
+
+// エラーコードベースの判定（ログイン）
+if (error) {
+  console.error('[login] signIn error:', {
+    code: error.code,
+    message: error.message,
+    status: (error as any).status
+  });
+
+  // 無効な認証情報
+  if (error.code === 'invalid_credentials') {
+    throw new Error('メールアドレスまたはパスワードが正しくありません。');
+  }
+
+  // メール未確認
+  if (error.code === 'email_not_confirmed') {
+    throw new Error('メールアドレスが確認されていません。確認メールをご確認ください。');
+  }
+
+  // レート制限
+  if (error.code === 'too_many_requests' || (error as any).status === 429) {
+    throw new Error('ログイン試行回数が上限に達しました。しばらく待ってから再度お試しください。');
+  }
+
+  // その他の予期しないエラー
+  console.error('[login] Unexpected error code:', error.code);
+  throw new Error('ログインに失敗しました。再度お試しください。');
+}
+
+// 成功: ダッシュボードへリダイレクト
+await goto('/dashboard');
+```
+
 **Why Consistency Matters:**
-- **セキュリティ**: 両フローで同じセキュリティチェックを適用
+- **セキュリティ**: すべてのフローで同じセキュリティチェックを適用
 - **保守性**: パターンが統一されていると、バグ修正や改善が容易
-- **テスト**: 同じテストパターンを両フローに適用可能
+- **ユーザー体験**: 一貫したエラーメッセージとメール処理
+- **テスト**: 同じテストパターンをすべてのフローに適用可能
 - **信頼性**: 一方のフローで見つかった問題は他方にも適用される
 
 **Common Mistakes**:
-- ❌ 一方のフローだけにセキュリティ改善を適用し、もう一方を忘れる
-- ❌ 招待サインアップでは正規化するが、通常サインアップでは正規化しない
-- ❌ 一方のフローではエラーコードベース、もう一方では文字列マッチング
-- ❌ session チェックを一方のフローだけに実装
+- ❌ 一部のフローだけにセキュリティ改善を適用し、他を忘れる
+- ❌ サインアップでは正規化するが、ログインでは正規化しない
+- ❌ サインアップではエラーコードベース、ログインでは文字列マッチング
+- ❌ session チェックをサインアップの一方のフローだけに実装
+- ❌ ログインでSupabaseのデフォルトエラーメッセージをそのまま表示
 - ✅ 正しいパターン:
-  - 両フローで同じヘルパー関数を使用（または同じ実装を使用）
-  - セキュリティ改善は必ず両フローに適用
-  - テストパターンも両フローで統一
+  - すべてのフローで同じヘルパー関数を使用（または同じ実装を使用）
+  - セキュリティ改善は必ずすべてのフローに適用
+  - テストパターンもすべてのフローで統一
+  - エラーコードベースの判定で適切なメッセージを返す
 
 **Affected Files**:
-- `/src/routes/signup/+page.server.ts` (通常のサインアップ)
-- `/src/routes/invite/[token]/+page.server.ts` (招待サインアップ)
+- `/src/routes/signup/+page.server.ts` (通常のサインアップ - サーバーサイド)
+- `/src/routes/invite/[token]/+page.server.ts` (招待サインアップ - サーバーサイド)
+- `/src/routes/login/+page.svelte` (ログイン - クライアントサイド)
 - `/src/routes/signup/signup.test.ts` (通常のサインアップテスト - 7テスト)
 - `/src/routes/invite/[token]/invite.test.ts` (招待サインアップテスト - 12テスト)
+- `/src/routes/login/login.test.ts` (ログインテスト - 14テスト)
+
+---
+
+### ✅ Invitation Completion Race Condition Handling (RELIABILITY)
+**Rule**: 招待完了処理では一意制約違反（PostgreSQL error code: 23505）を成功として扱い、冪等性を確保する
+
+**Problem**:
+招待完了処理（`/invite/[token]/complete`）で、`existingMembership` チェック後に `insert` する際、同時アクセス時に一意制約違反が起きると 500 エラーになる。本来は「既に参加済み」として成功扱いが望ましい。
+
+**Wrong (非冪等な実装):**
+```typescript
+// すでにメンバーかチェック
+const { data: existingMembership } = await supabaseAdmin
+  .from('organization_members')
+  .select('id')
+  .eq('organization_id', invitation.organization_id)
+  .eq('user_id', user.id)
+  .is('removed_at', null)
+  .single();
+
+if (existingMembership) {
+  throw redirect(303, `/organization/${invitation.organization_id}`);
+}
+
+// 組織メンバーとして追加
+const { error: memberError } = await supabaseAdmin
+  .from('organization_members')
+  .insert({
+    organization_id: invitation.organization_id,
+    user_id: user.id,
+    role: invitation.role
+  });
+
+if (memberError) {
+  // ❌ すべてのエラーを500として扱う（一意制約違反も含む）
+  console.error('[Invite Complete] Error adding member:', memberError);
+  throw error(500, '組織への追加に失敗しました');
+}
+```
+
+**Correct (冪等な実装):**
+```typescript
+// すでにメンバーかチェック
+const { data: existingMembership } = await supabaseAdmin
+  .from('organization_members')
+  .select('id')
+  .eq('organization_id', invitation.organization_id)
+  .eq('user_id', user.id)
+  .is('removed_at', null)
+  .single();
+
+if (existingMembership) {
+  throw redirect(303, `/organization/${invitation.organization_id}`);
+}
+
+// 組織メンバーとして追加
+const { error: memberError } = await supabaseAdmin
+  .from('organization_members')
+  .insert({
+    organization_id: invitation.organization_id,
+    user_id: user.id,
+    role: invitation.role
+  });
+
+if (memberError) {
+  // ✅ PostgreSQLエラーコード '23505' は一意制約違反（UNIQUE constraint violation）
+  // 同時アクセスでexistingMembershipチェック後にinsertが競合した場合に発生
+  // この場合、既に参加済みとして成功扱いし、組織ページにリダイレクト
+  if (memberError.code === '23505') {
+    console.log('[Invite Complete] User is already a member (race condition detected), redirecting to organization');
+    throw redirect(303, `/organization/${invitation.organization_id}`);
+  }
+
+  // その他の予期しないエラー
+  console.error('[Invite Complete] Error adding member:', {
+    code: memberError.code,
+    message: memberError.message,
+    details: memberError
+  });
+  throw error(500, '組織への追加に失敗しました');
+}
+```
+
+**Apply to All Insert Operations**:
+同じパターンをプロフィール作成と招待使用履歴記録にも適用:
+
+```typescript
+// プロフィール作成時の一意制約違反を成功として扱う
+if (profileError) {
+  if (profileError.code === '23505') {
+    console.log('[Invite Complete] Profile already exists (race condition detected), continuing');
+  } else {
+    console.error('[Invite Complete] Error creating profile:', {
+      code: profileError.code,
+      message: profileError.message,
+      details: profileError
+    });
+  }
+}
+
+// 招待使用履歴記録時の一意制約違反を成功として扱う
+if (usageError) {
+  if (usageError.code === '23505') {
+    console.log('[Invite Complete] Invitation usage already recorded (race condition detected)');
+  } else {
+    console.error('[Invite Complete] Error recording invitation usage:', {
+      code: usageError.code,
+      message: usageError.message,
+      details: usageError
+    });
+  }
+}
+```
+
+**Why**:
+- **冪等性**: 同じ招待リンクを複数回（同時に）使用しても、最終的に同じ結果（メンバー追加成功）となる
+- **ユーザー体験**: 競合時に500エラーではなく、成功として扱われる
+- **信頼性**: ネットワーク遅延やリトライなどで同時アクセスが発生しても、正しく処理される
+- **PostgreSQL error code 23505**: `unique_violation` を示す標準的なエラーコード
+
+**Test Coverage**: 4テストケース
+1. 組織メンバー追加時の一意制約違反（23505）を成功として扱う
+2. プロフィール作成時の一意制約違反（23505）を成功として扱う
+3. 招待使用履歴記録時の一意制約違反（23505）を成功として扱う
+4. メンバー追加時の予期しないエラー（非23505）は500エラーを返す
+
+**Common Mistakes**:
+- ❌ すべてのデータベースエラーを500として扱う
+- ❌ 一意制約違反を検出せずにエラーとして扱う
+- ❌ エラーコードを確認せずに `error.message.includes()` で判定する
+- ❌ 競合が発生しない前提でコードを書く（楽観的ロックなし）
+- ✅ 正しいパターン:
+  - PostgreSQLエラーコード '23505' を検出
+  - 一意制約違反は成功同等として扱う
+  - その他のエラーは詳細をログ出力して500エラー
+  - すべてのinsert操作に一貫して適用
+
+**Alternative Approach**:
+DB関数で原子的に処理する方法もあるが、現在の実装ではエラーコードベースの判定で十分：
+```sql
+CREATE OR REPLACE FUNCTION add_organization_member_idempotent(
+  p_organization_id uuid,
+  p_user_id uuid,
+  p_role text
+)
+RETURNS void AS $$
+BEGIN
+  INSERT INTO organization_members (organization_id, user_id, role)
+  VALUES (p_organization_id, p_user_id, p_role)
+  ON CONFLICT (organization_id, user_id) DO NOTHING;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Affected Files**:
+- `/src/routes/invite/[token]/complete/+page.server.ts` (メール確認後の組織メンバー追加処理)
+- `/src/routes/invite/[token]/complete/complete.test.ts` (競合処理テスト - 4テスト)
 
 ---
 
@@ -750,8 +1000,11 @@ if (guestIdentifier) {
 12. **Always** use specific error codes instead of broad string matching for better reliability
 13. **Never** use loose regex patterns like `[a-f0-9-]+` for UUID validation → Use strict UUID v4 format
 14. **Always** validate `session === null` after `signUp()` to detect Supabase configuration errors **CRITICAL SECURITY**
-15. **Always** normalize emails before passing to `signUp()`, not just for comparison **DATA INTEGRITY**
-16. **Always** apply security improvements to both regular signup and invitation signup flows **CONSISTENCY & SECURITY**
+15. **Always** normalize emails before passing to `signUp()` and `signInWithPassword()`, not just for comparison **DATA INTEGRITY**
+16. **Always** apply security improvements to all auth flows (signup, invitation signup, login) **CONSISTENCY & SECURITY**
+17. **Never** use generic error messages for login → Use error code-based messages (invalid_credentials, email_not_confirmed, too_many_requests) **USER EXPERIENCE**
+18. **Always** add message fallback when using error code-based detection → Prevents 500 errors when Supabase doesn't set error.code **RELIABILITY**
+19. **Always** handle PostgreSQL unique constraint violations (error code 23505) as success in idempotent operations → Prevents 500 errors on race conditions **RELIABILITY**
 
 ---
 

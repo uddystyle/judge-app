@@ -108,7 +108,18 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		});
 
 		if (profileError) {
-			console.error('[Invite Complete] Error creating profile:', profileError);
+			// PostgreSQLエラーコード '23505' は一意制約違反
+			// 同時アクセスでプロフィールが既に作成されている場合、成功として扱う
+			if (profileError.code === '23505') {
+				console.log('[Invite Complete] Profile already exists (race condition detected), continuing');
+			} else {
+				// その他のエラーはログに記録するが、招待フローは継続
+				console.error('[Invite Complete] Error creating profile:', {
+					code: profileError.code,
+					message: profileError.message,
+					details: profileError
+				});
+			}
 		}
 	}
 
@@ -120,7 +131,20 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	});
 
 	if (memberError) {
-		console.error('[Invite Complete] Error adding member:', memberError);
+		// PostgreSQLエラーコード '23505' は一意制約違反（UNIQUE constraint violation）
+		// 同時アクセスでexistingMembershipチェック後にinsertが競合した場合に発生
+		// この場合、既に参加済みとして成功扱いし、組織ページにリダイレクト
+		if (memberError.code === '23505') {
+			console.log('[Invite Complete] User is already a member (race condition detected), redirecting to organization');
+			throw redirect(303, `/organization/${invitation.organization_id}`);
+		}
+
+		// その他の予期しないエラー
+		console.error('[Invite Complete] Error adding member:', {
+			code: memberError.code,
+			message: memberError.message,
+			details: memberError
+		});
 		throw error(500, '組織への追加に失敗しました');
 	}
 
@@ -131,10 +155,26 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.eq('id', invitation.id);
 
 	// 招待使用履歴を記録
-	await supabaseAdmin.from('invitation_uses').insert({
+	const { error: usageError } = await supabaseAdmin.from('invitation_uses').insert({
 		invitation_id: invitation.id,
 		user_id: user.id
 	});
+
+	if (usageError) {
+		// PostgreSQLエラーコード '23505' は一意制約違反
+		// 既に記録済みの場合、成功として扱う
+		if (usageError.code === '23505') {
+			console.log('[Invite Complete] Invitation usage already recorded (race condition detected)');
+		} else {
+			// その他のエラーはログに記録するが、招待フローは継続
+			// 履歴記録の失敗はメンバー追加の成功を妨げるべきではない
+			console.error('[Invite Complete] Error recording invitation usage:', {
+				code: usageError.code,
+				message: usageError.message,
+				details: usageError
+			});
+		}
+	}
 
 	console.log('[Invite Complete] Successfully added user to organization:', {
 		userId: user.id,

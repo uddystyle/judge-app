@@ -3,6 +3,7 @@ import {
 	sanitizeString,
 	validateEmail,
 	validateName,
+	validatePassword,
 	validateOrganizationName,
 	validateSessionName,
 	validateBibNumber,
@@ -303,5 +304,47 @@ describe('validateText', () => {
 	it('should sanitize malicious input', () => {
 		const result = validateText('<script>alert("xss")</script>');
 		expect(result.sanitized).toBe('scriptalert("xss")/script');
+	});
+});
+
+describe('validatePassword', () => {
+	it('should accept valid passwords', () => {
+		expect(validatePassword('password123')).toEqual({ valid: true });
+		expect(validatePassword('abcdef')).toEqual({ valid: true });
+		expect(validatePassword('P@ssw0rd!')).toEqual({ valid: true });
+	});
+
+	it('should reject empty or null passwords', () => {
+		expect(validatePassword('')).toMatchObject({ valid: false, error: 'パスワードを入力してください。' });
+		expect(validatePassword(null)).toMatchObject({ valid: false, error: 'パスワードを入力してください。' });
+		expect(validatePassword(undefined)).toMatchObject({ valid: false, error: 'パスワードを入力してください。' });
+	});
+
+	it('should reject passwords shorter than 6 characters', () => {
+		expect(validatePassword('12345')).toMatchObject({
+			valid: false,
+			error: 'パスワードは6文字以上で入力してください。'
+		});
+		expect(validatePassword('abc')).toMatchObject({
+			valid: false,
+			error: 'パスワードは6文字以上で入力してください。'
+		});
+	});
+
+	it('should reject passwords longer than 72 characters', () => {
+		const longPassword = 'a'.repeat(73);
+		expect(validatePassword(longPassword)).toMatchObject({
+			valid: false,
+			error: 'パスワードは72文字以内で入力してください。'
+		});
+	});
+
+	it('should accept passwords exactly 6 characters', () => {
+		expect(validatePassword('123456')).toEqual({ valid: true });
+	});
+
+	it('should accept passwords exactly 72 characters', () => {
+		const maxPassword = 'a'.repeat(72);
+		expect(validatePassword(maxPassword)).toEqual({ valid: true });
 	});
 });

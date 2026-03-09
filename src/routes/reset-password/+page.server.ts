@@ -1,0 +1,48 @@
+import { fail } from '@sveltejs/kit';
+import type { Actions } from './$types';
+import { validateEmail } from '$lib/server/validation';
+import { PUBLIC_SITE_URL } from '$env/static/public';
+
+/**
+ * メールアドレスを正規化（小文字化 + トリム）
+ */
+function normalizeEmail(email: string): string {
+	return email.trim().toLowerCase();
+}
+
+export const actions: Actions = {
+	default: async ({ request, locals: { supabase } }) => {
+		const formData = await request.formData();
+		const emailRaw = formData.get('email') as string;
+
+		// バリデーション
+		const emailValidation = validateEmail(emailRaw);
+		if (!emailValidation.valid) {
+			return fail(400, {
+				email: emailRaw || '',
+				error: emailValidation.error || 'メールアドレスが無効です。'
+			});
+		}
+
+		const sanitizedEmail = emailValidation.sanitized!;
+		const email = normalizeEmail(sanitizedEmail);
+
+		// パスワードリセットメールを送信
+		// auth/callbackを経由してトークン交換を行う
+		const { error } = await supabase.auth.resetPasswordForEmail(email, {
+			redirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/reset-password/confirm`
+		});
+
+		if (error) {
+			console.error('[reset-password] エラー:', error);
+			// セキュリティ上の理由から、メールアドレスが存在しない場合でも成功メッセージを表示
+			// （アカウントの存在を推測されないようにするため）
+		}
+
+		// 常に成功を返す（セキュリティ対策）
+		return {
+			success: true,
+			email
+		};
+	}
+};

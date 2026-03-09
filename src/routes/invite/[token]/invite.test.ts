@@ -101,6 +101,120 @@ describe('invite/[token] - signup action', () => {
 				}
 			});
 		});
+
+		it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出', async () => {
+			const request = createMockRequest({
+				email: 'existing@example.com',
+				password: 'password123',
+				fullName: 'Existing User'
+			});
+
+			const event = {
+				request,
+				params: { token: 'test-token' },
+				locals: { supabase: mockSupabase }
+			} as unknown as RequestEvent;
+
+			const mockInvitation = {
+				id: 'invite-123',
+				email: null,
+				organization_id: 'org-123',
+				role: 'member',
+				expires_at: new Date(Date.now() + 86400000).toISOString(),
+				used_count: 0,
+				organizations: {
+					id: 'org-123',
+					name: 'Test Organization'
+				}
+			};
+
+			mockSupabaseAdmin.from.mockReturnValue({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({
+							data: mockInvitation,
+							error: null
+						})
+					})
+				})
+			});
+
+			// code が空で message に "already registered" が含まれるケース
+			mockSupabase.auth.signUp.mockResolvedValue({
+				data: { user: null, session: null },
+				error: {
+					code: '', // code が空
+					message: 'User already registered',
+					status: 400
+				}
+			});
+
+			const result = await actions.signup(event);
+
+			expect(result).toMatchObject({
+				status: 409,
+				data: {
+					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+				}
+			});
+		});
+
+		it('codeが未定義でmessageに"already exists"が含まれる場合も既存ユーザーを検出', async () => {
+			const request = createMockRequest({
+				email: 'existing@example.com',
+				password: 'password123',
+				fullName: 'Existing User'
+			});
+
+			const event = {
+				request,
+				params: { token: 'test-token' },
+				locals: { supabase: mockSupabase }
+			} as unknown as RequestEvent;
+
+			const mockInvitation = {
+				id: 'invite-123',
+				email: null,
+				organization_id: 'org-123',
+				role: 'member',
+				expires_at: new Date(Date.now() + 86400000).toISOString(),
+				used_count: 0,
+				organizations: {
+					id: 'org-123',
+					name: 'Test Organization'
+				}
+			};
+
+			mockSupabaseAdmin.from.mockReturnValue({
+				select: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({
+							data: mockInvitation,
+							error: null
+						})
+					})
+				})
+			});
+
+			// code が undefined で message に "already exists" が含まれるケース
+			mockSupabase.auth.signUp.mockResolvedValue({
+				data: { user: null, session: null },
+				error: {
+					// code プロパティなし（undefined）
+					message: 'Email already exists',
+					status: 400
+				} as any
+			});
+
+			const result = await actions.signup(event);
+
+			expect(result).toMatchObject({
+				status: 409,
+				data: {
+					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+				}
+			});
+		});
 	});
 
 	describe('メールアドレス照合（セキュリティ）', () => {
@@ -605,7 +719,7 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: 'すべてのフィールドを入力してください'
+					error: 'メールアドレスを入力してください。'
 				}
 			});
 		});
@@ -628,7 +742,7 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: 'すべてのフィールドを入力してください'
+					error: 'パスワードを入力してください。'
 				}
 			});
 		});
@@ -651,7 +765,7 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: 'すべてのフィールドを入力してください'
+					error: '名前を入力してください。'
 				}
 			});
 		});

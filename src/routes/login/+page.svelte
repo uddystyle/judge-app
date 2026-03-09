@@ -13,6 +13,7 @@
 	let email = '';
 	let password = '';
 	let errorMessage = '';
+	let successMessage = '';
 	let loading = false;
 	let checkingAuth = true;
 
@@ -21,18 +22,67 @@
 		errorMessage = $page.url.searchParams.get('error') || '';
 	}
 
+	// URLパラメータから成功メッセージを取得
+	$: if (!checkingAuth && $page.url.searchParams.get('success') === 'password-reset') {
+		successMessage = 'パスワードが正常に更新されました。新しいパスワードでログインしてください。';
+	}
+
+	/**
+	 * メールアドレスを正規化（小文字化 + トリム）
+	 * サインアップと同じ正規化を適用し、一貫性を保つ
+	 */
+	function normalizeEmail(email: string): string {
+		return email.trim().toLowerCase();
+	}
+
 	async function handleLogin() {
 		loading = true;
 		errorMessage = '';
 		try {
+			// メールアドレスを正規化してログイン
+			const normalizedEmail = normalizeEmail(email);
+
+			console.log('[login] ログイン試行:', {
+				originalEmail: email,
+				normalizedEmail
+			});
+
 			const { error } = await supabase.auth.signInWithPassword({
-				email: email,
+				email: normalizedEmail,
 				password: password
 			});
 
 			if (error) {
-				throw new Error('メールアドレスまたはパスワードが正しくありません。');
+				console.error('[login] signIn error:', {
+					code: error.code,
+					message: error.message,
+					status: (error as any).status
+				});
+
+				// エラーコードベースの判定（文字列マッチングではなくコード判定）
+				// Supabase Auth Error Codes: https://supabase.com/docs/guides/auth/debugging/error-codes
+
+				// 無効な認証情報
+				if (error.code === 'invalid_credentials') {
+					throw new Error('メールアドレスまたはパスワードが正しくありません。');
+				}
+
+				// メール未確認
+				if (error.code === 'email_not_confirmed') {
+					throw new Error('メールアドレスが確認されていません。確認メールをご確認ください。');
+				}
+
+				// レート制限
+				if (error.code === 'too_many_requests' || (error as any).status === 429) {
+					throw new Error('ログイン試行回数が上限に達しました。しばらく待ってから再度お試しください。');
+				}
+
+				// その他の予期しないエラー
+				console.error('[login] Unexpected error code:', error.code);
+				throw new Error('ログインに失敗しました。再度お試しください。');
 			}
+
+			console.log('[login] ログイン成功');
 			await goto('/dashboard');
 		} catch (error: any) {
 			errorMessage = error.message;
@@ -83,9 +133,17 @@
 			disabled={loading}
 		/>
 
+		{#if successMessage}
+			<p class="success-message">{successMessage}</p>
+		{/if}
+
 		{#if errorMessage}
 			<p class="error-message">{errorMessage}</p>
 		{/if}
+
+		<div class="forgot-password-link">
+			<a href="/reset-password">パスワードを忘れた場合</a>
+		</div>
 
 		<div class="nav-buttons">
 			<NavButton variant="primary" on:click={handleLogin} disabled={loading}>
@@ -146,6 +204,15 @@
 		border-color: var(--accent-primary);
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
+	.success-message {
+		color: #10b981;
+		font-size: 14px;
+		margin: 0;
+		padding: 12px;
+		background: #f0fdf4;
+		border-radius: 8px;
+		border: 1px solid #bbf7d0;
+	}
 	.error-message {
 		color: #dc3545;
 		font-size: 14px;
@@ -154,6 +221,20 @@
 		background: #fff5f5;
 		border-radius: 8px;
 		border: 1px solid #ffdddd;
+	}
+	.forgot-password-link {
+		text-align: right;
+		margin-top: -8px;
+	}
+	.forgot-password-link a {
+		color: var(--accent-primary);
+		font-size: 14px;
+		text-decoration: none;
+		transition: color 0.2s;
+	}
+	.forgot-password-link a:hover {
+		color: var(--accent-hover);
+		text-decoration: underline;
 	}
 	.nav-buttons {
 		display: flex;
@@ -180,9 +261,16 @@
 			padding: 18px;
 			font-size: 18px;
 		}
+		.success-message {
+			font-size: 15px;
+			padding: 14px;
+		}
 		.error-message {
 			font-size: 15px;
 			padding: 14px;
+		}
+		.forgot-password-link a {
+			font-size: 15px;
 		}
 	}
 </style>

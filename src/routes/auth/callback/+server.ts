@@ -11,7 +11,8 @@ export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
 	const allowedPaths = [
 		'/dashboard',
 		'/onboarding/create-organization',
-		'/account'
+		'/account',
+		'/reset-password/confirm'
 	];
 
 	// 組織ページへのリダイレクトを許可（/organization/[uuid]）

@@ -128,7 +128,103 @@ describe('signup action', () => {
 				});
 			});
 
-			it('sessionが返る場合（設定エラー）は500エラーを返す', async () => {
+			it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出', async () => {
+			const request = createMockRequest({
+				fullName: 'Test User',
+				email: 'existing@example.com',
+				password: 'password123'
+			});
+
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as unknown as RequestEvent;
+
+			// code が空で message に "already registered" が含まれるケース
+			mockSupabaseClient.auth.signUp.mockResolvedValue({
+				data: { user: null, session: null },
+				error: {
+					code: '', // code が空
+					message: 'User already registered',
+					status: 400
+				}
+			});
+
+			const result = await actions.signup(event);
+
+			expect(result).toMatchObject({
+				status: 409,
+				data: {
+					error: 'このメールアドレスは既に使用されています。'
+				}
+			});
+		});
+
+		it('codeが未定義で messageに"already exists"が含まれる場合も既存ユーザーを検出', async () => {
+			const request = createMockRequest({
+				fullName: 'Test User',
+				email: 'existing@example.com',
+				password: 'password123'
+			});
+
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as unknown as RequestEvent;
+
+			// code が undefined で message に "already exists" が含まれるケース
+			mockSupabaseClient.auth.signUp.mockResolvedValue({
+				data: { user: null, session: null },
+				error: {
+					// code プロパティなし（undefined）
+					message: 'Email already exists',
+					status: 400
+				} as any
+			});
+
+			const result = await actions.signup(event);
+
+			expect(result).toMatchObject({
+				status: 409,
+				data: {
+					error: 'このメールアドレスは既に使用されています。'
+				}
+			});
+		});
+
+		it('codeが空でmessageがマッチしない場合は500エラーを返す', async () => {
+			const request = createMockRequest({
+				fullName: 'Test User',
+				email: 'error@example.com',
+				password: 'password123'
+			});
+
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as unknown as RequestEvent;
+
+			// code が空で message がマッチしないケース
+			mockSupabaseClient.auth.signUp.mockResolvedValue({
+				data: { user: null, session: null },
+				error: {
+					code: '',
+					message: 'Some other error',
+					status: 400
+				}
+			});
+
+			const result = await actions.signup(event);
+
+			expect(result).toMatchObject({
+				status: 500,
+				data: {
+					error: 'サーバーエラー: アカウントの作成に失敗しました。'
+				}
+			});
+		});
+
+		it('sessionが返る場合（設定エラー）は500エラーを返す', async () => {
 				const request = createMockRequest({
 					fullName: 'Auto User',
 					email: 'auto@example.com',
@@ -181,7 +277,7 @@ describe('signup action', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: '氏名を入力してください。'
+					error: '名前を入力してください。'
 				}
 			});
 		});

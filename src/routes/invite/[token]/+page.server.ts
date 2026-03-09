@@ -3,6 +3,7 @@ import { error, redirect, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SITE_URL } from '$env/static/public';
+import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -114,9 +115,25 @@ export const actions: Actions = {
 		const fullName = formData.get('fullName')?.toString();
 
 		// バリデーション
-		if (!email || !password || !fullName) {
-			return fail(400, { error: 'すべてのフィールドを入力してください' });
+		// 共通バリデーション関数を使用（XSS対策、長さチェック、形式チェック）
+		const nameValidation = validateName(fullName);
+		if (!nameValidation.valid) {
+			return fail(400, { error: nameValidation.error });
 		}
+
+		const emailValidation = validateEmail(email);
+		if (!emailValidation.valid) {
+			return fail(400, { error: emailValidation.error });
+		}
+
+		const passwordValidation = validatePassword(password);
+		if (!passwordValidation.valid) {
+			return fail(400, { error: passwordValidation.error });
+		}
+
+		// サニタイズされた値を使用（XSS対策）
+		const sanitizedFullName = nameValidation.sanitized!;
+		const sanitizedEmail = emailValidation.sanitized!;
 
 		// 招待情報を取得
 		const { data: invitation } = await supabaseAdmin
@@ -131,7 +148,7 @@ export const actions: Actions = {
 
 		// メールアドレスを正規化（大文字小文字、空白を統一）
 		// signUp()にも正規化後のメールを渡すことで、データの一貫性を保つ
-		const normalizedEmail = normalizeEmail(email);
+		const normalizedEmail = normalizeEmail(sanitizedEmail);
 
 		// 【セキュリティ】招待メールが指定されている場合、入力メールと一致するかチェック
 		// 正規化して比較することで、大文字小文字の違いや空白による回避を防ぐ
@@ -140,6 +157,7 @@ export const actions: Actions = {
 			console.warn('[Invite Signup] Email mismatch detected:', {
 				invitationEmail: invitation.email,
 				inputEmail: email,
+				sanitizedEmail,
 				normalizedInvitation: normalizeEmail(invitation.email),
 				normalizedInput: normalizedEmail,
 				token
@@ -152,6 +170,7 @@ export const actions: Actions = {
 		console.log('[Invite Signup] Email validation passed:', {
 			hasInvitationEmail: !!invitation.email,
 			originalEmail: email,
+			sanitizedEmail,
 			normalizedEmail,
 			token
 		});
@@ -165,7 +184,7 @@ export const actions: Actions = {
 				password,
 				options: {
 					data: {
-						full_name: fullName,
+						full_name: sanitizedFullName,
 						// 招待トークンをuser_metadataに保存（メール確認後に使用）
 						invitation_token: token
 					},
@@ -181,7 +200,7 @@ export const actions: Actions = {
 					status: (authError as any).status
 				});
 
-				// エラーコードベースの判定（文字列マッチングではなくコード判定）
+				// エラーコードベースの判定（推奨）
 				// Supabase Auth Error Codes: https://supabase.com/docs/guides/auth/debugging/error-codes
 				if (authError.code === 'user_already_exists' ||
 				    authError.code === 'email_exists') {
@@ -191,7 +210,23 @@ export const actions: Actions = {
 					});
 				}
 
-				// その他のエラー
+				// フォールバック: error.code が設定されていない場合、message で判定
+				// code が設定されている場合は、このブロックは実行されない
+				if (!authError.code || authError.code === '') {
+					const message = authError.message?.toLowerCase() || '';
+
+					// 既存ユーザーを示す具体的なメッセージパターン
+					if (message.includes('already registered') ||
+					    message.includes('already exists') ||
+					    message.includes('already been registered')) {
+						console.warn('[Invite Signup] Detected existing user via message fallback:', authError.message);
+						return fail(409, {
+							error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+						});
+					}
+				}
+
+				// その他の予期しないエラー
 				console.error('[Invite Signup] Unexpected error code:', authError.code);
 				return fail(500, { error: 'アカウントの作成に失敗しました' });
 			}

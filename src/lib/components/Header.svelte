@@ -83,7 +83,12 @@
 	}
 
 	async function confirmLogout() {
-		await supabase.auth.signOut();
+		const { error } = await supabase.auth.signOut();
+		if (error) {
+			console.error('[Header] ログアウトエラー:', error);
+			// エラーが発生してもログインページに遷移
+			// （セッションが残っている可能性があるため、ユーザーに通知すべき）
+		}
 		goto('/login');
 	}
 

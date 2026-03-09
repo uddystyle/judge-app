@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import { PUBLIC_SITE_URL } from '$env/static/public';
+import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
 
 /**
  * メールアドレスを正規化（小文字化 + トリム）
@@ -18,24 +19,35 @@ export const actions: Actions = {
 		const password = formData.get('password') as string;
 
 		// --- Validation ---
-		if (!fullName || fullName.trim().length === 0) {
-			return fail(400, { fullName, email, error: '氏名を入力してください。' });
+		// 共通バリデーション関数を使用（XSS対策、長さチェック、形式チェック）
+		const nameValidation = validateName(fullName);
+		if (!nameValidation.valid) {
+			return fail(400, { fullName, email, error: nameValidation.error });
 		}
-		if (!email) {
-			return fail(400, { fullName, email, error: 'メールアドレスを入力してください。' });
+
+		const emailValidation = validateEmail(email);
+		if (!emailValidation.valid) {
+			return fail(400, { fullName, email, error: emailValidation.error });
 		}
-		if (!password || password.length < 6) {
-			return fail(400, { fullName, email, error: 'パスワードは6文字以上で入力してください。' });
+
+		const passwordValidation = validatePassword(password);
+		if (!passwordValidation.valid) {
+			return fail(400, { fullName, email, error: passwordValidation.error });
 		}
+
+		// サニタイズされた値を使用（XSS対策）
+		const sanitizedFullName = nameValidation.sanitized!;
+		const sanitizedEmail = emailValidation.sanitized!;
 
 		// メールアドレスを正規化（大文字小文字、空白を統一）
 		// signUp()に正規化後のメールを渡すことで、データの一貫性を保つ
-		const normalizedEmail = normalizeEmail(email);
+		const normalizedEmail = normalizeEmail(sanitizedEmail);
 
 		// --- Create User in Supabase Auth ---
 		// Pass full_name in metadata so the database trigger can use it
 		console.log('[signup] サインアップ開始:', {
 			originalEmail: email,
+			sanitizedEmail,
 			normalizedEmail,
 			emailRedirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/onboarding/create-organization`
 		});
@@ -45,7 +57,7 @@ export const actions: Actions = {
 			password: password,
 			options: {
 				data: {
-					full_name: fullName
+					full_name: sanitizedFullName
 				},
 				// メール確認後、認証コールバックへリダイレクト（オンボーディングへの遷移を指定）
 				emailRedirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/onboarding/create-organization`
@@ -75,24 +87,38 @@ export const actions: Actions = {
 			// 既存ユーザー: メールアドレスが既に登録されている
 			if (authError.code === 'user_already_exists' ||
 			    authError.code === 'email_exists') {
-				return fail(409, { fullName, email, error: 'このメールアドレスは既に使用されています。' });
+				return fail(409, { fullName: sanitizedFullName, email: sanitizedEmail, error: 'このメールアドレスは既に使用されています。' });
 			}
 
 			// メール送信レート制限
 			if (authError.code === 'over_email_send_rate_limit' ||
 			    (authError as any).status === 429) {
 				return fail(429, {
-					fullName,
-					email,
+					fullName: sanitizedFullName,
+					email: sanitizedEmail,
 					error: '確認メールの送信回数が上限に達しました。しばらく待ってから再度お試しください。'
 				});
 			}
 
-			// その他のエラー
+			// フォールバック: error.code が設定されていない場合、message で判定
+			// code が設定されている場合は、このブロックは実行されない
+			if (!authError.code || authError.code === '') {
+				const message = authError.message?.toLowerCase() || '';
+
+				// 既存ユーザーを示す具体的なメッセージパターン
+				if (message.includes('already registered') ||
+				    message.includes('already exists') ||
+				    message.includes('already been registered')) {
+					console.warn('[signup] Detected existing user via message fallback:', authError.message);
+					return fail(409, { fullName: sanitizedFullName, email: sanitizedEmail, error: 'このメールアドレスは既に使用されています。' });
+				}
+			}
+
+			// その他の予期しないエラー
 			console.error('[signup] Unexpected error code:', authError.code);
 			return fail(500, {
-				fullName,
-				email,
+				fullName: sanitizedFullName,
+				email: sanitizedEmail,
 				error: 'サーバーエラー: アカウントの作成に失敗しました。'
 			});
 		}
@@ -106,16 +132,16 @@ export const actions: Actions = {
 				reason: 'このケースではメールは送信されません'
 			});
 			return fail(409, {
-				fullName,
-				email,
+				fullName: sanitizedFullName,
+				email: sanitizedEmail,
 				error: 'このメールアドレスは既に登録されています。ログインしてください。'
 			});
 		}
 
 		if (!authData.user) {
 			return fail(500, {
-				fullName,
-				email,
+				fullName: sanitizedFullName,
+				email: sanitizedEmail,
 				error: 'サーバーエラー: ユーザーの作成後に問題が発生しました。'
 			});
 		}
@@ -130,8 +156,8 @@ export const actions: Actions = {
 				message: 'Supabase "Confirm email" setting may be disabled. Email ownership verification is required for security.'
 			});
 			return fail(500, {
-				fullName,
-				email,
+				fullName: sanitizedFullName,
+				email: sanitizedEmail,
 				error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
 			});
 		}
