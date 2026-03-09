@@ -80,7 +80,12 @@ export const actions: Actions = {
 
 		// パスワード変更後、セキュリティのためセッションをクリアしてログインページにリダイレクト
 		// これにより、ユーザーは新しいパスワードで再ログインする必要がある
-		await supabase.auth.signOut();
+		// scope: 'global' で全てのデバイス・タブからログアウト
+		const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
+
+		if (signOutError) {
+			console.error('[reset-password/confirm] サインアウトエラー:', signOutError);
+		}
 
 		// ログインページにリダイレクト
 		throw redirect(303, '/login?success=password-reset');
