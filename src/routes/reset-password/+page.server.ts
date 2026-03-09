@@ -28,13 +28,15 @@ export const actions: Actions = {
 		const email = normalizeEmail(sanitizedEmail);
 
 		// パスワードリセットメールを送信
-		// auth/callbackを経由してトークン交換を行う
 		const { error } = await supabase.auth.resetPasswordForEmail(email, {
-			redirectTo: `${PUBLIC_SITE_URL}/auth/callback?next=/reset-password/confirm`
+			redirectTo: `${PUBLIC_SITE_URL}/reset-password/confirm`
 		});
 
 		if (error) {
 			console.error('[reset-password] エラー:', error);
+			console.error('[reset-password] エラーコード:', error.code);
+			console.error('[reset-password] エラーメッセージ:', error.message);
+			console.error('[reset-password] エラー詳細:', JSON.stringify(error, null, 2));
 			// セキュリティ上の理由から、メールアドレスが存在しない場合でも成功メッセージを表示
 			// （アカウントの存在を推測されないようにするため）
 		}
