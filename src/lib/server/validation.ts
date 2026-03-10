@@ -3,6 +3,8 @@
  * XSS、SQLインジェクション、その他の攻撃からの保護
  */
 
+import { PUBLIC_SITE_URL } from '$env/static/public';
+
 /**
  * 文字列をサニタイズ（XSS対策）
  * HTMLタグを除去し、安全な文字列を返す
@@ -297,4 +299,114 @@ export function validateText(
 	}
 
 	return { valid: true, sanitized };
+}
+
+/**
+ * Allowed redirect paths for Stripe payment flows
+ * These paths are safe destinations after Stripe checkout/portal sessions
+ */
+export const ALLOWED_STRIPE_REDIRECT_PATHS: (string | RegExp)[] = [
+	'/dashboard',
+	'/account',
+	'/pricing',
+	'/organizations',
+	// Pattern: /organization/[uuid-v4]
+	/^\/organization\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+	// Pattern: /organization/[uuid-v4]/upgrade
+	/^\/organization\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/upgrade$/
+];
+
+/**
+ * Validates and sanitizes redirect URLs for Stripe payment flows
+ * Prevents Open Redirect attacks by enforcing same-origin and path allowlist
+ *
+ * @param url - URL to validate (relative path or full URL)
+ * @param allowedPaths - List of allowed path patterns
+ * @returns Validation result with sanitized URL
+ */
+export function validateRedirectUrl(
+	url: string | null | undefined,
+	allowedPaths: (string | RegExp)[]
+): {
+	valid: boolean;
+	error?: string;
+	sanitizedUrl?: string;
+} {
+	// 1. Input validation
+	if (!url || typeof url !== 'string' || url.trim() === '') {
+		return { valid: false, error: 'URL is required' };
+	}
+
+	const trimmedUrl = url.trim();
+
+	// 2. Detect relative vs absolute URL
+	let parsedUrl: URL;
+	let baseOrigin: string;
+
+	try {
+		baseOrigin = new URL(PUBLIC_SITE_URL).origin;
+	} catch {
+		return { valid: false, error: 'PUBLIC_SITE_URL configuration error' };
+	}
+
+	// Parse URL (handle both relative and absolute)
+	try {
+		if (trimmedUrl.startsWith('/')) {
+			// Relative path - construct full URL for parsing
+			parsedUrl = new URL(trimmedUrl, PUBLIC_SITE_URL);
+		} else {
+			// Absolute URL
+			parsedUrl = new URL(trimmedUrl);
+		}
+	} catch {
+		return { valid: false, error: 'Invalid URL format' };
+	}
+
+	// 3. Origin validation (for absolute URLs)
+	const urlOrigin = parsedUrl.origin;
+
+	// Allow localhost with any port in development
+	// Check hostname specifically to prevent subdomain attacks (e.g., evil.localhost)
+	const baseHostname = new URL(baseOrigin).hostname;
+	const urlHostname = parsedUrl.hostname;
+	const isLocalhost = baseHostname === 'localhost' && urlHostname === 'localhost';
+
+	if (!isLocalhost && urlOrigin !== baseOrigin) {
+		return {
+			valid: false,
+			error: `Origin mismatch: expected ${baseOrigin}, got ${urlOrigin}`
+		};
+	}
+
+	// 4. Path extraction and normalization
+	let pathname = parsedUrl.pathname;
+
+	// Normalize trailing slashes
+	if (pathname.length > 1 && pathname.endsWith('/')) {
+		pathname = pathname.slice(0, -1);
+	}
+
+	// 5. Path validation against allowlist
+	const isAllowed = allowedPaths.some((pattern) => {
+		if (typeof pattern === 'string') {
+			return pattern === pathname;
+		} else {
+			return pattern.test(pathname);
+		}
+	});
+
+	if (!isAllowed) {
+		return {
+			valid: false,
+			error: `Path not allowed: ${pathname}`
+		};
+	}
+
+	// 6. Reconstruct safe URL
+	const sanitizedUrl = `${baseOrigin}${pathname}${parsedUrl.search}${parsedUrl.hash}`;
+
+	return {
+		valid: true,
+		sanitizedUrl
+	};
 }

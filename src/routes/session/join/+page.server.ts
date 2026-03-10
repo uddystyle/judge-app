@@ -1,10 +1,17 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
 	join: async ({ request, locals: { supabase } }) => {
+		// レート制限チェックを最初に実行
+		const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
+		if (!rateLimitResult.success) {
+			return rateLimitResult.response;
+		}
+
 		const {
 			data: { user },
 			error: userError
@@ -31,20 +38,20 @@ export const actions: Actions = {
 			return fail(400, { joinCode: '', guestName, error: '参加コードを入力してください。' });
 		}
 
-		if (joinCode.length !== 6) {
-			return fail(400, { joinCode, guestName, error: '参加コードは6桁です。' });
+		if (joinCode.length !== 8) {
+			return fail(400, { joinCode, guestName, error: '参加コードは8桁です。' });
 		}
 
 		// 英数字のみ許可
-		if (!/^[A-Z0-9]{6}$/.test(joinCode)) {
-			return fail(400, { joinCode, guestName, error: '参加コードは英数字6桁で入力してください。' });
+		if (!/^[A-Z0-9]{8}$/.test(joinCode)) {
+			return fail(400, { joinCode, guestName, error: '参加コードは英数字8桁で入力してください。' });
 		}
 
 		// 参加コードに一致するセッションをデータベースから検索
 		console.log('[Join Session] 参加コードでセッション検索:', joinCode);
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
-			.select('id, is_accepting_participants, organization_id')
+			.select('id, is_accepting_participants, organization_id, failed_join_attempts, is_locked, join_code')
 			.eq('join_code', joinCode)
 			.maybeSingle();
 
@@ -58,6 +65,51 @@ export const actions: Actions = {
 		if (!sessionData) {
 			console.log('[Join Session] 参加コードに一致するセッションが見つかりません');
 			return fail(404, { joinCode, error: '無効な参加コードです。' });
+		}
+
+		// セッションがロックされているかチェック
+		if (sessionData.is_locked) {
+			console.log('[Join Session] ロックされたセッションへのアクセス試行:', { sessionId: sessionData.id });
+			return fail(423, {
+				joinCode,
+				guestName,
+				error: '不正なアクセスが検出されたため、このセッションはロックされました。'
+			});
+		}
+
+		// 参加コードが正しいことを確認（念のため）
+		if (sessionData.join_code !== joinCode) {
+			// 失敗回数をインクリメント
+			const newFailedAttempts = (sessionData.failed_join_attempts || 0) + 1;
+
+			console.log('[Join Session] 参加コード不一致。失敗回数:', newFailedAttempts);
+
+			// 10回失敗でロック
+			if (newFailedAttempts >= 10) {
+				await supabase
+					.from('sessions')
+					.update({
+						is_locked: true,
+						failed_join_attempts: newFailedAttempts
+					})
+					.eq('id', sessionData.id);
+
+				console.log('[Join Session] セッションをロックしました:', { sessionId: sessionData.id });
+
+				return fail(423, {
+					joinCode,
+					guestName,
+					error: '不正なアクセスが検出されたため、このセッションはロックされました。'
+				});
+			}
+
+			// 失敗回数のみ更新
+			await supabase
+				.from('sessions')
+				.update({ failed_join_attempts: newFailedAttempts })
+				.eq('id', sessionData.id);
+
+			return fail(401, { joinCode, guestName, error: '参加コードが正しくありません。' });
 		}
 
 		// セッションが参加受付中かチェック

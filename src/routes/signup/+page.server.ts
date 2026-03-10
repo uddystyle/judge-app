@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import { PUBLIC_SITE_URL } from '$env/static/public';
 import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 /**
  * メールアドレスを正規化（小文字化 + トリム）
@@ -13,6 +14,12 @@ function normalizeEmail(email: string): string {
 
 export const actions: Actions = {
 	signup: async ({ request, locals: { supabase } }) => {
+		// レート制限チェックを最初に実行
+		const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
+		if (!rateLimitResult.success) {
+			return rateLimitResult.response;
+		}
+
 		const formData = await request.formData();
 		const fullName = formData.get('fullName') as string;
 		const email = formData.get('email') as string;
@@ -85,9 +92,12 @@ export const actions: Actions = {
 			// Supabase Auth Error Codes: https://supabase.com/docs/guides/auth/debugging/error-codes
 
 			// 既存ユーザー: メールアドレスが既に登録されている
+			// セキュリティ対策: ユーザー列挙攻撃を防ぐため、成功メッセージを返す
 			if (authError.code === 'user_already_exists' ||
 			    authError.code === 'email_exists') {
-				return fail(409, { fullName: sanitizedFullName, email: sanitizedEmail, error: 'このメールアドレスは既に使用されています。' });
+				console.log('[signup] 既存ユーザー検出 - 成功レスポンスを返す（セキュリティ対策）');
+				// 既存ユーザーには確認メールが送信されないが、新規ユーザーと同じレスポンスを返す
+				return { success: true };
 			}
 
 			// メール送信レート制限
@@ -106,11 +116,12 @@ export const actions: Actions = {
 				const message = authError.message?.toLowerCase() || '';
 
 				// 既存ユーザーを示す具体的なメッセージパターン
+				// セキュリティ対策: ユーザー列挙攻撃を防ぐため、成功メッセージを返す
 				if (message.includes('already registered') ||
 				    message.includes('already exists') ||
 				    message.includes('already been registered')) {
-					console.warn('[signup] Detected existing user via message fallback:', authError.message);
-					return fail(409, { fullName: sanitizedFullName, email: sanitizedEmail, error: 'このメールアドレスは既に使用されています。' });
+					console.log('[signup] 既存ユーザー検出（メッセージフォールバック） - 成功レスポンスを返す');
+					return { success: true };
 				}
 			}
 
@@ -125,17 +136,14 @@ export const actions: Actions = {
 
 		// Supabaseは既存ユーザーの場合、エラーなしで匿名化ユーザーを返す場合がある
 		// identitiesが空なら既存登録済みとして扱う
+		// セキュリティ対策: ユーザー列挙攻撃を防ぐため、成功メッセージを返す
 		if (authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
-			console.warn('[signup] 既存ユーザーを検出（identitiesが空）:', {
+			console.log('[signup] 既存ユーザーを検出（identitiesが空） - 成功レスポンスを返す:', {
 				email: authData.user.email,
 				userId: authData.user.id,
 				reason: 'このケースではメールは送信されません'
 			});
-			return fail(409, {
-				fullName: sanitizedFullName,
-				email: sanitizedEmail,
-				error: 'このメールアドレスは既に登録されています。ログインしてください。'
-			});
+			return { success: true };
 		}
 
 		if (!authData.user) {

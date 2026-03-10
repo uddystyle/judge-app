@@ -7,6 +7,8 @@ import {
 	checkCanUseTrainingMode
 } from '$lib/server/organizationLimits';
 import { validateSessionName, validateUUID } from '$lib/server/validation';
+import { randomBytes } from 'crypto';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const {
@@ -51,15 +53,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 	};
 };
 
-// Helper function to generate a unique 6-digit join code
+// Helper function to generate a unique 8-character join code
+// 紛らわしい文字を除外: 0,O,1,I
 const generateUniqueJoinCode = async (supabase: SupabaseClient): Promise<string> => {
-	const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+	const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 	const maxAttempts = 10;
 
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		const bytes = randomBytes(8);
 		let code = '';
-		for (let i = 0; i < 6; i++) {
-			code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+		for (let i = 0; i < 8; i++) {
+			code += chars[bytes[i] % chars.length];
 		}
 
 		// 既存の参加コードと重複していないかチェック
@@ -89,6 +94,12 @@ const generateUniqueJoinCode = async (supabase: SupabaseClient): Promise<string>
 export const actions: Actions = {
 	// This `create` function will be called when the form is submitted
 	create: async ({ request, locals: { supabase } }) => {
+		// レート制限チェックを最初に実行
+		const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+		if (!rateLimitResult.success) {
+			return rateLimitResult.response;
+		}
+
 		const {
 			data: { user },
 			error: userError

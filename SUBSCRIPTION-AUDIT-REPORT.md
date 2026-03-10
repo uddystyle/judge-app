@@ -3,6 +3,11 @@
 **監査日時**: 2026-02-20
 **監査範囲**: Webhook処理、プラン制限、Stripe API連携、データ整合性
 
+> **⚠️ 重要な更新 (2026-03-10)**
+> 個人プランAPI (`/api/stripe/create-checkout-session`) は、セキュリティ上の理由により削除されました。
+> 本アプリケーションは組織ベースのプランのみをサポートします。
+> 詳細は実装プランを参照してください。
+
 ---
 
 ## エグゼクティブサマリー
@@ -32,65 +37,28 @@
 
 ## 詳細レポート
 
-### 1. 🚨 致命的: 個人プランCheckoutでメタデータ不足
+### 1. 🚨 致命的: 個人プランCheckoutでメタデータ不足 [削除済み]
 
-**ファイル**: `/src/routes/api/stripe/create-checkout-session/+server.ts`
+> **⚠️ API削除 (2026-03-10)**
+> このAPIエンドポイントは、セキュリティ上の理由により完全に削除されました。
+> 個人プランのサポートを終了し、組織ベースのプランのみを提供します。
 
-**問題**:
-```typescript
-// 修正前
-metadata: {
-    user_id: user.id
-    // ❌ is_organization が欠落
-}
-```
+**旧ファイル**: `/src/routes/api/stripe/create-checkout-session/+server.ts` (削除済み)
 
-**影響**:
-- 個人プランのサブスクリプション作成時、webhookで以下のエラー:
-  ```
-  [Webhook] is_organizationは"true"または"false"である必要があります
-  NonRetryableError (400)
-  ```
-- ユーザーは支払いを完了してもサブスクリプションが有効化されない
-- Stripeでは課金されるが、アプリ側でプランがアップグレードされない
+**問題 (削除前)**:
+- メタデータに `is_organization` フィールドが欠落
+- サブスクリプション作成時にWebhookエラーが発生
+- さらに、`priceId` のバリデーションがなく、任意のPrice IDを指定可能な脆弱性が存在
 
-**修正内容**:
-```typescript
-// 修正後
-metadata: {
-    user_id: user.id,
-    is_organization: 'false' // ✅ 追加
-},
-subscription_data: {
-    metadata: {
-        user_id: user.id,
-        is_organization: 'false' // ✅ 追加
-    }
-}
-```
+**削除理由**:
+1. セキュリティ脆弱性: priceIdの改ざんリスク
+2. ビジネス方針: 組織ベースプランに統一
+3. 未使用: フロントエンドから呼び出されていない
 
-**検証**:
-- ✅ 組織プランCheckout (`create-organization-checkout`): 正しく設定済み
-- ✅ 組織プランUpgrade (`upgrade-organization`): 正しく設定済み
-- ✅ 個人プランCheckout (`create-checkout-session`): 修正完了
-
-**追加改善**:
-- ✅ `subscription_data.metadata` を常時付与に変更
-  - 修正前: 既存サブスクリプションがある場合のみ設定
-  - 修正後: 常に設定（将来のcustomer.subscription.*イベント参照に備える）
-- ✅ 回帰防止テスト追加（2件）
-  - 新規ユーザーのメタデータ検証
-  - 既存ユーザーのメタデータ検証
-  - テスト結果: 35 tests passing
-
-**影響範囲**:
-- 既存ユーザーで個人プランにアップグレードしようとした全ユーザー
-- Stripeでは課金済みだがアプリでは反映されていない可能性
-
-**推奨対応**:
-1. ✅ 修正コードをデプロイ
-2. ⚠️ Stripe Dashboardで未処理のsubscriptionがないか確認
-3. ⚠️ 該当ユーザーに手動でプランを反映
+**現在のサポート対象**:
+- ✅ 組織プランCheckout (`create-organization-checkout`)
+- ✅ 組織プランUpgrade (`upgrade-organization`)
+- ✅ カスタマーポータル (`customer-portal`, `create-portal-session`)
 
 ---
 
@@ -270,7 +238,7 @@ if (belongsToCustomer && currentOrg.stripe_subscription_id === subscription.id) 
 
 | API | メタデータ設定 | 状態 | 備考 |
 |-----|-------------|------|------|
-| create-checkout-session | user_id, is_organization | ✅ 修正完了 | is_organization追加 |
+| ~~create-checkout-session~~ | ~~user_id, is_organization~~ | 🗑️ 削除済み | 個人プラン削除 (2026-03-10) |
 | create-organization-checkout | user_id, organization_name, plan_type, is_organization | ✅ 正常 | - |
 | upgrade-organization | user_id, organization_id, plan_type, is_organization, is_upgrade | ✅ 正常 | - |
 | create-portal-session | - | ✅ 正常 | 個人プラン管理 |
@@ -320,8 +288,8 @@ WHERE u.id IS NULL;
 
 ### 今回の監査で修正したファイル
 
-1. ✅ `/src/routes/api/stripe/create-checkout-session/+server.ts`
-   - `is_organization: 'false'` を metadata に追加
+1. ~~`/src/routes/api/stripe/create-checkout-session/+server.ts`~~ (削除済み)
+   - セキュリティ上の理由により2026-03-10に削除
 
 2. ✅ `/src/lib/server/organizationLimits.ts`
    - `getCurrentMonthSessionCount`: `.is('deleted_at', null)` 追加
@@ -371,11 +339,9 @@ WHERE u.id IS NULL;
 - ✅ T21 Portal API境界テスト追加済み
 
 ### Checkout API テスト
-- ✅ 35 tests passing (+2件追加)
-- ✅ create-checkout-session メタデータ検証追加
-  - 新規ユーザーケース
-  - 既存ユーザーケース
-- ✅ metadata.is_organization='false' の回帰防止
+- ✅ 組織プランAPIテストのみ (個人プランAPI削除済み)
+- ~~create-checkout-session メタデータ検証~~ (API削除により不要)
+- ✅ 組織プランCheckoutテスト継続実施
 
 ### プラン制限テスト
 - ⚠️ 7 tests failing (モック更新が必要)

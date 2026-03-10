@@ -2,6 +2,8 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
 import { env } from '$env/dynamic/private';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
 
 // Stripe Price IDのマッピング
 const PRICE_IDS: Record<string, { month: string; year: string }> = {
@@ -27,6 +29,12 @@ const MAX_MEMBERS: Record<string, number> = {
 };
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	// 1. ユーザー認証確認
 	const {
 		data: { user },
@@ -54,6 +62,22 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		if (!['month', 'year'].includes(billingInterval)) {
 			throw error(400, '無効な請求間隔です。');
 		}
+
+		// Security: Validate redirect URLs to prevent Open Redirect attacks
+		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
+		if (!returnValidation.valid) {
+			console.error('[Organization Upgrade] Invalid returnUrl:', returnUrl, 'Error:', returnValidation.error);
+			throw error(400, `無効なreturnUrlです: ${returnValidation.error}`);
+		}
+
+		const cancelValidation = validateRedirectUrl(cancelUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
+		if (!cancelValidation.valid) {
+			console.error('[Organization Upgrade] Invalid cancelUrl:', cancelUrl, 'Error:', cancelValidation.error);
+			throw error(400, `無効なcancelUrlです: ${cancelValidation.error}`);
+		}
+
+		const sanitizedReturnUrl = returnValidation.sanitizedUrl!;
+		const sanitizedCancelUrl = cancelValidation.sanitizedUrl!;
 
 		console.log('[Organization Upgrade API] ユーザー:', user.id);
 		console.log('[Organization Upgrade API] 組織ID:', organizationId);
@@ -86,7 +110,12 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		const priceId = PRICE_IDS[planType][billingInterval];
 
 		if (priceId.includes('placeholder')) {
-			throw error(500, 'Stripe Price IDが設定されていません。環境変数を確認してください。');
+			// 詳細はログのみに出力（セキュリティ：内部実装の詳細を隠す）
+			console.error('[Organization Upgrade API] CRITICAL: Stripe Price ID not configured!');
+			console.error('[Organization Upgrade API] planType:', planType, 'billingInterval:', billingInterval);
+
+			// クライアントには汎用的なメッセージ
+			throw error(500, 'サービスの設定エラーが発生しました。管理者に連絡してください。');
 		}
 
 		// 6. ユーザー情報を取得
@@ -132,8 +161,8 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 					quantity: 1
 				}
 			],
-			success_url: returnUrl,
-			cancel_url: cancelUrl,
+			success_url: sanitizedReturnUrl,
+			cancel_url: sanitizedCancelUrl,
 			metadata: {
 				user_id: user.id,
 				organization_id: organizationId,
@@ -157,10 +186,24 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			}
 		};
 
-		// クーポンコードがある場合は追加
+		// Security: Validate coupon code
 		if (couponCode) {
+			// 長さ制限（Stripeのcoupon IDは通常50文字以内）
+			if (typeof couponCode !== 'string' || couponCode.length > 100) {
+				throw error(400, '無効なクーポンコードです。');
+			}
+
+			// 英数字、アンダースコア、ハイフンのみ許可
+			if (!/^[a-zA-Z0-9_-]+$/.test(couponCode)) {
+				throw error(400, '無効なクーポンコードです。');
+			}
+
 			sessionParams.discounts = [{ coupon: couponCode }];
-			console.log('[Organization Upgrade API] クーポンコードを適用:', couponCode);
+			// ログには最初の10文字のみ出力（プライバシー保護）
+			const maskedCoupon = couponCode.length > 10
+				? couponCode.substring(0, 10) + '...'
+				: couponCode;
+			console.log('[Organization Upgrade API] クーポンコード適用:', maskedCoupon);
 		}
 
 		const session = await stripe.checkout.sessions.create(sessionParams);
@@ -170,13 +213,18 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// 9. Checkout URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
-		console.error('[Organization Upgrade API] エラー:', err);
-		console.error('[Organization Upgrade API] エラー詳細:', JSON.stringify(err, null, 2));
+		// 詳細なエラーはログのみに出力（セキュリティ：情報漏洩防止、個人情報保護）
+		console.error('[Organization Upgrade API] エラー:', err.message);
+		console.error('[Organization Upgrade API] エラータイプ:', err.type);
+		console.error('[Organization Upgrade API] エラーコード:', err.code);
+
 		// 4xxのHttpErrorはそのまま返す
 		if (err?.status && err.status >= 400 && err.status < 500) {
 			throw err;
 		}
-		const message = err.message || 'Checkout Sessionの作成に失敗しました。';
+
+		// クライアントには汎用的なメッセージのみ返す
+		const message = 'Checkout Sessionの作成に失敗しました。しばらくしてから再度お試しください。';
 		return json({ message }, { status: 500 });
 	}
 };

@@ -1,7 +1,14 @@
 import { json, redirect, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
-export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
+export const GET: RequestHandler = async ({ params, request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.expensive);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	const {
 		data: { user },
 		error: userError
@@ -28,7 +35,7 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 	// セッション情報を取得して作成者を確認
 	const { data: session, error: sessionError } = await supabase
 		.from('sessions')
-		.select('created_by, mode, is_tournament_mode')
+		.select('created_by, mode, is_tournament_mode, organization_id')
 		.eq('id', sessionIdNum)
 		.single();
 
@@ -46,6 +53,34 @@ export const GET: RequestHandler = async ({ params, locals: { supabase } }) => {
 	}
 
 	console.log('[Export API] 作成者チェック完了:', { userId: user.id, createdBy: session.created_by });
+
+	// 新規追加: 組織メンバーシップのチェック
+	if (session.organization_id) {
+		// ユーザーがまだ組織のメンバーであることを確認
+		const { data: membership, error: membershipError } = await supabase
+			.from('organization_members')
+			.select('role')
+			.eq('organization_id', session.organization_id)
+			.eq('user_id', user.id)
+			.is('removed_at', null)
+			.single();
+
+		if (membershipError || !membership) {
+			console.error('[Export API] Unauthorized: User not in organization', {
+				userId: user.id,
+				sessionId: sessionIdNum,
+				orgId: session.organization_id,
+				error: membershipError
+			});
+			throw error(403, 'この組織のメンバーではありません。');
+		}
+
+		console.log('[Export API] 組織メンバーシップ確認完了:', {
+			userId: user.id,
+			orgId: session.organization_id,
+			role: membership.role
+		});
+	}
 
 	let exportData: any[] = [];
 

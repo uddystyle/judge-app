@@ -25,7 +25,7 @@ describe('signup action', () => {
 	};
 
 	describe('既存ユーザーの検出', () => {
-		it('identitiesが空配列の場合、既存ユーザーとして409を返す', async () => {
+		it('identitiesが空配列の場合、セキュリティ対策として成功レスポンスを返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'existing@example.com',
@@ -52,14 +52,8 @@ describe('signup action', () => {
 
 			const result = await actions.signup(event);
 
-			expect(result).toMatchObject({
-				status: 409,
-				data: {
-					fullName: 'Test User',
-					email: 'existing@example.com',
-					error: 'このメールアドレスは既に登録されています。ログインしてください。'
-				}
-			});
+			// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
+			expect(result).toEqual({ success: true });
 		});
 
 			it('identitiesが存在する場合、正常にサインアップ処理を継続', async () => {
@@ -97,7 +91,7 @@ describe('signup action', () => {
 			}
 		});
 
-			it('authErrorがある場合は従来通りエラーハンドリング', async () => {
+			it('user_already_existsエラーの場合、セキュリティ対策として成功レスポンスを返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'error@example.com',
@@ -120,15 +114,11 @@ describe('signup action', () => {
 
 				const result = await actions.signup(event);
 
-				expect(result).toMatchObject({
-					status: 409,
-					data: {
-						error: 'このメールアドレスは既に使用されています。'
-					}
-				});
+				// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
+				expect(result).toEqual({ success: true });
 			});
 
-			it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出', async () => {
+			it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出し成功レスポンスを返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'existing@example.com',
@@ -152,15 +142,11 @@ describe('signup action', () => {
 
 			const result = await actions.signup(event);
 
-			expect(result).toMatchObject({
-				status: 409,
-				data: {
-					error: 'このメールアドレスは既に使用されています。'
-				}
-			});
+			// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
+			expect(result).toEqual({ success: true });
 		});
 
-		it('codeが未定義で messageに"already exists"が含まれる場合も既存ユーザーを検出', async () => {
+		it('codeが未定義で messageに"already exists"が含まれる場合も既存ユーザーを検出し成功レスポンスを返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'existing@example.com',
@@ -184,12 +170,8 @@ describe('signup action', () => {
 
 			const result = await actions.signup(event);
 
-			expect(result).toMatchObject({
-				status: 409,
-				data: {
-					error: 'このメールアドレスは既に使用されています。'
-				}
-			});
+			// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
+			expect(result).toEqual({ success: true });
 		});
 
 		it('codeが空でmessageがマッチしない場合は500エラーを返す', async () => {

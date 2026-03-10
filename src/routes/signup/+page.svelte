@@ -13,67 +13,84 @@
 <Header showAppName={true} pageUser={null} />
 
 <div class="container">
-	<div class="instruction">新規アカウント登録</div>
-
-	<form
-		method="POST"
-		action="?/signup"
-		use:enhance={() => {
-			loading = true;
-			return async ({ update }) => {
-				await update();
-				loading = false;
-			};
-		}}
-	>
-		<div class="form-container">
-			<input
-				type="text"
-				name="fullName"
-				placeholder="氏名"
-				autocomplete="name"
-				value={form?.fullName ?? ''}
-				required
-			/>
-			<input
-				type="email"
-				name="email"
-				placeholder="メールアドレス"
-				autocomplete="email"
-				value={form?.email ?? ''}
-				required
-			/>
-			<input
-				type="password"
-				name="password"
-				placeholder="パスワード (6文字以上)"
-				autocomplete="new-password"
-				required
-			/>
-
-			{#if form?.error}
-				<p class="error-message">{form.error}</p>
-			{/if}
-
-			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit" disabled={loading}>
-					{#if loading}
-						<span style="display: inline-flex; align-items: center; gap: 8px;">
-							登録中
-							<LoadingSpinner size="small" inline={true} />
-						</span>
-					{:else}
-						登録する
-					{/if}
-				</NavButton>
-			</div>
+	{#if form?.success}
+		<div class="instruction">確認メールを送信しました</div>
+		<div class="success-container">
+			<p class="success-message">
+				ご登録いただいたメールアドレスに確認メールを送信しました。<br />
+				メール内のリンクをクリックして、アカウント登録を完了してください。
+			</p>
+			<p class="info-message">
+				メールが届かない場合は、迷惑メールフォルダをご確認ください。
+			</p>
 		</div>
-	</form>
+		<div class="nav-buttons">
+			<NavButton on:click={() => goto('/login')}>ログイン画面</NavButton>
+			<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+		</div>
+	{:else}
+		<div class="instruction">新規アカウント登録</div>
 
-	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/login')}>ログイン画面</NavButton>
-		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
-	</div>
+		<form
+			method="POST"
+			action="?/signup"
+			use:enhance={() => {
+				loading = true;
+				return async ({ update }) => {
+					await update();
+					loading = false;
+				};
+			}}
+		>
+			<div class="form-container">
+				<input
+					type="text"
+					name="fullName"
+					placeholder="氏名"
+					autocomplete="name"
+					value={form?.fullName ?? ''}
+					required
+				/>
+				<input
+					type="email"
+					name="email"
+					placeholder="メールアドレス"
+					autocomplete="email"
+					value={form?.email ?? ''}
+					required
+				/>
+				<input
+					type="password"
+					name="password"
+					placeholder="パスワード (6文字以上)"
+					autocomplete="new-password"
+					required
+				/>
+
+				{#if form?.error}
+					<p class="error-message">{form.error}</p>
+				{/if}
+
+				<div class="nav-buttons">
+					<NavButton variant="primary" type="submit" disabled={loading}>
+						{#if loading}
+							<span style="display: inline-flex; align-items: center; gap: 8px;">
+								登録中
+								<LoadingSpinner size="small" inline={true} />
+							</span>
+						{:else}
+							登録する
+						{/if}
+					</NavButton>
+				</div>
+			</div>
+		</form>
+
+		<div class="nav-buttons">
+			<NavButton on:click={() => goto('/login')}>ログイン画面</NavButton>
+			<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -130,6 +147,28 @@
 		border-radius: 8px;
 		border: 1px solid #ffdddd;
 	}
+	.success-container {
+		background: var(--bg-primary);
+		padding: 32px;
+		border-radius: 20px;
+		border: 2px solid var(--border-light);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+		margin-bottom: 16px;
+	}
+	.success-message {
+		font-size: 16px;
+		color: var(--text-primary);
+		line-height: 1.6;
+		margin: 0 0 20px 0;
+	}
+	.info-message {
+		font-size: 14px;
+		color: var(--text-secondary);
+		margin: 0;
+		padding: 12px;
+		background: var(--bg-secondary);
+		border-radius: 8px;
+	}
 
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
@@ -150,6 +189,17 @@
 			font-size: 18px;
 		}
 		.error-message {
+			font-size: 15px;
+			padding: 14px;
+		}
+		.success-container {
+			padding: 40px;
+		}
+		.success-message {
+			font-size: 18px;
+			margin: 0 0 24px 0;
+		}
+		.info-message {
 			font-size: 15px;
 			padding: 14px;
 		}

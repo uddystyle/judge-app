@@ -1,7 +1,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
-export const GET: RequestHandler = async ({ params, url, locals: { supabase } }) => {
+export const GET: RequestHandler = async ({ params, url, request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	const {
 		data: { user },
 		error: userError

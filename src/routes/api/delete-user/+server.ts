@@ -1,8 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import { json, error as svelteError } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 export async function POST({ request }) {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.expensive);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	// Initialize the Supabase Admin Client
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL || env.SUPABASE_URL;
 	const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;

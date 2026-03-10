@@ -1027,7 +1027,7 @@ if (guestIdentifier) {
 - Results: `/src/routes/session/[id]/score/[modeType]/[eventId]/results/+page.svelte`
 
 ### Stripe Integration
-- Checkout: `/src/routes/api/stripe/create-checkout-session/+server.ts`
+- ~~Checkout: `/src/routes/api/stripe/create-checkout-session/+server.ts`~~ (削除済み)
 - Portal: `/src/routes/api/stripe/create-portal-session/+server.ts`
 - Org Checkout: `/src/routes/api/stripe/create-organization-checkout/+server.ts`
 

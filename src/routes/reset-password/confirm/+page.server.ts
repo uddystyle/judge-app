@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { validatePassword } from '$lib/server/validation';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 /**
  * パスワードリセット確認ページのロード処理
@@ -37,6 +38,12 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
 
 export const actions: Actions = {
 	default: async ({ request, locals: { supabase } }) => {
+		// レート制限チェックを最初に実行
+		const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
+		if (!rateLimitResult.success) {
+			return rateLimitResult.response;
+		}
+
 		const formData = await request.formData();
 		const password = formData.get('password') as string;
 		const confirmPassword = formData.get('confirmPassword') as string;

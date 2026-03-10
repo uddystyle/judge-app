@@ -2,18 +2,30 @@
 import { createClient } from '@supabase/supabase-js';
 import { json, error as svelteError } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { randomBytes } from 'crypto';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
-// 6桁のランダムな参加コードを生成するヘルパー関数
-const generateJoinCode = () => {
-	const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+// 8桁の暗号学的に安全な参加コードを生成するヘルパー関数
+// 紛らわしい文字を除外: 0,O,1,I
+const generateJoinCode = (): string => {
+	const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+	const bytes = randomBytes(8);
 	let code = '';
-	for (let i = 0; i < 6; i++) {
-		code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+	for (let i = 0; i < 8; i++) {
+		code += chars[bytes[i] % chars.length];
 	}
+
 	return code;
 };
 
 export async function POST({ request }) {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	// Initialize Supabase client inside the request handler
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL || env.SUPABASE_URL;
 	const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;

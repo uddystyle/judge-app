@@ -1,8 +1,16 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	// 1. ユーザー認証確認
 	const {
 		data: { user },
@@ -19,6 +27,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		if (!returnUrl || !organizationId) {
 			throw error(400, '必須パラメータが不足しています。');
 		}
+
+		// Security: Validate redirect URL to prevent Open Redirect attacks
+		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
+		if (!returnValidation.valid) {
+			console.error('[Customer Portal] Invalid returnUrl:', returnUrl, 'Error:', returnValidation.error);
+			throw error(400, `無効なreturnUrlです: ${returnValidation.error}`);
+		}
+
+		const sanitizedReturnUrl = returnValidation.sanitizedUrl!;
 
 		// 2. 組織情報を取得
 		const { data: organization } = await supabase
@@ -47,7 +64,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// 4. Stripe Customer Portalセッションを作成
 		const session = await stripe.billingPortal.sessions.create({
 			customer: organization.stripe_customer_id,
-			return_url: returnUrl
+			return_url: sanitizedReturnUrl
 		});
 
 		console.log('[Customer Portal API] セッション作成成功:', session.id);

@@ -1,8 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 // セッション完全削除（Premium限定）
-export const DELETE: RequestHandler = async ({ params, locals: { supabase } }) => {
+export const DELETE: RequestHandler = async ({ params, request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.expensive);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	const { id: sessionId } = params;
 
 	// ユーザー認証チェック

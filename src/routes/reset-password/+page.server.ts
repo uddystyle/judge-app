@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import { validateEmail } from '$lib/server/validation';
 import { PUBLIC_SITE_URL } from '$env/static/public';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 /**
  * メールアドレスを正規化（小文字化 + トリム）
@@ -12,6 +13,12 @@ function normalizeEmail(email: string): string {
 
 export const actions: Actions = {
 	default: async ({ request, locals: { supabase } }) => {
+		// レート制限チェックを最初に実行
+		const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
+		if (!rateLimitResult.success) {
+			return rateLimitResult.response;
+		}
+
 		const formData = await request.formData();
 		const emailRaw = formData.get('email') as string;
 

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -14,6 +15,12 @@ const MAX_MEMBERS: Record<string, number> = {
 };
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	try {
 		// 認証チェック
 		const {

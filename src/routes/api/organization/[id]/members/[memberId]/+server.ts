@@ -1,8 +1,15 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 // メンバー削除（Soft Delete）
-export const DELETE: RequestHandler = async ({ params, locals: { supabase } }) => {
+export const DELETE: RequestHandler = async ({ params, request, locals: { supabase } }) => {
+	// レート制限チェックを最初に実行
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	const { id: orgId, memberId } = params;
 
 	// ユーザー認証チェック

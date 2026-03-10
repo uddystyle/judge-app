@@ -2,8 +2,13 @@ import { env } from '$env/dynamic/public';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import type { Handle } from '@sveltejs/kit';
+import { randomBytes } from 'crypto';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// リクエストIDを生成して追跡
+	const requestId = randomBytes(16).toString('hex');
+	event.locals.requestId = requestId;
+
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
 	const supabaseAnonKey = env.PUBLIC_SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY;
 	const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -76,6 +81,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	});
 
+	// リクエストIDをレスポンスヘッダーに追加
+	response.headers.set('X-Request-ID', requestId);
+
 	// パフォーマンス向上のためのキャッシュヘッダー設定
 	// 静的リソース（CSS、JS、フォント等）のキャッシュ
 	if (event.url.pathname.startsWith('/_app/')) {
@@ -107,6 +115,42 @@ export const handle: Handle = async ({ event, resolve }) => {
 		response.headers.set('pragma', 'no-cache');
 		response.headers.set('expires', '0');
 	}
+
+	// セキュリティヘッダーの設定
+	// クリックジャッキング対策: iframe での埋め込みを禁止
+	response.headers.set('X-Frame-Options', 'DENY');
+
+	// MIME タイプスニッフィング対策
+	response.headers.set('X-Content-Type-Options', 'nosniff');
+
+	// XSS保護（レガシーブラウザ向け）
+	response.headers.set('X-XSS-Protection', '1; mode=block');
+
+	// リファラーポリシー: 同一オリジンのみリファラーを送信
+	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+	// HTTPSの強制（本番環境のみ）
+	if (event.url.protocol === 'https:') {
+		response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+	}
+
+	// Content Security Policy (CSP)
+	// Google Fonts、Supabase、Stripe を許可
+	const cspDirectives = [
+		"default-src 'self'",
+		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
+		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+		"font-src 'self' https://fonts.gstatic.com",
+		"img-src 'self' data: https: blob:",
+		"connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co",
+		"frame-src https://js.stripe.com",
+		"frame-ancestors 'none'", // すべてのフレーミングを防止
+		"base-uri 'self'",
+		"form-action 'self'",
+		"upgrade-insecure-requests", // HTTPSを強制
+		"block-all-mixed-content" // HTTPSページでHTTPリソースを禁止
+	].join('; ');
+	response.headers.set('Content-Security-Policy', cspDirectives);
 
 	return response;
 };
