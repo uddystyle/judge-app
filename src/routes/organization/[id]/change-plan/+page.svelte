@@ -298,13 +298,6 @@
 
 	{#if !isFree}
 		<div class="cancel-section">
-			<div class="cancel-warning">
-				<h3 class="warning-title">サブスクリプションをキャンセル</h3>
-				<p class="warning-text">
-					サブスクリプションをキャンセルすると、現在の請求期間が終了した時点でフリープランに移行します。請求期間終了までは、引き続き有料プランの機能をご利用いただけます。
-				</p>
-			</div>
-
 			{#if showCancelConfirm}
 				<form method="POST" action="?/cancelSubscription" use:enhance={() => {
 					cancelLoading = true;
@@ -315,7 +308,11 @@
 					};
 				}}>
 					<div class="confirm-box">
-						<p class="confirm-text">本当にサブスクリプションをキャンセルしますか？</p>
+						<h3 class="confirm-title">サブスクリプションをキャンセル</h3>
+						<p class="confirm-description">
+							サブスクリプションをキャンセルすると、現在の請求期間が終了した時点でフリープランに移行します。請求期間終了までは、引き続き有料プランの機能をご利用いただけます。
+						</p>
+						<p class="confirm-question">本当にサブスクリプションをキャンセルしますか？</p>
 						<div class="confirm-buttons">
 							<button
 								type="submit"
@@ -692,28 +689,6 @@
 		border-top: 1px solid var(--border-light);
 	}
 
-	.cancel-warning {
-		background: #fff3cd;
-		border: 2px solid #ffc107;
-		border-radius: 12px;
-		padding: 20px;
-		margin-bottom: 20px;
-	}
-
-	.warning-title {
-		font-size: 16px;
-		font-weight: 700;
-		color: #856404;
-		margin: 0 0 8px 0;
-	}
-
-	.warning-text {
-		font-size: 14px;
-		line-height: 1.6;
-		color: #856404;
-		margin: 0;
-	}
-
 	.cancel-btn {
 		width: 100%;
 		background: var(--bg-primary);
@@ -738,18 +713,35 @@
 	}
 
 	.confirm-box {
-		background: #fee;
-		border: 2px solid #dc3545;
+		background: #fff3cd;
+		border: 2px solid #ffc107;
 		border-radius: 12px;
 		padding: 24px;
 		text-align: center;
 	}
 
-	.confirm-text {
+	.confirm-title {
+		font-size: 18px;
+		font-weight: 700;
+		color: #856404;
+		margin: 0 0 16px 0;
+	}
+
+	.confirm-description {
+		font-size: 14px;
+		line-height: 1.6;
+		color: #856404;
+		margin: 0 0 20px 0;
+		text-align: left;
+	}
+
+	.confirm-question {
 		font-size: 16px;
 		font-weight: 600;
 		color: #dc3545;
 		margin: 0 0 20px 0;
+		padding-top: 12px;
+		border-top: 1px solid #ffc107;
 	}
 
 	.confirm-buttons {
