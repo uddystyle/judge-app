@@ -22,22 +22,24 @@ const config = {
 		},
 
 		// Content Security Policy
-		// NOTE: 現在は hooks.server.ts で手動設定しているため、ここではコメントアウト
-		// 将来的にはこちらに移行してNonce-based CSPを実装する予定
-		// csp: {
-		// 	mode: 'auto',
-		// 	directives: {
-		// 		'script-src': ['self', 'https://js.stripe.com'],
-		// 		'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
-		// 		'font-src': ['self', 'https://fonts.gstatic.com'],
-		// 		'img-src': ['self', 'data:', 'https:', 'blob:'],
-		// 		'connect-src': ['self', 'https://*.supabase.co', 'https://api.stripe.com', 'wss://*.supabase.co'],
-		// 		'frame-src': ['https://js.stripe.com'],
-		// 		'frame-ancestors': ['none'],
-		// 		'base-uri': ['self'],
-		// 		'form-action': ['self']
-		// 	}
-		// }
+		// SvelteKitが自動的にnonceを生成し、生成したスクリプト/スタイルに適用
+		// mode: 'auto' = 動的ページはnonce、プリレンダリングページはhash
+		csp: {
+			mode: 'auto',
+			directives: {
+				'default-src': ['self'],
+				'script-src': ['self', 'https://js.stripe.com'],
+				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
+				'font-src': ['self', 'https://fonts.gstatic.com'],
+				'img-src': ['self', 'data:', 'https:', 'blob:'],
+				'connect-src': ['self', 'https://*.supabase.co', 'https://api.stripe.com', 'wss://*.supabase.co'],
+				'frame-src': ['https://js.stripe.com'],
+				'frame-ancestors': ['none'],
+				'base-uri': ['self'],
+				'form-action': ['self'],
+				'upgrade-insecure-requests': true
+			}
+		}
 	}
 };
 

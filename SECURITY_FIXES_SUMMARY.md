@@ -255,7 +255,7 @@ npm run build
 | 認可バイパス（removed_at） | ❌ 未対策 | ✅ 対策済み |
 | 個人情報漏洩（ログ） | ❌ GDPR違反リスク | ✅ 対策済み |
 | サービス停止（外部障害） | ❌ Fail-Closed | ✅ Fail-Open |
-| XSS（インラインスクリプト） | ❌ 防御なし | ⚠️ 一部防御（ホワイトリスト化） |
+| XSS（インラインスクリプト） | ❌ 防御なし | ✅ CSPで防御（Nonce-based） |
 | コードインジェクション（eval） | ❌ 防御なし | ✅ CSPで防御 |
 
 ---
@@ -460,9 +460,48 @@ const cspDirectives = [
 - `src/app.html` (インラインイベントハンドラー削除)
 - `svelte.config.js` (将来のNonce実装用コメント追加)
 
+**正しい実装（2026-03-10 最終版）**:
+```javascript
+// svelte.config.js - SvelteKit公式方式
+csp: {
+	mode: 'auto',  // 動的ページ:nonce、プリレンダリング:hash
+	directives: {
+		'default-src': ['self'],
+		'script-src': ['self', 'https://js.stripe.com'],  // ✅ unsafe-inline 削除
+		'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
+		// ... other directives
+		'upgrade-insecure-requests': true
+	}
+}
+```
+
+```typescript
+// hooks.server.ts - block-all-mixed-content のみ追記
+const existingCSP = response.headers.get('Content-Security-Policy');
+if (existingCSP) {
+	response.headers.set(
+		'Content-Security-Policy',
+		`${existingCSP}; block-all-mixed-content`
+	);
+}
+```
+
+**最終的な効果**:
+- ✅ `unsafe-inline` 削除（script-src）- Nonce-based CSP
+- ✅ `unsafe-eval` 削除（コードインジェクション防御）
+- ✅ SvelteKitが自動的にnonceを生成・適用
+- ✅ ナビゲーション完全動作
+- ✅ XSS攻撃の防御層追加
+
+**修正ファイル（最終版）**:
+- `svelte.config.js` (kit.csp 設定)
+- `src/hooks.server.ts` (block-all-mixed-content 追記)
+- `src/app.html` (インラインイベントハンドラー削除)
+
 **詳細ドキュメント**:
 - `CSP_HARDENING_FIX.md` (初期実装とバグ)
 - `CSP_NAVIGATION_FIX.md` (バグ修正の詳細)
+- `CSP_PROPER_IMPLEMENTATION.md` (正しい実装方法 - 最終版)
 
 ---
 
@@ -539,5 +578,11 @@ const cspDirectives = [
 **次回セキュリティ監査推奨日**: 2026-06-10（3ヶ月後）
 
 **追加推奨事項**:
-- style-src の Nonce対応（CSP Phase 2）
+- style-src の Nonce対応（インラインスタイルの削除）
 - CSP Violation監視の実装
+
+**最新の実装状態**:
+- ✅ SvelteKit公式 `kit.csp` 実装完了（2026-03-10）
+- ✅ Nonce-based CSP実装完了
+- ✅ `unsafe-inline` 削除（script-src）
+- ✅ セキュリティスコア: High

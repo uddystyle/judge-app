@@ -135,28 +135,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	// Content Security Policy (CSP)
-	// Google Fonts、Supabase、Stripe を許可
-	//
-	// NOTE: SvelteKitでNonce-based CSPを実装するには svelte.config.js の kit.csp 設定が必要
-	// 現時点では安全性とユーザビリティのバランスを取り、以下の方針を採用:
-	// - unsafe-inline は許可（SvelteKitのクライアントサイドナビゲーション用）
-	// - unsafe-eval は削除（eval使用なし）
-	// - 厳格なホワイトリストで外部リソースを制限
-	const cspDirectives = [
-		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' https://js.stripe.com",  // SvelteKit hydration用に unsafe-inline 必要
-		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-		"font-src 'self' https://fonts.gstatic.com",
-		"img-src 'self' data: https: blob:",
-		"connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co",
-		"frame-src https://js.stripe.com",
-		"frame-ancestors 'none'", // すべてのフレーミングを防止
-		"base-uri 'self'",
-		"form-action 'self'",
-		"upgrade-insecure-requests", // HTTPSを強制
-		"block-all-mixed-content" // HTTPSページでHTTPリソースを禁止
-	].join('; ');
-	response.headers.set('Content-Security-Policy', cspDirectives);
+	// NOTE: CSPは svelte.config.js の kit.csp で設定しています
+	// SvelteKitが自動的にnonceを生成し、生成したスクリプトに適用します
+
+	// block-all-mixed-content を追加
+	// kit.csp では upgrade-insecure-requests を設定済みだが、
+	// より厳格にするため block-all-mixed-content も追加
+	const existingCSP = response.headers.get('Content-Security-Policy');
+	if (existingCSP) {
+		response.headers.set(
+			'Content-Security-Policy',
+			`${existingCSP}; block-all-mixed-content`
+		);
+	}
 
 	return response;
 };
