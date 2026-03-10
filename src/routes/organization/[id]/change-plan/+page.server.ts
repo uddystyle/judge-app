@@ -85,6 +85,118 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 };
 
 export const actions: Actions = {
+	cancelSubscription: async ({ params, locals: { supabase } }) => {
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			throw redirect(303, '/login');
+		}
+
+		// 組織情報を取得
+		const { data: organization } = await supabase
+			.from('organizations')
+			.select('id, name, plan_type, stripe_subscription_id')
+			.eq('id', params.id)
+			.single();
+
+		if (!organization) {
+			return fail(404, { error: '組織が見つかりません。' });
+		}
+
+		// 管理者権限を確認
+		const { data: member } = await supabase
+			.from('organization_members')
+			.select('role')
+			.eq('organization_id', params.id)
+			.eq('user_id', user.id)
+			.single();
+
+		if (!member || member.role !== 'admin') {
+			return fail(403, { error: '組織の管理者権限が必要です。' });
+		}
+
+		// フリープランの場合はキャンセル不要
+		if (organization.plan_type === 'free') {
+			return fail(400, { error: '既にフリープランです。' });
+		}
+
+		// サブスクリプション情報を取得
+		const { data: subscription, error: subError } = await supabase
+			.from('subscriptions')
+			.select('stripe_subscription_id, plan_type, billing_interval, status')
+			.eq('organization_id', params.id)
+			.in('status', ['active', 'trialing'])
+			.maybeSingle();
+
+		if (subError) {
+			console.error('[Cancel Subscription] サブスクリプション取得エラー:', subError);
+			return fail(500, {
+				error: `サブスクリプション情報の取得に失敗しました。${subError.message || ''}`
+			});
+		}
+
+		if (!subscription || !subscription.stripe_subscription_id) {
+			return fail(400, {
+				error: 'アクティブなサブスクリプションが見つかりません。'
+			});
+		}
+
+		try {
+			console.log('[Cancel Subscription] サブスクリプションキャンセル開始:', {
+				organizationId: organization.id,
+				subscriptionId: subscription.stripe_subscription_id
+			});
+
+			// Stripeサブスクリプションを期間終了時にキャンセル設定
+			// cancel_at_period_end: true を使うことで、支払い済み期間は継続利用可能
+			const updatedSubscription = await stripe.subscriptions.update(
+				subscription.stripe_subscription_id,
+				{
+					cancel_at_period_end: true
+				}
+			);
+
+			console.log('[Cancel Subscription] Stripeサブスクリプション更新完了:', {
+				subscriptionId: updatedSubscription.id,
+				cancel_at_period_end: updatedSubscription.cancel_at_period_end,
+				cancel_at: updatedSubscription.cancel_at
+			});
+
+			// データベースのsubscriptionsテーブルを更新
+			const { error: subUpdateError } = await supabase
+				.from('subscriptions')
+				.update({
+					cancel_at_period_end: true,
+					cancel_at: updatedSubscription.cancel_at
+						? new Date(updatedSubscription.cancel_at * 1000).toISOString()
+						: null
+				})
+				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
+
+			if (subUpdateError) {
+				console.error('[Cancel Subscription] サブスクリプション更新エラー:', subUpdateError);
+				return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
+			}
+
+			console.log('[Cancel Subscription] データベース更新完了');
+
+			// 成功メッセージとともに同じページへリダイレクト
+			throw redirect(303, `/organization/${params.id}/change-plan?cancelled=true`);
+		} catch (err: any) {
+			// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
+			if (isRedirect(err) || isHttpError(err)) {
+				throw err;
+			}
+			console.error('[Cancel Subscription] エラー:', err);
+			return fail(500, {
+				error: `サブスクリプションのキャンセルに失敗しました。${err.message || ''}`
+			});
+		}
+	},
+
 	changePlan: async ({ request, params, locals: { supabase } }) => {
 		const {
 			data: { user },

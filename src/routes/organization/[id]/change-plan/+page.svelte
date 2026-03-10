@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData, ActionData } from './$types';
@@ -10,6 +11,8 @@
 	let selectedPlan: 'basic' | 'standard' | 'premium' | null = null;
 	let billingInterval: 'month' | 'year' = (data.subscription?.billing_interval as 'month' | 'year') || 'month';
 	let loading = false;
+	let cancelLoading = false;
+	let showCancelConfirm = false;
 
 	// フリープランかどうか
 	$: isFree = data.organization.plan_type === 'free';
@@ -110,6 +113,12 @@
 	{#if form?.error}
 		<div class="error-container">
 			<p class="error-message">{form.error}</p>
+		</div>
+	{/if}
+
+	{#if $page.url.searchParams.get('cancelled') === 'true'}
+		<div class="success-container">
+			<p class="success-message">サブスクリプションのキャンセルが完了しました。現在の請求期間が終了するまで、引き続きサービスをご利用いただけます。</p>
 		</div>
 	{/if}
 
@@ -286,6 +295,57 @@
 			</button>
 		</div>
 	</form>
+
+	{#if !isFree}
+		<div class="cancel-section">
+			<div class="cancel-warning">
+				<h3 class="warning-title">サブスクリプションをキャンセル</h3>
+				<p class="warning-text">
+					サブスクリプションをキャンセルすると、現在の請求期間が終了した時点でフリープランに移行します。請求期間終了までは、引き続き有料プランの機能をご利用いただけます。
+				</p>
+			</div>
+
+			{#if showCancelConfirm}
+				<form method="POST" action="?/cancelSubscription" use:enhance={() => {
+					cancelLoading = true;
+					return async ({ update }) => {
+						await update();
+						cancelLoading = false;
+						showCancelConfirm = false;
+					};
+				}}>
+					<div class="confirm-box">
+						<p class="confirm-text">本当にサブスクリプションをキャンセルしますか？</p>
+						<div class="confirm-buttons">
+							<button
+								type="submit"
+								class="cancel-submit-btn"
+								disabled={cancelLoading}
+							>
+								{cancelLoading ? 'キャンセル中...' : 'はい、キャンセルします'}
+							</button>
+							<button
+								type="button"
+								class="cancel-back-btn"
+								on:click={() => showCancelConfirm = false}
+								disabled={cancelLoading}
+							>
+								戻る
+							</button>
+						</div>
+					</div>
+				</form>
+			{:else}
+				<button
+					type="button"
+					class="cancel-btn"
+					on:click={() => showCancelConfirm = true}
+				>
+					プランをキャンセルする
+				</button>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <Footer />
@@ -379,6 +439,22 @@
 		color: #dc3545;
 		font-size: 14px;
 		margin: 0;
+	}
+
+	.success-container {
+		background: #d4edda;
+		border: 2px solid #28a745;
+		border-radius: 12px;
+		padding: 16px;
+		text-align: center;
+		margin-bottom: 20px;
+	}
+
+	.success-message {
+		color: #155724;
+		font-size: 14px;
+		margin: 0;
+		font-weight: 600;
 	}
 
 	.info-box {
@@ -610,6 +686,134 @@
 		margin: 4px 0;
 	}
 
+	.cancel-section {
+		margin-top: 48px;
+		padding-top: 32px;
+		border-top: 1px solid var(--border-light);
+	}
+
+	.cancel-warning {
+		background: #fff3cd;
+		border: 2px solid #ffc107;
+		border-radius: 12px;
+		padding: 20px;
+		margin-bottom: 20px;
+	}
+
+	.warning-title {
+		font-size: 16px;
+		font-weight: 700;
+		color: #856404;
+		margin: 0 0 8px 0;
+	}
+
+	.warning-text {
+		font-size: 14px;
+		line-height: 1.6;
+		color: #856404;
+		margin: 0;
+	}
+
+	.cancel-btn {
+		width: 100%;
+		background: var(--bg-primary);
+		color: #dc3545;
+		border: 2px solid #dc3545;
+		border-radius: 12px;
+		padding: 16px;
+		font-size: 16px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.cancel-btn:hover {
+		background: #dc3545;
+		color: var(--bg-primary);
+		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+	}
+
+	.cancel-btn:active {
+		transform: scale(0.98);
+	}
+
+	.confirm-box {
+		background: #fee;
+		border: 2px solid #dc3545;
+		border-radius: 12px;
+		padding: 24px;
+		text-align: center;
+	}
+
+	.confirm-text {
+		font-size: 16px;
+		font-weight: 600;
+		color: #dc3545;
+		margin: 0 0 20px 0;
+	}
+
+	.confirm-buttons {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.cancel-submit-btn {
+		width: 100%;
+		background: #dc3545;
+		color: var(--bg-primary);
+		border: none;
+		border-radius: 12px;
+		padding: 16px;
+		font-size: 16px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.cancel-submit-btn:hover:not(:disabled) {
+		background: #c82333;
+		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+	}
+
+	.cancel-submit-btn:active:not(:disabled) {
+		transform: scale(0.98);
+	}
+
+	.cancel-submit-btn:disabled {
+		background: var(--bg-secondary);
+		color: var(--text-secondary);
+		cursor: not-allowed;
+		opacity: 0.6;
+	}
+
+	.cancel-back-btn {
+		width: 100%;
+		background: var(--bg-primary);
+		color: var(--text-primary);
+		border: 2px solid var(--border-medium);
+		border-radius: 12px;
+		padding: 16px;
+		font-size: 16px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.cancel-back-btn:hover:not(:disabled) {
+		background: var(--bg-secondary);
+		border-color: var(--border-dark);
+	}
+
+	.cancel-back-btn:active:not(:disabled) {
+		transform: scale(0.98);
+	}
+
+	.cancel-back-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
 	/* PC対応 */
 	@media (min-width: 768px) {
 		.container {
@@ -632,6 +836,30 @@
 		.submit-btn {
 			width: auto;
 			min-width: 300px;
+		}
+
+		.cancel-section {
+			max-width: 600px;
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		.cancel-btn {
+			width: auto;
+			min-width: 400px;
+			margin: 0 auto;
+			display: block;
+		}
+
+		.confirm-buttons {
+			flex-direction: row;
+			justify-content: center;
+		}
+
+		.cancel-submit-btn,
+		.cancel-back-btn {
+			width: auto;
+			min-width: 200px;
 		}
 	}
 </style>
