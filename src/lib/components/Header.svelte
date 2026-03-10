@@ -116,7 +116,7 @@
 				</span>
 			{/if}
 		</div>
-		{#if !showAppName}
+		{#if !showAppName || user}
 			<div class="account-menu-wrapper">
 				{#if isGuest}
 					<!-- ゲストユーザー: メニューなしの表示のみ -->
