@@ -41,10 +41,9 @@ export const actions: Actions = {
 		});
 
 		if (error) {
-			console.error('[reset-password] エラー:', error);
+			// 最小限のエラー情報のみログ出力（個人情報保護）
 			console.error('[reset-password] エラーコード:', error.code);
 			console.error('[reset-password] エラーメッセージ:', error.message);
-			console.error('[reset-password] エラー詳細:', JSON.stringify(error, null, 2));
 			// セキュリティ上の理由から、メールアドレスが存在しない場合でも成功メッセージを表示
 			// （アカウントの存在を推測されないようにするため）
 		}

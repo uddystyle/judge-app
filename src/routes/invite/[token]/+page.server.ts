@@ -257,10 +257,9 @@ export const actions: Actions = {
 			}
 
 			console.log('[Invite Signup] User created, email confirmation required:', {
-				userId: authData.user.id,
-				email: authData.user.email,
 				hasSession: false,
 				emailConfirmedAt: authData.user.email_confirmed_at
+				// userId と email は個人情報のため出力しない（GDPR/プライバシー保護）
 			});
 
 			// メール確認ページにリダイレクト

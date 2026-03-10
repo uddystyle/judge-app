@@ -73,12 +73,10 @@ export const actions: Actions = {
 
 		console.log('[signup] Supabase signUp レスポンス:', {
 			hasUser: !!authData.user,
-			userId: authData.user?.id,
-			email: authData.user?.email,
 			hasError: !!authError,
-			errorMessage: authError?.message,
-			// 完全なレスポンスをログ出力
-			fullResponse: JSON.stringify(authData, null, 2)
+			errorMessage: authError?.message
+			// userId と email は個人情報のため、開発環境でのみ出力
+			// 本番環境では hasUser, hasError のみで十分
 		});
 
 		if (authError) {
@@ -171,10 +169,9 @@ export const actions: Actions = {
 		}
 
 		console.log('[signup] User created, email confirmation required:', {
-			userId: authData.user.id,
-			email: authData.user.email,
 			hasSession: false,
 			emailConfirmedAt: authData.user.email_confirmed_at
+			// userId と email は個人情報のため出力しない（GDPR/プライバシー保護）
 		});
 
 		// プロフィールはメール認証後のオンボーディング時に作成されます

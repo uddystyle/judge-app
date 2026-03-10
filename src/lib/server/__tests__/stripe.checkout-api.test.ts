@@ -230,6 +230,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const mockSelect2 = vi.fn().mockReturnThis();
 			const mockEq2a = vi.fn().mockReturnThis();
 			const mockEq2b = vi.fn().mockReturnThis();
+			const mockIs2 = vi.fn().mockReturnThis();
 			const mockSingle2 = vi.fn().mockResolvedValue({
 				data: { role: 'member' }, // Not admin
 				error: null
@@ -244,6 +245,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 				.mockReturnValueOnce({
 					select: mockSelect2,
 					eq: mockEq2a,
+					is: mockIs2,
 					single: mockSingle2
 				} as any);
 
@@ -264,6 +266,10 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			} as any);
 
 			mockEq2b.mockReturnValue({
+				is: mockIs2
+			} as any);
+
+			mockIs2.mockReturnValue({
 				single: mockSingle2
 			} as any);
 

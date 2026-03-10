@@ -136,10 +136,21 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Content Security Policy (CSP)
 	// Google Fonts、Supabase、Stripe を許可
+	// 本番環境では厳格なCSP、開発環境ではHMR/Viteのために緩和
+	const isDevelopment = process.env.NODE_ENV === 'development';
+
+	// Nonce生成（本番環境用）
+	const cspNonce = randomBytes(16).toString('base64');
+	event.locals.cspNonce = cspNonce;
+
+	const scriptSrc = isDevelopment
+		? "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com"  // 開発: HMR/Viteのため緩和
+		: `'self' 'nonce-${cspNonce}' https://js.stripe.com`;  // 本番: Nonce-based（unsafe削除）
+
 	const cspDirectives = [
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com",
-		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+		`script-src ${scriptSrc}`,
+		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",  // TODO: Nonce対応
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' data: https: blob:",
 		"connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co",

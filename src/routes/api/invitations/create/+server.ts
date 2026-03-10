@@ -43,6 +43,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			.select('role')
 			.eq('organization_id', organizationId)
 			.eq('user_id', user.id)
+			.is('removed_at', null) // 退会済みメンバーを明示的に除外
 			.single();
 
 		if (!membership || membership.role !== 'admin') {

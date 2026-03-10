@@ -8,12 +8,15 @@
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 
-		<!-- フォントを非ブロッキングで読み込み: media="print"トリックを使用 -->
+		<!-- フォントを非ブロッキングで読み込み: preloadを使用（CSP安全） -->
+		<link
+			rel="preload"
+			as="style"
+			href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+		/>
 		<link
 			rel="stylesheet"
 			href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
-			media="print"
-			onload="this.media='all'"
 		/>
 		<noscript>
 			<link
