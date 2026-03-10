@@ -116,60 +116,62 @@
 				</span>
 			{/if}
 		</div>
-		<div class="account-menu-wrapper">
-			{#if isGuest}
-				<!-- ゲストユーザー: メニューなしの表示のみ -->
-				<div class="guest-label">
-					<span class="guest-badge">
-						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-							<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
-							<text x="8" y="11" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">G</text>
-						</svg>
-					</span>
-					{guestName || 'ゲスト'}
-				</div>
-			{:else}
-				<!-- 通常ユーザー: メニュー付き -->
-				<!-- モバイル: ハンバーガーメニュー -->
-				<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu} aria-label="メニューを開く">
-					<div class="hamburger-icon">
-						<span class="line line-1"></span>
-						<span class="line line-2"></span>
-						<span class="line line-3"></span>
+		{#if !showAppName}
+			<div class="account-menu-wrapper">
+				{#if isGuest}
+					<!-- ゲストユーザー: メニューなしの表示のみ -->
+					<div class="guest-label">
+						<span class="guest-badge">
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
+								<text x="8" y="11" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">G</text>
+							</svg>
+						</span>
+						{guestName || 'ゲスト'}
 					</div>
-				</button>
+				{:else}
+					<!-- 通常ユーザー: メニュー付き -->
+					<!-- モバイル: ハンバーガーメニュー -->
+					<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu} aria-label="メニューを開く">
+						<div class="hamburger-icon">
+							<span class="line line-1"></span>
+							<span class="line line-2"></span>
+							<span class="line line-3"></span>
+						</div>
+					</button>
 
-				<!-- タブレット・PC: プロフィールボタン -->
-				<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
-					{profile?.full_name || 'アカウント'}
-					<span class="menu-icon" class:rotated={showMenu}>
-						<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-							<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-						</svg>
-					</span>
-				</button>
+					<!-- タブレット・PC: プロフィールボタン -->
+					<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
+						{profile?.full_name || 'アカウント'}
+						<span class="menu-icon" class:rotated={showMenu}>
+							<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</span>
+					</button>
 
-				{#if showMenu}
-					<div class="dropdown-menu">
-						<button class="menu-item" on:click={() => handleMenuClick('/account')}>
-							<span class="menu-label">プロフィール</span>
-						</button>
-						<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
-							<span class="menu-label">組織</span>
-						</button>
-						<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
-							<span class="menu-label">セッション</span>
-						</button>
-						{#if user}
-							<div class="menu-divider"></div>
-							<button class="menu-item logout" on:click={handleLogout}>
-								<span class="menu-label">ログアウト</span>
+					{#if showMenu}
+						<div class="dropdown-menu">
+							<button class="menu-item" on:click={() => handleMenuClick('/account')}>
+								<span class="menu-label">プロフィール</span>
 							</button>
-						{/if}
-					</div>
+							<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
+								<span class="menu-label">組織</span>
+							</button>
+							<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
+								<span class="menu-label">セッション</span>
+							</button>
+							{#if user}
+								<div class="menu-divider"></div>
+								<button class="menu-item logout" on:click={handleLogout}>
+									<span class="menu-label">ログアウト</span>
+								</button>
+							{/if}
+						</div>
+					{/if}
 				{/if}
-			{/if}
-		</div>
+			</div>
+		{/if}
 	</div>
 </div>
 

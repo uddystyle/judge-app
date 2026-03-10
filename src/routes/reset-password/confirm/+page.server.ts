@@ -78,9 +78,13 @@ export const actions: Actions = {
 
 		console.log('[reset-password/confirm] パスワード更新成功');
 
-		// パスワード変更後、セキュリティのためセッションをクリアしてログインページにリダイレクト
-		// これにより、ユーザーは新しいパスワードで再ログインする必要がある
-		await supabase.auth.signOut();
+			// パスワード変更後は全セッションを失効させる
+			// 他タブ/他デバイスの既存セッションを継続利用させないため
+			const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
+			if (signOutError) {
+				console.error('[reset-password/confirm] グローバルサインアウトエラー:', signOutError);
+				// 失効に失敗しても、パスワード更新自体は成功しているため処理は継続
+			}
 
 		// ログインページにリダイレクト
 		throw redirect(303, '/login?success=password-reset');
