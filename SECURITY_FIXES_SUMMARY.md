@@ -255,8 +255,8 @@ npm run build
 | 認可バイパス（removed_at） | ❌ 未対策 | ✅ 対策済み |
 | 個人情報漏洩（ログ） | ❌ GDPR違反リスク | ✅ 対策済み |
 | サービス停止（外部障害） | ❌ Fail-Closed | ✅ Fail-Open |
-| XSS（インラインスクリプト） | ❌ 防御なし（本番） | ✅ CSPで防御 |
-| コードインジェクション | ❌ 防御なし（本番） | ✅ CSPで防御 |
+| XSS（インラインスクリプト） | ❌ 防御なし | ⚠️ 一部防御（ホワイトリスト化） |
+| コードインジェクション（eval） | ❌ 防御なし | ✅ CSPで防御 |
 
 ---
 
@@ -414,18 +414,24 @@ try {
 
 **問題**: `script-src` に `'unsafe-inline'` と `'unsafe-eval'` が残っている
 
-**修正内容**:
+**修正内容（最終版）**:
 ```typescript
 // hooks.server.ts
-const isDevelopment = process.env.NODE_ENV === 'development';
-
-// Nonce生成（本番環境用）
-const cspNonce = randomBytes(16).toString('base64');
-event.locals.cspNonce = cspNonce;
-
-const scriptSrc = isDevelopment
-    ? "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com"  // 開発: HMR/Viteのため緩和
-    : `'self' 'nonce-${cspNonce}' https://js.stripe.com`;  // 本番: Nonce-based（unsafe削除）
+// NOTE: 初期のNonce-based実装は SvelteKitのナビゲーションをブロックするバグがあり修正
+const cspDirectives = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://js.stripe.com",  // unsafe-inline: SvelteKit要件
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https: blob:",
+    "connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co",
+    "frame-src https://js.stripe.com",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+    "block-all-mixed-content"
+].join('; ');
 ```
 
 **app.html**: インラインイベントハンドラー削除
@@ -439,16 +445,24 @@ const scriptSrc = isDevelopment
 ```
 
 **効果**:
-- ✅ 本番環境でXSS攻撃の防御層追加
-- ✅ コードインジェクションリスク軽減
-- ✅ 開発効率を維持しながらセキュリティ向上
-- ✅ Nonce-based CSPで信頼できるスクリプトのみ実行
+- ✅ `unsafe-eval` 削除（コードインジェクション防御）
+- ✅ 外部リソースの厳格なホワイトリスト化
+- ✅ インラインイベントハンドラー削除
+- ⚠️ `unsafe-inline` 許可（SvelteKit hydration要件、将来的に改善予定）
+
+**発見されたバグと修正**:
+- 問題: 初期のNonce-based実装でページ遷移後のクリックが動作しなくなった
+- 原因: SvelteKitスクリプトにnonceが適用されずブロックされた
+- 修正: `unsafe-inline` を再追加、`unsafe-eval` のみ削除
 
 **修正ファイル**:
 - `src/hooks.server.ts` (CSP設定)
 - `src/app.html` (インラインイベントハンドラー削除)
+- `svelte.config.js` (将来のNonce実装用コメント追加)
 
-**詳細ドキュメント**: `CSP_HARDENING_FIX.md`
+**詳細ドキュメント**:
+- `CSP_HARDENING_FIX.md` (初期実装とバグ)
+- `CSP_NAVIGATION_FIX.md` (バグ修正の詳細)
 
 ---
 

@@ -136,21 +136,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Content Security Policy (CSP)
 	// Google Fonts、Supabase、Stripe を許可
-	// 本番環境では厳格なCSP、開発環境ではHMR/Viteのために緩和
-	const isDevelopment = process.env.NODE_ENV === 'development';
-
-	// Nonce生成（本番環境用）
-	const cspNonce = randomBytes(16).toString('base64');
-	event.locals.cspNonce = cspNonce;
-
-	const scriptSrc = isDevelopment
-		? "'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com"  // 開発: HMR/Viteのため緩和
-		: `'self' 'nonce-${cspNonce}' https://js.stripe.com`;  // 本番: Nonce-based（unsafe削除）
-
+	//
+	// NOTE: SvelteKitでNonce-based CSPを実装するには svelte.config.js の kit.csp 設定が必要
+	// 現時点では安全性とユーザビリティのバランスを取り、以下の方針を採用:
+	// - unsafe-inline は許可（SvelteKitのクライアントサイドナビゲーション用）
+	// - unsafe-eval は削除（eval使用なし）
+	// - 厳格なホワイトリストで外部リソースを制限
 	const cspDirectives = [
 		"default-src 'self'",
-		`script-src ${scriptSrc}`,
-		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",  // TODO: Nonce対応
+		"script-src 'self' 'unsafe-inline' https://js.stripe.com",  // SvelteKit hydration用に unsafe-inline 必要
+		"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' data: https: blob:",
 		"connect-src 'self' https://*.supabase.co https://api.stripe.com wss://*.supabase.co",
