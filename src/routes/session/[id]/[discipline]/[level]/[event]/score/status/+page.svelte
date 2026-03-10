@@ -12,9 +12,9 @@
 
 	export let data: PageData;
 	let scoreStatus: any = { scores: [], requiredJudges: 1 };
-	let realtimeChannel: any;
+	let sessionRealtimeChannel: any;
+	let scoreRealtimeChannel: any;
 	let pollingInterval: any;
-	let sessionPollingInterval: any;
 	let previousIsActive: boolean | null = null;
 
 	let id: string = '';
@@ -54,7 +54,7 @@
 		}
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		// URLパラメータを取得
 		id = $page.params.id || '';
 		discipline = $page.params.discipline || '';
@@ -71,78 +71,70 @@
 		currentLevel.set(level);
 		currentEvent.set(event);
 
-		fetchStatus();
-		pollingInterval = setInterval(fetchStatus, 1000); // Poll every 1 second (for debugging)
+		// 初回ロード
+		await fetchStatus();
+
+		// スコア監視のRealtime購読（大会モード - resultsテーブル）
+		if (bib) {
+			const channelName = `results-${id}-${bib}-${Date.now()}`;
+			console.log('[status/realtime] スコア監視のRealtime購読開始:', channelName);
+
+			scoreRealtimeChannel = supabase
+				.channel(channelName)
+				.on(
+					'postgres_changes',
+					{
+						event: '*', // INSERT, UPDATE, DELETE
+						schema: 'public',
+						table: 'results',
+						filter: `session_id=eq.${id},bib=eq.${parseInt(bib)}`
+					},
+					async (payload) => {
+						console.log('[status/realtime] スコア変更を検知:', payload);
+
+						// discipline, level, event_name のフィルタリング
+						let shouldUpdate = false;
+						if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+							if (
+								payload.new?.discipline === discipline &&
+								payload.new?.level === level &&
+								payload.new?.event_name === event
+							) {
+								shouldUpdate = true;
+							}
+						} else if (payload.eventType === 'DELETE') {
+							if (
+								payload.old?.discipline === discipline &&
+								payload.old?.level === level &&
+								payload.old?.event_name === event
+							) {
+								shouldUpdate = true;
+							}
+						}
+
+						if (shouldUpdate) {
+							console.log('[status/realtime] 該当イベントのスコア変更 - 再取得中...');
+							await fetchStatus();
+						}
+					}
+				)
+				.subscribe((status) => {
+					console.log('[status/realtime] スコア監視チャンネルの状態:', status);
+					if (status === 'SUBSCRIBED') {
+						console.log('[status/realtime] ✅ スコア監視のRealtime接続成功');
+					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+						console.error('[status/realtime] ❌ スコア監視の接続エラー');
+					}
+				});
+		}
 
 		// dataから直接判定（リアクティブステートメントに依存しない）
 		const currentIsChief = data.user?.id === data.sessionDetails?.chief_judge_id;
 
-		// セッション終了検知用のポーリング（主任・一般共通）
-		let previousActivePromptId: string | null = null;
-		sessionPollingInterval = setInterval(async () => {
-			const { data: sessionData, error } = await supabase
-				.from('sessions')
-				.select('is_active, active_prompt_id')
-				.eq('id', id)
-				.single();
-
-			if (!error && sessionData) {
-				const isActive = sessionData.is_active;
-				const activePromptId = sessionData.active_prompt_id;
-
-				if (previousIsActive === null) {
-					previousIsActive = isActive;
-					previousActivePromptId = activePromptId;
-					return;
-				}
-
-				// セッション終了を検知
-				if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
-					console.log('[status] ✅ 検定終了を検知（ポーリング）');
-					const guestIdentifier = $page.url.searchParams.get('guest');
-					const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
-					goto(`/session/${id}?ended=true${guestParam}`);
-					return;
-				}
-
-				// 新しい採点指示を検知（一般検定員のみ）
-				if (!currentIsChief && activePromptId && activePromptId !== previousActivePromptId) {
-					console.log('[status] ✅ 新しい採点指示を検知（ポーリング）:', activePromptId);
-					const { data: promptData, error: promptError } = await supabase
-						.from('scoring_prompts')
-						.select('*')
-						.eq('id', activePromptId)
-						.single();
-
-					if (!promptError && promptData) {
-						console.log('[status] 採点指示データ取得成功:', promptData);
-						// ゼッケン番号をストアに保存
-						currentBib.set(promptData.bib_number);
-						const guestIdentifier = $page.url.searchParams.get('guest');
-						const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-						goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`);
-						return;
-					}
-				}
-
-				// 採点が確定された場合（一般検定員のみ）
-				if (!currentIsChief && activePromptId === null && previousActivePromptId !== null) {
-					console.log('[status] ✅ 採点確定を検知（ポーリング）。待機画面に遷移します。');
-					const guestIdentifier = $page.url.searchParams.get('guest');
-					const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-					goto(`/session/${id}${guestParam}`);
-					return;
-				}
-
-				previousIsActive = isActive;
-				previousActivePromptId = activePromptId;
-			}
-		}, 3000);
-
 		// 一般検定員の場合、active_prompt_idがクリアされたら待機画面に遷移
 		if (!currentIsChief) {
 			console.log('[一般検定員/status] リアルタイムリスナーをセットアップ中...', { id });
-			realtimeChannel = supabase
+			sessionRealtimeChannel = supabase
 				.channel(`session-finalize-${id}`)
 				.on(
 					'postgres_changes',
@@ -207,8 +199,8 @@
 					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 						console.error('[一般検定員/status] ❌ 接続エラー - 再接続を試みます');
 						setTimeout(() => {
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
+							if (sessionRealtimeChannel) {
+								supabase.removeChannel(sessionRealtimeChannel);
 							}
 							window.location.reload();
 						}, 2000);
@@ -218,10 +210,12 @@
 	});
 
 	onDestroy(() => {
-		clearInterval(pollingInterval); // Stop polling for score status
-		clearInterval(sessionPollingInterval); // Stop polling for session end
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
+		clearInterval(pollingInterval); // Not used anymore, but kept for compatibility
+		if (sessionRealtimeChannel) {
+			supabase.removeChannel(sessionRealtimeChannel);
+		}
+		if (scoreRealtimeChannel) {
+			supabase.removeChannel(scoreRealtimeChannel);
 		}
 	});
 

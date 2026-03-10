@@ -2,27 +2,54 @@
 	import type { PageData } from './$types';
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
+	import { supabase } from '$lib/supabaseClient';
 
 	export let data: PageData;
 
 	let selectedTab: 'overall' | number = 'overall';
-	let pollingInterval: any;
+	let realtimeChannel: any;
 
 	// ページをリロードして最新データを取得
 	async function refreshData() {
 		window.location.reload();
 	}
 
-	// 自動更新（30秒ごと）
+	// Realtimeで自動更新（resultsテーブル監視）
 	onMount(() => {
-		pollingInterval = setInterval(() => {
-			refreshData();
-		}, 30000);
+		const sessionId = $page.params.sessionId;
+		const channelName = `scoreboard-${sessionId}-${Date.now()}`;
+
+		console.log('[scoreboard] Realtime購読開始:', channelName);
+
+		realtimeChannel = supabase
+			.channel(channelName)
+			.on(
+				'postgres_changes',
+				{
+					event: '*', // INSERT, UPDATE, DELETE
+					schema: 'public',
+					table: 'results',
+					filter: `session_id=eq.${sessionId}`
+				},
+				(payload) => {
+					console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
+					// 簡易実装: リロードで対応（将来的には差分更新に置き換え可能）
+					refreshData();
+				}
+			)
+			.subscribe((status) => {
+				console.log('[scoreboard] Realtimeチャンネルの状態:', status);
+				if (status === 'SUBSCRIBED') {
+					console.log('[scoreboard] ✅ Realtime接続成功 - ポーリング不要');
+				} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+					console.error('[scoreboard] ❌ Realtime接続エラー');
+				}
+			});
 	});
 
 	onDestroy(() => {
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
+		if (realtimeChannel) {
+			supabase.removeChannel(realtimeChannel);
 		}
 	});
 
@@ -37,7 +64,7 @@
 	<div class="header-section">
 		<h1 class="title">{data.sessionDetails.name}</h1>
 		<p class="subtitle">スコアボード</p>
-		<p class="auto-update">30秒ごとに自動更新</p>
+		<p class="auto-update">リアルタイム自動更新</p>
 	</div>
 
 	<!-- タブ -->

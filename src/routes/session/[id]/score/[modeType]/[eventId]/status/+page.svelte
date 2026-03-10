@@ -12,9 +12,9 @@
 
 	export let data: PageData;
 	let scoreStatus: any = { scores: [], requiredJudges: 1 };
-	let realtimeChannel: any;
+	let sessionRealtimeChannel: any;
+	let scoreRealtimeChannel: any;
 	let pollingInterval: any;
-	let sessionPollingInterval: any;
 	let previousIsActive: boolean | null = null;
 
 	let sessionId: string = '';
@@ -50,53 +50,74 @@
 				return;
 			}
 
+			// N+1問題を解決: 1回のクエリで全データ取得
 			const { data: trainingScores, error: scoresError } = await supabase
 				.from('training_scores')
-				.select('*')
+				.select('id, score, judge_id, guest_identifier')
 				.eq('event_id', eventId)
 				.eq('athlete_id', participant.id);
 
 			console.log('[status] training_scores取得:', { trainingScores, scoresError });
 
-			if (trainingScores) {
-				// judge_idまたはguest_identifierから名前を取得
-				const scoresWithNames = await Promise.all(
-					trainingScores.map(async (s: any) => {
-						let judgeName = '不明';
+			if (trainingScores && trainingScores.length > 0) {
+				// 全検定員の名前を一度に取得
+				const judgeIds = trainingScores
+					.filter((s: any) => s.judge_id)
+					.map((s: any) => s.judge_id);
 
-						if (s.guest_identifier) {
-							// ゲストユーザーの場合
-							const { data: guestData } = await supabase
-								.from('session_participants')
-								.select('guest_name')
-								.eq('guest_identifier', s.guest_identifier)
-								.single();
+				const guestIdentifiers = trainingScores
+					.filter((s: any) => s.guest_identifier)
+					.map((s: any) => s.guest_identifier);
 
-							judgeName = guestData?.guest_name || 'ゲスト';
-						} else if (s.judge_id) {
-							// 認証ユーザーの場合
-							const { data: profile } = await supabase
-								.from('profiles')
-								.select('full_name')
-								.eq('id', s.judge_id)
-								.single();
+				// 認証ユーザーの名前を取得
+				let judgeNames: Record<string, string> = {};
+				if (judgeIds.length > 0) {
+					const { data: profiles } = await supabase
+						.from('profiles')
+						.select('id, full_name')
+						.in('id', judgeIds);
 
-							judgeName = profile?.full_name || '不明';
-						}
+					if (profiles) {
+						judgeNames = Object.fromEntries(
+							profiles.map((p: any) => [p.id, p.full_name || '不明'])
+						);
+					}
+				}
 
-						return {
-							judge_id: s.judge_id,
-							guest_identifier: s.guest_identifier,
-							judge_name: judgeName,
-							score: s.score,
-							is_guest: !!s.guest_identifier
-						};
-					})
-				);
+				// ゲストユーザーの名前を取得
+				let guestNames: Record<string, string> = {};
+				if (guestIdentifiers.length > 0) {
+					const { data: guests } = await supabase
+						.from('session_participants')
+						.select('guest_identifier, guest_name')
+						.in('guest_identifier', guestIdentifiers);
+
+					if (guests) {
+						guestNames = Object.fromEntries(
+							guests.map((g: any) => [g.guest_identifier, g.guest_name || 'ゲスト'])
+						);
+					}
+				}
+
+				// スコアデータに名前をマッピング
+				const scoresWithNames = trainingScores.map((s: any) => ({
+					judge_id: s.judge_id,
+					guest_identifier: s.guest_identifier,
+					judge_name: s.guest_identifier
+						? guestNames[s.guest_identifier] || 'ゲスト'
+						: judgeNames[s.judge_id] || '不明',
+					score: s.score,
+					is_guest: !!s.guest_identifier
+				}));
 
 				scoreStatus = {
 					scores: scoresWithNames,
 					requiredJudges: data.totalJudges || 1 // 研修モードでは参加検定員の総数
+				};
+			} else {
+				scoreStatus = {
+					scores: [],
+					requiredJudges: data.totalJudges || 1
 				};
 			}
 		} else {
@@ -121,7 +142,27 @@
 		}
 	}
 
-	onMount(() => {
+	// 検定員名を取得するヘルパー関数
+	async function fetchJudgeName(score: any): Promise<string> {
+		if (score.guest_identifier) {
+			const { data } = await supabase
+				.from('session_participants')
+				.select('guest_name')
+				.eq('guest_identifier', score.guest_identifier)
+				.single();
+			return data?.guest_name || 'ゲスト';
+		} else if (score.judge_id) {
+			const { data } = await supabase
+				.from('profiles')
+				.select('full_name')
+				.eq('id', score.judge_id)
+				.single();
+			return data?.full_name || '不明';
+		}
+		return '不明';
+	}
+
+	onMount(async () => {
 		// URLパラメータを取得
 		sessionId = $page.params.id || '';
 		modeType = $page.params.modeType || '';
@@ -138,87 +179,99 @@
 		currentEvent.set(data.eventInfo?.name || data.eventInfo?.event_name || '');
 		currentBib.set(bib ? parseInt(bib) : null);
 
-		fetchStatus();
-		pollingInterval = setInterval(fetchStatus, 3000); // Poll every 3 seconds
+		// 初回ロード
+		await fetchStatus();
+
+		// 研修モードの場合、Realtimeでスコア監視
+		if (data.isTrainingMode) {
+			const { data: participant } = await supabase
+				.from('participants')
+				.select('id')
+				.eq('session_id', sessionId)
+				.eq('bib_number', parseInt(bib || '0'))
+				.maybeSingle();
+
+			if (participant) {
+				const channelName = `training-scores-${eventId}-${participant.id}-${Date.now()}`;
+				console.log('[status/realtime] スコア監視のRealtime購読開始:', channelName);
+
+				scoreRealtimeChannel = supabase
+					.channel(channelName)
+					.on(
+						'postgres_changes',
+						{
+							event: '*', // INSERT, UPDATE, DELETE
+							schema: 'public',
+							table: 'training_scores',
+							filter: `event_id=eq.${eventId},athlete_id=eq.${participant.id}`
+						},
+						async (payload) => {
+							console.log('[status/realtime] スコア変更を検知:', payload);
+
+							if (payload.eventType === 'INSERT') {
+								// 新規スコア追加
+								const judgeName = await fetchJudgeName(payload.new);
+								scoreStatus = {
+									...scoreStatus,
+									scores: [
+										...scoreStatus.scores,
+										{
+											judge_id: payload.new.judge_id,
+											guest_identifier: payload.new.guest_identifier,
+											judge_name: judgeName,
+											score: payload.new.score,
+											is_guest: !!payload.new.guest_identifier
+										}
+									]
+								};
+								console.log('[status/realtime] 新しいスコアを追加:', judgeName, payload.new.score);
+							} else if (payload.eventType === 'UPDATE') {
+								// スコア更新
+								scoreStatus = {
+									...scoreStatus,
+									scores: scoreStatus.scores.map((s) =>
+										s.judge_id === payload.new.judge_id ||
+										s.guest_identifier === payload.new.guest_identifier
+											? { ...s, score: payload.new.score }
+											: s
+									)
+								};
+								console.log('[status/realtime] スコアを更新:', payload.new.score);
+							} else if (payload.eventType === 'DELETE') {
+								// スコア削除
+								scoreStatus = {
+									...scoreStatus,
+									scores: scoreStatus.scores.filter(
+										(s) =>
+											s.judge_id !== payload.old.judge_id &&
+											s.guest_identifier !== payload.old.guest_identifier
+									)
+								};
+								console.log('[status/realtime] スコアを削除');
+							}
+						}
+					)
+					.subscribe((status) => {
+						console.log('[status/realtime] スコア監視チャンネルの状態:', status);
+						if (status === 'SUBSCRIBED') {
+							console.log('[status/realtime] ✅ スコア監視のRealtime接続成功');
+						} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+							console.error('[status/realtime] ❌ スコア監視の接続エラー');
+						}
+					});
+			}
+		} else {
+			// 大会モードの場合、ポーリングを継続
+			pollingInterval = setInterval(fetchStatus, 3000);
+		}
 
 		// dataから直接判定（リアクティブステートメントに依存しない）
 		const currentIsChief = data.user?.id === data.sessionDetails?.chief_judge_id;
 
-		// セッション終了検知用のポーリング（主任・一般共通）
-		let previousActivePromptId: string | null = null;
-		sessionPollingInterval = setInterval(async () => {
-			const { data: sessionData, error } = await supabase
-				.from('sessions')
-				.select('is_active, active_prompt_id')
-				.eq('id', sessionId)
-				.single();
-
-			if (!error && sessionData) {
-				const isActive = sessionData.is_active;
-				const activePromptId = sessionData.active_prompt_id;
-
-				if (previousIsActive === null) {
-					previousIsActive = isActive;
-					previousActivePromptId = activePromptId;
-					return;
-				}
-
-				// セッション終了を検知
-				if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
-					console.log('[status/polling] ✅ 検定終了を検知（ポーリング） → 終了画面に遷移');
-					const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
-					goto(`/session/${sessionId}?ended=true${guestParam}`);
-					return;
-				}
-
-				// 新しい採点指示を検知（一般検定員・ゲストのみ）
-				if (!currentIsChief && activePromptId && activePromptId !== previousActivePromptId) {
-					console.log('[status/polling] ✅ 新しい採点指示を検知（ポーリング）:', activePromptId);
-					const { data: promptData, error: promptError } = await supabase
-						.from('scoring_prompts')
-						.select('*')
-						.eq('id', activePromptId)
-						.single();
-
-					if (!promptError && promptData) {
-						console.log('[status/polling] 採点指示データ取得成功:', promptData);
-						// ゼッケン番号をストアに保存
-						currentBib.set(promptData.bib_number);
-						// 参加者情報を取得
-						const { data: participant } = await supabase
-							.from('participants')
-							.select('id')
-							.eq('session_id', sessionId)
-							.eq('bib_number', promptData.bib_number)
-							.maybeSingle();
-
-						if (participant) {
-							const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
-							goto(
-								`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`
-							);
-							return;
-						}
-					}
-				}
-
-				// 採点が確定された場合（一般検定員・ゲストのみ）
-				if (!currentIsChief && activePromptId === null && previousActivePromptId !== null) {
-					console.log('[status/polling] ✅ 採点確定を検知（ポーリング）。待機画面に遷移します。');
-					const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-					goto(`/session/${sessionId}${guestParam}`);
-					return;
-				}
-
-				previousIsActive = isActive;
-				previousActivePromptId = activePromptId;
-			}
-		}, 3000);
-
 		// 一般検定員の場合、active_prompt_idがクリアされたら待機画面に遷移
 		if (!currentIsChief) {
 			console.log('[一般検定員/status] リアルタイムリスナーをセットアップ中...', { sessionId });
-			realtimeChannel = supabase
+			sessionRealtimeChannel = supabase
 				.channel(`session-finalize-${sessionId}`)
 				.on(
 					'postgres_changes',
@@ -291,8 +344,8 @@
 					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 						console.error('[一般検定員/status] ❌ 接続エラー - 再接続を試みます');
 						setTimeout(() => {
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
+							if (sessionRealtimeChannel) {
+								supabase.removeChannel(sessionRealtimeChannel);
 							}
 							window.location.reload();
 						}, 2000);
@@ -302,10 +355,12 @@
 	});
 
 	onDestroy(() => {
-		clearInterval(pollingInterval); // Stop polling for score status
-		clearInterval(sessionPollingInterval); // Stop polling for session end
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
+		clearInterval(pollingInterval); // Stop polling for score status (tournament mode only)
+		if (sessionRealtimeChannel) {
+			supabase.removeChannel(sessionRealtimeChannel);
+		}
+		if (scoreRealtimeChannel) {
+			supabase.removeChannel(scoreRealtimeChannel);
 		}
 	});
 
