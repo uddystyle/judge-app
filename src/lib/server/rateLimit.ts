@@ -45,12 +45,30 @@ export const rateLimiters = isRedisAvailable && redis ? {
 } : null;
 
 // クライアント識別用ヘルパー
-export function getClientIdentifier(request: Request): string {
-  const ip = request.headers.get('x-forwarded-for') ||
-             request.headers.get('x-real-ip') ||
-             'unknown';
-  const userAgent = request.headers.get('user-agent') || 'unknown';
-  return `${ip}:${userAgent.substring(0, 50)}`;
+// 【セキュリティ改善】UA変更による回避を防ぐため、IPのみを使用
+export function getClientIdentifier(request: Request, userId?: string): string {
+  // 認証済みユーザーはuserIdを優先（最も確実な識別子）
+  if (userId) {
+    return `user:${userId}`;
+  }
+
+  // x-forwarded-for の先頭IP（実際のクライアントIP）を取得
+  // x-forwarded-for フォーマット: "client_ip, proxy1, proxy2, ..."
+  // 先頭IPが実際のクライアントアドレス
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const realIp = request.headers.get('x-real-ip');
+
+  let ip = 'unknown';
+  if (forwardedFor) {
+    // カンマ区切りの先頭IPを取得し、空白を除去
+    ip = forwardedFor.split(',')[0].trim();
+  } else if (realIp) {
+    ip = realIp.trim();
+  }
+
+  // 匿名ユーザーはIPのみ
+  // User-Agentは含めない（簡単に変更可能で回避耐性が低い）
+  return `ip:${ip}`;
 }
 
 // レート制限チェック（Redis未設定の場合は常に成功）
@@ -66,7 +84,8 @@ export async function checkRateLimit(
     return { success: true };
   }
 
-  const identifier = userId || getClientIdentifier(request);
+  // userIdを getClientIdentifier に渡す（userId優先の識別子生成）
+  const identifier = getClientIdentifier(request, userId);
 
   try {
     const { success, limit, reset, remaining } = await limiter.limit(identifier);
