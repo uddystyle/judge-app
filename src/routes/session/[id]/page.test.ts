@@ -295,3 +295,115 @@ describe('Fallback Polling - Session End Detection', () => {
 		expect(isSessionEnded).toBe(true);
 	});
 });
+
+describe('Fallback Polling - previousPromptId 巻き戻し防止', () => {
+	it('Realtime処理後、フォールバックポーリング再開時にpreviousPromptIdを巻き戻さない', () => {
+		let previousPromptId: string | null = null;
+		let fallbackPolling: any = null;
+		const sessionDetails = { active_prompt_id: 'prompt-1' };
+
+		// フォールバックポーリング開始関数のシミュレーション
+		const startFallbackPolling = () => {
+			if (fallbackPolling) {
+				console.log('[fallback] 既にポーリング開始済み');
+				return;
+			}
+
+			// ✅ previousPromptId が null の場合のみ初期化（巻き戻し防止）
+			if (previousPromptId === null) {
+				previousPromptId = sessionDetails.active_prompt_id;
+				console.log('[fallback] previousPromptId を初期化:', previousPromptId);
+			} else {
+				console.log('[fallback] previousPromptId を保持:', previousPromptId);
+			}
+
+			fallbackPolling = 'polling-timer';
+		};
+
+		// 初回開始: previousPromptId が null なので初期化される
+		startFallbackPolling();
+		expect(previousPromptId).toBe('prompt-1');
+
+		// Realtime で prompt-2 を処理
+		previousPromptId = 'prompt-2';
+		expect(previousPromptId).toBe('prompt-2');
+
+		// 接続エラーでフォールバックポーリング再開
+		fallbackPolling = null; // ポーリングが停止したと仮定
+		startFallbackPolling();
+
+		// ✅ previousPromptId が巻き戻されないことを確認
+		expect(previousPromptId).toBe('prompt-2'); // 'prompt-1'に戻ってはいけない
+	});
+
+	it('初回開始時のみpreviousPromptIdを初期化する', () => {
+		let previousPromptId: string | null = null;
+		let fallbackPolling: any = null;
+		const sessionDetails = { active_prompt_id: 'prompt-initial' };
+
+		const startFallbackPolling = () => {
+			if (fallbackPolling) {
+				return;
+			}
+
+			if (previousPromptId === null) {
+				previousPromptId = sessionDetails.active_prompt_id;
+			}
+
+			fallbackPolling = 'polling-timer';
+		};
+
+		// 初回開始
+		startFallbackPolling();
+		expect(previousPromptId).toBe('prompt-initial');
+
+		// 2回目の開始（previousPromptIdは既に値がある）
+		previousPromptId = 'prompt-updated';
+		fallbackPolling = null;
+		startFallbackPolling();
+
+		// previousPromptIdは上書きされない
+		expect(previousPromptId).toBe('prompt-updated');
+	});
+
+	it('Realtime処理後の再開で二重遷移が発生しない', () => {
+		let previousPromptId: string | null = null;
+		let gotoCallCount = 0;
+		const sessionDetails = { active_prompt_id: 'prompt-old' }; // ページロード時の古い値
+
+		const startFallbackPolling = () => {
+			if (previousPromptId === null) {
+				previousPromptId = sessionDetails.active_prompt_id;
+			}
+		};
+
+		const checkSessionStatus = async () => {
+			const currentPrompt = 'prompt-new';
+
+			if (currentPrompt && currentPrompt !== previousPromptId) {
+				gotoCallCount++;
+				previousPromptId = currentPrompt;
+			}
+		};
+
+		// 初回開始
+		startFallbackPolling();
+		expect(previousPromptId).toBe('prompt-old');
+
+		// Realtime で prompt-new を処理
+		previousPromptId = 'prompt-new';
+		gotoCallCount++;
+
+		// 接続エラーでフォールバックポーリング再開
+		startFallbackPolling();
+
+		// previousPromptId は 'prompt-new' のまま（巻き戻されない）
+		expect(previousPromptId).toBe('prompt-new');
+
+		// ポーリングで最新データ取得
+		checkSessionStatus();
+
+		// ✅ 二重遷移は発生しない（goto は Realtime の1回のみ）
+		expect(gotoCallCount).toBe(1);
+	});
+});

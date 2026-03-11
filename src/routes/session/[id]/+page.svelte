@@ -467,8 +467,15 @@
 		}
 
 		console.log('[fallback] フォールバックポーリングを開始（30秒ごと）');
-		// 初回実行
-		previousPromptId = data.sessionDetails.active_prompt_id;
+
+		// ✅ previousPromptId が null の場合のみ初期化（巻き戻し防止）
+		// Realtimeで既に処理済みの prompt を上書きしないようにする
+		if (previousPromptId === null) {
+			previousPromptId = data.sessionDetails.active_prompt_id;
+			console.log('[fallback] previousPromptId を初期化:', previousPromptId);
+		} else {
+			console.log('[fallback] previousPromptId を保持:', previousPromptId);
+		}
 
 		// 30秒ごとにポーリング（Realtimeのバックアップなので低頻度）
 		fallbackPolling = setInterval(checkSessionStatus, 30000);
