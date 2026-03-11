@@ -154,6 +154,8 @@
 						// 新しい採点指示IDがセットされたら
 						if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
 							console.log('[一般検定員] 新しい採点指示を検知:', newPromptId);
+							// ✅ フォールバックポーリングとの二重処理を防ぐため、ここで previousPromptId を更新
+							previousPromptId = newPromptId;
 							// 新しい指示の詳細をscoring_promptsテーブルから取得
 							const { data: promptData, error } = await supabase
 								.from('scoring_prompts')
@@ -227,6 +229,8 @@
 						const currentPromptId = data.sessionDetails.active_prompt_id;
 						if (currentPromptId && !shouldShowJoinUI) {
 							console.log('[一般検定員] 既存の採点指示を検知:', currentPromptId);
+							// ✅ フォールバックポーリングとの二重処理を防ぐため、ここで previousPromptId を更新
+							previousPromptId = currentPromptId;
 							// 採点指示の詳細を取得
 							const { data: promptData, error } = await supabase
 								.from('scoring_prompts')

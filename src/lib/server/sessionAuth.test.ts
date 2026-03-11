@@ -54,8 +54,19 @@ describe('sessionAuth', () => {
 			};
 
 			mocks.getUser.mockResolvedValue({
-				data: { user: null },
-				error: { message: 'Not authenticated' }
+				data: {
+					user: {
+						id: 'anon-user-123',
+						aud: 'authenticated',
+						user_metadata: {
+							is_guest: true,
+							guest_identifier: 'guest-uuid-123',
+							session_id: 'session-123',
+							guest_name: 'ゲスト太郎'
+						}
+					}
+				},
+				error: null
 			});
 
 			mocks.single.mockResolvedValue({
@@ -75,7 +86,9 @@ describe('sessionAuth', () => {
 				'guest-uuid-123'
 			);
 
-			expect(result.user).toBeNull();
+			expect(result.user).toBeTruthy();
+			expect(result.user?.user_metadata?.is_guest).toBe(true);
+			expect(result.user?.user_metadata?.guest_identifier).toBe('guest-uuid-123');
 			expect(result.guestParticipant).toEqual(mockGuestParticipant);
 			expect(result.guestIdentifier).toBe('guest-uuid-123');
 			expect(mocks.from).toHaveBeenCalledWith('session_participants');
@@ -96,8 +109,19 @@ describe('sessionAuth', () => {
 
 		it('ゲスト識別子が無効な場合は/session/joinにリダイレクト', async () => {
 			mocks.getUser.mockResolvedValue({
-				data: { user: null },
-				error: { message: 'Not authenticated' }
+				data: {
+					user: {
+						id: 'anon-user-invalid',
+						aud: 'authenticated',
+						user_metadata: {
+							is_guest: true,
+							guest_identifier: 'invalid-guest-id',
+							session_id: 'session-123',
+							guest_name: 'ゲスト無効'
+						}
+					}
+				},
+				error: null
 			});
 
 			mocks.single.mockResolvedValue({
@@ -120,8 +144,19 @@ describe('sessionAuth', () => {
 
 		it('ゲスト識別子がsession_idと一致しない場合は/session/joinにリダイレクト', async () => {
 			mocks.getUser.mockResolvedValue({
-				data: { user: null },
-				error: { message: 'Not authenticated' }
+				data: {
+					user: {
+						id: 'anon-user-other',
+						aud: 'authenticated',
+						user_metadata: {
+							is_guest: true,
+							guest_identifier: 'guest-from-other-session',
+							session_id: 'session-other',
+							guest_name: 'ゲスト他セッション'
+						}
+					}
+				},
+				error: null
 			});
 
 			mocks.single.mockResolvedValue({
@@ -174,8 +209,19 @@ describe('sessionAuth', () => {
 			};
 
 			mocks.getUser.mockResolvedValue({
-				data: { user: null },
-				error: { message: 'Not authenticated' }
+				data: {
+					user: {
+						id: 'anon-user-123',
+						aud: 'authenticated',
+						user_metadata: {
+							is_guest: true,
+							guest_identifier: 'guest-uuid-123',
+							session_id: 'session-123',
+							guest_name: 'ゲスト太郎'
+						}
+					}
+				},
+				error: null
 			});
 
 			mocks.single.mockResolvedValue({
@@ -196,7 +242,9 @@ describe('sessionAuth', () => {
 			);
 
 			expect(result).not.toBeNull();
-			expect(result?.user).toBeNull();
+			expect(result?.user).toBeTruthy();
+			expect(result?.user?.user_metadata?.is_guest).toBe(true);
+			expect(result?.user?.user_metadata?.guest_identifier).toBe('guest-uuid-123');
 			expect(result?.guestParticipant).toEqual(mockGuestParticipant);
 			expect(result?.guestIdentifier).toBe('guest-uuid-123');
 		});
@@ -251,8 +299,19 @@ describe('sessionAuth', () => {
 			};
 
 			mocks.getUser.mockResolvedValue({
-				data: { user: null },
-				error: { message: 'Not authenticated' }
+				data: {
+					user: {
+						id: 'anon-user-456',
+						aud: 'authenticated',
+						user_metadata: {
+							is_guest: true,
+							guest_identifier: 'guest-uuid-456',
+							session_id: 'session-456',
+							guest_name: 'ゲスト次郎'
+						}
+					}
+				},
+				error: null
 			});
 
 			mocks.single.mockResolvedValue({
@@ -443,8 +502,19 @@ describe('sessionAuth', () => {
 			};
 
 			mocks.getUser.mockResolvedValue({
-				data: { user: null },
-				error: { message: 'Not authenticated' }
+				data: {
+					user: {
+						id: 'anon-user-123',
+						aud: 'authenticated',
+						user_metadata: {
+							is_guest: true,
+							guest_identifier: 'guest-uuid-123',
+							session_id: 'session-123',
+							guest_name: 'ゲスト太郎'
+						}
+					}
+				},
+				error: null
 			});
 
 			mocks.single.mockResolvedValue({
@@ -684,8 +754,19 @@ describe('sessionAuth', () => {
 				};
 
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-abc',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'guest-uuid-abc',
+								session_id: 'session-abc',
+								guest_name: 'ゲスト太郎'
+							}
+						}
+					},
+					error: null
 				});
 
 				mocks.single.mockResolvedValue({
@@ -711,8 +792,19 @@ describe('sessionAuth', () => {
 
 			it('別のセッションIDのguest_identifierは/session/joinにリダイレクト', async () => {
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-xyz',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'guest-uuid-from-session-xyz',
+								session_id: 'session-xyz',
+								guest_name: 'ゲストXYZ'
+							}
+						}
+					},
+					error: null
 				});
 
 				// session-xyzのguest_identifierを、session-abcで使おうとする
@@ -741,8 +833,19 @@ describe('sessionAuth', () => {
 
 			it('正しいsession_idでも異なるguest_identifierは/session/joinにリダイレクト', async () => {
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-wrong',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'wrong-guest-identifier',
+								session_id: 'session-abc',
+								guest_name: 'ゲストWrong'
+							}
+						}
+					},
+					error: null
 				});
 
 				// session-abcは正しいが、guest_identifierが異なる
@@ -803,8 +906,19 @@ describe('sessionAuth', () => {
 				};
 
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-xyz',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'guest-uuid-xyz',
+								session_id: 'session-xyz',
+								guest_name: 'ゲスト花子'
+							}
+						}
+					},
+					error: null
 				});
 
 				mocks.single.mockResolvedValue({
@@ -917,8 +1031,19 @@ describe('sessionAuth', () => {
 				};
 
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-test',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'guest-uuid-test',
+								session_id: 'session-test',
+								guest_name: 'テストゲスト'
+							}
+						}
+					},
+					error: null
 				});
 
 				mocks.single.mockResolvedValue({
@@ -950,8 +1075,19 @@ describe('sessionAuth', () => {
 		describe('クロスセッション攻撃の防御', () => {
 			it('session-Aのguest_identifierでsession-Bにアクセスできない（authenticateSession）', async () => {
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-A',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'guest-identifier-from-session-A',
+								session_id: 'session-A',
+								guest_name: 'ゲストA'
+							}
+						}
+					},
+					error: null
 				});
 
 				// session-Aのguest_identifierを持っているが、session-Bにアクセスしようとする
@@ -1015,8 +1151,19 @@ describe('sessionAuth', () => {
 				};
 
 				mocks.getUser.mockResolvedValue({
-					data: { user: null },
-					error: { message: 'Not authenticated' }
+					data: {
+						user: {
+							id: 'anon-user-A',
+							aud: 'authenticated',
+							user_metadata: {
+								is_guest: true,
+								guest_identifier: 'same-guest-id',
+								session_id: 'session-A',
+								guest_name: 'セッションAのゲスト'
+							}
+						}
+					},
+					error: null
 				});
 
 				// session-Aで認証する場合

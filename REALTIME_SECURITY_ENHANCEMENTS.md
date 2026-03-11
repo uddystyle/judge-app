@@ -125,7 +125,32 @@ startFallbackPolling();
 2. **Realtime失敗時**: フォールバックポーリングが30秒以内に検知
 3. **Realtime復旧時**: フォールバックポーリングを停止し、Realtimeに切り替え
 
-#### D. onDestroy でのクリーンアップ
+#### D. Realtime と Polling の状態同期
+
+**問題**: Realtimeハンドラで採点指示を処理しても `previousPromptId` が同期されないため、フォールバックポーリングが同じ指示を再度検知して二重遷移を試みるリスク
+
+**修正**: `src/routes/session/[id]/+page.svelte:158, 233`
+
+```typescript
+// Realtimeハンドラ: 新しい採点指示を検知したとき
+if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
+  console.log('[一般検定員] 新しい採点指示を検知:', newPromptId);
+  // ✅ フォールバックポーリングとの二重処理を防ぐため、ここで previousPromptId を更新
+  previousPromptId = newPromptId;
+  // ...
+}
+
+// SUBSCRIBED時: 既存の採点指示を検知したとき
+const currentPromptId = data.sessionDetails.active_prompt_id;
+if (currentPromptId && !shouldShowJoinUI) {
+  console.log('[一般検定員] 既存の採点指示を検知:', currentPromptId);
+  // ✅ フォールバックポーリングとの二重処理を防ぐため、ここで previousPromptId を更新
+  previousPromptId = currentPromptId;
+  // ...
+}
+```
+
+#### E. onDestroy でのクリーンアップ
 
 ```typescript
 onDestroy(() => {
@@ -145,6 +170,7 @@ onDestroy(() => {
 - ✅ Realtime購読が黙って止まった場合でも30秒以内に検知
 - ✅ イベント取りこぼしを二重経路で防止
 - ✅ CHANNEL_ERROR / TIMED_OUT 時にページリロードせずフォールバックで継続
+- ✅ Realtimeとポーリングの `previousPromptId` を同期し、二重遷移を完全防止
 - ✅ 一般検定員が待機し続けるリスクを大幅削減
 - ✅ 複数検定員モードでの運用安定性向上
 
@@ -548,7 +574,7 @@ if (guestParticipant) {
 1. `src/routes/session/join/+page.server.ts` - JWT発行失敗時のロールバック処理
 2. `src/routes/session/invite/[token]/+page.server.ts` - JWT発行失敗時のロールバック処理
 3. `src/lib/supabaseClient.ts` - JWT リフレッシュ監視
-4. `src/routes/session/[id]/+page.svelte` - 期限切れ UI
+4. `src/routes/session/[id]/+page.svelte` - フォールバックポーリング + previousPromptId 同期 + 期限切れ UI
 5. `src/routes/session/[id]/score/[modeType]/[eventId]/input/+page.server.ts` - Retry + ゲスト名 suffix
 6. `GUEST_SESSION_SECURITY.md` - ドキュメント更新
 7. `REALTIME_SECURITY_ENHANCEMENTS.md` - 新規作成
@@ -557,9 +583,10 @@ if (guestParticipant) {
 
 ## まとめ
 
-優先度の高い**4つ**の懸念点に対して、即座に実装可能な対策を完了しました：
+優先度の高い**5つ**の懸念点に対して、即座に実装可能な対策を完了しました：
 
-0. **ゲスト参加の原子性保証**: JWT発行失敗時のロールバック処理により、中途半端な参加者レコードを防止
+0A. **待機画面フォールバックポーリング**: Realtime失敗時の30秒バックアップポーリング + previousPromptId 同期で二重遷移防止
+0B. **ゲスト参加の原子性保証**: JWT発行失敗時のロールバック処理により、中途半端な参加者レコードを防止
 1. **JWT 有効期限切れ**: 自動監視とユーザー通知により、長時間セッションに対応
 2. **同時採点競合**: Retry ロジックによりユーザー体験を大幅改善
 3. **judge_name 衝突**: ゲスト名 suffix により認証ユーザーとの衝突を完全回避
@@ -571,6 +598,6 @@ if (guestParticipant) {
 ---
 
 **作成日**: 2026-03-11
-**最終更新**: 2026-03-11（ゲスト参加ロールバック追加）
+**最終更新**: 2026-03-11（previousPromptId 同期追加）
 **ステータス**: ✅ 実装完了（検証待ち）
 **優先度**: HIGH（本番デプロイ推奨）

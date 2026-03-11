@@ -1,6 +1,112 @@
-# Stripe E2E統合テスト
+# E2Eテスト
 
-このディレクトリには、Stripe統合機能のE2E（End-to-End）テストが含まれています。
+このディレクトリには、以下のE2E（End-to-End）テストが含まれています：
+1. **複数検定員のリアルタイム機能テスト** (`multi-judge-realtime.spec.ts`)
+2. **Stripe統合機能テスト**（手動テスト）
+
+---
+
+## 1. 複数検定員のリアルタイム機能テスト
+
+### 目的
+
+本番環境相当のブラウザ環境で、以下を検証します：
+- **二重遷移の防止**: 同一promptで複数回遷移しないこと
+- **Realtime機能**: スコア更新、修正要求、セッション終了のリアルタイム反映
+- **状態同期**: RealtimeとPollingフォールバックの競合がないこと
+
+### テストケース
+
+#### 1.1 待機画面で採点指示の二重遷移が起きない
+- 主任が1回promptを発行した際、一般検定員が1回だけ採点画面に遷移することを確認
+- **検証項目**: URL変化回数 = 1回、正しいbibパラメータ、3秒待機後も追加遷移なし
+
+#### 1.2 待機画面で複数promptが連続発行されても正しく遷移する
+- 複数のpromptが連続発行された場合でも、各promptで1回ずつ正しく遷移すること
+- **検証項目**: 各promptで1回遷移、正しいパラメータ
+
+#### 1.3 待機画面でセッション終了時は終了画面へ遷移する
+- セッション終了時に採点画面ではなく終了画面に遷移すること
+- **検証項目**: URL変化回数 = 1回、`ended=true`パラメータ、終了メッセージ表示
+
+#### 1.4 Realtimeとポーリングの同時動作で二重遷移が起きない
+- RealtimeとPollingフォールバックが両方動作しても、previousPromptIdで二重遷移を防ぐこと
+- **検証項目**: URL変化回数 = 1回（検知回数に関わらず）、5秒待機後も追加遷移なし
+
+### 実行方法
+
+#### 前提条件
+
+1. **Playwrightのインストール**:
+```bash
+npx playwright install
+```
+
+2. **環境変数の設定** (`.env.test`):
+```bash
+# テストユーザーのクレデンシャル
+TEST_CHIEF_EMAIL=chief@example.com
+TEST_CHIEF_PASSWORD=password
+TEST_JUDGE1_EMAIL=judge1@example.com
+TEST_JUDGE1_PASSWORD=password
+TEST_JUDGE2_EMAIL=judge2@example.com
+TEST_JUDGE2_PASSWORD=password
+
+# ベースURL（オプション）
+BASE_URL=http://localhost:5173
+```
+
+3. **開発サーバーの起動**:
+```bash
+npm run dev
+```
+
+#### テスト実行
+
+```bash
+# すべてのE2Eテストを実行
+npm run test:e2e
+
+# UIモードで実行（デバッグに便利）
+npm run test:e2e:ui
+
+# 特定のテストのみ実行
+npx playwright test -g "待機画面で採点指示の二重遷移が起きない"
+```
+
+### トラブルシューティング
+
+#### 二重遷移の検証方法
+
+テストでは以下の方法で二重遷移を検出します：
+
+1. **URL変化のカウント**:
+```typescript
+page.on('framenavigated', (frame) => {
+  if (frame === page.mainFrame()) {
+    urlChanges.push(frame.url());
+  }
+});
+```
+
+2. **待機時間の挿入**:
+```typescript
+await page.waitForURL('**/score/input**', { timeout: 5000 });
+await page.waitForTimeout(3000); // 追加遷移がないことを確認
+```
+
+#### 成功パターン
+
+```
+[初期状態] Judge1 URLs: 1, Judge2 URLs: 1
+✅ 主任検定員が採点指示を発行: bib=10
+[遷移回数] Judge1: 1回, Judge2: 1回
+✅ 同一promptで二重遷移は発生しなかった
+```
+
+---
+
+## 2. Stripe統合機能テスト
 
 ## テストの目的
 

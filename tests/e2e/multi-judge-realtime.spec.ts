@@ -180,6 +180,302 @@ test.describe('Multi-Judge Realtime Score Monitoring', () => {
 		console.log('✅ Session end detected in real-time');
 	});
 
+	test('待機画面で採点指示の二重遷移が起きない', async () => {
+		// Step 1: 検定員を待機画面に配置
+		await judge1Page.goto(`${BASE_URL}/session/${sessionId}`);
+		await judge2Page.goto(`${BASE_URL}/session/${sessionId}`);
+
+		// URL変化とコンソールログをトラッキング
+		const judge1UrlChanges: string[] = [];
+		const judge1ConsoleLogs: string[] = [];
+		const judge2UrlChanges: string[] = [];
+		const judge2ConsoleLogs: string[] = [];
+
+		// Judge1のURL変化を記録
+		judge1Page.on('framenavigated', (frame) => {
+			if (frame === judge1Page.mainFrame()) {
+				const url = frame.url();
+				judge1UrlChanges.push(url);
+				console.log(`[Judge1 URL変化] ${url}`);
+			}
+		});
+
+		// Judge2のURL変化を記録
+		judge2Page.on('framenavigated', (frame) => {
+			if (frame === frame.page().mainFrame()) {
+				const url = frame.url();
+				judge2UrlChanges.push(url);
+				console.log(`[Judge2 URL変化] ${url}`);
+			}
+		});
+
+		// コンソールログを記録
+		judge1Page.on('console', (msg) => {
+			const text = msg.text();
+			judge1ConsoleLogs.push(text);
+			if (text.includes('採点指示') || text.includes('prompt')) {
+				console.log(`[Judge1 Console] ${text}`);
+			}
+		});
+
+		judge2Page.on('console', (msg) => {
+			const text = msg.text();
+			judge2ConsoleLogs.push(text);
+			if (text.includes('採点指示') || text.includes('prompt')) {
+				console.log(`[Judge2 Console] ${text}`);
+			}
+		});
+
+		// 初期URL数を記録（待機画面への遷移まで）
+		const judge1InitialUrlCount = judge1UrlChanges.length;
+		const judge2InitialUrlCount = judge2UrlChanges.length;
+
+		console.log(`[初期状態] Judge1 URLs: ${judge1InitialUrlCount}, Judge2 URLs: ${judge2InitialUrlCount}`);
+
+		// Step 2: 主任検定員が採点指示を1回発行
+		await chiefPage.goto(`${BASE_URL}/session/${sessionId}`);
+		await chiefPage.click('text=採点指示');
+		await chiefPage.fill('input[name="bib"]', '10');
+		await chiefPage.click('button:has-text("開始")');
+
+		console.log('✅ 主任検定員が採点指示を発行: bib=10');
+
+		// Step 3: 検定員の画面が採点画面に遷移するのを待つ
+		await judge1Page.waitForURL('**/score/input**', { timeout: 5000 });
+		await judge2Page.waitForURL('**/score/input**', { timeout: 5000 });
+
+		// 3秒待機して、追加の遷移が起きないことを確認
+		await judge1Page.waitForTimeout(3000);
+
+		// Step 4: URL変化回数を検証
+		const judge1FinalUrlCount = judge1UrlChanges.length;
+		const judge2FinalUrlCount = judge2UrlChanges.length;
+
+		const judge1Transitions = judge1FinalUrlCount - judge1InitialUrlCount;
+		const judge2Transitions = judge2FinalUrlCount - judge2InitialUrlCount;
+
+		console.log(`[遷移回数] Judge1: ${judge1Transitions}回, Judge2: ${judge2Transitions}回`);
+		console.log(`[Judge1 URLs] ${judge1UrlChanges.slice(judge1InitialUrlCount).join(' -> ')}`);
+		console.log(`[Judge2 URLs] ${judge2UrlChanges.slice(judge2InitialUrlCount).join(' -> ')}`);
+
+		// ✅ 受け入れ条件: 各検定員は1回だけ採点画面へ遷移する
+		expect(judge1Transitions).toBe(1);
+		expect(judge2Transitions).toBe(1);
+
+		// URLが採点画面であることを確認
+		const judge1CurrentUrl = judge1Page.url();
+		const judge2CurrentUrl = judge2Page.url();
+
+		expect(judge1CurrentUrl).toContain('/score/input');
+		expect(judge1CurrentUrl).toContain('bib=10');
+		expect(judge2CurrentUrl).toContain('/score/input');
+		expect(judge2CurrentUrl).toContain('bib=10');
+
+		console.log('✅ 同一promptで二重遷移は発生しなかった');
+	});
+
+	test('待機画面で複数promptが連続発行されても正しく遷移する', async () => {
+		// Step 1: 検定員を待機画面に配置
+		await judge1Page.goto(`${BASE_URL}/session/${sessionId}`);
+
+		const urlChanges: string[] = [];
+
+		// URL変化を記録
+		judge1Page.on('framenavigated', (frame) => {
+			if (frame === judge1Page.mainFrame()) {
+				urlChanges.push(frame.url());
+			}
+		});
+
+		const initialUrlCount = urlChanges.length;
+
+		// Step 2: 主任検定員が1つ目の採点指示を発行
+		await chiefPage.goto(`${BASE_URL}/session/${sessionId}`);
+		await chiefPage.click('text=採点指示');
+		await chiefPage.fill('input[name="bib"]', '11');
+		await chiefPage.click('button:has-text("開始")');
+
+		// 検定員が採点画面に遷移
+		await judge1Page.waitForURL('**/score/input**', { timeout: 5000 });
+		await judge1Page.waitForTimeout(1000);
+
+		const afterFirstPrompt = urlChanges.length;
+		const firstTransitions = afterFirstPrompt - initialUrlCount;
+
+		console.log(`[1回目] 遷移回数: ${firstTransitions}回`);
+
+		// 検定員がスコアを入力して送信
+		await judge1Page.fill('input[name="score"]', '85');
+		await judge1Page.click('button[type="submit"]');
+
+		// 待機画面に戻る
+		await judge1Page.waitForURL(`**/session/${sessionId}`, { timeout: 3000 });
+
+		// Step 3: 主任検定員が2つ目の採点指示を発行
+		await chiefPage.click('text=採点指示');
+		await chiefPage.fill('input[name="bib"]', '12');
+		await chiefPage.click('button:has-text("開始")');
+
+		// 検定員が再度採点画面に遷移
+		await judge1Page.waitForURL('**/score/input**', { timeout: 5000 });
+		await judge1Page.waitForTimeout(1000);
+
+		const afterSecondPrompt = urlChanges.length;
+		const secondTransitions = afterSecondPrompt - afterFirstPrompt;
+
+		console.log(`[2回目] 遷移回数: ${secondTransitions}回`);
+
+		// ✅ 各promptで1回ずつ遷移している
+		expect(firstTransitions).toBe(1);
+		expect(secondTransitions).toBeGreaterThanOrEqual(1); // 待機画面 -> 採点画面
+
+		// 2つ目のpromptのパラメータが正しい
+		const currentUrl = judge1Page.url();
+		expect(currentUrl).toContain('bib=12');
+
+		console.log('✅ 複数promptが正しく処理された（二重遷移なし）');
+	});
+
+	test('待機画面でセッション終了時は終了画面へ遷移する（採点画面ではない）', async () => {
+		// Step 1: 検定員を待機画面に配置
+		await judge1Page.goto(`${BASE_URL}/session/${sessionId}`);
+		await judge2Page.goto(`${BASE_URL}/session/${sessionId}`);
+
+		const judge1UrlChanges: string[] = [];
+		const judge2UrlChanges: string[] = [];
+
+		judge1Page.on('framenavigated', (frame) => {
+			if (frame === judge1Page.mainFrame()) {
+				judge1UrlChanges.push(frame.url());
+				console.log(`[Judge1] ${frame.url()}`);
+			}
+		});
+
+		judge2Page.on('framenavigated', (frame) => {
+			if (frame === judge2Page.mainFrame()) {
+				judge2UrlChanges.push(frame.url());
+				console.log(`[Judge2] ${frame.url()}`);
+			}
+		});
+
+		const initialCount1 = judge1UrlChanges.length;
+		const initialCount2 = judge2UrlChanges.length;
+
+		// Step 2: 主任検定員がセッションを終了
+		await chiefPage.goto(`${BASE_URL}/session/${sessionId}`);
+		await chiefPage.click('button:has-text("検定を終了")');
+
+		console.log('✅ 主任検定員がセッション終了を実行');
+
+		// Step 3: 検定員が終了画面に遷移
+		await judge1Page.waitForURL('**/session/**?ended=true', { timeout: 5000 });
+		await judge2Page.waitForURL('**/session/**?ended=true', { timeout: 5000 });
+
+		await judge1Page.waitForTimeout(2000);
+
+		const finalCount1 = judge1UrlChanges.length;
+		const finalCount2 = judge2UrlChanges.length;
+
+		const judge1Transitions = finalCount1 - initialCount1;
+		const judge2Transitions = finalCount2 - initialCount2;
+
+		console.log(`[終了時の遷移] Judge1: ${judge1Transitions}回, Judge2: ${judge2Transitions}回`);
+
+		// ✅ 終了画面へ1回だけ遷移する（採点画面には遷移しない）
+		expect(judge1Transitions).toBe(1);
+		expect(judge2Transitions).toBe(1);
+
+		// URLが終了画面であることを確認
+		const judge1FinalUrl = judge1Page.url();
+		const judge2FinalUrl = judge2Page.url();
+
+		expect(judge1FinalUrl).toContain('ended=true');
+		expect(judge1FinalUrl).not.toContain('/score/input');
+		expect(judge2FinalUrl).toContain('ended=true');
+		expect(judge2FinalUrl).not.toContain('/score/input');
+
+		// 終了メッセージが表示される
+		await expect(judge1Page.locator('text=検定が終了しました')).toBeVisible();
+		await expect(judge2Page.locator('text=検定が終了しました')).toBeVisible();
+
+		console.log('✅ セッション終了時は終了画面へ遷移（採点画面への誤遷移なし）');
+	});
+
+	test('Realtimeとポーリングの同時動作で二重遷移が起きない', async () => {
+		// Step 1: 検定員を待機画面に配置
+		await judge1Page.goto(`${BASE_URL}/session/${sessionId}`);
+
+		const urlChanges: string[] = [];
+		const consoleLogs: string[] = [];
+
+		judge1Page.on('framenavigated', (frame) => {
+			if (frame === judge1Page.mainFrame()) {
+				urlChanges.push(frame.url());
+			}
+		});
+
+		judge1Page.on('console', (msg) => {
+			const text = msg.text();
+			if (
+				text.includes('[一般検定員]') ||
+				text.includes('Realtime') ||
+				text.includes('fallback') ||
+				text.includes('prompt')
+			) {
+				consoleLogs.push(text);
+				console.log(`[Judge1] ${text}`);
+			}
+		});
+
+		const initialUrlCount = urlChanges.length;
+
+		// Step 2: Realtime接続状態を確認するため少し待機
+		await judge1Page.waitForTimeout(2000);
+
+		// Step 3: 主任検定員が採点指示を発行
+		await chiefPage.goto(`${BASE_URL}/session/${sessionId}`);
+		await chiefPage.click('text=採点指示');
+		await chiefPage.fill('input[name="bib"]', '20');
+		await chiefPage.click('button:has-text("開始")');
+
+		console.log('✅ 採点指示発行: bib=20');
+
+		// Step 4: 採点画面に遷移するのを待つ
+		await judge1Page.waitForURL('**/score/input**', { timeout: 5000 });
+
+		// 5秒待機して、追加の遷移がないことを確認（RealtimeとPollingの競合検証）
+		await judge1Page.waitForTimeout(5000);
+
+		const finalUrlCount = urlChanges.length;
+		const transitions = finalUrlCount - initialUrlCount;
+
+		console.log(`[遷移回数] ${transitions}回`);
+		console.log(`[URL履歴] ${urlChanges.slice(initialUrlCount).join(' -> ')}`);
+
+		// コンソールログを分析
+		const realtimeDetections = consoleLogs.filter((log) =>
+			log.includes('Realtime') && log.includes('新しい採点指示')
+		).length;
+		const pollingDetections = consoleLogs.filter((log) =>
+			log.includes('fallback') && log.includes('新しい採点指示')
+		).length;
+
+		console.log(`[検知] Realtime: ${realtimeDetections}回, Polling: ${pollingDetections}回`);
+
+		// ✅ 受け入れ条件: 1回だけ遷移する（RealtimeとPollingのどちらが動作しても）
+		expect(transitions).toBe(1);
+
+		// 同じpromptを両方で検知しても、previousPromptIdで二重遷移を防いでいる
+		const totalDetections = realtimeDetections + pollingDetections;
+		console.log(`[合計検知回数] ${totalDetections}回（うち遷移: 1回のみ）`);
+
+		// URLが正しい
+		const currentUrl = judge1Page.url();
+		expect(currentUrl).toContain('bib=20');
+
+		console.log('✅ RealtimeとPollingが同時に動作しても二重遷移しない');
+	});
+
 	test('スコアボードがリアルタイムで更新される', async () => {
 		// Step 1: スコアボードを開く
 		const scoreboardPage = await chiefContext.newPage();
