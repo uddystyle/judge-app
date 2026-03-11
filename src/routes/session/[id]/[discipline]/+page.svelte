@@ -29,8 +29,7 @@
 	// 級ボタンがクリックされたときに実行される関数
 	function selectLevel(level: string) {
 		// 次のページ（種目選択）へ移動
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-		goto(`/session/${id}/${discipline}/${level}${guestParam}`);
+		goto(`/session/${id}/${discipline}/${level}`);
 	}
 </script>
 
@@ -54,8 +53,7 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={() => {
-			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-			goto(`/session/${id}${guestParam}`);
+			goto(`/session/${id}`);
 		}}>種別選択に戻る</NavButton>
 	</div>
 </div>

@@ -73,8 +73,7 @@
 
 		// 複数検定員モードOFFの場合は、直接採点画面に遷移
 		if (!isMultiJudge) {
-			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
-			goto(`/session/${id}/${discipline}/${level}/${event}/score?bib=${bib}${guestParam}`);
+			goto(`/session/${id}/${discipline}/${level}/${event}/score?bib=${bib}`);
 			return;
 		}
 
@@ -97,7 +96,7 @@
 
 	<div class="numeric-display">{currentBib || '0'}</div>
 
-	<form method="POST" action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/setPrompt" use:enhance bind:this={formElement}>
+	<form method="POST" action="{guestIdentifier ? `` : '?'}/setPrompt" use:enhance bind:this={formElement}>
 		<input type="hidden" name="bib" value={currentBib} />
 	</form>
 
@@ -108,8 +107,7 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={() => {
-			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-			goto(isTournamentMode ? `/session/${id}/tournament-events${guestParam}` : `/session/${id}/${discipline}/${level}${guestParam}`);
+			goto(isTournamentMode ? `/session/${id}/tournament-events` : `/session/${id}/${discipline}/${level}`);
 		}}>
 			種目選択に戻る
 		</NavButton>

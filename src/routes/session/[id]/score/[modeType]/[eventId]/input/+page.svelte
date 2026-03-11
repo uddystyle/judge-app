@@ -22,7 +22,7 @@
 	$: maxScore = data.eventInfo.max_score || 100;
 	$: precision = data.eventInfo.score_precision || 1;
 	$: guestIdentifier = data.guestIdentifier;
-	$: formAction = guestIdentifier ? `?/submitScore&guest=${guestIdentifier}` : '?/submitScore';
+	$: formAction = guestIdentifier ? `?/submitScore` : '?/submitScore';
 	$: showBackButton = !data.isMultiJudge || data.isChief;
 
 	let loading = false;
@@ -53,11 +53,10 @@
 	// フォーム送信後の処理
 	$: if (form?.success && form?.score !== undefined && form?.bibNumber) {
 		// 複数検定員モードがONの場合はstatus画面へ、OFFの場合はcomplete画面へ
-		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
 		if (data.isMultiJudge) {
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}${guestParam}`);
+			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}`);
 		} else {
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}${guestParam}`);
+			goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}`);
 		}
 	}
 
@@ -66,8 +65,7 @@
 		// ストアをクリア
 		currentBib.set(null);
 		// ゼッケン入力画面に戻る
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}`);
 	}
 </script>
 

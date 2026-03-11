@@ -11,8 +11,7 @@
 
 	function selectEvent(eventId: string) {
 		// 統一された採点画面へ遷移（ゲストパラメータを引き継ぐ）
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-		goto(`/session/${sessionId}/score/training/${eventId}${guestParam}`);
+		goto(`/session/${sessionId}/score/training/${eventId}`);
 	}
 </script>
 
@@ -39,8 +38,7 @@
 			<p>種目が登録されていません。</p>
 			<p>検定詳細ページから種目を追加してください。</p>
 			<NavButton on:click={() => {
-				const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-				goto(`/session/${sessionId}/details${guestParam}`);
+				goto(`/session/${sessionId}/details`);
 			}}>
 				検定詳細へ
 			</NavButton>
@@ -66,8 +64,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="secondary" on:click={() => {
-			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-			goto(`/session/${sessionId}${guestParam}`);
+			goto(`/session/${sessionId}`);
 		}}>
 			戻る
 		</NavButton>

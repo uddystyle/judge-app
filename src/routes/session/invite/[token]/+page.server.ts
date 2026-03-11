@@ -95,7 +95,7 @@ export const actions: Actions = {
 		// ゲスト識別子を生成
 		const guestIdentifier = crypto.randomUUID();
 
-		// session_participants に登録
+		// Step 1: session_participants に登録
 		const { error: insertError } = await supabase.from('session_participants').insert({
 			session_id: session.id,
 			is_guest: true,
@@ -110,7 +110,43 @@ export const actions: Actions = {
 			});
 		}
 
-		// セッションページへリダイレクト（guest識別子をパラメータに含める）
-		throw redirect(303, `/session/${session.id}?guest=${guestIdentifier}`);
+		// Step 2: Supabase Anonymous Authでゲスト用JWTを発行
+		console.log('[Guest Invite] ゲスト用JWT発行開始:', { guestIdentifier });
+		const { data: authData, error: authError } = await supabase.auth.signInAnonymously({
+			options: {
+				data: {
+					session_id: session.id,
+					guest_identifier: guestIdentifier,
+					guest_name: guestName.trim(),
+					is_guest: true
+				}
+			}
+		});
+
+		if (authError || !authData.session) {
+			console.error('[Guest Invite] JWT発行エラー:', authError);
+
+			// ⚠️ CRITICAL: JWT発行失敗時は session_participants レコードをロールバック
+			console.log('[Guest Invite] JWT発行失敗のため、参加者レコードをロールバック中...');
+			const { error: rollbackError } = await supabase
+				.from('session_participants')
+				.delete()
+				.eq('guest_identifier', guestIdentifier);
+
+			if (rollbackError) {
+				console.error('[Guest Invite] ロールバック失敗:', rollbackError);
+				// ロールバック失敗でも、ユーザーには認証失敗として通知
+			} else {
+				console.log('[Guest Invite] ロールバック成功');
+			}
+
+			return fail(500, {
+				error: '認証に失敗しました。再度お試しください。'
+			});
+		}
+
+		console.log('[Guest Invite] ゲスト参加成功。JWT発行完了。リダイレクト先:', `/session/${session.id}`);
+		// Step 3: セッションページへリダイレクト（JWTがcookieに保存される）
+		throw redirect(303, `/session/${session.id}`);
 	}
 };

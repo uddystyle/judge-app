@@ -48,8 +48,7 @@
 
 		// ゼッケン入力画面に遷移
 		const guestIdentifier = $page.url.searchParams.get('guest');
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-		goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}${guestParam}`);
+		goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}`);
 	}
 
 	async function handleSubmit(event: CustomEvent<{ score: number }>) {
@@ -74,7 +73,7 @@
 		formData.append('bib', bib.toString());
 
 		try {
-			const response = await fetch(`?/submitScore${guestIdentifier ? `&guest=${guestIdentifier}` : ''}`, {
+			const response = await fetch(`?/submitScore${guestIdentifier ? `` : ''}`, {
 				method: 'POST',
 				body: formData
 			});
@@ -87,12 +86,11 @@
 				alert(result.data?.error || '採点の保存に失敗しました。');
 				loading = false;
 			} else if (result.type === 'success') {
-				const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
 				if (isMultiJudge) {
-					goto(`/session/${id}/${discipline}/${level}/${eventParam}/score/status?bib=${bib}${guestParam}`);
+					goto(`/session/${id}/${discipline}/${level}/${eventParam}/score/status?bib=${bib}`);
 				} else {
 					goto(
-						`/session/${id}/${discipline}/${level}/${eventParam}/score/complete?bib=${bib}&score=${score}${guestParam}`
+						`/session/${id}/${discipline}/${level}/${eventParam}/score/complete?bib=${bib}&score=${score}`
 					);
 				}
 			}

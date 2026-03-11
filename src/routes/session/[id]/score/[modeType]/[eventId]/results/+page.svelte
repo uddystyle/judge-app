@@ -25,8 +25,7 @@
 	});
 
 	function goBack() {
-		const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
-		goto(`/session/${$page.params.id}${guestParam}`);
+		goto(`/session/${$page.params.id}`);
 	}
 
 	function selectEvent(eventId: string) {

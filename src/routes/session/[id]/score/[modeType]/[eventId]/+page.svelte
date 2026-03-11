@@ -58,16 +58,14 @@
 	// フォーム送信後の処理
 	$: if (form?.success && form?.bibNumber && form?.participantId) {
 		// ゼッケン番号入力後は常に得点入力画面へ
-		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}${guestParam}`);
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}`);
 	}
 
 	// モードに応じた戻り先
 	$: {
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
 		backUrl = isTrainingMode
-			? `/session/${sessionId}/training-events${guestParam}`
-			: `/session/${sessionId}/tournament-events${guestParam}`;
+			? `/session/${sessionId}/training-events`
+			: `/session/${sessionId}/tournament-events`;
 	}
 	let backUrl: string;
 
@@ -98,7 +96,7 @@
 
 	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} />
 
-	<form id="bibForm" method="POST" action="?/submitBib{guestIdentifier ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;">
+	<form id="bibForm" method="POST" action="?/submitBib{guestIdentifier ? `` : ''}" use:enhance style="display: none;">
 		<input type="hidden" name="bibNumber" value={bibNumber} />
 	</form>
 
@@ -107,7 +105,7 @@
 			種目選択に戻る
 		</NavButton>
 		{#if isTrainingMode}
-			<NavButton variant="secondary" on:click={() => goto(`/session/${sessionId}/score/${modeType}/${eventId}/results${guestIdentifier ? `?guest=${guestIdentifier}` : ''}`)}>
+			<NavButton variant="secondary" on:click={() => goto(`/session/${sessionId}/score/${modeType}/${eventId}/results${guestIdentifier ? `` : ''}`)}>
 				結果を見る
 			</NavButton>
 		{/if}

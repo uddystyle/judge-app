@@ -1,8 +1,32 @@
 # Supabase Realtime設定ガイド
 
+## 🚨 重要: セキュリティ警告
+
+**Realtime設定の前に必ず以下を確認してください:**
+
+⚠️ **RLSポリシーが適切に設定されていないと、他セッションのデータが漏洩します**
+
+1. **必須**: RLSポリシーの確認
+   ```bash
+   psql $DATABASE_URL -f scripts/verify-rls-security.sql
+   ```
+
+2. **推奨**: セキュリティチェックリストの実施
+   - [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) を参照
+   - [REALTIME_SECURITY.md](./REALTIME_SECURITY.md) を熟読
+
+3. **緊急時**: セキュリティ問題が見つかった場合
+   ```bash
+   psql $DATABASE_URL -f database/migrations/999_fix_rls_realtime_security.sql
+   ```
+
+---
+
 ## 概要
 
 このドキュメントでは、Supabase Realtimeを有効化するための設定手順を説明します。
+
+**注意**: Realtime設定はデータベース設定とRLSポリシーの両方が必要です。
 
 ---
 

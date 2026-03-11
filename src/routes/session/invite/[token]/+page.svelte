@@ -24,7 +24,7 @@
 					const guestData = JSON.parse(savedGuestData);
 					// 既にこのセッションに参加済みの場合、自動的にセッションページへ
 					console.log('[Guest] 保存されたゲスト情報を検出:', guestData);
-					goto(`/session/${data.session.id}?guest=${guestData.guest_identifier}`);
+					goto(`/session/${data.session.id}`);
 				} catch (e) {
 					console.error('[Guest] ゲスト情報の復元に失敗:', e);
 					localStorage.removeItem(storageKey);

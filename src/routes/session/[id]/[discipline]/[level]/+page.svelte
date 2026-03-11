@@ -27,8 +27,7 @@
 
 	function selectEvent(eventName: string) {
 		// 次のページ（ゼッケン入力）へ移動
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-		goto(`/session/${id}/${discipline}/${level}/${eventName}${guestParam}`);
+		goto(`/session/${id}/${discipline}/${level}/${eventName}`);
 	}
 </script>
 
@@ -52,8 +51,7 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={() => {
-			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-			goto(`/session/${id}/${discipline}${guestParam}`);
+			goto(`/session/${id}/${discipline}`);
 		}}>級選択に戻る</NavButton>
 	</div>
 </div>

@@ -13,9 +13,11 @@
 	export let data: PageData;
 	export const form: ActionData = undefined;
 	let realtimeChannel: any;
-	let pollingInterval: any;
 	let previousStatus: string | null = null; // ポーリングで前回の状態を記憶
 	let isPageActive = true; // ページがアクティブかどうかを追跡
+	let fallbackPolling: any = null; // フォールバックポーリング用タイマー
+	let previousPromptId: string | null = null; // 前回の active_prompt_id を記憶
+
 	// URLパラメータで終了フラグをチェック（リアクティブに監視）
 	// ただし、restart=true パラメータがある場合は終了フラグを無視
 	$: isSessionEnded = $page.url.searchParams.get('restart') === 'true'
@@ -24,6 +26,9 @@
 
 	// URLパラメータから join フラグを取得（リアクティブに監視）
 	$: shouldShowJoinUI = $page.url.searchParams.get('join') === 'true';
+
+	// URLパラメータから expired フラグを取得（JWT期限切れ検出）
+	$: isSessionExpired = $page.url.searchParams.get('expired') === 'true';
 
 	// 研修モード用の変数
 	let selectedUserId: string = '';
@@ -136,18 +141,13 @@
 								return;
 							}
 							// リソースをクリーンアップ
-							console.log('[一般検定員/realtime] リアルタイム接続とポーリングを停止します');
+							console.log('[一般検定員/realtime] リアルタイム接続を停止します');
 							if (realtimeChannel) {
 								supabase.removeChannel(realtimeChannel);
 								realtimeChannel = null;
 							}
-							if (pollingInterval) {
-								clearInterval(pollingInterval);
-								pollingInterval = null;
-							}
 							isSessionEnded = true;
-							const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
-							goto(`/session/${sessionId}?ended=true${guestParam}`);
+							goto(`/session/${sessionId}?ended=true`);
 							return;
 						}
 
@@ -186,13 +186,12 @@
 
 									if (participant) {
 										const eventId = promptData.level; // level カラムに eventId を保存している
-										const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
 										if (mode === 'tournament') {
-											console.log('[一般検定員/大会] 採点画面に遷移:', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
-											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
+											console.log('[一般検定員/大会] 採点画面に遷移:', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										} else {
-											console.log('[一般検定員/研修] 採点画面に遷移:', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
-											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
+											console.log('[一般検定員/研修] 採点画面に遷移:', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										}
 									}
 								} else {
@@ -203,9 +202,8 @@
 										level: promptData.level,
 										event: promptData.event_name
 									});
-									const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
 									goto(
-										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`
+										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
 									);
 								}
 							}
@@ -217,202 +215,12 @@
 					if (status === 'SUBSCRIBED') {
 						console.log('[一般検定員] ✅ リアルタイム接続成功');
 
-						// Realtimeのバックアップとして、2秒ごとにポーリングでstatusとactive_prompt_idをチェック
-						let previousActivePromptId: string | null = null;
-						pollingInterval = setInterval(async () => {
-							console.log('[一般検定員/polling] ========== ポーリング実行 ==========');
-							console.log('[一般検定員/polling] 時刻:', new Date().toISOString());
-
-							// 現在のパスをチェック - セッションページから離れていたらポーリングを停止
-							const currentPath = window.location.pathname;
-							console.log('[一般検定員/polling] 現在のパス:', currentPath);
-							if (!currentPath.includes(`/session/${sessionId}`)) {
-								console.log('[一般検定員/polling] ⚠️ セッションページから離れているため、ポーリングを停止します');
-								if (pollingInterval) {
-									clearInterval(pollingInterval);
-								}
-								return;
-							}
-
-							console.log('[一般検定員/polling] データベースクエリ実行中...', { sessionId });
-							const { data: sessionData, error } = await supabase
-								.from('sessions')
-								.select('status, active_prompt_id, is_active')
-								.eq('id', sessionId)
-								.single();
-
-							console.log('[一般検定員/polling] クエリ結果:', { sessionData, error });
-
-							if (!error && sessionData) {
-								const currentStatus = sessionData.status;
-								const currentActivePromptId = sessionData.active_prompt_id;
-								const currentIsActive = sessionData.is_active;
-								console.log('[一般検定員/polling] ========== 状態確認 ==========');
-								console.log('[一般検定員/polling] status:', currentStatus, '(前回:', previousStatus + ')');
-								console.log('[一般検定員/polling] is_active:', currentIsActive);
-								console.log('[一般検定員/polling] active_prompt_id:', currentActivePromptId, '(前回:', previousActivePromptId + ')');
-
-								// 既に終了画面を表示している場合は、状態変更をスキップ
-								if (isSessionEnded) {
-									console.log('[一般検定員/polling] 終了画面表示中のため、状態変更をスキップ');
-									return;
-								}
-
-								// 初回のポーリング時
-								if (previousStatus === null) {
-									console.log('[一般検定員/polling] ========== 初回ポーリング ==========');
-									console.log('[一般検定員/polling] 初回 - 状態を記録');
-									const isJoining = $page.url.searchParams.get('join') === 'true';
-
-									// 初回ポーリング時に既にセッションが終了している場合は即座に遷移
-									if (currentStatus === 'ended') {
-										console.log('[一般検定員/polling] ⚠️ 初回ポーリングで既にセッション終了を検知！');
-										console.log('[一般検定員/polling] ✅✅✅ 終了画面に即座に遷移します！');
-										if (!isPageActive) {
-											console.log('[一般検定員/polling] ⚠️ ページが非アクティブのため、遷移をスキップ');
-											return;
-										}
-										// リソースをクリーンアップ
-										console.log('[一般検定員/polling] リアルタイム接続とポーリングを停止します');
-										if (realtimeChannel) {
-											supabase.removeChannel(realtimeChannel);
-											realtimeChannel = null;
-										}
-										if (pollingInterval) {
-											clearInterval(pollingInterval);
-											pollingInterval = null;
-										}
-										isSessionEnded = true;
-										try {
-											const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
-											const targetUrl = `/session/${sessionId}?ended=true${guestParam}`;
-											console.log('[一般検定員/polling] 遷移先URL:', targetUrl);
-											await goto(targetUrl);
-											console.log('[一般検定員/polling] goto完了');
-										} catch (error) {
-											console.error('[一般検定員/polling] ❌ goto失敗:', error);
-										}
-										return;
-									}
-
-									previousStatus = currentStatus;
-									// セッション再参加直後の場合、既存のactive_prompt_idを無視してnullとして扱う
-									// これにより、その後の新しい採点指示を確実に検知できる
-									previousActivePromptId = isJoining ? null : currentActivePromptId;
-									console.log('[一般検定員/polling] 状態記録:', {
-										previousStatus,
-										previousActivePromptId,
-										isJoining,
-										currentActivePromptId,
-										currentIsActive
-									});
-
-									// 初回は状態を記録するだけで、終了画面への遷移は行わない（ただし既に終了している場合は上で遷移済み）
-									console.log('[一般検定員/polling] 初回なので状態記録のみ。遷移はしない。');
-									return;
-								}
-
-								// statusが 'ended' に変化した場合の検知
-								console.log('[一般検定員/polling] ========== 終了検知チェック ==========');
-								console.log('[一般検定員/polling] 条件1: previousStatus !== "ended":', previousStatus !== 'ended');
-								console.log('[一般検定員/polling] 条件2: currentStatus === "ended":', currentStatus === 'ended');
-								console.log('[一般検定員/polling] 両方満たす:', previousStatus !== 'ended' && currentStatus === 'ended');
-
-								if (previousStatus !== 'ended' && currentStatus === 'ended') {
-									console.log('[一般検定員/polling] ✅✅✅ セッション終了を検知！終了画面に遷移します！');
-									if (!isPageActive) {
-										console.log('[一般検定員/polling] ⚠️ ページが非アクティブのため、遷移をスキップ');
-										return;
-									}
-									// リソースをクリーンアップ
-									console.log('[一般検定員/polling] リアルタイム接続とポーリングを停止します');
-									if (realtimeChannel) {
-										supabase.removeChannel(realtimeChannel);
-										realtimeChannel = null;
-									}
-									if (pollingInterval) {
-										clearInterval(pollingInterval);
-										pollingInterval = null;
-									}
-									isSessionEnded = true;
-									try {
-										const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
-										const targetUrl = `/session/${sessionId}?ended=true${guestParam}`;
-										console.log('[一般検定員/polling] 遷移先URL:', targetUrl);
-										await goto(targetUrl);
-										console.log('[一般検定員/polling] goto完了');
-									} catch (error) {
-										console.error('[一般検定員/polling] ❌ goto失敗:', error);
-									}
-								}
-
-								// statusが 'active' に変化した場合（セッション再開）の検知
-								if (previousStatus === 'ended' && currentStatus === 'active') {
-									console.log('[一般検定員/polling] ✅ セッション再開を検知！待機画面に遷移します！');
-									if (!isPageActive) {
-										console.log('[一般検定員/polling] ⚠️ ページが非アクティブのため、遷移をスキップ');
-										return;
-									}
-									// ended=trueパラメータを削除して待機画面に遷移
-									const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
-									const targetUrl = `/session/${sessionId}${guestParam}`;
-									console.log('[一般検定員/polling] セッション再開により待機画面に遷移:', targetUrl);
-									await goto(targetUrl);
-									return;
-								}
-
-								// active_prompt_idの変化を検知
-								// previousActivePromptIdがnullの場合は初回ポーリングなので、変化とみなさない
-								if (currentActivePromptId && previousActivePromptId !== null && currentActivePromptId !== previousActivePromptId) {
-									console.log('[一般検定員/polling] ✅ 新しい採点指示を検知（ポーリング）:', currentActivePromptId);
-									// 新しい指示の詳細を取得
-									const { data: promptData, error: promptError } = await supabase
-										.from('scoring_prompts')
-										.select('*')
-										.eq('id', currentActivePromptId)
-										.single();
-
-									if (!promptError && promptData) {
-										console.log('[一般検定員/polling] 採点指示データ取得成功:', promptData);
-										currentBib.set(promptData.bib_number);
-
-										// discipline カラムの値でモードを判定
-										const mode = promptData.discipline;
-
-										if (mode === 'tournament' || mode === 'training') {
-											// 大会・研修モード
-											const { data: participant } = await supabase
-												.from('participants')
-												.select('id')
-												.eq('session_id', sessionId)
-												.eq('bib_number', promptData.bib_number)
-												.maybeSingle();
-
-											if (participant) {
-												const eventId = promptData.level;
-												const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
-												const targetUrl = mode === 'tournament'
-													? `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`
-													: `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`;
-												console.log(`[一般検定員/polling/${mode}] 採点画面に遷移:`, targetUrl);
-												await goto(targetUrl);
-												return;
-											}
-										} else {
-											// 検定モード
-											const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
-											const targetUrl = `/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`;
-											console.log('[一般検定員/polling/検定] 採点画面に遷移:', targetUrl);
-											await goto(targetUrl);
-											return;
-										}
-									}
-								}
-
-								previousStatus = currentStatus;
-								previousActivePromptId = currentActivePromptId;
-							}
-						}, 2000);
+						// Realtime接続成功時はフォールバックポーリングを停止（Realtimeを優先）
+						if (fallbackPolling) {
+							console.log('[一般検定員] Realtime接続成功のため、フォールバックポーリングを停止');
+							clearInterval(fallbackPolling);
+							fallbackPolling = null;
+						}
 
 						// 接続成功後、ページロード時に既にactive_prompt_idが設定されているかチェック
 						// ただし、初回参加画面（join=true）の場合はスキップ
@@ -465,7 +273,16 @@
 										if (data.guestIdentifier) {
 											scoreQuery = scoreQuery.eq('guest_identifier', data.guestIdentifier);
 										} else if (data.user) {
-											scoreQuery = scoreQuery.eq(mode === 'training' ? 'judge_id' : 'user_id', data.user.id);
+											if (mode === 'training') {
+												// 研修モード: training_scores.judge_id (UUID)
+												scoreQuery = scoreQuery.eq('judge_id', data.user.id);
+											} else {
+												// 大会モード: results.judge_name (text)
+												// ⚠️ CRITICAL: 保存時と同じフォールバックロジックを使用
+												// (input/+page.server.ts:372 と一致させる)
+												const judgeName = data.profile?.full_name || data.user.email || 'Unknown';
+												scoreQuery = scoreQuery.eq('judge_name', judgeName);
+											}
 										}
 
 										const { data: existingScore } = await scoreQuery.maybeSingle();
@@ -479,46 +296,41 @@
 										console.log('[一般検定員] まだ採点していないため、採点画面に遷移します');
 										currentBib.set(promptData.bib_number);
 
-										const guestParam = data.guestIdentifier ? `&guest=${data.guestIdentifier}` : '';
 										if (mode === 'tournament') {
-											console.log('[一般検定員/大会] 採点画面に遷移(既存):', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
-											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
+											console.log('[一般検定員/大会] 採点画面に遷移(既存):', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										} else {
-											console.log('[一般検定員/研修] 採点画面に遷移(既存):', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
-											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}${guestParam}`);
+											console.log('[一般検定員/研修] 採点画面に遷移(既存):', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										}
 									}
 								} else {
 									// 検定モード
-									const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
 									goto(
-										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`
+										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
 									);
 								}
 							}
 						}
 					} else if (status === 'CHANNEL_ERROR') {
-						console.error('[一般検定員] ❌ チャンネルエラー - 再接続を試みます');
-						// 再接続
-						setTimeout(() => {
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
-							}
-							window.location.reload();
-						}, 2000);
+						console.error('[一般検定員] ❌ チャンネルエラー - フォールバックポーリングに切り替えます');
+						// フォールバックポーリング開始
+						startFallbackPolling();
 					} else if (status === 'TIMED_OUT') {
-						console.error('[一般検定員] ❌ タイムアウト - 再接続を試みます');
-						// 再接続
-						setTimeout(() => {
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
-							}
-							window.location.reload();
-						}, 2000);
+						console.error('[一般検定員] ❌ タイムアウト - フォールバックポーリングに切り替えます');
+						// フォールバックポーリング開始
+						startFallbackPolling();
 					} else if (status === 'CLOSED') {
-						console.log('[一般検定員] リアルタイム接続が閉じられました');
+						console.log('[一般検定員] リアルタイム接続が閉じられました - フォールバックポーリング確認');
+						// 念のためフォールバックポーリングを開始
+						startFallbackPolling();
 					}
 				});
+
+			// フォールバックポーリング開始（Realtimeのバックアップ）
+			// イベント取りこぼし対策として、Realtimeと並行してポーリングも実行
+			console.log('[一般検定員] フォールバックポーリングを開始（イベント取りこぼし対策）');
+			startFallbackPolling();
 		}
 	});
 
@@ -528,31 +340,162 @@
 		if (realtimeChannel) {
 			supabase.removeChannel(realtimeChannel);
 		}
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
+		if (fallbackPolling) {
+			clearInterval(fallbackPolling);
+			fallbackPolling = null;
 		}
 	});
 
+	// フォールバックポーリング: Realtime接続が失敗/停止した場合のバックアップ
+	async function checkSessionStatus() {
+		if (!isPageActive) {
+			console.log('[fallback] ページ非アクティブのため、ポーリングをスキップ');
+			return;
+		}
+
+		console.log('[fallback] セッション状態を確認中...');
+		const { data: session, error } = await supabase
+			.from('sessions')
+			.select('active_prompt_id, status')
+			.eq('id', data.sessionDetails.id)
+			.single();
+
+		if (error) {
+			console.error('[fallback] セッション取得エラー:', error);
+			return;
+		}
+
+		if (!session) {
+			console.warn('[fallback] セッションが見つかりません');
+			return;
+		}
+
+		// 終了検知
+		if (session.status === 'ended' && !isSessionEnded) {
+			console.log('[fallback] ✅ セッション終了を検知（ポーリング）');
+			isSessionEnded = true;
+			goto(`/session/${data.sessionDetails.id}?ended=true`);
+			return;
+		}
+
+		// 新しい採点指示検知
+		const newPromptId = session.active_prompt_id;
+		if (newPromptId && newPromptId !== previousPromptId && !shouldShowJoinUI) {
+			console.log('[fallback] ✅ 新しい採点指示を検知（ポーリング）:', newPromptId);
+			previousPromptId = newPromptId;
+
+			// 採点指示の詳細を取得
+			const { data: promptData, error: promptError } = await supabase
+				.from('scoring_prompts')
+				.select('*')
+				.eq('id', newPromptId)
+				.single();
+
+			if (!promptError && promptData) {
+				console.log('[fallback] 採点指示データ取得成功:', promptData);
+				currentBib.set(promptData.bib_number);
+
+				const mode = promptData.discipline;
+
+				if (mode === 'tournament' || mode === 'training') {
+					const { data: participant } = await supabase
+						.from('participants')
+						.select('id')
+						.eq('session_id', data.sessionDetails.id)
+						.eq('bib_number', promptData.bib_number)
+						.maybeSingle();
+
+					if (participant) {
+						const eventId = promptData.level;
+
+						// 既存採点チェック
+						let scoreQuery = supabase.from(mode === 'training' ? 'training_scores' : 'results').select('id');
+
+						if (mode === 'training') {
+							scoreQuery = scoreQuery.eq('event_id', eventId).eq('athlete_id', participant.id);
+						} else {
+							scoreQuery = scoreQuery.eq('session_id', data.sessionDetails.id).eq('bib', promptData.bib_number);
+						}
+
+						if (data.guestIdentifier) {
+							scoreQuery = scoreQuery.eq('guest_identifier', data.guestIdentifier);
+						} else if (data.user) {
+							if (mode === 'training') {
+								scoreQuery = scoreQuery.eq('judge_id', data.user.id);
+							} else {
+								const judgeName = data.profile?.full_name || data.user.email || 'Unknown';
+								scoreQuery = scoreQuery.eq('judge_name', judgeName);
+							}
+						}
+
+						const { data: existingScore } = await scoreQuery.maybeSingle();
+
+						if (existingScore) {
+							console.log('[fallback] 既に採点済みのため、待機画面に留まります');
+							return;
+						}
+
+						// 採点画面に遷移
+						if (mode === 'tournament') {
+							goto(
+								`/session/${data.sessionDetails.id}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+							);
+						} else {
+							goto(
+								`/session/${data.sessionDetails.id}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+							);
+						}
+					}
+				} else {
+					// 検定モード
+					goto(
+						`/session/${data.sessionDetails.id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+					);
+				}
+			}
+		}
+	}
+
+	function startFallbackPolling() {
+		if (fallbackPolling) {
+			console.log('[fallback] 既にポーリング開始済み');
+			return;
+		}
+
+		console.log('[fallback] フォールバックポーリングを開始（30秒ごと）');
+		// 初回実行
+		previousPromptId = data.sessionDetails.active_prompt_id;
+
+		// 30秒ごとにポーリング（Realtimeのバックアップなので低頻度）
+		fallbackPolling = setInterval(checkSessionStatus, 30000);
+	}
+
 	function selectDiscipline(discipline: string) {
 		// 次のステップ（級選択）のページへ移動
-		const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
-		goto(`/session/${data.sessionDetails.id}/${discipline}${guestParam}`);
+		goto(`/session/${data.sessionDetails.id}/${discipline}`);
 	}
 
 	function goToTournamentEvents() {
-		const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
-		goto(`/session/${data.sessionDetails.id}/tournament-events${guestParam}`);
+		goto(`/session/${data.sessionDetails.id}/tournament-events`);
 	}
 
 	function goToTournamentSetup() {
-		const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
-		goto(`/session/${data.sessionDetails.id}/tournament-setup${guestParam}`);
+		goto(`/session/${data.sessionDetails.id}/tournament-setup`);
 	}
 </script>
 
 <Header pageUser={data.user} pageProfile={data.profile} isGuest={!data.user && !!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
 
 <div class="container">
+	{#if isSessionExpired}
+		<!-- セッション期限切れメッセージ -->
+		<div class="alert warning" style="margin-bottom: 24px;">
+			<p><strong>⚠️ セッションの有効期限が切れました</strong></p>
+			<p>長時間操作がなかったため、セキュリティ上の理由でセッションが終了しました。</p>
+			<p>再度参加する場合は、招待リンクまたは参加コードを使用してください。</p>
+		</div>
+	{/if}
+
 	{#if isSessionEnded}
 		<!-- 終了画面（主任・一般共通） -->
 		<div class="instruction">{data.isTournamentMode ? '大会終了' : data.isTrainingMode ? '研修終了' : '検定終了'}</div>
@@ -583,7 +526,7 @@
 					<NavButton on:click={() => {
 						// ページをリロードして最新の設定を取得（ended=true を維持）
 						const url = data.guestIdentifier
-							? `/session/${data.sessionDetails.id}?ended=true&guest=${data.guestIdentifier}`
+							? `/session/${data.sessionDetails.id}?ended=true`
 							: `/session/${data.sessionDetails.id}?ended=true`;
 						window.location.href = url;
 					}}>
@@ -594,7 +537,7 @@
 						<!-- ゲストユーザー向け：セッション再開ボタン -->
 						<NavButton variant="primary" on:click={() => {
 							// 完全にページをリロードして監視を再開
-							window.location.href = `/session/${data.sessionDetails.id}?guest=${data.guestIdentifier}&join=true`;
+							window.location.href = `/session/${data.sessionDetails.id}?join=true`;
 						}}>
 							セッションに参加
 						</NavButton>
@@ -617,7 +560,7 @@
 					<NavButton on:click={() => {
 						// ページをリロードして最新の設定を取得（ended=true を維持）
 						const url = data.guestIdentifier
-							? `/session/${data.sessionDetails.id}?ended=true&guest=${data.guestIdentifier}`
+							? `/session/${data.sessionDetails.id}?ended=true`
 							: `/session/${data.sessionDetails.id}?ended=true`;
 						window.location.href = url;
 					}}>
@@ -628,7 +571,7 @@
 						<!-- ゲストユーザー向け：セッション再開ボタン -->
 						<NavButton variant="primary" on:click={() => {
 							// 完全にページをリロードして監視を再開
-							window.location.href = `/session/${data.sessionDetails.id}?guest=${data.guestIdentifier}&join=true`;
+							window.location.href = `/session/${data.sessionDetails.id}?join=true`;
 						}}>
 							セッションに参加
 						</NavButton>
@@ -651,8 +594,7 @@
 			</div>
 			<div class="list-keypad">
 				<NavButton variant="primary" on:click={() => {
-					const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
-					goto(`/session/${data.sessionDetails.id}/training-events${guestParam}`);
+					goto(`/session/${data.sessionDetails.id}/training-events`);
 				}}>
 					種目選択へ進む
 				</NavButton>
@@ -728,7 +670,7 @@
 				<div class="guest-action-buttons">
 					<NavButton variant="primary" on:click={() => {
 						// ゲストパラメータを保持したままメインセッションページに戻る（待機画面へ遷移）
-						window.location.href = `/session/${data.sessionDetails.id}?guest=${data.guestIdentifier}&join=true`;
+						window.location.href = `/session/${data.sessionDetails.id}?join=true`;
 					}}>
 						セッションに参加
 					</NavButton>
@@ -741,8 +683,7 @@
 				<p>種目選択画面から採点を開始できます。</p>
 				<div class="nav-buttons">
 					<NavButton variant="primary" on:click={() => {
-						const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}` : '';
-						goto(`/session/${data.sessionDetails.id}/training-events${guestParam}`);
+						goto(`/session/${data.sessionDetails.id}/training-events`);
 					}}>
 						種目選択へ進む
 					</NavButton>
@@ -804,6 +745,31 @@
 </div>
 
 <style>
+	.alert {
+		padding: 16px 20px;
+		border-radius: 12px;
+		text-align: left;
+		line-height: 1.6;
+	}
+
+	.alert.warning {
+		background-color: rgba(255, 149, 0, 0.1);
+		border: 1px solid rgba(255, 149, 0, 0.3);
+		color: var(--text-primary);
+	}
+
+	.alert p {
+		margin: 8px 0;
+	}
+
+	.alert p:first-child {
+		margin-top: 0;
+	}
+
+	.alert p:last-child {
+		margin-bottom: 0;
+	}
+
 	.container {
 		padding: 28px 20px;
 		text-align: center;

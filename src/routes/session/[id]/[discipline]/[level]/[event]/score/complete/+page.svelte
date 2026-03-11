@@ -23,8 +23,7 @@
 		bibStore.set(null);
 		const bibInputPath = $page.url.pathname.replace('/score/complete', '');
 		const guestIdentifier = $page.url.searchParams.get('guest');
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-		goto(`${bibInputPath}${guestParam}`);
+		goto(`${bibInputPath}`);
 	}
 
 	function handleEndSession() {
@@ -54,7 +53,6 @@
 		if (!data.isChief) {
 			const sessionId = $page.params.id;
 			const guestIdentifier = $page.url.searchParams.get('guest');
-			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}&join=true` : '';
 
 			console.log('[一般検定員/complete] リアルタイムリスナーをセットアップ中...', { sessionId });
 			realtimeChannel = supabase
@@ -77,7 +75,7 @@
 						// セッションが終了した場合、待機画面（終了画面）に遷移
 						if (isActive === false) {
 							console.log('[一般検定員/complete] 検定/大会終了を検知。終了画面に遷移します。');
-							goto(`/session/${sessionId}?ended=true${guestParam}`);
+							goto(`/session/${sessionId}?ended=true`);
 						}
 						// active_prompt_idがクリアされた場合、待機画面に遷移（種目変更）
 						else if (activePromptId === null && oldActivePromptId !== null) {
@@ -104,7 +102,7 @@
 								// ゼッケン番号をストアに保存
 								bibStore.set(promptData.bib_number);
 								// 得点入力画面に遷移
-								goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`);
+								goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
 							}
 						}
 					}
@@ -137,7 +135,7 @@
 								// セッション終了を検知
 								if (isActive === false && previousIsActive === true) {
 									console.log('[一般検定員/complete] ✅ 検定終了を検知（ポーリング）');
-									goto(`/session/${sessionId}?ended=true${guestParam}`);
+									goto(`/session/${sessionId}?ended=true`);
 									return;
 								}
 
@@ -162,7 +160,7 @@
 										console.log('[一般検定員/complete] 採点指示の詳細:', promptData);
 										// ゼッケン番号をストアに保存
 										bibStore.set(promptData.bib_number);
-										goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`);
+										goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
 										return;
 									}
 								}
@@ -249,8 +247,7 @@
 
 	<!-- 非表示のフォーム -->
 	{#if typeof window !== 'undefined'}
-		{@const guestParam = new URLSearchParams(window.location.search).get('guest')}
-		{@const guestQuery = guestParam ? `&guest=${guestParam}` : ''}
+		{@const guestQuery = guestParam ? `` : ''}
 		<form bind:this={endSessionForm} method="POST" action="?/endSession{guestQuery}" use:enhance style="display: none;">
 		</form>
 		<form

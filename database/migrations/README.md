@@ -341,6 +341,80 @@ $$ language 'plpgsql';
 
 ---
 
+## セキュリティマイグレーション（999, 1000, 1001）
+
+### ⚠️ Migration 999（非推奨）
+
+**ファイル**: `999_fix_rls_realtime_security.sql`
+
+**状態**: **DEPRECATED**（Migration 1000 で置き換え）
+
+**既知の脆弱性**:
+1. ゲストセッション隔離: `is_guest = true` のみでクロスセッションアクセス可能
+2. 認証ユーザー UPDATE: `judge_name` 文字列一致のみで同名衝突リスク
+
+**推奨**: このマイグレーションは実行しないでください。代わりに Migration 1000 を使用してください。
+
+---
+
+### ✅ Migration 1000（必須・推奨）
+
+**ファイル**: `1000_secure_guest_session_isolation.sql`
+
+**内容**:
+- ゲストセッション隔離（JWT `user_metadata` ベース）
+- 認証ユーザーの `results` UPDATE に `session_participants` チェック追加
+- クロスセッション攻撃を防止
+
+**セキュリティ改善**:
+- ✅ ゲスト: 他セッションへのアクセス完全ブロック
+- ✅ 認証ユーザー: クロスセッション攻撃を防止
+- ✅ 同名ユーザー衝突リスクを大幅削減（同一セッション内のみに限定）
+
+**適用方法**:
+```bash
+psql $DATABASE_URL -f database/migrations/1000_secure_guest_session_isolation.sql
+```
+
+**検証**:
+```bash
+psql $DATABASE_URL -f scripts/verify-guest-session-isolation.sql
+```
+
+期待される出力:
+```
+✅ Test 1: training_scores のゲストポリシーが存在
+✅ Test 2: results のゲストポリシーが存在
+✅ Test 3: 危険なポリシーは存在しない
+✅ Test 4: RLSが有効
+✅ Test 5: 認証ユーザーのresults UPDATEポリシーにsession_participantsチェックあり
+✅ 全テスト合格
+```
+
+---
+
+### 📋 Migration 1001（計画中・未実装）
+
+**ファイル**: `1001_add_judge_id_to_results.sql`
+
+**状態**: **PLANNED**（未実装）
+
+**内容**:
+- `results` テーブルに `judge_id UUID` カラム追加
+- RLS ポリシーを `judge_id = auth.uid()` に変更
+- 同名ユーザー衝突リスクを完全に排除
+
+**現在の制限**:
+- Migration 1000 で「同一セッション内のみ」に衝突リスクを限定（許容可能）
+- 完全な修正には `judge_id` カラムが必要（将来実装）
+
+**実装前の要件**:
+1. アプリケーションコードの更新（`judge_id` の設定）
+2. 既存データのマイグレーション計画
+3. ステージング環境での徹底的なテスト
+
+---
+
 ## サポート
 
 問題が発生した場合は、以下を確認してください：
@@ -348,4 +422,5 @@ $$ language 'plpgsql';
 1. Supabaseダッシュボードの「Logs」でエラーを確認
 2. RLSポリシーが正しく設定されているか確認
 3. `auth.uid()` が正しく動作しているか確認
-4. マイグレーション順序が正しいか確認（001 → 002 → 003 → 004）
+4. マイグレーション順序が正しいか確認（001 → 002 → 003 → 004 → 1000）
+5. セキュリティマイグレーション（1000）が適用されているか確認

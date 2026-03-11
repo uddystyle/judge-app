@@ -28,8 +28,7 @@
 
 	function selectEvent(event: any) {
 		// 統一された採点画面へ遷移
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-		goto(`/session/${sessionId}/score/tournament/${event.id}${guestParam}`);
+		goto(`/session/${sessionId}/score/tournament/${event.id}`);
 	}
 </script>
 
@@ -61,8 +60,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="secondary" on:click={() => {
-			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-			goto(`/session/${sessionId}${guestParam}`);
+			goto(`/session/${sessionId}`);
 		}}>
 			待機画面に戻る
 		</NavButton>

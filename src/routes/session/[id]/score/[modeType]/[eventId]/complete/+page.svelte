@@ -15,8 +15,8 @@
 	$: modeType = $page.params.modeType;
 	$: eventId = $page.params.eventId;
 	$: guestIdentifier = data.guestIdentifier;
-	$: guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-	$: eventListUrl = data.isTrainingMode ? `/session/${sessionId}/training-events${guestParam}` : `/session/${sessionId}/tournament-events${guestParam}`;
+	$: guestParam = guestIdentifier ? `` : '';
+	$: eventListUrl = data.isTrainingMode ? `/session/${sessionId}/training-events` : `/session/${sessionId}/tournament-events`;
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
@@ -27,7 +27,7 @@
 
 	function handleNextAthlete() {
 		bibStore.set(null);
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}`);
 	}
 
 	function handleEndSession() {
@@ -43,7 +43,7 @@
 	}
 
 	function handleViewResults() {
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}/results${guestParam}`);
+		goto(`/session/${sessionId}/score/${modeType}/${eventId}/results`);
 	}
 
 	onMount(() => {
@@ -72,13 +72,13 @@
 						// セッションが終了した場合、待機画面（終了画面）に遷移
 						if (isActive === false) {
 							console.log('[一般検定員/complete] 検定/大会/研修終了を検知。終了画面に遷移します。');
-							const endedParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+							const endedParam = guestIdentifier ? `` : '';
 							goto(`/session/${sessionId}?ended=true${endedParam}`);
 						}
 						// active_prompt_idがクリアされた場合、待機画面に遷移（種目変更）
 						else if (activePromptId === null && payload.old.active_prompt_id !== null) {
 							console.log('[一般検定員/complete] 種目変更を検知。待機画面に遷移します。');
-							goto(`/session/${sessionId}${guestParam}`);
+							goto(`/session/${sessionId}`);
 						}
 					}
 				)
@@ -111,7 +111,7 @@
 									// 終了した場合（true -> false）
 									if (isActive === false && previousIsActive === true) {
 										console.log('[一般検定員/complete] ✅ 終了を検知（ポーリング）');
-										const endedParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
+										const endedParam = guestIdentifier ? `` : '';
 										goto(`/session/${sessionId}?ended=true${endedParam}`);
 									}
 									previousIsActive = isActive;
@@ -120,7 +120,7 @@
 								// 種目変更を検知（active_prompt_idがクリアされた）
 								if (previousActivePromptId !== null && activePromptId === null) {
 									console.log('[一般検定員/complete] ✅ 種目変更を検知（ポーリング）。待機画面に遷移します。');
-									goto(`/session/${sessionId}${guestParam}`);
+									goto(`/session/${sessionId}`);
 								}
 
 								// 前回の値を更新
@@ -203,8 +203,8 @@
 	</div>
 
 	<!-- 非表示のフォーム -->
-	<form bind:this={endSessionForm} method="POST" action="?/endSession{guestIdentifier ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
-	<form bind:this={changeEventForm} method="POST" action="?/changeEvent{guestIdentifier ? `&guest=${guestIdentifier}` : ''}" use:enhance style="display: none;"></form>
+	<form bind:this={endSessionForm} method="POST" action="?/endSession{guestIdentifier ? `` : ''}" use:enhance style="display: none;"></form>
+	<form bind:this={changeEventForm} method="POST" action="?/changeEvent{guestIdentifier ? `` : ''}" use:enhance style="display: none;"></form>
 </div>
 
 <style>

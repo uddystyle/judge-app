@@ -14,8 +14,14 @@
 	let scoreStatus: any = { scores: [], requiredJudges: 1 };
 	let sessionRealtimeChannel: any;
 	let scoreRealtimeChannel: any;
-	let pollingInterval: any;
 	let previousIsActive: boolean | null = null;
+
+	// Realtime自己回復用の変数
+	let realtimeConnectionError = false;
+	let retryCount = 0;
+	let retryTimer: any = null;
+	let fallbackPolling: any = null;
+	const MAX_RETRY_COUNT = 5;
 
 	let id: string = '';
 	let discipline: string = '';
@@ -34,8 +40,7 @@
 		}
 
 		const guestIdentifier = $page.url.searchParams.get('guest');
-		const guestParam = guestIdentifier ? `&guest=${encodeURIComponent(guestIdentifier)}` : '';
-		const url = `/api/score-status/${id}/${bib}?discipline=${encodeURIComponent(discipline || '')}&level=${encodeURIComponent(level || '')}&event=${encodeURIComponent(event || '')}${guestParam}`;
+		const url = `/api/score-status/${id}/${bib}?discipline=${encodeURIComponent(discipline || '')}&level=${encodeURIComponent(level || '')}&event=${encodeURIComponent(event || '')}`;
 
 		console.log('[fetchStatus] ポーリング中...', { url, isGuest: !!guestIdentifier });
 		const response = await fetch(url);
@@ -52,6 +57,118 @@
 			const errorText = await response.text();
 			console.error('❌ API Error:', response.status, errorText);
 		}
+	}
+
+	// Realtime再接続ロジック（指数バックオフ）
+	function retryRealtimeConnection() {
+		if (retryCount >= MAX_RETRY_COUNT) {
+			console.error('[status/realtime] 最大リトライ回数に達しました。フォールバックポーリングに切り替えます。');
+			realtimeConnectionError = true;
+			startFallbackPolling();
+			return;
+		}
+
+		const backoffDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
+		retryCount++;
+		console.log(`[status/realtime] 再接続を試みます（${retryCount}/${MAX_RETRY_COUNT}）- ${backoffDelay}ms後`);
+
+		retryTimer = setTimeout(() => {
+			console.log('[status/realtime] Realtimeチャンネルを再作成中...');
+
+			// 既存のチャンネルをクリーンアップ
+			if (scoreRealtimeChannel) {
+				supabase.removeChannel(scoreRealtimeChannel);
+				scoreRealtimeChannel = null;
+			}
+
+			// チャンネルを再作成
+			setupScoreRealtimeChannel();
+		}, backoffDelay);
+	}
+
+	// フォールバックポーリング（10秒ごと）
+	function startFallbackPolling() {
+		if (fallbackPolling) return; // 既に開始済み
+
+		console.log('[status/fallback] フォールバックポーリングを開始します（10秒ごと）');
+		fallbackPolling = setInterval(async () => {
+			console.log('[status/fallback] データを取得中...');
+			await fetchStatus();
+		}, 10000);
+	}
+
+	// 手動更新
+	async function manualRefresh() {
+		console.log('[status/manual] 手動更新実行');
+		realtimeConnectionError = false;
+		await fetchStatus();
+
+		// 再接続を試みる
+		retryCount = 0;
+		retryRealtimeConnection();
+	}
+
+	// Realtimeチャンネルのセットアップを関数化
+	function setupScoreRealtimeChannel() {
+		const channelName = `results-${id}-${bib}-${Date.now()}`;
+		console.log('[status/realtime] スコア監視のRealtime購読開始:', channelName);
+
+		scoreRealtimeChannel = supabase
+			.channel(channelName)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'results',
+					filter: `session_id=eq.${id},bib=eq.${parseInt(bib || '0')}`
+				},
+				async (payload) => {
+					console.log('[status/realtime] スコア変更を検知:', payload);
+
+					// discipline, level, event_nameでフィルタリング（クライアント側）
+					let shouldUpdate = false;
+					if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+						if (
+							payload.new?.discipline === discipline &&
+							payload.new?.level === level &&
+							payload.new?.event_name === event
+						) {
+							shouldUpdate = true;
+						}
+					} else if (payload.eventType === 'DELETE') {
+						if (
+							payload.old?.discipline === discipline &&
+							payload.old?.level === level &&
+							payload.old?.event_name === event
+						) {
+							shouldUpdate = true;
+						}
+					}
+
+					if (shouldUpdate) {
+						console.log('[status/realtime] 該当イベントのスコア変更 - 再取得中...');
+						await fetchStatus();
+					}
+				}
+			)
+			.subscribe((status) => {
+				console.log('[status/realtime] スコア監視チャンネルの状態:', status);
+				if (status === 'SUBSCRIBED') {
+					console.log('[status/realtime] ✅ スコア監視のRealtime接続成功');
+					realtimeConnectionError = false;
+					retryCount = 0;
+
+					if (fallbackPolling) {
+						clearInterval(fallbackPolling);
+						fallbackPolling = null;
+					}
+				} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+					console.error('[status/realtime] ❌ スコア監視の接続エラー:', status);
+					realtimeConnectionError = true;
+					retryRealtimeConnection();
+				}
+			});
 	}
 
 	onMount(async () => {
@@ -74,58 +191,9 @@
 		// 初回ロード
 		await fetchStatus();
 
-		// スコア監視のRealtime購読（大会モード - resultsテーブル）
+		// Realtime スコア監視のセットアップ
 		if (bib) {
-			const channelName = `results-${id}-${bib}-${Date.now()}`;
-			console.log('[status/realtime] スコア監視のRealtime購読開始:', channelName);
-
-			scoreRealtimeChannel = supabase
-				.channel(channelName)
-				.on(
-					'postgres_changes',
-					{
-						event: '*', // INSERT, UPDATE, DELETE
-						schema: 'public',
-						table: 'results',
-						filter: `session_id=eq.${id},bib=eq.${parseInt(bib)}`
-					},
-					async (payload) => {
-						console.log('[status/realtime] スコア変更を検知:', payload);
-
-						// discipline, level, event_name のフィルタリング
-						let shouldUpdate = false;
-						if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-							if (
-								payload.new?.discipline === discipline &&
-								payload.new?.level === level &&
-								payload.new?.event_name === event
-							) {
-								shouldUpdate = true;
-							}
-						} else if (payload.eventType === 'DELETE') {
-							if (
-								payload.old?.discipline === discipline &&
-								payload.old?.level === level &&
-								payload.old?.event_name === event
-							) {
-								shouldUpdate = true;
-							}
-						}
-
-						if (shouldUpdate) {
-							console.log('[status/realtime] 該当イベントのスコア変更 - 再取得中...');
-							await fetchStatus();
-						}
-					}
-				)
-				.subscribe((status) => {
-					console.log('[status/realtime] スコア監視チャンネルの状態:', status);
-					if (status === 'SUBSCRIBED') {
-						console.log('[status/realtime] ✅ スコア監視のRealtime接続成功');
-					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-						console.error('[status/realtime] ❌ スコア監視の接続エラー');
-					}
-				});
+			setupScoreRealtimeChannel();
 		}
 
 		// dataから直接判定（リアクティブステートメントに依存しない）
@@ -155,8 +223,7 @@
 						if (isActive === false) {
 							console.log('[一般検定員/status] 検定終了を検知。終了画面に遷移します。');
 							const guestIdentifier = $page.url.searchParams.get('guest');
-							const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
-							goto(`/session/${id}?ended=true${guestParam}`);
+							goto(`/session/${id}?ended=true`);
 							return;
 						}
 
@@ -176,8 +243,7 @@
 								currentBib.set(promptData.bib_number);
 								// 得点入力画面に遷移
 								const guestIdentifier = $page.url.searchParams.get('guest');
-								const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-								goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score${guestParam}`);
+								goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
 								return;
 							}
 						}
@@ -187,8 +253,7 @@
 							// 一般検定員は待機画面に戻る（次のゼッケン番号を待つ）
 							console.log('[一般検定員/status] 採点確定を検知。待機画面に遷移します。');
 							const guestIdentifier = $page.url.searchParams.get('guest');
-							const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true` : '';
-							goto(`/session/${id}${guestParam}`);
+							goto(`/session/${id}`);
 						}
 					}
 				)
@@ -210,12 +275,17 @@
 	});
 
 	onDestroy(() => {
-		clearInterval(pollingInterval); // Not used anymore, but kept for compatibility
 		if (sessionRealtimeChannel) {
 			supabase.removeChannel(sessionRealtimeChannel);
 		}
 		if (scoreRealtimeChannel) {
 			supabase.removeChannel(scoreRealtimeChannel);
+		}
+		if (retryTimer) {
+			clearTimeout(retryTimer);
+		}
+		if (fallbackPolling) {
+			clearInterval(fallbackPolling);
 		}
 	});
 
@@ -254,8 +324,7 @@
 				console.log('[一般検定員/status] ✅ 修正要求を検知。採点画面に遷移します。');
 				// ゼッケン番号をストアに保存してから遷移
 				currentBib.set(parseInt(bib || '0'));
-				const guestParam = data.guestIdentifier ? `?guest=${data.guestIdentifier}&join=true` : '';
-				goto(`/session/${id}/${discipline}/${level}/${event}/score${guestParam}`);
+				goto(`/session/${id}/${discipline}/${level}/${event}/score`);
 			}
 
 			previousMyScore = myScore;
@@ -309,6 +378,18 @@
 
 <div class="container">
 	<div class="instruction">採点内容の確認</div>
+
+	{#if realtimeConnectionError}
+		<div class="realtime-error-banner">
+			<div class="error-message">
+				⚠️ リアルタイム接続エラー - フォールバック更新中（10秒ごと）
+			</div>
+			<button class="manual-refresh-btn" on:click={manualRefresh}>
+				🔄 手動更新・再接続
+			</button>
+		</div>
+	{/if}
+
 	<div class="form-container">
 		<div class="current-bib-display">採点対象: <strong>{bib}番</strong></div>
 		<h3 class="settings-title">各検定員の得点</h3>
@@ -323,7 +404,7 @@
 						{#if isChief}
 							<form
 								method="POST"
-								action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/requestCorrection"
+								action="{guestIdentifier ? `` : '?'}/requestCorrection"
 								use:enhance={({ formData }) => {
 									return async ({ result, update }) => {
 										await update({ reset: false });
@@ -361,7 +442,7 @@
 			</p>
 			<form
 				method="POST"
-				action="{guestIdentifier ? `?guest=${guestIdentifier}&` : '?'}/finalizeScore"
+				action="{guestIdentifier ? `` : '?'}/finalizeScore"
 				use:enhance
 			>
 				<input type="hidden" name="bib" value={bib} />
@@ -460,5 +541,38 @@
 	}
 	.nav-buttons {
 		margin-top: 1rem;
+	}
+	/* Realtimeエラー通知のスタイル */
+	.realtime-error-banner {
+		margin: 16px 0;
+		background: #fff3cd;
+		border: 1px solid #ffc107;
+		border-radius: 8px;
+		padding: 12px 16px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.error-message {
+		color: #856404;
+		font-size: 14px;
+		font-weight: 500;
+		flex: 1;
+	}
+	.manual-refresh-btn {
+		background: var(--ios-blue);
+		color: white;
+		border: none;
+		border-radius: 6px;
+		padding: 8px 16px;
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: opacity 0.2s;
+	}
+	.manual-refresh-btn:active {
+		opacity: 0.7;
 	}
 </style>

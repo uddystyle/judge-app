@@ -124,6 +124,47 @@ export class MockSupabaseRealtime {
 	getChannelCount(): number {
 		return this.channels.size;
 	}
+
+	/**
+	 * チャンネルエラーをシミュレート（テスト用）
+	 */
+	simulateChannelError(channelName: string) {
+		const channel = this.channels.get(channelName);
+		if (!channel) {
+			throw new Error(`Channel ${channelName} not found`);
+		}
+
+		channel.subscribeCallbacks.forEach((cb) => cb('CHANNEL_ERROR'));
+	}
+
+	/**
+	 * チャンネルタイムアウトをシミュレート（テスト用）
+	 */
+	simulateChannelTimeout(channelName: string) {
+		const channel = this.channels.get(channelName);
+		if (!channel) {
+			throw new Error(`Channel ${channelName} not found`);
+		}
+
+		channel.subscribeCallbacks.forEach((cb) => cb('TIMED_OUT'));
+	}
+
+	/**
+	 * チャンネルの再購読をシミュレート（テスト用）
+	 */
+	simulateReconnect(channelName: string) {
+		const channel = this.channels.get(channelName);
+		if (!channel) {
+			throw new Error(`Channel ${channelName} not found`);
+		}
+
+		// 一度切断してから再接続
+		channel.isSubscribed = false;
+		setTimeout(() => {
+			channel.isSubscribed = true;
+			channel.subscribeCallbacks.forEach((cb) => cb('SUBSCRIBED'));
+		}, 10);
+	}
 }
 
 /**

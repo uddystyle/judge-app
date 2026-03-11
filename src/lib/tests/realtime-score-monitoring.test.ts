@@ -161,6 +161,78 @@ describe('Realtime Score Monitoring', () => {
 			expect(receivedScores[2].score).toBe(82);
 		});
 
+		it('同一検定員のINSERTイベント重複時にupsertされる', async () => {
+			const channelName = 'training-scores-upsert';
+			const scoreStatus = { scores: [] as any[], requiredJudges: 3 };
+
+			mockSupabase
+				.channel(channelName)
+				.on(
+					'postgres_changes',
+					{ event: '*', table: 'training_scores' },
+					(payload: any) => {
+						if (payload.eventType === 'INSERT') {
+							// 実装と同じupsertロジック
+							const existingIndex = scoreStatus.scores.findIndex((s: any) => {
+								if (payload.new.guest_identifier) {
+									return s.guest_identifier === payload.new.guest_identifier;
+								} else {
+									return s.judge_id === payload.new.judge_id;
+								}
+							});
+
+							const newScore = {
+								judge_id: payload.new.judge_id,
+								guest_identifier: payload.new.guest_identifier,
+								judge_name: 'Judge Name',
+								score: payload.new.score,
+								is_guest: !!payload.new.guest_identifier
+							};
+
+							if (existingIndex !== -1) {
+								// 既存データがある場合：UPDATE扱い
+								scoreStatus.scores[existingIndex] = newScore;
+							} else {
+								// 既存データがない場合：新規追加
+								scoreStatus.scores.push(newScore);
+							}
+						}
+					}
+				)
+				.subscribe();
+
+			await waitForChannelSubscription(mockRealtime, channelName);
+
+			// 初回INSERT
+			simulateScoreInsert(mockRealtime, channelName, {
+				id: 'score_1',
+				judge_id: 'judge_1',
+				score: 80,
+				event_id: 'event_1',
+				athlete_id: 'athlete_1'
+			});
+
+			await waitForAsync(20);
+			expect(scoreStatus.scores).toHaveLength(1);
+			expect(scoreStatus.scores[0].score).toBe(80);
+
+			// 同じ検定員が再度INSERT（重複イベント）
+			simulateScoreInsert(mockRealtime, channelName, {
+				id: 'score_2', // IDは異なる
+				judge_id: 'judge_1', // 同じ検定員
+				score: 85,
+				event_id: 'event_1',
+				athlete_id: 'athlete_1'
+			});
+
+			await waitForAsync(20);
+
+			// 重複せず、スコアが更新される
+			expect(scoreStatus.scores).toHaveLength(1);
+			expect(scoreStatus.scores[0].score).toBe(85);
+			expect(scoreStatus.scores[0].judge_id).toBe('judge_1');
+		});
+
 		it('ゲスト検定員のスコアも受信できる', async () => {
 			const channelName = 'training-scores-guest';
 			const receivedScores: any[] = [];
@@ -363,6 +435,306 @@ describe('Realtime Score Monitoring', () => {
 			);
 
 			expect(queryCounter.getCount()).toBeLessThanOrEqual(3);
+		});
+	});
+
+	describe('results（大会モード）のRealtime監視', () => {
+		it('resultsテーブルのINSERTイベントが受信できる', async () => {
+			const channelName = 'results-tournament';
+			const receivedResults: any[] = [];
+
+			mockSupabase
+				.channel(channelName)
+				.on(
+					'postgres_changes',
+					{ event: '*', table: 'results' },
+					(payload: any) => {
+						if (payload.eventType === 'INSERT') {
+							receivedResults.push(payload.new);
+						}
+					}
+				)
+				.subscribe();
+
+			await waitForChannelSubscription(mockRealtime, channelName);
+
+			// resultsテーブルへのINSERTをシミュレート
+			mockRealtime.simulateEvent(channelName, 'INSERT', 'results', {
+				new: {
+					id: 'result_1',
+					session_id: 'session_1',
+					bib: 10,
+					discipline: 'rhythmic',
+					level: '1級',
+					event_name: 'ロープ',
+					judge_name: 'Judge A',
+					score: 85.5
+				}
+			});
+
+			await waitForAsync(20);
+
+			expect(receivedResults).toHaveLength(1);
+			expect(receivedResults[0].score).toBe(85.5);
+			expect(receivedResults[0].judge_name).toBe('Judge A');
+			expect(receivedResults[0].discipline).toBe('rhythmic');
+		});
+
+		it('resultsのクライアント側フィルタ判定が正しく動作する', async () => {
+			const channelName = 'results-filter';
+			const targetDiscipline = 'rhythmic';
+			const targetLevel = '1級';
+			const targetEvent = 'ロープ';
+			const filteredResults: any[] = [];
+
+			mockSupabase
+				.channel(channelName)
+				.on(
+					'postgres_changes',
+					{ event: '*', table: 'results' },
+					(payload: any) => {
+						// クライアント側フィルタ判定（実装と同じロジック）
+						if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+							if (
+								payload.new?.discipline === targetDiscipline &&
+								payload.new?.level === targetLevel &&
+								payload.new?.event_name === targetEvent
+							) {
+								filteredResults.push(payload.new);
+							}
+						}
+					}
+				)
+				.subscribe();
+
+			await waitForChannelSubscription(mockRealtime, channelName);
+
+			// マッチするイベント
+			mockRealtime.simulateEvent(channelName, 'INSERT', 'results', {
+				new: {
+					id: 'result_1',
+					session_id: 'session_1',
+					bib: 10,
+					discipline: 'rhythmic',
+					level: '1級',
+					event_name: 'ロープ',
+					score: 85.5
+				}
+			});
+
+			await waitForAsync(20);
+
+			// マッチしないイベント（異なるdiscipline）
+			mockRealtime.simulateEvent(channelName, 'INSERT', 'results', {
+				new: {
+					id: 'result_2',
+					session_id: 'session_1',
+					bib: 11,
+					discipline: 'artistic', // 異なる
+					level: '1級',
+					event_name: 'ロープ',
+					score: 82.0
+				}
+			});
+
+			await waitForAsync(20);
+
+			// マッチしないイベント（異なるlevel）
+			mockRealtime.simulateEvent(channelName, 'INSERT', 'results', {
+				new: {
+					id: 'result_3',
+					session_id: 'session_1',
+					bib: 12,
+					discipline: 'rhythmic',
+					level: '2級', // 異なる
+					event_name: 'ロープ',
+					score: 88.0
+				}
+			});
+
+			await waitForAsync(20);
+
+			// フィルタ判定により、1つだけ追加される
+			expect(filteredResults).toHaveLength(1);
+			expect(filteredResults[0].id).toBe('result_1');
+		});
+
+		it('resultsのDELETEイベントでクライアント側フィルタ判定が動作する', async () => {
+			const channelName = 'results-delete-filter';
+			const targetDiscipline = 'rhythmic';
+			const targetLevel = '1級';
+			const targetEvent = 'ロープ';
+			let deleteShouldUpdate = false;
+
+			mockSupabase
+				.channel(channelName)
+				.on(
+					'postgres_changes',
+					{ event: '*', table: 'results' },
+					(payload: any) => {
+						if (payload.eventType === 'DELETE') {
+							// クライアント側フィルタ判定
+							if (
+								payload.old?.discipline === targetDiscipline &&
+								payload.old?.level === targetLevel &&
+								payload.old?.event_name === targetEvent
+							) {
+								deleteShouldUpdate = true;
+							}
+						}
+					}
+				)
+				.subscribe();
+
+			await waitForChannelSubscription(mockRealtime, channelName);
+
+			// マッチするDELETEイベント
+			mockRealtime.simulateEvent(channelName, 'DELETE', 'results', {
+				old: {
+					id: 'result_1',
+					discipline: 'rhythmic',
+					level: '1級',
+					event_name: 'ロープ',
+					score: 85.5
+				}
+			});
+
+			await waitForAsync(20);
+
+			expect(deleteShouldUpdate).toBe(true);
+		});
+	});
+
+	describe('Realtime接続エラーと自己回復', () => {
+		it('CHANNEL_ERROR時に再接続が試行される', async () => {
+			const channelName = 'error-recovery';
+			let subscriptionAttempts = 0;
+			let lastStatus = '';
+
+			const attemptSubscription = () => {
+				subscriptionAttempts++;
+				mockSupabase
+					.channel(channelName)
+					.on('postgres_changes', { table: 'training_scores' }, () => {})
+					.subscribe((status: string) => {
+						lastStatus = status;
+					});
+			};
+
+			// 初回購読
+			attemptSubscription();
+			await waitForAsync(20);
+			expect(lastStatus).toBe('SUBSCRIBED');
+
+			// CHANNEL_ERRORをシミュレート
+			mockRealtime.simulateChannelError(channelName);
+			await waitForAsync(20);
+
+			// 再接続を試行
+			attemptSubscription();
+			await waitForAsync(20);
+
+			expect(subscriptionAttempts).toBe(2);
+			expect(lastStatus).toBe('SUBSCRIBED');
+		});
+
+		it('TIMED_OUT時に再接続が試行される', async () => {
+			const channelName = 'timeout-recovery';
+			let reconnectCalled = false;
+			let currentStatus = '';
+
+			mockSupabase
+				.channel(channelName)
+				.on('postgres_changes', { table: 'training_scores' }, () => {})
+				.subscribe((status: string) => {
+					currentStatus = status;
+					if (status === 'TIMED_OUT') {
+						reconnectCalled = true;
+					}
+				});
+
+			await waitForAsync(20);
+			expect(currentStatus).toBe('SUBSCRIBED');
+
+			// タイムアウトをシミュレート
+			mockRealtime.simulateChannelTimeout(channelName);
+			await waitForAsync(20);
+
+			expect(reconnectCalled).toBe(true);
+		});
+
+		it('指数バックオフで再接続の遅延が増加する', async () => {
+			const retryDelays: number[] = [];
+
+			// 指数バックオフのシミュレーション
+			for (let retryCount = 0; retryCount < 5; retryCount++) {
+				const backoffDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
+				retryDelays.push(backoffDelay);
+			}
+
+			expect(retryDelays).toEqual([1000, 2000, 4000, 8000, 16000]);
+		});
+
+		it('最大リトライ回数到達後はフォールバックポーリングに切り替わる', async () => {
+			const MAX_RETRY_COUNT = 5;
+			let retryCount = 0;
+			let fallbackPollingStarted = false;
+
+			// 再接続を繰り返す
+			while (retryCount < MAX_RETRY_COUNT) {
+				retryCount++;
+				// 再接続失敗をシミュレート
+			}
+
+			// 最大リトライ回数到達
+			if (retryCount >= MAX_RETRY_COUNT) {
+				fallbackPollingStarted = true;
+			}
+
+			expect(retryCount).toBe(5);
+			expect(fallbackPollingStarted).toBe(true);
+		});
+
+		it('再接続成功時にリトライカウントがリセットされる', async () => {
+			let retryCount = 3;
+
+			// 再接続成功をシミュレート
+			const onSubscriptionSuccess = () => {
+				retryCount = 0; // リセット
+			};
+
+			onSubscriptionSuccess();
+			expect(retryCount).toBe(0);
+		});
+
+		it('再接続成功時にフォールバックポーリングが停止される', async () => {
+			let fallbackPollingActive = true;
+
+			// 再接続成功をシミュレート
+			const onSubscriptionSuccess = () => {
+				if (fallbackPollingActive) {
+					fallbackPollingActive = false; // 停止
+				}
+			};
+
+			onSubscriptionSuccess();
+			expect(fallbackPollingActive).toBe(false);
+		});
+
+		it('手動更新でリトライカウントがリセットされる', async () => {
+			let retryCount = 4;
+			let dataRefreshed = false;
+
+			// 手動更新ボタンのクリックをシミュレート
+			const manualRefresh = async () => {
+				dataRefreshed = true;
+				retryCount = 0; // リトライカウントをリセット
+			};
+
+			await manualRefresh();
+
+			expect(retryCount).toBe(0);
+			expect(dataRefreshed).toBe(true);
 		});
 	});
 

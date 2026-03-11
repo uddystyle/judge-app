@@ -5,6 +5,79 @@ import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const sessionId = params.id;
+	const guestParam = url.searchParams.get('guest');
+
+	// URLパラメータでguest_identifierが渡された場合（レガシー方式からの移行）
+	if (guestParam) {
+		// 既にJWT認証されているか確認
+		const { data: { user } } = await supabase.auth.getUser();
+
+		// ✅ SECURITY: 通常ユーザー（認証済みでゲストではない）の場合、ゲスト移行をスキップ
+		// 通常ユーザーが誤ってゲストリンクを踏んでも、匿名JWTに置き換わらないようにする
+		if (user && user.user_metadata?.is_guest !== true) {
+			console.log('[ゲスト移行] 通常ユーザーのため、ゲスト移行をスキップ');
+			// URLパラメータを削除してリダイレクト
+			throw redirect(303, `/session/${sessionId}`);
+		}
+
+		// ゲストユーザーまたは未認証の場合のみゲスト移行を実行
+		if (!user || user.user_metadata?.guest_identifier !== guestParam) {
+			// まだJWT認証されていない → 自動的にJWT発行
+			console.log('[ゲスト移行] URLパラメータ検出、JWT発行開始:', { guestParam, sessionId });
+
+			// ✅ SECURITY: URLのsessionIdと一致するguest_identifierのみ取得
+			const { data: participant } = await supabase
+				.from('session_participants')
+				.select('session_id, guest_name, guest_identifier')
+				.eq('session_id', sessionId)
+				.eq('guest_identifier', guestParam)
+				.eq('is_guest', true)
+				.maybeSingle();
+
+			if (participant) {
+				// ✅ SECURITY: 念のため、取得したparticipantのsession_idがURLと一致するか確認
+				if (participant.session_id.toString() !== sessionId) {
+					console.error('[ゲスト移行] セッションID不一致:', {
+						urlSessionId: sessionId,
+						participantSessionId: participant.session_id
+					});
+					throw redirect(303, `/session/${sessionId}`);
+				}
+
+				// JWT発行
+				console.log('[ゲスト移行] session_participants取得成功、JWT発行中');
+				const { error } = await supabase.auth.signInAnonymously({
+					options: {
+						data: {
+							session_id: participant.session_id,
+							guest_identifier: participant.guest_identifier,
+							guest_name: participant.guest_name,
+							is_guest: true
+						}
+					}
+				});
+
+				if (!error) {
+					console.log('[ゲスト移行] JWT発行成功、リダイレクト');
+					// リダイレクト（URLパラメータを削除）
+					throw redirect(303, `/session/${sessionId}`);
+				} else {
+					console.error('[ゲスト移行] JWT発行エラー:', error);
+				}
+			} else {
+				console.warn('[ゲスト移行] session_participants が見つかりません:', {
+					guestParam,
+					sessionId,
+					reason: 'URLのsessionIdと一致するguest_identifierが存在しない'
+				});
+			}
+		} else {
+			console.log('[ゲスト移行] 既にJWT認証済み、URLパラメータを削除してリダイレクト');
+			// 既にJWT認証済みの場合もURLパラメータを削除
+			throw redirect(303, `/session/${sessionId}`);
+		}
+	}
+
 	const guestIdentifier = url.searchParams.get('guest');
 
 	// セッション認証

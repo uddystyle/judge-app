@@ -361,8 +361,9 @@ export const actions: Actions = {
 			// 検定員名を取得（通常ユーザーまたはゲストユーザー）
 			let judgeName: string;
 			if (guestParticipant) {
-				judgeName = guestParticipant.guest_name;
-				console.log('[submitScore] Using guest name:', judgeName);
+				// ゲストの場合: 識別用 suffix を追加（認証ユーザーとの衝突回避）
+				judgeName = `${guestParticipant.guest_name} (ゲスト)`;
+				console.log('[submitScore] Using guest name with suffix:', judgeName);
 			} else if (user) {
 				const { data: profile } = await supabase
 					.from('profiles')
@@ -386,20 +387,58 @@ export const actions: Actions = {
 				event_name: eventData.event_name
 			});
 
-			const { error: insertError } = await supabase.from('results').upsert(
-				{
-					session_id: sessionIdInt,
-					bib: bibNumber,
-					score: score,
-					judge_name: judgeName,
-					discipline: eventData.discipline,
-					level: eventData.level,
-					event_name: eventData.event_name
-				},
-				{
-					onConflict: 'session_id, bib, discipline, level, event_name, judge_name'
+			// 同時採点対応: Exponential backoff でリトライ
+			const MAX_RETRIES = 3;
+			let insertError = null;
+
+			for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+				const { error } = await supabase.from('results').upsert(
+					{
+						session_id: sessionIdInt,
+						bib: bibNumber,
+						score: score,
+						judge_name: judgeName,
+						discipline: eventData.discipline,
+						level: eventData.level,
+						event_name: eventData.event_name
+					},
+					{
+						onConflict: 'session_id, bib, discipline, level, event_name, judge_name'
+					}
+				);
+
+				if (!error) {
+					// 成功
+					insertError = null;
+					break;
 				}
-			);
+
+				// エラーコードをチェック
+				const errorCode = error.code;
+				const isRetryable =
+					errorCode === '40001' || // SERIALIZATION FAILURE
+					errorCode === '40P01'; // DEADLOCK DETECTED
+
+				if (!isRetryable) {
+					// リトライ不可能なエラー（例: 制約違反）は即座に失敗
+					insertError = error;
+					break;
+				}
+
+				// リトライ可能なエラー
+				insertError = error;
+				console.warn(
+					`[submitScore] Retryable error (${errorCode}) on attempt ${attempt + 1}/${MAX_RETRIES}:`,
+					error.message
+				);
+
+				if (attempt < MAX_RETRIES - 1) {
+					// 最後の試行でない場合、exponential backoff
+					const delay = Math.min(100 * Math.pow(2, attempt) + Math.random() * 100, 1000);
+					console.log(`[submitScore] Retrying in ${delay}ms...`);
+					await new Promise((resolve) => setTimeout(resolve, delay));
+				}
+			}
 
 			if (insertError) {
 				console.error('[submitScore] Error saving tournament score:', insertError);
@@ -409,7 +448,13 @@ export const actions: Actions = {
 					details: insertError.details,
 					hint: insertError.hint
 				});
-				return fail(500, { error: `採点の保存に失敗しました。${insertError.message || ''}` });
+				return fail(500, {
+					error: `採点の保存に失敗しました。${
+						insertError.code === '40001' || insertError.code === '40P01'
+							? '複数の検定員が同時に採点したため、再度お試しください。'
+							: insertError.message || ''
+					}`
+				});
 			}
 
 			console.log('[submitScore] Score saved successfully');

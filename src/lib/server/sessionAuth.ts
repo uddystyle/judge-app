@@ -30,7 +30,7 @@ export interface AuthResult {
  *
  * @param supabase - Supabaseクライアント
  * @param sessionId - セッションID
- * @param guestIdentifier - ゲスト識別子（URLパラメータから）
+ * @param guestIdentifier - ゲスト識別子（URLパラメータから、下位互換性用）
  * @returns 認証結果（user, guestParticipant, guestIdentifier）
  * @throws redirect - 認証失敗時に /login または /session/join にリダイレクト
  */
@@ -55,14 +55,21 @@ export async function authenticateSession(
 
 	let guestParticipant: GuestParticipant | null = null;
 
+	// ✅ 新方式: JWTのuser_metadataから取得
+	const jwtGuestIdentifier = user?.user_metadata?.guest_identifier;
+	const isGuest = user?.user_metadata?.is_guest === true;
+
+	// URLパラメータとJWTの両方から取得（JWTを優先）
+	const effectiveGuestIdentifier = jwtGuestIdentifier || guestIdentifier;
+
 	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
+	if (isGuest && effectiveGuestIdentifier) {
 		// ゲスト参加者情報を検証
 		const { data: guestData, error: guestError } = await supabase
 			.from('session_participants')
 			.select('*')
 			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
+			.eq('guest_identifier', effectiveGuestIdentifier)
 			.eq('is_guest', true)
 			.single();
 
@@ -81,7 +88,7 @@ export async function authenticateSession(
 	return {
 		user,
 		guestParticipant,
-		guestIdentifier
+		guestIdentifier: effectiveGuestIdentifier
 	};
 }
 
@@ -93,7 +100,7 @@ export async function authenticateSession(
  *
  * @param supabase - Supabaseクライアント
  * @param sessionId - セッションID
- * @param guestIdentifier - ゲスト識別子（URLパラメータから）
+ * @param guestIdentifier - ゲスト識別子（URLパラメータから、下位互換性用）
  * @returns 認証結果または null（認証失敗時）
  */
 export async function authenticateAction(
@@ -117,14 +124,21 @@ export async function authenticateAction(
 
 	let guestParticipant: GuestParticipant | null = null;
 
+	// ✅ 新方式: JWTのuser_metadataから取得
+	const jwtGuestIdentifier = user?.user_metadata?.guest_identifier;
+	const isGuest = user?.user_metadata?.is_guest === true;
+
+	// URLパラメータとJWTの両方から取得（JWTを優先）
+	const effectiveGuestIdentifier = jwtGuestIdentifier || guestIdentifier;
+
 	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
+	if (isGuest && effectiveGuestIdentifier) {
 		// ゲスト参加者情報を検証
 		const { data: guestData, error: guestError } = await supabase
 			.from('session_participants')
 			.select('*')
 			.eq('session_id', sessionId)
-			.eq('guest_identifier', guestIdentifier)
+			.eq('guest_identifier', effectiveGuestIdentifier)
 			.eq('is_guest', true)
 			.single();
 
@@ -143,6 +157,6 @@ export async function authenticateAction(
 	return {
 		user,
 		guestParticipant,
-		guestIdentifier
+		guestIdentifier: effectiveGuestIdentifier
 	};
 }
