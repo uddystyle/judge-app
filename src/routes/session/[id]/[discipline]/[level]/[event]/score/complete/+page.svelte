@@ -14,6 +14,9 @@
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
+	$: guestIdentifier = data.guestIdentifier;
+	$: guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
 	let sessionMonitorHandle: RealtimeChannelHandle | null = null;

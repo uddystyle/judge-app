@@ -16,7 +16,7 @@
 	$: modeType = $page.params.modeType;
 	$: eventId = $page.params.eventId;
 	$: guestIdentifier = data.guestIdentifier;
-	$: guestParam = guestIdentifier ? `` : '';
+	$: guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
 	$: eventListUrl = data.isTrainingMode ? `/session/${sessionId}/training-events` : `/session/${sessionId}/tournament-events`;
 
 	let endSessionForm: HTMLFormElement;
