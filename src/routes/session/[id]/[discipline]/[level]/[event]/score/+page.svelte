@@ -156,71 +156,81 @@
 			.subscribe((status) => {
 				console.log('[採点画面] Realtimeチャンネルの状態:', status);
 				if (status === 'SUBSCRIBED') {
-					console.log('[採点画面] ✅ リアルタイム接続成功');
+					console.log('[採点画面] ✅ リアルタイム接続成功 - ポーリング不要');
 
-					// ポーリング追加
-					pollingInterval = setInterval(async () => {
-						// ページがアンマウントされていたらポーリングを停止
-						if (!isPageMounted) {
-							console.log('[採点画面/polling] ⚠️ ページがアンマウントされているため、ポーリングを停止します');
-							if (pollingInterval) {
-								clearInterval(pollingInterval);
+					// ポーリング停止（Realtime接続成功時は不要）
+					if (pollingInterval) {
+						clearInterval(pollingInterval);
+						pollingInterval = null;
+					}
+				} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+					console.error('[採点画面] ❌ Realtime接続エラー - フォールバックポーリング開始');
+
+					// エラー時のみフォールバックポーリング開始（10秒ごと）
+					if (!pollingInterval) {
+						pollingInterval = setInterval(async () => {
+							// ページがアンマウントされていたらポーリングを停止
+							if (!isPageMounted) {
+								console.log('[採点画面/polling] ⚠️ ページがアンマウントされているため、ポーリングを停止します');
+								if (pollingInterval) {
+									clearInterval(pollingInterval);
+								}
+								return;
 							}
-							return;
-						}
 
-						// 現在のパスをチェック - 採点画面から離れていたらポーリングを停止
-						const currentPath = window.location.pathname;
-						if (!currentPath.endsWith('/score')) {
-							console.log('[採点画面/polling] ⚠️ 採点画面から離れているため、ポーリングを停止します。パス:', currentPath);
-							if (pollingInterval) {
-								clearInterval(pollingInterval);
+							// 現在のパスをチェック - 採点画面から離れていたらポーリングを停止
+							const currentPath = window.location.pathname;
+							if (!currentPath.endsWith('/score')) {
+								console.log('[採点画面/polling] ⚠️ 採点画面から離れているため、ポーリングを停止します。パス:', currentPath);
+								if (pollingInterval) {
+									clearInterval(pollingInterval);
+								}
+								return;
 							}
-							return;
-						}
 
-						const { data: sessionData, error } = await supabase
-							.from('sessions')
-							.select('is_active, active_prompt_id')
-							.eq('id', sessionId)
-							.single();
+							const { data: sessionData, error } = await supabase
+								.from('sessions')
+								.select('is_active, active_prompt_id')
+								.eq('id', sessionId)
+								.single();
 
-						if (!error && sessionData) {
-							const isActive = sessionData.is_active;
-							const currentPromptId = sessionData.active_prompt_id;
+							if (!error && sessionData) {
+								const isActive = sessionData.is_active;
+								const currentPromptId = sessionData.active_prompt_id;
 
-							if (previousIsActive === null) {
+								if (previousIsActive === null) {
+									previousIsActive = isActive;
+									return;
+								}
+
+								// セッション終了を先にチェック
+								if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
+									console.log('[採点画面] ✅ 検定終了を検知（ポーリング）');
+									// 再度パスチェック - 採点画面にいる場合のみ遷移
+									if (window.location.pathname.endsWith('/score')) {
+										goto(`/session/${sessionId}?ended=true`);
+									} else {
+										console.log('[採点画面] ⚠️ 既に採点画面から離れているため、遷移をスキップ');
+									}
+									return;
+								}
+
+								// active_prompt_idがnullになった場合（一般検定員のみ、かつセッションがアクティブな場合）
+								if (!isChief && isActive === true && currentPromptId === null) {
+									console.log('[採点画面/一般検定員] ✅ ゼッケン修正を検知（ポーリング）');
+									// 再度パスチェック - 採点画面にいる場合のみ遷移
+									if (window.location.pathname.endsWith('/score')) {
+										goto(`/session/${sessionId}`);
+									} else {
+										console.log('[採点画面] ⚠️ 既に採点画面から離れているため、遷移をスキップ');
+									}
+									return;
+								}
+
 								previousIsActive = isActive;
-								return;
 							}
-
-							// セッション終了を先にチェック
-							if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
-								console.log('[採点画面] ✅ 検定終了を検知（ポーリング）');
-								// 再度パスチェック - 採点画面にいる場合のみ遷移
-								if (window.location.pathname.endsWith('/score')) {
-									goto(`/session/${sessionId}?ended=true`);
-								} else {
-									console.log('[採点画面] ⚠️ 既に採点画面から離れているため、遷移をスキップ');
-								}
-								return;
-							}
-
-							// active_prompt_idがnullになった場合（一般検定員のみ、かつセッションがアクティブな場合）
-							if (!isChief && isActive === true && currentPromptId === null) {
-								console.log('[採点画面/一般検定員] ✅ ゼッケン修正を検知（ポーリング）');
-								// 再度パスチェック - 採点画面にいる場合のみ遷移
-								if (window.location.pathname.endsWith('/score')) {
-									goto(`/session/${sessionId}`);
-								} else {
-									console.log('[採点画面] ⚠️ 既に採点画面から離れているため、遷移をスキップ');
-								}
-								return;
-							}
-
-							previousIsActive = isActive;
-						}
-					}, 3000);
+						}, 10000);
+					}
 				}
 			});
 	});

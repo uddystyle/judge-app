@@ -8,10 +8,11 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { onMount, onDestroy } from 'svelte';
+	import { createSessionMonitorWithPolling, type RealtimeChannelHandle } from '$lib/realtime';
 
 	export let data: PageData;
 
-	$: sessionId = $page.params.id;
+	$: sessionId = $page.params.id || '';
 	$: modeType = $page.params.modeType;
 	$: eventId = $page.params.eventId;
 	$: guestIdentifier = data.guestIdentifier;
@@ -20,8 +21,7 @@
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
-	let realtimeChannel: any;
-	let pollingInterval: any;
+	let sessionMonitorHandle: RealtimeChannelHandle | null = null;
 	let previousIsActive: boolean | null = null;
 	let previousActivePromptId: string | null = null;
 
@@ -48,105 +48,52 @@
 
 	onMount(() => {
 		// 一般検定員かつ複数検定員モードの場合、セッション終了を監視
-		// 複数検定員モードがオフの場合は、各自が自由に操作できるため監視不要
 		const shouldMonitorSession = !data.isChief && data.isMultiJudge;
 
 		if (shouldMonitorSession) {
-			console.log('[一般検定員/complete] リアルタイムリスナーをセットアップ中...', { sessionId });
-			realtimeChannel = supabase
-				.channel(`session-end-${sessionId}`)
-				.on(
-					'postgres_changes',
-					{
-						event: 'UPDATE',
-						schema: 'public',
-						table: 'sessions',
-						filter: `id=eq.${sessionId}`
-					},
-					async (payload) => {
-						console.log('[一般検定員/complete] セッション更新を検知:', payload);
-						const isActive = payload.new.is_active;
-						const activePromptId = payload.new.active_prompt_id;
-						console.log('[一般検定員/complete] is_active:', isActive, 'active_prompt_id:', activePromptId);
+			sessionMonitorHandle = createSessionMonitorWithPolling(supabase, {
+				sessionId,
+				channelPrefix: 'session-end',
+				onRealtimePayload: async (payload) => {
+					const isActive = payload.new.is_active;
+					const activePromptId = payload.new.active_prompt_id;
 
-						// セッションが終了した場合、待機画面（終了画面）に遷移
-						if (isActive === false) {
-							console.log('[一般検定員/complete] 検定/大会/研修終了を検知。終了画面に遷移します。');
-							const endedParam = guestIdentifier ? `` : '';
-							goto(`/session/${sessionId}?ended=true${endedParam}`);
-						}
-						// active_prompt_idがクリアされた場合、待機画面に遷移（種目変更）
-						else if (activePromptId === null && payload.old.active_prompt_id !== null) {
-							console.log('[一般検定員/complete] 種目変更を検知。待機画面に遷移します。');
-							goto(`/session/${sessionId}`);
-						}
+					if (isActive === false) {
+						goto(`/session/${sessionId}?ended=true`);
+					} else if (activePromptId === null && payload.old.active_prompt_id !== null) {
+						goto(`/session/${sessionId}`);
 					}
-				)
-				.subscribe((status) => {
-					console.log('[一般検定員/complete] Realtimeチャンネルの状態:', status);
-					if (status === 'SUBSCRIBED') {
-						console.log('[一般検定員/complete] ✅ リアルタイム接続成功');
+				},
+				onPollingData: (sessionData) => {
+					const isActive = sessionData.is_active;
+					const activePromptId = sessionData.active_prompt_id;
 
-						// Realtimeのバックアップとして、3秒ごとにポーリング
-						pollingInterval = setInterval(async () => {
-							const { data: sessionData, error } = await supabase
-								.from('sessions')
-								.select('is_active, active_prompt_id')
-								.eq('id', sessionId)
-								.single();
-
-							if (!error && sessionData) {
-								const isActive = sessionData.is_active;
-								const activePromptId = sessionData.active_prompt_id;
-
-								// 初回のポーリング
-								if (previousIsActive === null) {
-									previousIsActive = isActive;
-									previousActivePromptId = activePromptId;
-									return;
-								}
-
-								// セッション終了を検知（is_activeの変化）
-								if (previousIsActive !== isActive) {
-									// 終了した場合（true -> false）
-									if (isActive === false && previousIsActive === true) {
-										console.log('[一般検定員/complete] ✅ 終了を検知（ポーリング）');
-										const endedParam = guestIdentifier ? `` : '';
-										goto(`/session/${sessionId}?ended=true${endedParam}`);
-									}
-									previousIsActive = isActive;
-								}
-
-								// 種目変更を検知（active_prompt_idがクリアされた）
-								if (previousActivePromptId !== null && activePromptId === null) {
-									console.log('[一般検定員/complete] ✅ 種目変更を検知（ポーリング）。待機画面に遷移します。');
-									goto(`/session/${sessionId}`);
-								}
-
-								// 前回の値を更新
-								previousActivePromptId = activePromptId;
-							}
-						}, 3000);
-					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-						console.error('[一般検定員/complete] ❌ 接続エラー - 再接続を試みます');
-						setTimeout(() => {
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
-							}
-							window.location.reload();
-						}, 2000);
+					// 初回のポーリング
+					if (previousIsActive === null) {
+						previousIsActive = isActive;
+						previousActivePromptId = activePromptId;
+						return;
 					}
-				});
+
+					// セッション終了を検知
+					if (isActive === false && previousIsActive === true) {
+						goto(`/session/${sessionId}?ended=true`);
+					}
+
+					// 種目変更を検知
+					if (previousActivePromptId !== null && activePromptId === null) {
+						goto(`/session/${sessionId}`);
+					}
+
+					previousIsActive = isActive;
+					previousActivePromptId = activePromptId;
+				}
+			});
 		}
 	});
 
 	onDestroy(() => {
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
-		}
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
-		}
+		sessionMonitorHandle?.cleanup();
 	});
 </script>
 

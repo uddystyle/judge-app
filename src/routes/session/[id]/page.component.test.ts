@@ -239,10 +239,8 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 
 		await new Promise(resolve => setTimeout(resolve, 100));
 
-		// チャンネル名は `session-status-${sessionId}-${timestamp}` 形式
-		expect(mockChannelFn).toHaveBeenCalledWith(
-			expect.stringContaining('session-status-456-')
-		);
+		// チャンネル名は `session-status-${sessionId}` 形式
+		expect(mockChannelFn).toHaveBeenCalledWith('session-status-456');
 
 		unmount();
 	});

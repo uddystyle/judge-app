@@ -140,22 +140,38 @@ export const actions: Actions = {
 			return fail(400, { error: '得点は整数で入力してください。' });
 		}
 
-		// 3. ゼッケン番号の存在確認
-		const { data: participant, error: participantError } = await supabase
+		// 3. ゼッケン番号の存在確認（なければ自動作成）
+		let participant: { id: string; bib_number: number } | null = null;
+
+		const { data: existingParticipant, error: participantError } = await supabase
 			.from('participants')
 			.select('id, bib_number')
 			.eq('session_id', sessionId)
 			.eq('bib_number', bib)
-			.single();
+			.maybeSingle();
 
-		if (participantError || !participant) {
-			console.error('[submitScore/inspection] ゼッケン番号が存在しません:', {
-				bib,
-				error: participantError
-			});
-			return fail(400, {
-				error: '指定されたゼッケン番号の参加者が見つかりません。'
-			});
+		if (existingParticipant) {
+			participant = existingParticipant;
+		} else {
+			// 検定モードでは参加者が事前登録されていない場合、自動作成する
+			console.log('[submitScore/inspection] 参加者が存在しないため自動作成:', { sessionId, bib });
+			const { data: newParticipant, error: createError } = await supabase
+				.from('participants')
+				.insert({
+					session_id: sessionId,
+					bib_number: bib,
+					athlete_name: `選手${bib}`
+				})
+				.select('id, bib_number')
+				.single();
+
+			if (createError || !newParticipant) {
+				console.error('[submitScore/inspection] 参加者の自動作成に失敗:', createError);
+				return fail(500, {
+					error: '参加者の登録に失敗しました。'
+				});
+			}
+			participant = newParticipant;
 		}
 
 		console.log('[submitScore/inspection] 参加者確認成功:', participant);

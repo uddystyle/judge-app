@@ -97,12 +97,10 @@
 			console.log('[一般検定員] current status:', data.sessionDetails.status);
 			console.log('[一般検定員] current is_active:', data.sessionDetails.is_active);
 
-			// Realtimeで sessions.status の変更を監視
-			const channelName = `session-status-${sessionId}-${Date.now()}`;
-			console.log('[一般検定員] チャンネル名:', channelName);
-
+			// Note: This page uses manual channel creation because the onSubscribed callback
+			// contains complex logic (checking existing prompts on initial connection)
 			realtimeChannel = supabase
-				.channel(channelName)
+				.channel(`session-status-${sessionId}`)
 				.on(
 					'postgres_changes',
 					{
@@ -154,8 +152,6 @@
 						// 新しい採点指示IDがセットされたら
 						if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
 							console.log('[一般検定員] 新しい採点指示を検知:', newPromptId);
-							// ✅ フォールバックポーリングとの二重処理を防ぐため、ここで previousPromptId を更新
-							previousPromptId = newPromptId;
 							// 新しい指示の詳細をscoring_promptsテーブルから取得
 							const { data: promptData, error } = await supabase
 								.from('scoring_prompts')
@@ -190,9 +186,13 @@
 										const eventId = promptData.level; // level カラムに eventId を保存している
 										if (mode === 'tournament') {
 											console.log('[一般検定員/大会] 採点画面に遷移:', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+											previousPromptId = newPromptId;
 											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										} else {
 											console.log('[一般検定員/研修] 採点画面に遷移:', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+											previousPromptId = newPromptId;
 											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										}
 									}
@@ -204,6 +204,8 @@
 										level: promptData.level,
 										event: promptData.event_name
 									});
+									// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+									previousPromptId = newPromptId;
 									goto(
 										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
 									);
@@ -229,8 +231,6 @@
 						const currentPromptId = data.sessionDetails.active_prompt_id;
 						if (currentPromptId && !shouldShowJoinUI) {
 							console.log('[一般検定員] 既存の採点指示を検知:', currentPromptId);
-							// ✅ フォールバックポーリングとの二重処理を防ぐため、ここで previousPromptId を更新
-							previousPromptId = currentPromptId;
 							// 採点指示の詳細を取得
 							const { data: promptData, error } = await supabase
 								.from('scoring_prompts')
@@ -302,14 +302,20 @@
 
 										if (mode === 'tournament') {
 											console.log('[一般検定員/大会] 採点画面に遷移(既存):', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+											previousPromptId = currentPromptId;
 											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										} else {
 											console.log('[一般検定員/研修] 採点画面に遷移(既存):', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+											previousPromptId = currentPromptId;
 											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
 										}
 									}
 								} else {
 									// 検定モード
+									// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+									previousPromptId = currentPromptId;
 									goto(
 										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
 									);
@@ -386,7 +392,6 @@
 		const newPromptId = session.active_prompt_id;
 		if (newPromptId && newPromptId !== previousPromptId && !shouldShowJoinUI) {
 			console.log('[fallback] ✅ 新しい採点指示を検知（ポーリング）:', newPromptId);
-			previousPromptId = newPromptId;
 
 			// 採点指示の詳細を取得
 			const { data: promptData, error: promptError } = await supabase
@@ -440,11 +445,15 @@
 						}
 
 						// 採点画面に遷移
+							// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+							previousPromptId = newPromptId;
 						if (mode === 'tournament') {
 							goto(
 								`/session/${data.sessionDetails.id}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
 							);
 						} else {
+							// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+							previousPromptId = newPromptId;
 							goto(
 								`/session/${data.sessionDetails.id}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
 							);
@@ -452,6 +461,8 @@
 					}
 				} else {
 					// 検定モード
+					// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+					previousPromptId = newPromptId;
 					goto(
 						`/session/${data.sessionDetails.id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
 					);

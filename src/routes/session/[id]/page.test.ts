@@ -407,3 +407,182 @@ describe('Fallback Polling - previousPromptId 巻き戻し防止', () => {
 		expect(gotoCallCount).toBe(1);
 	});
 });
+
+describe('previousPromptId 更新タイミング - データ取得失敗時の取りこぼし防止', () => {
+	it('scoring_prompts 取得失敗時、previousPromptId が更新されない', () => {
+		let previousPromptId: string | null = null;
+		let gotoCallCount = 0;
+		const newPromptId = 'prompt-new';
+
+		// データ取得失敗をシミュレート
+		const processPrompt = async () => {
+			// scoring_prompts取得前の時点では previousPromptId は null のまま
+			expect(previousPromptId).toBeNull();
+
+			const promptData = null; // ← 取得失敗
+
+			if (!promptData) {
+				console.log('[エラー] 採点指示の取得に失敗');
+				// ✅ 取得失敗時は previousPromptId を更新しない
+				return;
+			}
+
+			// 成功時のみ更新（ここには到達しない）
+			previousPromptId = newPromptId;
+			gotoCallCount++;
+		};
+
+		processPrompt();
+
+		// ✅ 取得失敗により previousPromptId は null のまま
+		expect(previousPromptId).toBeNull();
+		expect(gotoCallCount).toBe(0);
+	});
+
+	it('participants 取得失敗時、previousPromptId が更新されない', () => {
+		let previousPromptId: string | null = null;
+		let gotoCallCount = 0;
+		const newPromptId = 'prompt-new';
+
+		// scoring_promptsは成功、participantsは失敗をシミュレート
+		const processPrompt = async () => {
+			const promptData = { bib_number: 10, discipline: 'tournament', level: 'event-1' };
+
+			if (promptData) {
+				// participants取得
+				const participant = null; // ← 取得失敗
+
+				if (!participant) {
+					console.log('[エラー] 参加者の取得に失敗');
+					// ✅ 取得失敗時は previousPromptId を更新しない
+					return;
+				}
+
+				// 成功時のみ更新（ここには到達しない）
+				previousPromptId = newPromptId;
+				gotoCallCount++;
+			}
+		};
+
+		processPrompt();
+
+		// ✅ 取得失敗により previousPromptId は null のまま
+		expect(previousPromptId).toBeNull();
+		expect(gotoCallCount).toBe(0);
+	});
+
+	it('データ取得成功時、遷移直前に previousPromptId が更新される', () => {
+		let previousPromptId: string | null = null;
+		let gotoCallCount = 0;
+		const newPromptId = 'prompt-new';
+
+		// 全て成功をシミュレート
+		const processPrompt = async () => {
+			const promptData = { bib_number: 10, discipline: 'tournament', level: 'event-1' };
+
+			if (promptData) {
+				const participant = { id: 'participant-123' };
+
+				if (participant) {
+					// ✅ 遷移成功確定時のみ previousPromptId を更新
+					previousPromptId = newPromptId;
+					gotoCallCount++;
+					// goto(`/session/.../score/...`)
+				}
+			}
+		};
+
+		processPrompt();
+
+		// ✅ 成功時は previousPromptId が更新される
+		expect(previousPromptId).toBe('prompt-new');
+		expect(gotoCallCount).toBe(1);
+	});
+
+	it('取得失敗後、次回の処理で再試行できる', () => {
+		let previousPromptId: string | null = null;
+		let gotoCallCount = 0;
+		const newPromptId = 'prompt-new';
+
+		// 1回目: 取得失敗
+		const processPromptFailed = async () => {
+			const promptData = null; // 失敗
+
+			if (!promptData) {
+				return;
+			}
+
+			previousPromptId = newPromptId;
+			gotoCallCount++;
+		};
+
+		processPromptFailed();
+		expect(previousPromptId).toBeNull(); // 更新されていない
+
+		// 2回目: 取得成功（同じpromptを再試行）
+		const processPromptSuccess = async () => {
+			// newPromptId !== previousPromptId なので処理を実行
+			if (newPromptId !== previousPromptId) {
+				const promptData = { bib_number: 10 }; // 成功
+
+				if (promptData) {
+					// ✅ 遷移成功確定時のみ previousPromptId を更新
+					previousPromptId = newPromptId;
+					gotoCallCount++;
+				}
+			}
+		};
+
+		processPromptSuccess();
+
+		// ✅ 2回目で成功し、previousPromptId が更新された
+		expect(previousPromptId).toBe('prompt-new');
+		expect(gotoCallCount).toBe(1); // 1回だけ遷移
+	});
+
+	it('Realtime での取得失敗後、fallback で再試行できる', () => {
+		let previousPromptId: string | null = null;
+		let realtimeGotoCount = 0;
+		let fallbackGotoCount = 0;
+		const newPromptId = 'prompt-new';
+
+		// Realtime: 取得失敗
+		const handleRealtimeUpdate = () => {
+			if (newPromptId !== previousPromptId) {
+				const promptData = null; // 失敗
+
+				if (!promptData) {
+					console.log('[Realtime] 取得失敗');
+					return;
+				}
+
+				previousPromptId = newPromptId;
+				realtimeGotoCount++;
+			}
+		};
+
+		handleRealtimeUpdate();
+		expect(previousPromptId).toBeNull(); // 更新されていない
+		expect(realtimeGotoCount).toBe(0);
+
+		// Fallback: 取得成功（同じpromptを再試行）
+		const handleFallbackPolling = () => {
+			if (newPromptId !== previousPromptId) {
+				const promptData = { bib_number: 10 }; // 成功
+
+				if (promptData) {
+					// ✅ 遷移成功確定時のみ previousPromptId を更新
+					previousPromptId = newPromptId;
+					fallbackGotoCount++;
+				}
+			}
+		};
+
+		handleFallbackPolling();
+
+		// ✅ fallback で成功し、previousPromptId が更新された
+		expect(previousPromptId).toBe('prompt-new');
+		expect(realtimeGotoCount).toBe(0); // Realtimeでは遷移しない
+		expect(fallbackGotoCount).toBe(1); // fallbackで遷移
+	});
+});

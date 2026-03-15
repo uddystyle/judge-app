@@ -9,19 +9,14 @@
 	import { goto } from '$app/navigation';
 	import { currentBib, userProfile, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import { get } from 'svelte/store';
+	import { createRealtimeChannelWithRetry, createSessionMonitorChannel, type RealtimeChannelWithRetryHandle, type RealtimeChannelHandle } from '$lib/realtime';
 
 	export let data: PageData;
 	let scoreStatus: any = { scores: [], requiredJudges: 1 };
-	let sessionRealtimeChannel: any;
-	let scoreRealtimeChannel: any;
-	let previousIsActive: boolean | null = null;
+	let scoreRealtimeHandle: RealtimeChannelWithRetryHandle | null = null;
+	let sessionRealtimeHandle: RealtimeChannelHandle | null = null;
 
-	// Realtime自己回復用の変数
 	let realtimeConnectionError = false;
-	let retryCount = 0;
-	let retryTimer: any = null;
-	let fallbackPolling: any = null;
-	const MAX_RETRY_COUNT = 5;
 
 	let id: string = '';
 	let discipline: string = '';
@@ -59,71 +54,40 @@
 		}
 	}
 
-	// Realtime再接続ロジック（指数バックオフ）
-	function retryRealtimeConnection() {
-		if (retryCount >= MAX_RETRY_COUNT) {
-			console.error('[status/realtime] 最大リトライ回数に達しました。フォールバックポーリングに切り替えます。');
-			realtimeConnectionError = true;
-			startFallbackPolling();
-			return;
-		}
-
-		const backoffDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
-		retryCount++;
-		console.log(`[status/realtime] 再接続を試みます（${retryCount}/${MAX_RETRY_COUNT}）- ${backoffDelay}ms後`);
-
-		retryTimer = setTimeout(() => {
-			console.log('[status/realtime] Realtimeチャンネルを再作成中...');
-
-			// 既存のチャンネルをクリーンアップ
-			if (scoreRealtimeChannel) {
-				supabase.removeChannel(scoreRealtimeChannel);
-				scoreRealtimeChannel = null;
-			}
-
-			// チャンネルを再作成
-			setupScoreRealtimeChannel();
-		}, backoffDelay);
-	}
-
-	// フォールバックポーリング（10秒ごと）
-	function startFallbackPolling() {
-		if (fallbackPolling) return; // 既に開始済み
-
-		console.log('[status/fallback] フォールバックポーリングを開始します（10秒ごと）');
-		fallbackPolling = setInterval(async () => {
-			console.log('[status/fallback] データを取得中...');
-			await fetchStatus();
-		}, 10000);
-	}
-
 	// 手動更新
 	async function manualRefresh() {
-		console.log('[status/manual] 手動更新実行');
-		realtimeConnectionError = false;
-		await fetchStatus();
-
-		// 再接続を試みる
-		retryCount = 0;
-		retryRealtimeConnection();
+		scoreRealtimeHandle?.manualRefresh(fetchStatus);
 	}
 
-	// Realtimeチャンネルのセットアップを関数化
-	function setupScoreRealtimeChannel() {
-		const channelName = `results-${id}-${bib}-${Date.now()}`;
-		console.log('[status/realtime] スコア監視のRealtime購読開始:', channelName);
+	onMount(async () => {
+		// URLパラメータを取得
+		id = $page.params.id || '';
+		discipline = $page.params.discipline || '';
+		level = $page.params.level || '';
+		event = $page.params.event || '';
+		bib = $page.url.searchParams.get('bib');
+		guestIdentifier = $page.url.searchParams.get('guest');
 
-		scoreRealtimeChannel = supabase
-			.channel(channelName)
-			.on(
-				'postgres_changes',
-				{
-					event: '*',
-					schema: 'public',
-					table: 'results',
-					filter: `session_id=eq.${id},bib=eq.${parseInt(bib || '0')}`
-				},
-				async (payload) => {
+		// ヘッダー情報を設定
+		if (data.sessionDetails) {
+			currentSession.set(data.sessionDetails);
+		}
+		currentDiscipline.set(discipline);
+		currentLevel.set(level);
+		currentEvent.set(event);
+
+		// 初回ロード
+		await fetchStatus();
+
+		// Realtime スコア監視のセットアップ（リトライ＋フォールバックポーリング付き）
+		if (bib) {
+			scoreRealtimeHandle = createRealtimeChannelWithRetry(supabase, {
+				channelName: `results-${id}-${bib}`,
+				table: 'results',
+				filter: `session_id=eq.${id},bib=eq.${parseInt(bib || '0')}`,
+				pollingFn: fetchStatus,
+				onConnectionError: (hasError) => { realtimeConnectionError = hasError; },
+				onPayload: async (payload) => {
 					console.log('[status/realtime] スコア変更を検知:', payload);
 
 					// discipline, level, event_nameでフィルタリング（クライアント側）
@@ -151,49 +115,7 @@
 						await fetchStatus();
 					}
 				}
-			)
-			.subscribe((status) => {
-				console.log('[status/realtime] スコア監視チャンネルの状態:', status);
-				if (status === 'SUBSCRIBED') {
-					console.log('[status/realtime] ✅ スコア監視のRealtime接続成功');
-					realtimeConnectionError = false;
-					retryCount = 0;
-
-					if (fallbackPolling) {
-						clearInterval(fallbackPolling);
-						fallbackPolling = null;
-					}
-				} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-					console.error('[status/realtime] ❌ スコア監視の接続エラー:', status);
-					realtimeConnectionError = true;
-					retryRealtimeConnection();
-				}
 			});
-	}
-
-	onMount(async () => {
-		// URLパラメータを取得
-		id = $page.params.id || '';
-		discipline = $page.params.discipline || '';
-		level = $page.params.level || '';
-		event = $page.params.event || '';
-		bib = $page.url.searchParams.get('bib');
-		guestIdentifier = $page.url.searchParams.get('guest');
-
-		// ヘッダー情報を設定
-		if (data.sessionDetails) {
-			currentSession.set(data.sessionDetails);
-		}
-		currentDiscipline.set(discipline);
-		currentLevel.set(level);
-		currentEvent.set(event);
-
-		// 初回ロード
-		await fetchStatus();
-
-		// Realtime スコア監視のセットアップ
-		if (bib) {
-			setupScoreRealtimeChannel();
 		}
 
 		// dataから直接判定（リアクティブステートメントに依存しない）
@@ -201,92 +123,48 @@
 
 		// 一般検定員の場合、active_prompt_idがクリアされたら待機画面に遷移
 		if (!currentIsChief) {
-			console.log('[一般検定員/status] リアルタイムリスナーをセットアップ中...', { id });
-			sessionRealtimeChannel = supabase
-				.channel(`session-finalize-${id}`)
-				.on(
-					'postgres_changes',
-					{
-						event: 'UPDATE',
-						schema: 'public',
-						table: 'sessions',
-						filter: `id=eq.${id}`
-					},
-					async (payload) => {
-						console.log('[一般検定員/status] セッション更新を検知:', payload);
-						const isActive = payload.new.is_active;
-						const activePromptId = payload.new.active_prompt_id;
-						const oldActivePromptId = payload.old.active_prompt_id;
-						console.log('[一般検定員/status] is_active:', isActive, 'active_prompt_id:', activePromptId, 'old:', oldActivePromptId);
+			sessionRealtimeHandle = createSessionMonitorChannel(supabase, {
+				sessionId: id,
+				channelPrefix: 'session-finalize',
+				onPayload: async (payload) => {
+					console.log('[一般検定員/status] セッション更新を検知:', payload);
+					const isActive = payload.new.is_active;
+					const activePromptId = payload.new.active_prompt_id;
+					const oldActivePromptId = payload.old.active_prompt_id;
 
-						// セッションが終了した場合、待機画面（終了画面）に遷移
-						if (isActive === false) {
-							console.log('[一般検定員/status] 検定終了を検知。終了画面に遷移します。');
-							const guestIdentifier = $page.url.searchParams.get('guest');
-							goto(`/session/${id}?ended=true`);
+					// セッションが終了した場合
+					if (isActive === false) {
+						goto(`/session/${id}?ended=true`);
+						return;
+					}
+
+					// 新しいactive_prompt_idが設定された場合（次の滑走者）
+					if (activePromptId && activePromptId !== oldActivePromptId) {
+						const { data: promptData, error: promptError } = await supabase
+							.from('scoring_prompts')
+							.select('*')
+							.eq('id', activePromptId)
+							.single();
+
+						if (!promptError && promptData) {
+							currentBib.set(promptData.bib_number);
+							goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
 							return;
 						}
-
-						// 新しいactive_prompt_idが設定された場合（次の滑走者）
-						if (activePromptId && activePromptId !== oldActivePromptId) {
-							console.log('[一般検定員/status] 新しい採点指示を検知:', activePromptId);
-							// 新しい指示の詳細を取得
-							const { data: promptData, error: promptError } = await supabase
-								.from('scoring_prompts')
-								.select('*')
-								.eq('id', activePromptId)
-								.single();
-
-							if (!promptError && promptData) {
-								console.log('[一般検定員/status] 採点指示データ取得成功:', promptData);
-								// ゼッケン番号をストアに保存
-								currentBib.set(promptData.bib_number);
-								// 得点入力画面に遷移
-								const guestIdentifier = $page.url.searchParams.get('guest');
-								goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
-								return;
-							}
-						}
-
-						// active_prompt_idがnullになったら、採点が確定された
-						if (activePromptId === null && oldActivePromptId !== null) {
-							// 一般検定員は待機画面に戻る（次のゼッケン番号を待つ）
-							console.log('[一般検定員/status] 採点確定を検知。待機画面に遷移します。');
-							const guestIdentifier = $page.url.searchParams.get('guest');
-							goto(`/session/${id}`);
-						}
 					}
-				)
-				.subscribe((status) => {
-					console.log('[一般検定員/status] Realtimeチャンネルの状態:', status);
-					if (status === 'SUBSCRIBED') {
-						console.log('[一般検定員/status] ✅ リアルタイム接続成功');
-					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-						console.error('[一般検定員/status] ❌ 接続エラー - 再接続を試みます');
-						setTimeout(() => {
-							if (sessionRealtimeChannel) {
-								supabase.removeChannel(sessionRealtimeChannel);
-							}
-							window.location.reload();
-						}, 2000);
+
+					// active_prompt_idがnullになったら、採点が確定された
+					if (activePromptId === null && oldActivePromptId !== null) {
+						goto(`/session/${id}`);
 					}
-				});
+				}
+			});
 		}
 	});
 
 	onDestroy(() => {
-		if (sessionRealtimeChannel) {
-			supabase.removeChannel(sessionRealtimeChannel);
-		}
-		if (scoreRealtimeChannel) {
-			supabase.removeChannel(scoreRealtimeChannel);
-		}
-		if (retryTimer) {
-			clearTimeout(retryTimer);
-		}
-		if (fallbackPolling) {
-			clearInterval(fallbackPolling);
-		}
+		scoreRealtimeHandle?.cleanup();
+		sessionRealtimeHandle?.cleanup();
 	});
 
 	let canSubmit = false;

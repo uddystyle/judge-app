@@ -8,6 +8,7 @@
 	import { enhance } from '$app/forms';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
+	import { createSessionMonitorWithPolling, type RealtimeChannelHandle } from '$lib/realtime';
 
 	export let data: PageData;
 
@@ -15,9 +16,9 @@
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
-	let realtimeChannel: any;
-	let pollingInterval: any;
+	let sessionMonitorHandle: RealtimeChannelHandle | null = null;
 	let previousIsActive: boolean | null = null;
+	let previousActivePromptId: string | null = null;
 
 	function handleNextSkier() {
 		bibStore.set(null);
@@ -51,144 +52,83 @@
 
 		// 一般検定員の場合、セッション終了を監視
 		if (!data.isChief) {
-			const sessionId = $page.params.id;
-			const guestIdentifier = $page.url.searchParams.get('guest');
+			const sessionId = $page.params.id || '';
 
-			console.log('[一般検定員/complete] リアルタイムリスナーをセットアップ中...', { sessionId });
-			realtimeChannel = supabase
-				.channel(`session-end-${sessionId}`)
-				.on(
-					'postgres_changes',
-					{
-						event: 'UPDATE',
-						schema: 'public',
-						table: 'sessions',
-						filter: `id=eq.${sessionId}`
-					},
-					async (payload) => {
-						console.log('[一般検定員/complete] セッション更新を検知:', payload);
-						const isActive = payload.new.is_active;
-						const activePromptId = payload.new.active_prompt_id;
-						const oldActivePromptId = payload.old.active_prompt_id;
-						console.log('[一般検定員/complete] is_active:', isActive, 'active_prompt_id:', activePromptId, 'old_active_prompt_id:', oldActivePromptId);
+			sessionMonitorHandle = createSessionMonitorWithPolling(supabase, {
+				sessionId,
+				channelPrefix: 'session-end',
+				onRealtimePayload: async (payload) => {
+					const isActive = payload.new.is_active;
+					const activePromptId = payload.new.active_prompt_id;
+					const oldActivePromptId = payload.old.active_prompt_id;
 
-						// セッションが終了した場合、待機画面（終了画面）に遷移
-						if (isActive === false) {
-							console.log('[一般検定員/complete] 検定/大会終了を検知。終了画面に遷移します。');
-							goto(`/session/${sessionId}?ended=true`);
-						}
-						// active_prompt_idがクリアされた場合、待機画面に遷移（種目変更）
-						else if (activePromptId === null && oldActivePromptId !== null) {
-							console.log('[一般検定員/complete] 種目変更を検知。待機画面に遷移します。');
-							goto(`/session/${sessionId}?${guestParam.substring(1)}`);
-						}
-						// 新しいactive_prompt_idが設定された場合、新しい採点指示を取得して得点入力画面に遷移
-						else if (activePromptId && activePromptId !== oldActivePromptId) {
-							console.log('[一般検定員/complete] 新しい採点指示を検知:', activePromptId);
-							// 新しい指示の詳細をscoring_promptsテーブルから取得
-							const { data: promptData, error } = await supabase
-								.from('scoring_prompts')
-								.select('*')
-								.eq('id', activePromptId)
-								.single();
+					if (isActive === false) {
+						goto(`/session/${sessionId}?ended=true`);
+					} else if (activePromptId === null && oldActivePromptId !== null) {
+						goto(`/session/${sessionId}?${guestParam.substring(1)}`);
+					} else if (activePromptId && activePromptId !== oldActivePromptId) {
+						const { data: promptData, error } = await supabase
+							.from('scoring_prompts')
+							.select('*')
+							.eq('id', activePromptId)
+							.single();
 
-							if (error) {
-								console.error('[一般検定員/complete] 採点指示の取得に失敗:', error);
-								return;
-							}
-
-							if (promptData) {
-								console.log('[一般検定員/complete] 採点指示の詳細:', promptData);
-								// ゼッケン番号をストアに保存
-								bibStore.set(promptData.bib_number);
-								// 得点入力画面に遷移
-								goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
-							}
+						if (!error && promptData) {
+							bibStore.set(promptData.bib_number);
+							goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
 						}
 					}
-				)
-				.subscribe((status) => {
-					console.log('[一般検定員/complete] Realtimeチャンネルの状態:', status);
-					if (status === 'SUBSCRIBED') {
-						console.log('[一般検定員/complete] ✅ リアルタイム接続成功');
+				},
+				onPollingData: async (sessionData) => {
+					const isActive = sessionData.is_active;
+					const activePromptId = sessionData.active_prompt_id;
 
-						// Realtimeのバックアップとして、3秒ごとにポーリング
-						let previousActivePromptId: string | null = null;
-						pollingInterval = setInterval(async () => {
-							const { data: sessionData, error } = await supabase
-								.from('sessions')
-								.select('is_active, active_prompt_id')
-								.eq('id', sessionId)
-								.single();
-
-							if (!error && sessionData) {
-								const isActive = sessionData.is_active;
-								const activePromptId = sessionData.active_prompt_id;
-
-								// 初回のポーリング
-								if (previousIsActive === null) {
-									previousIsActive = isActive;
-									previousActivePromptId = activePromptId;
-									return;
-								}
-
-								// セッション終了を検知
-								if (isActive === false && previousIsActive === true) {
-									console.log('[一般検定員/complete] ✅ 検定終了を検知（ポーリング）');
-									goto(`/session/${sessionId}?ended=true`);
-									return;
-								}
-
-								// 種目変更を検知（active_prompt_idがクリアされた）
-								if (activePromptId === null && previousActivePromptId !== null) {
-									console.log('[一般検定員/complete] ✅ 種目変更を検知（ポーリング）');
-									goto(`/session/${sessionId}?${guestParam.substring(1)}`);
-									return;
-								}
-
-								// 新しい採点指示を検知
-								if (activePromptId && activePromptId !== previousActivePromptId) {
-									console.log('[一般検定員/complete] ✅ 新しい採点指示を検知（ポーリング）:', activePromptId);
-									// 新しい指示の詳細を取得
-									const { data: promptData, error: promptError } = await supabase
-										.from('scoring_prompts')
-										.select('*')
-										.eq('id', activePromptId)
-										.single();
-
-									if (!promptError && promptData) {
-										console.log('[一般検定員/complete] 採点指示の詳細:', promptData);
-										// ゼッケン番号をストアに保存
-										bibStore.set(promptData.bib_number);
-										goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
-										return;
-									}
-								}
-
-								previousIsActive = isActive;
-								previousActivePromptId = activePromptId;
-							}
-						}, 3000);
-					} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-						console.error('[一般検定員/complete] ❌ 接続エラー - 再接続を試みます');
-						setTimeout(() => {
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
-							}
-							window.location.reload();
-						}, 2000);
+					// 初回のポーリング
+					if (previousIsActive === null) {
+						previousIsActive = isActive;
+						previousActivePromptId = activePromptId;
+						return;
 					}
-				});
+
+					// セッション終了を検知
+					if (isActive === false && previousIsActive === true) {
+						goto(`/session/${sessionId}?ended=true`);
+						previousIsActive = isActive;
+						return;
+					}
+
+					// 種目変更を検知
+					if (activePromptId === null && previousActivePromptId !== null) {
+						goto(`/session/${sessionId}?${guestParam.substring(1)}`);
+						previousActivePromptId = activePromptId;
+						return;
+					}
+
+					// 新しい採点指示を検知
+					if (activePromptId && activePromptId !== previousActivePromptId) {
+						const { data: promptData, error } = await supabase
+							.from('scoring_prompts')
+							.select('*')
+							.eq('id', activePromptId)
+							.single();
+
+						if (!error && promptData) {
+							bibStore.set(promptData.bib_number);
+							goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
+							previousActivePromptId = activePromptId;
+							return;
+						}
+					}
+
+					previousIsActive = isActive;
+					previousActivePromptId = activePromptId;
+				}
+			});
 		}
 	});
 
 	onDestroy(() => {
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
-		}
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
-		}
+		sessionMonitorHandle?.cleanup();
 	});
 </script>
 

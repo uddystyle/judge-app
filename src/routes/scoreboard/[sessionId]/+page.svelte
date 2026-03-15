@@ -3,11 +3,12 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
+	import { createRealtimeChannel, type RealtimeChannelHandle } from '$lib/realtime';
 
 	export let data: PageData;
 
 	let selectedTab: 'overall' | number = 'overall';
-	let realtimeChannel: any;
+	let realtimeHandle: RealtimeChannelHandle | null = null;
 
 	// ページをリロードして最新データを取得
 	async function refreshData() {
@@ -17,40 +18,20 @@
 	// Realtimeで自動更新（resultsテーブル監視）
 	onMount(() => {
 		const sessionId = $page.params.sessionId;
-		const channelName = `scoreboard-${sessionId}-${Date.now()}`;
 
-		console.log('[scoreboard] Realtime購読開始:', channelName);
-
-		realtimeChannel = supabase
-			.channel(channelName)
-			.on(
-				'postgres_changes',
-				{
-					event: '*', // INSERT, UPDATE, DELETE
-					schema: 'public',
-					table: 'results',
-					filter: `session_id=eq.${sessionId}`
-				},
-				(payload) => {
-					console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
-					// 簡易実装: リロードで対応（将来的には差分更新に置き換え可能）
-					refreshData();
-				}
-			)
-			.subscribe((status) => {
-				console.log('[scoreboard] Realtimeチャンネルの状態:', status);
-				if (status === 'SUBSCRIBED') {
-					console.log('[scoreboard] ✅ Realtime接続成功 - ポーリング不要');
-				} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-					console.error('[scoreboard] ❌ Realtime接続エラー');
-				}
-			});
+		realtimeHandle = createRealtimeChannel(supabase, {
+			channelName: `scoreboard-${sessionId}`,
+			table: 'results',
+			filter: `session_id=eq.${sessionId}`,
+			onPayload: (payload) => {
+				console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
+				refreshData();
+			}
+		});
 	});
 
 	onDestroy(() => {
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
-		}
+		realtimeHandle?.cleanup();
 	});
 
 	$: sessionId = $page.params.sessionId;
