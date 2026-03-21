@@ -118,18 +118,22 @@ function createMockSupabase(overrides?: {
 	};
 }
 
-function createCertMockSupabase(overrides?: {
-	getUser?: any;
-	sessionSelect?: any;
-	sessionUpdateError?: any;
-}) {
+/** results テーブルを使うモード (certification / tournament) 共通のモック */
+function createResultsModeMockSupabase(
+	defaultMode: string,
+	overrides?: {
+		getUser?: any;
+		sessionSelect?: any;
+		sessionUpdateError?: any;
+	}
+) {
 	const getUserResult = overrides?.getUser ?? {
 		data: { user: { id: 'user-creator' } },
 		error: null
 	};
 
 	const sessionResult = overrides?.sessionSelect ?? {
-		data: { created_by: 'user-creator', mode: 'certification' },
+		data: { created_by: 'user-creator', mode: defaultMode },
 		error: null
 	};
 
@@ -159,6 +163,22 @@ function createCertMockSupabase(overrides?: {
 		_updateMock: updateMock,
 		_updateEq: updateEq
 	};
+}
+
+function createCertMockSupabase(overrides?: {
+	getUser?: any;
+	sessionSelect?: any;
+	sessionUpdateError?: any;
+}) {
+	return createResultsModeMockSupabase('certification', overrides);
+}
+
+function createTournamentMockSupabase(overrides?: {
+	getUser?: any;
+	sessionSelect?: any;
+	sessionUpdateError?: any;
+}) {
+	return createResultsModeMockSupabase('tournament', overrides);
 }
 
 function createActionArgs(params: Record<string, string>, supabase: any) {
@@ -496,6 +516,145 @@ describe('deleteCertificationData アクション', () => {
 		expect(result).toEqual({
 			success: true,
 			message: '検定モードの採点データを削除しました。'
+		});
+	});
+});
+
+describe('deleteTournamentData アクション', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('未認証ユーザーは /login にリダイレクトされる', async () => {
+		const mockSupabase = createTournamentMockSupabase({
+			getUser: { data: { user: null }, error: { message: 'not authenticated' } }
+		});
+
+		await expect(
+			actions.deleteTournamentData(createActionArgs({ id: 'session-1' }, mockSupabase))
+		).rejects.toThrow('Redirecting to /login');
+
+		expect(redirect).toHaveBeenCalledWith(303, '/login');
+	});
+
+	it('セッションが見つからない場合は 404 を返す', async () => {
+		const mockSupabase = createTournamentMockSupabase({
+			sessionSelect: { data: null, error: { message: 'not found' } }
+		});
+
+		const result = await actions.deleteTournamentData(
+			createActionArgs({ id: 'session-1' }, mockSupabase)
+		);
+
+		expect(fail).toHaveBeenCalledWith(404, { error: 'セッションが見つかりません。' });
+	});
+
+	it('作成者以外は 403 を返す', async () => {
+		const mockSupabase = createTournamentMockSupabase({
+			sessionSelect: {
+				data: { created_by: 'other-user', mode: 'tournament' },
+				error: null
+			}
+		});
+
+		const result = await actions.deleteTournamentData(
+			createActionArgs({ id: 'session-1' }, mockSupabase)
+		);
+
+		expect(fail).toHaveBeenCalledWith(403, { error: 'データを削除する権限がありません。' });
+	});
+
+	it('大会モード以外は 400 を返す', async () => {
+		const mockSupabase = createTournamentMockSupabase({
+			sessionSelect: {
+				data: { created_by: 'user-creator', mode: 'certification' },
+				error: null
+			}
+		});
+
+		const result = await actions.deleteTournamentData(
+			createActionArgs({ id: 'session-1' }, mockSupabase)
+		);
+
+		expect(fail).toHaveBeenCalledWith(400, {
+			error: '大会モードのセッションのみデータ削除が可能です。'
+		});
+	});
+
+	it('正常系: results テーブルから削除し active_prompt_id をクリアして成功を返す', async () => {
+		const mockSupabase = createTournamentMockSupabase();
+
+		const mockAdminEq = vi.fn().mockResolvedValue({ error: null, count: 8 });
+		const mockAdminDelete = vi.fn().mockReturnValue({ eq: mockAdminEq });
+		const mockAdminFrom = vi.fn().mockReturnValue({ delete: mockAdminDelete });
+		vi.mocked(createClient).mockReturnValue({ from: mockAdminFrom } as any);
+
+		const result = await actions.deleteTournamentData(
+			createActionArgs({ id: 'session-1' }, mockSupabase)
+		);
+
+		expect(createClient).toHaveBeenCalledWith(
+			'https://test.supabase.co',
+			'test-service-role-key',
+			expect.objectContaining({
+				auth: { autoRefreshToken: false, persistSession: false }
+			})
+		);
+
+		expect(mockAdminFrom).toHaveBeenCalledWith('results');
+		expect(mockAdminDelete).toHaveBeenCalledWith({ count: 'exact' });
+		expect(mockAdminEq).toHaveBeenCalledWith('session_id', 'session-1');
+
+		expect(mockSupabase._updateMock).toHaveBeenCalledWith({ active_prompt_id: null });
+		expect(mockSupabase._updateEq).toHaveBeenCalledWith('id', 'session-1');
+
+		expect(result).toEqual({
+			success: true,
+			message: '大会モードの採点データを削除しました。'
+		});
+	});
+
+	it('削除失敗時は 500 を返す', async () => {
+		const mockSupabase = createTournamentMockSupabase();
+
+		const mockAdminEq = vi.fn().mockResolvedValue({
+			error: { message: 'delete failed' },
+			count: null
+		});
+		vi.mocked(createClient).mockReturnValue({
+			from: vi.fn().mockReturnValue({
+				delete: vi.fn().mockReturnValue({ eq: mockAdminEq })
+			})
+		} as any);
+
+		const result = await actions.deleteTournamentData(
+			createActionArgs({ id: 'session-1' }, mockSupabase)
+		);
+
+		expect(fail).toHaveBeenCalledWith(500, {
+			error: '採点データの削除に失敗しました。delete failed'
+		});
+	});
+
+	it('削除件数が 0 でも active_prompt_id をクリアして成功を返す', async () => {
+		const mockSupabase = createTournamentMockSupabase();
+
+		const mockAdminEq = vi.fn().mockResolvedValue({ error: null, count: 0 });
+		vi.mocked(createClient).mockReturnValue({
+			from: vi.fn().mockReturnValue({
+				delete: vi.fn().mockReturnValue({ eq: mockAdminEq })
+			})
+		} as any);
+
+		const result = await actions.deleteTournamentData(
+			createActionArgs({ id: 'session-1' }, mockSupabase)
+		);
+
+		expect(mockSupabase._updateMock).toHaveBeenCalledWith({ active_prompt_id: null });
+
+		expect(result).toEqual({
+			success: true,
+			message: '大会モードの採点データを削除しました。'
 		});
 	});
 });

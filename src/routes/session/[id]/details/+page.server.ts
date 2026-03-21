@@ -1004,5 +1004,84 @@ export const actions: Actions = {
 
 		console.log('[deleteCertificationData] ========== 採点データ削除完了 ==========');
 		return { success: true, message: '検定モードの採点データを削除しました。' };
+	},
+
+	deleteTournamentData: async ({ params, locals: { supabase } }) => {
+		console.log('[deleteTournamentData] ========== 採点データ削除開始 ==========');
+		console.log('[deleteTournamentData] sessionId:', params.id);
+
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			console.error('[deleteTournamentData] ユーザー認証エラー:', userError);
+			throw redirect(303, '/login');
+		}
+
+		const sessionId = params.id;
+
+		// セッション情報を取得して権限とモードを確認
+		const { data: sessionData, error: sessionError } = await supabase
+			.from('sessions')
+			.select('created_by, mode')
+			.eq('id', sessionId)
+			.single();
+
+		if (sessionError || !sessionData) {
+			console.error('[deleteTournamentData] セッション取得エラー:', sessionError);
+			return fail(404, { error: 'セッションが見つかりません。' });
+		}
+
+		// セッション作成者のみがデータを削除できる
+		if (sessionData.created_by !== user.id) {
+			console.error('[deleteTournamentData] 権限エラー: 作成者ではない');
+			return fail(403, { error: 'データを削除する権限がありません。' });
+		}
+
+		// 大会モードのみデータ削除可能
+		if (sessionData.mode !== 'tournament') {
+			console.error('[deleteTournamentData] モードエラー:', sessionData.mode);
+			return fail(400, { error: '大会モードのセッションのみデータ削除が可能です。' });
+		}
+
+		// RLSをバイパスするためにService Roleクライアントを使用
+		const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+			auth: {
+				autoRefreshToken: false,
+				persistSession: false
+			}
+		});
+
+		// resultsテーブルから該当セッションのデータを削除
+		const { error: deleteError, count } = await supabaseAdmin
+			.from('results')
+			.delete({ count: 'exact' })
+			.eq('session_id', sessionId);
+
+		console.log('[deleteTournamentData] 削除結果:', { count, error: deleteError });
+
+		if (deleteError) {
+			console.error('[deleteTournamentData] 採点データの削除エラー:', deleteError);
+			return fail(500, {
+				error: `採点データの削除に失敗しました。${deleteError.message || ''}`
+			});
+		}
+
+		console.log('[deleteTournamentData] ✅ 採点データを削除しました:', count, '件');
+
+		// active_prompt_id をクリアして進行状態をリセット
+		const { error: updateError } = await supabase
+			.from('sessions')
+			.update({ active_prompt_id: null })
+			.eq('id', sessionId);
+
+		if (updateError) {
+			console.error('[deleteTournamentData] active_prompt_idクリアエラー:', updateError);
+		}
+
+		console.log('[deleteTournamentData] ========== 採点データ削除完了 ==========');
+		return { success: true, message: '大会モードの採点データを削除しました。' };
 	}
 };

@@ -45,6 +45,8 @@
 	let exportLoading = false;
 	let deleteDataForm: HTMLFormElement;
 	let deleteCertificationDataForm: HTMLFormElement;
+	let deleteTournamentDataForm: HTMLFormElement;
+	let deleteSessionForm: HTMLFormElement;
 
 	// ゲストユーザー削除確認ダイアログ
 	let showRemoveGuestDialog = false;
@@ -58,9 +60,9 @@
 
 	// 採点データ削除確認ダイアログ
 	let showDeleteDataDialog = false;
-	let deleteDataTarget: 'training' | 'certification' | null = null;
+	let deleteDataTarget: 'training' | 'certification' | 'tournament' | null = null;
 
-	function openDeleteDataDialog(target: 'training' | 'certification') {
+	function openDeleteDataDialog(target: 'training' | 'certification' | 'tournament') {
 		deleteDataTarget = target;
 		showDeleteDataDialog = true;
 	}
@@ -70,6 +72,8 @@
 			deleteDataForm.requestSubmit();
 		} else if (deleteDataTarget === 'certification' && deleteCertificationDataForm) {
 			deleteCertificationDataForm.requestSubmit();
+		} else if (deleteDataTarget === 'tournament' && deleteTournamentDataForm) {
+			deleteTournamentDataForm.requestSubmit();
 		}
 		showDeleteDataDialog = false;
 		deleteDataTarget = null;
@@ -78,6 +82,20 @@
 	function handleDeleteDataCancel() {
 		showDeleteDataDialog = false;
 		deleteDataTarget = null;
+	}
+
+	// セッション削除確認ダイアログ
+	let showDeleteSessionDialog = false;
+
+	function handleDeleteSessionConfirm() {
+		if (deleteSessionForm) {
+			deleteSessionForm.requestSubmit();
+		}
+		showDeleteSessionDialog = false;
+	}
+
+	function handleDeleteSessionCancel() {
+		showDeleteSessionDialog = false;
 	}
 
 	// 参加コードコピー機能
@@ -544,7 +562,14 @@
 						>
 							採点データを削除
 						</NavButton>
-					{:else if !data.sessionDetails.is_tournament_mode}
+					{:else if data.sessionDetails.is_tournament_mode}
+						<NavButton
+							variant="danger"
+							on:click={() => openDeleteDataDialog('tournament')}
+						>
+							採点データを削除
+						</NavButton>
+					{:else}
 						<NavButton
 							variant="danger"
 							on:click={() => openDeleteDataDialog('certification')}
@@ -569,7 +594,7 @@
 		<div class="nav-buttons">
 			<NavButton
 				variant="danger"
-				on:click={() => goto(`/session/${data.sessionDetails.id}/details/delete`)}
+				on:click={() => { showDeleteSessionDialog = true; }}
 			>
 				この{data.isTrainingMode ? '研修' : data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除
 			</NavButton>
@@ -631,12 +656,37 @@
 	style="display: none;"
 ></form>
 
+<!-- 非表示フォーム: 大会モード採点データ削除 -->
+<form
+	bind:this={deleteTournamentDataForm}
+	method="POST"
+	action="?/deleteTournamentData"
+	use:enhance={() => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') {
+				await update();
+				window.location.reload();
+			} else if (result.type === 'failure') {
+				await update();
+				if (result.data?.error) {
+					alert(`エラー: ${result.data.error}`);
+				}
+			} else {
+				await update();
+			}
+		};
+	}}
+	style="display: none;"
+></form>
+
 <!-- 採点データ削除確認ダイアログ -->
 <ConfirmDialog
 	bind:isOpen={showDeleteDataDialog}
 	title="採点データを削除"
 	message={deleteDataTarget === 'training'
 		? '研修モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'
+		: deleteDataTarget === 'tournament'
+		? '大会モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'
 		: '検定モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'}
 	confirmText="削除する"
 	cancelText="キャンセル"
@@ -668,6 +718,42 @@
 	on:confirm={handleRemoveParticipantConfirm}
 	on:cancel={handleRemoveParticipantCancel}
 />
+
+<!-- セッション削除確認ダイアログ -->
+<ConfirmDialog
+	bind:isOpen={showDeleteSessionDialog}
+	title="この{data.isTrainingMode ? '研修' : data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除"
+	message={'セッション「' + data.sessionDetails.name + '」を完全に削除します。\n採点データ・参加者情報など全てのデータが失われます。\n\nこの操作は取り消せません。'}
+	confirmText="削除する"
+	cancelText="キャンセル"
+	variant="danger"
+	on:confirm={handleDeleteSessionConfirm}
+	on:cancel={handleDeleteSessionCancel}
+/>
+
+<!-- 非表示フォーム: セッション削除 -->
+<form
+	bind:this={deleteSessionForm}
+	method="POST"
+	action="?/deleteSession"
+	use:enhance={() => {
+		return async ({ result, update }) => {
+			if (result.type === 'redirect') {
+				await update();
+			} else if (result.type === 'failure') {
+				await update();
+				if (result.data?.error) {
+					alertTitle = 'エラー';
+					alertMessage = result.data.error;
+					showAlert = true;
+				}
+			} else {
+				await update();
+			}
+		};
+	}}
+	style="display: none;"
+></form>
 
 <AlertDialog
 	bind:isOpen={showAlert}
