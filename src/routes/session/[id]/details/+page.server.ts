@@ -913,7 +913,96 @@ export const actions: Actions = {
 			console.log('[deleteTrainingData] 削除対象の種目がありません');
 		}
 
+		// active_prompt_id をクリアして進行状態をリセット
+		const { error: updateError } = await supabase
+			.from('sessions')
+			.update({ active_prompt_id: null })
+			.eq('id', sessionId);
+
+		if (updateError) {
+			console.error('[deleteTrainingData] active_prompt_idクリアエラー:', updateError);
+		}
+
 		console.log('[deleteTrainingData] ========== 採点データ削除完了 ==========');
 		return { success: true, message: '研修モードの採点データを削除しました。' };
+	},
+
+	deleteCertificationData: async ({ params, locals: { supabase } }) => {
+		console.log('[deleteCertificationData] ========== 採点データ削除開始 ==========');
+		console.log('[deleteCertificationData] sessionId:', params.id);
+
+		const {
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
+
+		if (userError || !user) {
+			console.error('[deleteCertificationData] ユーザー認証エラー:', userError);
+			throw redirect(303, '/login');
+		}
+
+		const sessionId = params.id;
+
+		// セッション情報を取得して権限とモードを確認
+		const { data: sessionData, error: sessionError } = await supabase
+			.from('sessions')
+			.select('created_by, mode')
+			.eq('id', sessionId)
+			.single();
+
+		if (sessionError || !sessionData) {
+			console.error('[deleteCertificationData] セッション取得エラー:', sessionError);
+			return fail(404, { error: 'セッションが見つかりません。' });
+		}
+
+		// セッション作成者のみがデータを削除できる
+		if (sessionData.created_by !== user.id) {
+			console.error('[deleteCertificationData] 権限エラー: 作成者ではない');
+			return fail(403, { error: 'データを削除する権限がありません。' });
+		}
+
+		// 検定モードのみデータ削除可能
+		if (sessionData.mode !== 'certification') {
+			console.error('[deleteCertificationData] モードエラー:', sessionData.mode);
+			return fail(400, { error: '検定モードのセッションのみデータ削除が可能です。' });
+		}
+
+		// RLSをバイパスするためにService Roleクライアントを使用
+		const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+			auth: {
+				autoRefreshToken: false,
+				persistSession: false
+			}
+		});
+
+		// resultsテーブルから該当セッションのデータを削除
+		const { error: deleteError, count } = await supabaseAdmin
+			.from('results')
+			.delete({ count: 'exact' })
+			.eq('session_id', sessionId);
+
+		console.log('[deleteCertificationData] 削除結果:', { count, error: deleteError });
+
+		if (deleteError) {
+			console.error('[deleteCertificationData] 採点データの削除エラー:', deleteError);
+			return fail(500, {
+				error: `採点データの削除に失敗しました。${deleteError.message || ''}`
+			});
+		}
+
+		console.log('[deleteCertificationData] ✅ 採点データを削除しました:', count, '件');
+
+		// active_prompt_id をクリアして進行状態をリセット
+		const { error: updateError } = await supabase
+			.from('sessions')
+			.update({ active_prompt_id: null })
+			.eq('id', sessionId);
+
+		if (updateError) {
+			console.error('[deleteCertificationData] active_prompt_idクリアエラー:', updateError);
+		}
+
+		console.log('[deleteCertificationData] ========== 採点データ削除完了 ==========');
+		return { success: true, message: '検定モードの採点データを削除しました。' };
 	}
 };

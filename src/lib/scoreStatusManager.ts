@@ -260,13 +260,12 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 				}
 			});
 
-			if (existingIndex !== -1) {
-				currentStatus.scores[existingIndex] = newScore;
-			} else {
-				currentStatus.scores.push(newScore);
-			}
+			// Immutable update — never mutate currentStatus.scores in place
+			const newScores = existingIndex !== -1
+				? currentStatus.scores.map((s, i) => i === existingIndex ? newScore : s)
+				: [...currentStatus.scores, newScore];
 
-			updateStatus({ ...currentStatus });
+			updateStatus({ ...currentStatus, scores: newScores });
 		} else if (payload.eventType === 'UPDATE') {
 			updateStatus({
 				...currentStatus,
@@ -283,13 +282,18 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 				})
 			});
 		} else if (payload.eventType === 'DELETE') {
+			// Match by guest_identifier if present, otherwise by judge_id
+			// Using && would incorrectly remove unrelated entries when one
+			// of the identifiers is undefined/null on both sides
 			updateStatus({
 				...currentStatus,
-				scores: currentStatus.scores.filter(
-					(s) =>
-						s.judge_id !== payload.old.judge_id &&
-						s.guest_identifier !== payload.old.guest_identifier
-				)
+				scores: currentStatus.scores.filter((s) => {
+					if (payload.old.guest_identifier) {
+						return s.guest_identifier !== payload.old.guest_identifier;
+					} else {
+						return s.judge_id !== payload.old.judge_id;
+					}
+				})
 			});
 		}
 	}
@@ -327,8 +331,15 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 
 	serializedFetch = createSerializedAsync(fetchStatusImpl, { pendingDelayMs: 100 });
 
-	async function fetchStatus(): Promise<void> {
+	// Fire-and-forget fetch (for pollingFn / realtime payload handlers)
+	function fetchStatus(): Promise<void> {
 		serializedFetch!.run();
+		return Promise.resolve();
+	}
+
+	// Awaitable fetch that respects serialization (for manualRefresh)
+	function fetchStatusAwaitable(): Promise<void> {
+		return serializedFetch!.runAsync();
 	}
 
 	// --- Realtime セットアップ ---
@@ -361,7 +372,10 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 		initializeNameCache,
 		setupRealtime,
 		async manualRefresh() {
-			await scoreRealtimeHandle?.manualRefresh(fetchStatus);
+			// Use the awaitable serialized path so we both respect the
+			// exclusion lock AND wait for the actual fetch to complete
+			// before the channel reconnects.
+			await scoreRealtimeHandle?.manualRefresh(fetchStatusAwaitable);
 		},
 		cleanup() {
 			scoreRealtimeHandle?.cleanup();

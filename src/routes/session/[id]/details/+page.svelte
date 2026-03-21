@@ -44,6 +44,7 @@
 
 	let exportLoading = false;
 	let deleteDataForm: HTMLFormElement;
+	let deleteCertificationDataForm: HTMLFormElement;
 
 	// ゲストユーザー削除確認ダイアログ
 	let showRemoveGuestDialog = false;
@@ -532,6 +533,19 @@
 						>
 							採点データを削除
 						</NavButton>
+					{:else if !data.sessionDetails.is_tournament_mode}
+						<NavButton
+							variant="danger"
+							on:click={() => {
+								if (confirm('検定モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
+									if (deleteCertificationDataForm) {
+										deleteCertificationDataForm.requestSubmit();
+									}
+								}
+							}}
+						>
+							採点データを削除
+						</NavButton>
 					{/if}
 				{/if}
 			</div>
@@ -582,6 +596,29 @@
 				}
 			} else {
 				console.log('[UI/enhance] その他の結果:', result.type);
+				await update();
+			}
+		};
+	}}
+	style="display: none;"
+></form>
+
+<!-- 非表示フォーム: 検定モード採点データ削除 -->
+<form
+	bind:this={deleteCertificationDataForm}
+	method="POST"
+	action="?/deleteCertificationData"
+	use:enhance={() => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') {
+				await update();
+				window.location.reload();
+			} else if (result.type === 'failure') {
+				await update();
+				if (result.data?.error) {
+					alert(`エラー: ${result.data.error}`);
+				}
+			} else {
 				await update();
 			}
 		};

@@ -3,6 +3,11 @@ import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 const DEFAULT_MAX_RETRY = 5;
 const DEFAULT_POLLING_INTERVAL_MS = 10000;
 
+/** Status values that indicate the channel is no longer functional. */
+function isErrorStatus(status: string): boolean {
+	return status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED';
+}
+
 export interface RealtimeChannelConfig {
 	channelName: string;
 	table: string;
@@ -57,7 +62,7 @@ export function createRealtimeChannel(
 			console.log(`[realtime/${config.channelName}] status:`, status);
 			if (status === 'SUBSCRIBED') {
 				console.log(`[realtime/${config.channelName}] connected`);
-			} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+			} else if (isErrorStatus(status)) {
 				console.error(`[realtime/${config.channelName}] error:`, status);
 			}
 		});
@@ -165,7 +170,7 @@ export function createRealtimeChannelWithRetry(
 
 					// Stop fallback polling when realtime is connected
 					stopFallbackPolling();
-				} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+				} else if (isErrorStatus(status)) {
 					console.error(`[realtime/${config.channelName}] error:`, status);
 					connectionError = true;
 					config.onConnectionError?.(true);
@@ -262,7 +267,7 @@ export function createSessionMonitorChannel(
 					clearTimeout(errorReloadTimer);
 					errorReloadTimer = null;
 				}
-			} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+			} else if (isErrorStatus(status)) {
 				console.error(`[realtime/${channelName}] error:`, status);
 				if (config.onError) {
 					config.onError();
@@ -275,6 +280,7 @@ export function createSessionMonitorChannel(
 					errorReloadTimer = setTimeout(() => {
 						if (channel) {
 							supabase.removeChannel(channel);
+							channel = null;
 						}
 						window.location.reload();
 					}, 2000);
@@ -370,7 +376,7 @@ export function createSessionMonitorWithPolling(
 				// recovery). startPolling() clears any existing interval first so
 				// we never accumulate duplicate setInterval handles.
 				startPolling();
-			} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+			} else if (isErrorStatus(status)) {
 				console.error(`[realtime/${channelName}] error:`, status);
 				// Stop polling during error state to avoid stale requests
 				stopPolling();
@@ -385,6 +391,7 @@ export function createSessionMonitorWithPolling(
 					errorReloadTimer = setTimeout(() => {
 						if (channel) {
 							supabase.removeChannel(channel);
+							channel = null;
 						}
 						window.location.reload();
 					}, 2000);

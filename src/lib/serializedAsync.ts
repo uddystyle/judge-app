@@ -7,8 +7,14 @@
  * (coalescing multiple pending calls into a single execution).
  */
 export interface SerializedAsyncHandle {
-	/** Execute the function, or mark as pending if already running */
+	/** Execute the function (fire-and-forget), or mark as pending if already running */
 	run: () => void;
+	/**
+	 * Execute the function and return a Promise that resolves when the
+	 * execution completes. If already running, waits for the current
+	 * execution (plus the coalesced pending run) to finish.
+	 */
+	runAsync: () => Promise<void>;
 	/** Whether the function is currently executing */
 	isRunning: () => boolean;
 	/** Dispose of pending timers */
@@ -27,6 +33,22 @@ export function createSerializedAsync(
 	let isExecuting = false;
 	let hasPending = false;
 	let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Waiters that need to be notified when the current cycle completes.
+	// A "cycle" is the current execution plus any coalesced pending run.
+	let waiters: Array<{ resolve: () => void; reject: (e: unknown) => void }> = [];
+
+	function flushWaiters(error?: unknown) {
+		const current = waiters;
+		waiters = [];
+		for (const w of current) {
+			if (error) {
+				w.reject(error);
+			} else {
+				w.resolve();
+			}
+		}
+	}
 
 	async function execute() {
 		if (isExecuting) {
@@ -49,6 +71,9 @@ export function createSerializedAsync(
 					pendingTimer = null;
 					execute();
 				}, pendingDelayMs);
+			} else {
+				// No more pending work — resolve all waiters
+				flushWaiters();
 			}
 		}
 	}
@@ -57,6 +82,12 @@ export function createSerializedAsync(
 		run: () => {
 			execute();
 		},
+		runAsync: () => {
+			return new Promise<void>((resolve, reject) => {
+				waiters.push({ resolve, reject });
+				execute();
+			});
+		},
 		isRunning: () => isExecuting,
 		cleanup: () => {
 			if (pendingTimer) {
@@ -64,6 +95,8 @@ export function createSerializedAsync(
 				pendingTimer = null;
 			}
 			hasPending = false;
+			// Resolve any outstanding waiters so they don't hang
+			flushWaiters();
 		}
 	};
 }

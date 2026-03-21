@@ -296,6 +296,114 @@ describe('createSerializedAsync', () => {
 		handle.cleanup();
 	});
 
+	it('runAsync()が実行完了まで待機する', async () => {
+		let executed = false;
+		const handle = createSerializedAsync(async () => {
+			await delay(50);
+			executed = true;
+		});
+
+		const promise = handle.runAsync();
+		expect(executed).toBe(false);
+
+		await vi.advanceTimersByTimeAsync(50);
+		await promise;
+
+		expect(executed).toBe(true);
+		handle.cleanup();
+	});
+
+	it('runAsync()が実行中の場合、現在の実行+ペンディング完了まで待機する', async () => {
+		let executionCount = 0;
+		let resolvers: Array<() => void> = [];
+
+		const handle = createSerializedAsync(async () => {
+			executionCount++;
+			await new Promise<void>((resolve) => {
+				resolvers.push(resolve);
+			});
+		});
+
+		// 1回目: fire-and-forget
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(executionCount).toBe(1);
+
+		// 2回目: runAsync — 実行中なのでpendingになり、完了を待つ
+		let asyncResolved = false;
+		const promise = handle.runAsync().then(() => { asyncResolved = true; });
+
+		// 1回目完了 → pending実行がスケジュール
+		resolvers[0]();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(asyncResolved).toBe(false); // まだpending実行が残っている
+
+		// pending遅延後に2回目実行
+		await vi.advanceTimersByTimeAsync(100);
+		expect(executionCount).toBe(2);
+
+		// 2回目完了 → runAsync の Promise が resolve
+		resolvers[1]();
+		await vi.advanceTimersByTimeAsync(1);
+		await promise;
+		expect(asyncResolved).toBe(true);
+
+		handle.cleanup();
+	});
+
+	it('runAsync()とrun()が排他制御を共有する', async () => {
+		let executionCount = 0;
+		let resolvers: Array<() => void> = [];
+
+		const handle = createSerializedAsync(async () => {
+			executionCount++;
+			await new Promise<void>((resolve) => {
+				resolvers.push(resolve);
+			});
+		});
+
+		// runAsync で実行開始
+		const promise = handle.runAsync();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(executionCount).toBe(1);
+		expect(handle.isRunning()).toBe(true);
+
+		// run() は pending になる（並行実行しない）
+		handle.run();
+		expect(executionCount).toBe(1);
+
+		// 1回目完了
+		resolvers[0]();
+		await vi.advanceTimersByTimeAsync(1);
+
+		// pending 遅延後に2回目実行
+		await vi.advanceTimersByTimeAsync(100);
+		expect(executionCount).toBe(2);
+
+		// 2回目完了 → promise resolve
+		resolvers[1]();
+		await vi.advanceTimersByTimeAsync(1);
+		await promise;
+
+		handle.cleanup();
+	});
+
+	it('cleanup()がrunAsync()のwaitersを解放する', async () => {
+		const handle = createSerializedAsync(async () => {
+			await delay(1000); // 長い処理
+		});
+
+		// runAsync 開始（完了前に cleanup される）
+		let resolved = false;
+		const promise = handle.runAsync().then(() => { resolved = true; });
+
+		// cleanup → waiter が即座に resolve される（ハングしない）
+		handle.cleanup();
+		await vi.advanceTimersByTimeAsync(1);
+		await promise;
+		expect(resolved).toBe(true);
+	});
+
 	it('連続したrun呼び出しでタイマーが多重登録されない', async () => {
 		let executionCount = 0;
 		let resolvers: Array<() => void> = [];

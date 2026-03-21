@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { enhance, applyAction } from '$app/forms';
-	import { invalidateAll } from '$app/navigation';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
 	export let scores: Array<{
@@ -36,10 +35,12 @@
 
 	const handleSubmit: SubmitFunction = ({ formData }) => {
 		const judgeName = formData.get('judgeName') as string;
-		return async ({ result, update }) => {
+		return async ({ result }) => {
 			if (result.type === 'success') {
-				// Re-run load functions so the page receives fresh data
-				await invalidateAll();
+				// Score update is handled by the Realtime channel (DELETE event
+				// triggers refetch). No need for invalidateAll() here — calling
+				// it would re-run load() but scoreStatus is managed separately
+				// by scoreStatusManager and wouldn't pick up the new data.
 				if (onCorrectionSuccess) {
 					onCorrectionSuccess(judgeName);
 				}
