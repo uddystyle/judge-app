@@ -1,10 +1,18 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	isChiefJudge
+} from '$lib/server/sessionHelpers';
+import { calculateFinalScore } from '$lib/scoreCalculation';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const sessionId = params.id;
+	const { discipline, level, event } = params;
 	const guestIdentifier = url.searchParams.get('guest');
+	const bib = url.searchParams.get('bib');
 
 	// セッション認証
 	const { user, guestParticipant } = await authenticateSession(
@@ -13,28 +21,27 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		guestIdentifier
 	);
 
-	// セッションの詳細情報を取得
-	const { data: sessionDetails, error: sessionError } = await supabase
-		.from('sessions')
-		.select('*')
-		.eq('id', sessionId)
-		.single();
+	const sessionDetails = await fetchSessionDetails(supabase, sessionId);
+	const profile = await fetchUserProfile(supabase, user);
 
-	if (sessionError) {
-		throw error(404, '検定が見つかりません。');
-	}
+	// 初期スコアデータを取得（SSR）
+	let initialScoreStatus: { scores: any[]; requiredJudges: number } = { scores: [], requiredJudges: 1 };
 
-	// プロフィール情報を取得（認証ユーザーの場合のみ）
-	let profile = null;
+	if (bib && discipline && level && event) {
+		const { data: scores } = await supabase
+			.from('results')
+			.select('judge_name, score')
+			.eq('session_id', sessionId)
+			.eq('bib', parseInt(bib))
+			.eq('discipline', discipline)
+			.eq('level', level)
+			.eq('event_name', event);
 
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
+		const requiredJudges = sessionDetails.exclude_extremes ? 5 : 3;
+		initialScoreStatus = {
+			scores: scores || [],
+			requiredJudges
+		};
 	}
 
 	return {
@@ -42,7 +49,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		sessionDetails,
 		guestIdentifier,
 		guestParticipant,
-		profile
+		profile,
+		initialScoreStatus
 	};
 };
 
@@ -71,17 +79,11 @@ export const actions: Actions = {
 		}
 
 		// セッション情報を取得して権限をチェック
-		const { data: sessionData, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, is_multi_judge')
-			.eq('id', id)
-			.single();
-
-		if (sessionError) {
+		const sessionData = await fetchSessionDetails(supabase, id, { throwOnError: false });
+		if (!sessionData) {
 			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
 		}
-
-		const isChief = user ? user.id === sessionData.chief_judge_id : false;
+		const isChief = isChiefJudge(user, sessionData);
 		const isMultiJudge = sessionData.is_multi_judge;
 
 		// 複数検定員モードONの場合、主任検定員のみが修正を要求できる
@@ -152,17 +154,11 @@ export const actions: Actions = {
 		}
 
 		// セッション情報を取得して権限をチェック
-		const { data: sessionData, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, is_tournament_mode, exclude_extremes, score_calculation, is_multi_judge')
-			.eq('id', id)
-			.single();
-
-		if (sessionError) {
+		const sessionData = await fetchSessionDetails(supabase, id, { throwOnError: false });
+		if (!sessionData) {
 			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
 		}
-
-		const isChief = user ? user.id === sessionData.chief_judge_id : false;
+		const isChief = isChiefJudge(user, sessionData);
 		const isMultiJudge = sessionData.is_multi_judge;
 
 		// 複数検定員モードONの場合、主任検定員のみが確定できる
@@ -188,38 +184,19 @@ export const actions: Actions = {
 			return fail(400, { error: '採点結果がありません。' });
 		}
 
-		let finalScore = 0;
+		const useSum = !!(sessionData.is_tournament_mode && sessionData.score_calculation === 'sum');
+		const scoreValues = scores.map((s) => s.score);
 
-		// 大会モードで合計点方式の場合
-		if (sessionData.is_tournament_mode && sessionData.score_calculation === 'sum') {
-			if (sessionData.exclude_extremes) {
-				// 5審3採: 最大・最小を除く3人の合計
-				if (scores.length < 5) {
-					return fail(400, {
-						error: `5審3採では5人の採点が必要です。現在${scores.length}人です。`
-					});
-				}
+		const calcResult = calculateFinalScore(scoreValues, {
+			useSum,
+			excludeExtremes: useSum && (sessionData.exclude_extremes || false)
+		});
 
-				const scoreValues = scores.map((s) => s.score).sort((a, b) => a - b);
-				// 最小と最大を除いた中間3つの合計
-				const middleThree = scoreValues.slice(1, 4);
-				finalScore = middleThree.reduce((sum, s) => sum + s, 0);
-			} else {
-				// 3審3採: 3人の合計
-				if (scores.length < 3) {
-					return fail(400, {
-						error: `3審3採では3人の採点が必要です。現在${scores.length}人です。`
-					});
-				}
-
-				const scoreValues = scores.map((s) => s.score);
-				finalScore = scoreValues.reduce((sum, s) => sum + s, 0);
-			}
-		} else {
-			// 検定モード: 平均点を計算
-			const total = scores.reduce((sum, s) => sum + s.score, 0);
-			finalScore = Math.round(total / scores.length);
+		if (!calcResult.success) {
+			return fail(400, { error: calcResult.error });
 		}
+
+		const finalScore = calcResult.finalScore;
 
 		// active_prompt_idをクリアして次の採点を受け付けられるようにする
 		await supabase.from('sessions').update({ active_prompt_id: null }).eq('id', id);

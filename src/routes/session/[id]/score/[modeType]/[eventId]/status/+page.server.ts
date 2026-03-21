@@ -1,10 +1,22 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	getMultiJudgeMode,
+	fetchEventInfo,
+	isChiefJudge,
+	isTrainingModeCheck,
+	isTournamentModeCheck
+} from '$lib/server/sessionHelpers';
+import { calculateFinalScore } from '$lib/scoreCalculation';
+import { deleteTrainingScore } from '$lib/server/scoreActions';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
 	const guestIdentifier = url.searchParams.get('guest');
+	const bib = url.searchParams.get('bib');
 
 	// セッション認証
 	const { user, guestParticipant } = await authenticateSession(
@@ -13,69 +25,13 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		guestIdentifier
 	);
 
-	// セッション情報を取得
-	const { data: sessionDetails, error: sessionError } = await supabase
-		.from('sessions')
-		.select('*')
-		.eq('id', sessionId)
-		.single();
-
-	if (sessionError) {
-		throw error(404, '検定が見つかりません。');
-	}
-
-	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
-	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
-	const isTournamentMode = modeType === 'tournament' || sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament';
-
-	// プロフィール情報を取得（認証ユーザーの場合のみ）
-	let profile = null;
-
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
-	}
-
-	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
-	let isMultiJudge = false;
-	if (isTrainingMode) {
-		const { data: trainingSession } = await supabase
-			.from('training_sessions')
-			.select('is_multi_judge')
-			.eq('session_id', sessionId)
-			.maybeSingle();
-		isMultiJudge = trainingSession?.is_multi_judge || false;
-	} else if (modeType === 'tournament') {
-		// 大会モードは常に複数検定員モードON
-		isMultiJudge = true;
-	} else {
-		isMultiJudge = sessionDetails.is_multi_judge || false;
-	}
-
-	// モードに応じて種目情報を取得
-	let eventInfo: any = null;
-	if (isTrainingMode) {
-		const { data: trainingEvent } = await supabase
-			.from('training_events')
-			.select('*')
-			.eq('id', eventId)
-			.eq('session_id', sessionId)
-			.single();
-		eventInfo = trainingEvent;
-	} else {
-		const { data: customEvent } = await supabase
-			.from('custom_events')
-			.select('*')
-			.eq('id', eventId)
-			.eq('session_id', sessionId)
-			.single();
-		eventInfo = customEvent;
-	}
+	const sessionDetails = await fetchSessionDetails(supabase, sessionId);
+	const isChief = isChiefJudge(user, sessionDetails);
+	const isTrainingMode = isTrainingModeCheck(modeType, sessionDetails);
+	const isTournamentMode = isTournamentModeCheck(modeType, sessionDetails);
+	const profile = await fetchUserProfile(supabase, user);
+	const isMultiJudge = await getMultiJudgeMode(supabase, sessionId, modeType, sessionDetails);
+	const eventInfo = await fetchEventInfo(supabase, eventId, sessionId, isTrainingMode);
 
 	// 研修モードで複数検定員ONの場合、参加検定員の総数を取得
 	let totalJudges = 1;
@@ -89,6 +45,101 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		totalJudges = count || 1;
 	}
 
+	// 初期スコアデータを取得
+	let initialScoreStatus: { scores: any[]; requiredJudges: number } = { scores: [], requiredJudges: 1 };
+	let athleteId: string | null = null;
+
+	if (bib) {
+		if (isTrainingMode) {
+			// 研修モード: participants → training_scores → profiles/session_participants
+			const { data: participant } = await supabase
+				.from('participants')
+				.select('id')
+				.eq('session_id', sessionId)
+				.eq('bib_number', parseInt(bib))
+				.maybeSingle();
+
+			if (participant) {
+				athleteId = participant.id;
+
+				const { data: trainingScores } = await supabase
+					.from('training_scores')
+					.select('id, score, judge_id, guest_identifier')
+					.eq('event_id', eventId)
+					.eq('athlete_id', participant.id);
+
+				if (trainingScores && trainingScores.length > 0) {
+					// 検定員名をバッチ取得
+					const judgeIds = trainingScores
+						.filter((s) => s.judge_id)
+						.map((s) => s.judge_id);
+					const guestIdentifiers = trainingScores
+						.filter((s) => s.guest_identifier)
+						.map((s) => s.guest_identifier);
+
+					let judgeNames: Record<string, string> = {};
+					if (judgeIds.length > 0) {
+						const { data: profiles } = await supabase
+							.from('profiles')
+							.select('id, full_name')
+							.in('id', judgeIds);
+						if (profiles) {
+							judgeNames = Object.fromEntries(
+								profiles.map((p) => [p.id, p.full_name || '不明'])
+							);
+						}
+					}
+
+					let guestNames: Record<string, string> = {};
+					if (guestIdentifiers.length > 0) {
+						const { data: guests } = await supabase
+							.from('session_participants')
+							.select('guest_identifier, guest_name')
+							.in('guest_identifier', guestIdentifiers);
+						if (guests) {
+							guestNames = Object.fromEntries(
+								guests.map((g) => [g.guest_identifier, g.guest_name || 'ゲスト'])
+							);
+						}
+					}
+
+					const scoresWithNames = trainingScores.map((s) => ({
+						judge_id: s.judge_id,
+						guest_identifier: s.guest_identifier,
+						judge_name: s.guest_identifier
+							? guestNames[s.guest_identifier] || 'ゲスト'
+							: judgeNames[s.judge_id] || '不明',
+						score: s.score,
+						is_guest: !!s.guest_identifier
+					}));
+
+					initialScoreStatus = {
+						scores: scoresWithNames,
+						requiredJudges: totalJudges
+					};
+				} else {
+					initialScoreStatus = { scores: [], requiredJudges: totalJudges };
+				}
+			}
+		} else {
+			// 大会モード: results テーブルから取得
+			const { data: scores } = await supabase
+				.from('results')
+				.select('judge_name, score')
+				.eq('session_id', sessionId)
+				.eq('bib', parseInt(bib))
+				.eq('discipline', eventInfo.discipline)
+				.eq('level', eventInfo.level)
+				.eq('event_name', eventInfo.event_name);
+
+			const requiredJudges = sessionDetails.exclude_extremes ? 5 : 3;
+			initialScoreStatus = {
+				scores: scores || [],
+				requiredJudges
+			};
+		}
+	}
+
 	return {
 		user,
 		sessionDetails,
@@ -100,7 +151,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		totalJudges,
 		guestParticipant,
 		guestIdentifier,
-		profile
+		profile,
+		initialScoreStatus,
+		athleteId
 	};
 };
 
@@ -129,30 +182,12 @@ export const actions: Actions = {
 		}
 
 		// セッション情報を取得して権限をチェック
-		const { data: sessionData, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id')
-			.eq('id', sessionId)
-			.single();
-
-		if (sessionError) {
+		const sessionData = await fetchSessionDetails(supabase, sessionId, { throwOnError: false });
+		if (!sessionData) {
 			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
 		}
-
-		const isChief = user ? user.id === sessionData.chief_judge_id : false;
-
-		// 複数検定員モードの確認
-		let isMultiJudge = false;
-		if (modeType === 'training') {
-			const { data: trainingSession } = await supabase
-				.from('training_sessions')
-				.select('is_multi_judge')
-				.eq('session_id', sessionId)
-				.maybeSingle();
-			isMultiJudge = trainingSession?.is_multi_judge || false;
-		} else if (modeType === 'tournament') {
-			isMultiJudge = true;
-		}
+		const isChief = isChiefJudge(user, sessionData);
+		const isMultiJudge = await getMultiJudgeMode(supabase, sessionId, modeType, sessionData);
 
 		// 複数検定員モードONの場合、主任検定員のみが修正を要求できる
 		if (!isChief && isMultiJudge) {
@@ -175,42 +210,16 @@ export const actions: Actions = {
 
 		// モードに応じて得点を削除
 		if (isTrainingMode) {
-			// ゲストまたは認証ユーザーの判定
-			let deleteQuery = supabase
-				.from('training_scores')
-				.delete()
-				.eq('event_id', eventId)
-				.eq('athlete_id', participant.id);
+			const deleteResult = await deleteTrainingScore(supabase, {
+				eventId,
+				athleteId: participant.id,
+				guestIdentifier: formGuestIdentifier || null,
+				judgeId: judgeId || null,
+				judgeName
+			});
 
-			if (formGuestIdentifier) {
-				// ゲストユーザーの場合
-				console.log('[requestCorrection] Deleting guest score:', formGuestIdentifier);
-				deleteQuery = deleteQuery.eq('guest_identifier', formGuestIdentifier);
-			} else if (judgeId) {
-				// 認証ユーザーの場合（judgeIdがフォームから送信されている）
-				console.log('[requestCorrection] Deleting user score:', judgeId);
-				deleteQuery = deleteQuery.eq('judge_id', judgeId);
-			} else {
-				// フォールバック: judge_nameから検定員を特定
-				const { data: judgeProfile } = await supabase
-					.from('profiles')
-					.select('id')
-					.eq('full_name', judgeName)
-					.maybeSingle();
-
-				if (!judgeProfile) {
-					return fail(404, { error: '検定員が見つかりません。' });
-				}
-
-				console.log('[requestCorrection] Deleting user score (fallback):', judgeProfile.id);
-				deleteQuery = deleteQuery.eq('judge_id', judgeProfile.id);
-			}
-
-			const { error: deleteError } = await deleteQuery;
-
-			if (deleteError) {
-				console.error('[requestCorrection] Error deleting training score:', deleteError);
-				return fail(500, { error: `得点の削除に失敗しました。${deleteError.message || ''}` });
+			if (!deleteResult.success) {
+				return fail(500, { error: deleteResult.error });
 			}
 		} else {
 			// 大会モードの場合、resultsから削除
@@ -265,30 +274,9 @@ export const actions: Actions = {
 		}
 
 		// セッション情報を取得して権限をチェック
-		const { data: sessionData, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, exclude_extremes, max_score_diff, is_tournament_mode, mode')
-			.eq('id', sessionId)
-			.single();
-
-		if (sessionError) {
-			return fail(500, { error: 'セッション情報の取得に失敗しました。' });
-		}
-
-		const isChief = user ? user.id === sessionData.chief_judge_id : false;
-
-		// 複数検定員モードの確認
-		let isMultiJudge = false;
-		if (modeType === 'training') {
-			const { data: trainingSession } = await supabase
-				.from('training_sessions')
-				.select('is_multi_judge')
-				.eq('session_id', sessionId)
-				.maybeSingle();
-			isMultiJudge = trainingSession?.is_multi_judge || false;
-		} else if (modeType === 'tournament') {
-			isMultiJudge = true;
-		}
+		const sessionData = await fetchSessionDetails(supabase, sessionId);
+		const isChief = isChiefJudge(user, sessionData);
+		const isMultiJudge = await getMultiJudgeMode(supabase, sessionId, modeType, sessionData);
 
 		// 複数検定員モードONの場合、主任検定員のみが確定できる
 		if (!isChief && isMultiJudge) {
@@ -336,32 +324,19 @@ export const actions: Actions = {
 			return fail(400, { error: '採点結果がありません。' });
 		}
 
-		const scoreValues = scores.map((s) => parseFloat(s.score)).sort((a, b) => a - b);
+		const scoreValues = scores.map((s) => parseFloat(s.score));
 
-		// 大会モードで点差制限が設定されている場合、点差をチェック
-		const isTournamentMode = modeType === 'tournament' || sessionData.is_tournament_mode || sessionData.mode === 'tournament';
-		if (isTournamentMode && sessionData.max_score_diff !== null && sessionData.max_score_diff !== undefined) {
-			const maxScore = Math.max(...scoreValues);
-			const minScore = Math.min(...scoreValues);
-			const scoreDiff = Math.round(maxScore - minScore);
+		const calcResult = calculateFinalScore(scoreValues, {
+			useSum: true,
+			excludeExtremes: sessionData.exclude_extremes || false,
+			maxScoreDiff: sessionData.max_score_diff ?? null
+		});
 
-			if (scoreDiff > sessionData.max_score_diff) {
-				return fail(400, {
-					error: `点差が上限を超えています（${scoreDiff}点 > ${sessionData.max_score_diff}点）。再採点を指示してください。`
-				});
-			}
+		if (!calcResult.success) {
+			return fail(400, { error: calcResult.error });
 		}
 
-		let finalScore = 0;
-
-		if (sessionData.exclude_extremes && scoreValues.length >= 5) {
-			// 5審3採: 最大・最小を除く3人の合計
-			const middleScores = scoreValues.slice(1, 4);
-			finalScore = middleScores.reduce((acc, s) => acc + s, 0);
-		} else {
-			// 3審3採: 3人の合計
-			finalScore = scoreValues.reduce((acc, s) => acc + s, 0);
-		}
+		const finalScore = calcResult.finalScore;
 
 		// 完了画面へリダイレクト（ゲストパラメータを保持）
 		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';

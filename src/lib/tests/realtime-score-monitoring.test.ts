@@ -606,232 +606,50 @@ describe('Realtime Score Monitoring', () => {
 	});
 
 	describe('Realtime接続エラーと自己回復', () => {
-		it('CHANNEL_ERROR時に再接続が試行される', async () => {
+		it('CHANNEL_ERROR時にコールバックが呼ばれる', async () => {
 			const channelName = 'error-recovery';
-			let subscriptionAttempts = 0;
-			let lastStatus = '';
-
-			const attemptSubscription = () => {
-				subscriptionAttempts++;
-				mockSupabase
-					.channel(channelName)
-					.on('postgres_changes', { table: 'training_scores' }, () => {})
-					.subscribe((status: string) => {
-						lastStatus = status;
-					});
-			};
-
-			// 初回購読
-			attemptSubscription();
-			await waitForAsync(20);
-			expect(lastStatus).toBe('SUBSCRIBED');
-
-			// CHANNEL_ERRORをシミュレート
-			mockRealtime.simulateChannelError(channelName);
-			await waitForAsync(20);
-
-			// 再接続を試行
-			attemptSubscription();
-			await waitForAsync(20);
-
-			expect(subscriptionAttempts).toBe(2);
-			expect(lastStatus).toBe('SUBSCRIBED');
-		});
-
-		it('TIMED_OUT時に再接続が試行される', async () => {
-			const channelName = 'timeout-recovery';
-			let reconnectCalled = false;
-			let currentStatus = '';
+			let errorDetected = false;
 
 			mockSupabase
 				.channel(channelName)
 				.on('postgres_changes', { table: 'training_scores' }, () => {})
 				.subscribe((status: string) => {
-					currentStatus = status;
-					if (status === 'TIMED_OUT') {
-						reconnectCalled = true;
+					if (status === 'CHANNEL_ERROR') {
+						errorDetected = true;
 					}
 				});
 
 			await waitForAsync(20);
-			expect(currentStatus).toBe('SUBSCRIBED');
 
-			// タイムアウトをシミュレート
+			mockRealtime.simulateChannelError(channelName);
+			await waitForAsync(20);
+
+			expect(errorDetected).toBe(true);
+		});
+
+		it('TIMED_OUT時にコールバックが呼ばれる', async () => {
+			const channelName = 'timeout-recovery';
+			let timeoutDetected = false;
+
+			mockSupabase
+				.channel(channelName)
+				.on('postgres_changes', { table: 'training_scores' }, () => {})
+				.subscribe((status: string) => {
+					if (status === 'TIMED_OUT') {
+						timeoutDetected = true;
+					}
+				});
+
+			await waitForAsync(20);
+
 			mockRealtime.simulateChannelTimeout(channelName);
 			await waitForAsync(20);
 
-			expect(reconnectCalled).toBe(true);
+			expect(timeoutDetected).toBe(true);
 		});
 
-		it('指数バックオフで再接続の遅延が増加する', async () => {
-			const retryDelays: number[] = [];
-
-			// 指数バックオフのシミュレーション
-			for (let retryCount = 0; retryCount < 5; retryCount++) {
-				const backoffDelay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s, 8s, 16s
-				retryDelays.push(backoffDelay);
-			}
-
-			expect(retryDelays).toEqual([1000, 2000, 4000, 8000, 16000]);
-		});
-
-		it('最大リトライ回数到達後はフォールバックポーリングに切り替わる', async () => {
-			const MAX_RETRY_COUNT = 5;
-			let retryCount = 0;
-			let fallbackPollingStarted = false;
-
-			// 再接続を繰り返す
-			while (retryCount < MAX_RETRY_COUNT) {
-				retryCount++;
-				// 再接続失敗をシミュレート
-			}
-
-			// 最大リトライ回数到達
-			if (retryCount >= MAX_RETRY_COUNT) {
-				fallbackPollingStarted = true;
-			}
-
-			expect(retryCount).toBe(5);
-			expect(fallbackPollingStarted).toBe(true);
-		});
-
-		it('再接続成功時にリトライカウントがリセットされる', async () => {
-			let retryCount = 3;
-
-			// 再接続成功をシミュレート
-			const onSubscriptionSuccess = () => {
-				retryCount = 0; // リセット
-			};
-
-			onSubscriptionSuccess();
-			expect(retryCount).toBe(0);
-		});
-
-		it('再接続成功時にフォールバックポーリングが停止される', async () => {
-			let fallbackPollingActive = true;
-
-			// 再接続成功をシミュレート
-			const onSubscriptionSuccess = () => {
-				if (fallbackPollingActive) {
-					fallbackPollingActive = false; // 停止
-				}
-			};
-
-			onSubscriptionSuccess();
-			expect(fallbackPollingActive).toBe(false);
-		});
-
-		it('手動更新でリトライカウントがリセットされる', async () => {
-			let retryCount = 4;
-			let dataRefreshed = false;
-
-			// 手動更新ボタンのクリックをシミュレート
-			const manualRefresh = async () => {
-				dataRefreshed = true;
-				retryCount = 0; // リトライカウントをリセット
-			};
-
-			await manualRefresh();
-
-			expect(retryCount).toBe(0);
-			expect(dataRefreshed).toBe(true);
-		});
-
-		it('連続したエラーイベントで再接続タイマーが多重登録されない', async () => {
-			let retryTimer: any = null;
-			let retryCount = 0;
-			let setupCallCount = 0;
-			const MAX_RETRY_COUNT = 5;
-
-			const mockSetupScoreRealtimeChannel = () => {
-				setupCallCount++;
-			};
-
-			const retryRealtimeConnection = () => {
-				// ✅ FIX: 既存のタイマーをクリアして多重登録を防止
-				if (retryTimer) {
-					clearTimeout(retryTimer);
-					retryTimer = null;
-				}
-
-				if (retryCount >= MAX_RETRY_COUNT) {
-					return;
-				}
-
-				const backoffDelay = Math.pow(2, retryCount) * 1000;
-				retryCount++;
-
-				retryTimer = setTimeout(() => {
-					mockSetupScoreRealtimeChannel();
-				}, backoffDelay);
-			};
-
-			// 短時間に3回連続でCHANNEL_ERRORが来る
-			retryRealtimeConnection();
-			await waitForAsync(10);
-			retryRealtimeConnection();
-			await waitForAsync(10);
-			retryRealtimeConnection();
-
-			// retryTimer は最後の1つのみ残っている
-			expect(retryTimer).not.toBeNull();
-			expect(retryCount).toBe(3);
-
-			// 最後のタイマーだけが実行される
-			await waitForAsync(Math.pow(2, 2) * 1000 + 100);
-			expect(setupCallCount).toBe(1);
-
-			// タイマーをクリーンアップ
-			if (retryTimer) {
-				clearTimeout(retryTimer);
-			}
-		});
-
-		it('エラー継続中の多重タイマー登録が防止される', async () => {
-			let retryTimer: any = null;
-			let timerSetCount = 0;
-			let timerClearCount = 0;
-
-			const mockSetTimeout = (callback: () => void, delay: number) => {
-				timerSetCount++;
-				return setTimeout(callback, delay);
-			};
-
-			const mockClearTimeout = (timer: any) => {
-				if (timer) {
-					timerClearCount++;
-					clearTimeout(timer);
-				}
-			};
-
-			const retryRealtimeConnection = () => {
-				// 既存のタイマーをクリア
-				if (retryTimer) {
-					mockClearTimeout(retryTimer);
-					retryTimer = null;
-				}
-
-				// 新しいタイマーを登録
-				retryTimer = mockSetTimeout(() => {}, 1000);
-			};
-
-			// 5回連続で呼び出し
-			for (let i = 0; i < 5; i++) {
-				retryRealtimeConnection();
-			}
-
-			// タイマー登録は5回、クリアは4回（1回目以外）
-			expect(timerSetCount).toBe(5);
-			expect(timerClearCount).toBe(4);
-
-			// 最後の1つだけが残っている
-			expect(retryTimer).not.toBeNull();
-
-			// クリーンアップ
-			if (retryTimer) {
-				clearTimeout(retryTimer);
-			}
-		});
+		// 指数バックオフ、リトライ、フォールバックポーリングの詳細テストは
+		// realtime-channel-with-retry.test.ts で実ロジックに対して実施
 	});
 
 	describe('パフォーマンス検証', () => {
@@ -909,168 +727,41 @@ describe('Realtime Score Monitoring', () => {
 		});
 	});
 
-	describe('fetchStatus() race condition防止（セマフォパターン）', () => {
-		it('複数の同時fetchStatus呼び出しが直列化される', async () => {
-			// セマフォパターンのシミュレーション
-			let isFetchingStatus = false;
-			let pendingFetchRequest = false;
-			let fetchExecutionCount = 0;
-			let concurrentCallAttempts = 0;
+	describe('fetchStatus() race condition防止', () => {
+		// 排他制御の実ロジックテストは serializedAsync.test.ts で実施
+		// ここではステータスページでの使用シナリオのみ検証
 
-			const mockFetchStatus = async () => {
-				concurrentCallAttempts++;
+		it('Realtimeイベント受信時にfetchStatusが呼ばれる', async () => {
+			// Realtimeイベントが来たら fetchStatus() (= serializedFetch.run()) が呼ばれる
+			// 排他制御は createSerializedAsync が担保する
+			const channelName = 'fetch-trigger-test';
+			let fetchTriggered = false;
 
-				// 既に実行中の場合、ペンディング状態にして終了
-				if (isFetchingStatus) {
-					pendingFetchRequest = true;
-					return;
-				}
-
-				try {
-					isFetchingStatus = true;
-					pendingFetchRequest = false;
-					fetchExecutionCount++;
-
-					// API呼び出しをシミュレート（100ms）
-					await new Promise((resolve) => setTimeout(resolve, 100));
-				} finally {
-					isFetchingStatus = false;
-
-					// ペンディング中のリクエストがあれば再実行
-					if (pendingFetchRequest) {
-						setTimeout(() => mockFetchStatus(), 100);
+			mockSupabase
+				.channel(channelName)
+				.on(
+					'postgres_changes',
+					{ event: '*', table: 'training_scores' },
+					(payload: any) => {
+						if (payload.eventType === 'INSERT') {
+							fetchTriggered = true;
+						}
 					}
-				}
-			};
+				)
+				.subscribe();
 
-			// 3つの同時呼び出し
-			const promises = [mockFetchStatus(), mockFetchStatus(), mockFetchStatus()];
+			await waitForChannelSubscription(mockRealtime, channelName);
 
-			await Promise.all(promises);
-			await waitForAsync(500); // ペンディングリクエスト実行のための待機
+			simulateScoreInsert(mockRealtime, channelName, {
+				id: 'score_1',
+				judge_id: 'judge_1',
+				score: 85,
+				event_id: 'event_1',
+				athlete_id: 'athlete_1'
+			});
 
-			// 3回の呼び出し試行があったが、実際の実行は2回のみ（1回目 + ペンディング1回）
-			expect(concurrentCallAttempts).toBe(3);
-			expect(fetchExecutionCount).toBe(2);
-		});
-
-		it('ペンディングリクエストが確実に実行される', async () => {
-			let isFetchingStatus = false;
-			let pendingFetchRequest = false;
-			let executionLog: string[] = [];
-
-			const mockFetchStatus = async (callId: string) => {
-				executionLog.push(`${callId}_called`);
-
-				if (isFetchingStatus) {
-					pendingFetchRequest = true;
-					executionLog.push(`${callId}_pending`);
-					return;
-				}
-
-				try {
-					isFetchingStatus = true;
-					pendingFetchRequest = false;
-					executionLog.push(`${callId}_executing`);
-
-					// 模擬的な非同期処理
-					await new Promise((resolve) => setTimeout(resolve, 50));
-				} finally {
-					isFetchingStatus = false;
-					executionLog.push(`${callId}_finished`);
-
-					// ペンディング中のリクエストがあれば再実行
-					if (pendingFetchRequest) {
-						executionLog.push(`pending_triggered`);
-						setTimeout(() => mockFetchStatus('pending_auto'), 100);
-					}
-				}
-			};
-
-			// 1つ目の呼び出し開始（実行される）
-			const call1 = mockFetchStatus('call1');
-			await waitForAsync(10);
-
-			// 2つ目の呼び出し（実行中のため、ペンディング状態になる）
-			const call2 = mockFetchStatus('call2');
-			await waitForAsync(10);
-
-			await Promise.all([call1, call2]);
-			await waitForAsync(200); // ペンディングリクエスト実行のための待機
-
-			// call1が実行され、call2はペンディング状態になり、後で自動実行される
-			expect(executionLog).toContain('call1_executing');
-			expect(executionLog).toContain('call2_pending');
-			expect(executionLog).toContain('pending_triggered');
-			expect(executionLog).toContain('pending_auto_executing');
-		});
-
-		it('Realtimeイベントからのfetchは既存実行を待つ', async () => {
-			let isFetchingStatus = false;
-			let pendingFetchRequest = false;
-			let fetchCount = 0;
-
-			const mockFetchStatus = async () => {
-				if (isFetchingStatus) {
-					pendingFetchRequest = true;
-					return;
-				}
-
-				try {
-					isFetchingStatus = true;
-					pendingFetchRequest = false;
-					fetchCount++;
-					await new Promise((resolve) => setTimeout(resolve, 100));
-				} finally {
-					isFetchingStatus = false;
-
-					if (pendingFetchRequest) {
-						setTimeout(() => mockFetchStatus(), 100);
-					}
-				}
-			};
-
-			// 手動更新（実行開始）
-			const manualFetch = mockFetchStatus();
 			await waitForAsync(20);
-
-			// Realtimeイベント受信（ペンディング状態に）
-			const realtimeTriggeredFetch = mockFetchStatus();
-			await waitForAsync(20);
-
-			// フォールバックポーリング（ペンディング状態に、2つ目は無視される）
-			const pollingFetch = mockFetchStatus();
-
-			await Promise.all([manualFetch, realtimeTriggeredFetch, pollingFetch]);
-			await waitForAsync(500);
-
-			// 実行回数は2回（初回 + ペンディング1回統合）
-			expect(fetchCount).toBe(2);
-		});
-
-		it('セマフォが正しくリセットされる', async () => {
-			let isFetchingStatus = false;
-
-			const mockFetchStatus = async () => {
-				if (isFetchingStatus) {
-					return;
-				}
-
-				try {
-					isFetchingStatus = true;
-					await new Promise((resolve) => setTimeout(resolve, 50));
-				} finally {
-					isFetchingStatus = false;
-				}
-			};
-
-			// 1回目の実行
-			await mockFetchStatus();
-			expect(isFetchingStatus).toBe(false);
-
-			// セマフォがリセットされているので、2回目も実行できる
-			await mockFetchStatus();
-			expect(isFetchingStatus).toBe(false);
+			expect(fetchTriggered).toBe(true);
 		});
 	});
 });

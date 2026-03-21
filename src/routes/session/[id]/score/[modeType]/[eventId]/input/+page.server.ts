@@ -1,6 +1,16 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	getMultiJudgeMode,
+	fetchEventInfo,
+	isChiefJudge,
+	isTrainingModeCheck,
+	getJudgeName
+} from '$lib/server/sessionHelpers';
+import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -21,8 +31,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	}
 
 	// セッション情報、参加者情報を並列取得（高速化）
-	const [sessionResult, participantResult] = await Promise.all([
-		supabase.from('sessions').select('*').eq('id', sessionId).single(),
+	const [sessionDetails, participantResult] = await Promise.all([
+		fetchSessionDetails(supabase, sessionId),
 		supabase
 			.from('participants')
 			.select('*')
@@ -31,80 +41,19 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.single()
 	]);
 
-	if (sessionResult.error) {
-		throw error(404, '検定が見つかりません。');
-	}
-
 	if (participantResult.error) {
 		console.error('[load] 参加者取得エラー:', participantResult.error);
 		throw error(404, '参加者が見つかりません。このセッションに所属していない可能性があります。');
 	}
 
-	const sessionDetails = sessionResult.data;
 	const participant = participantResult.data;
-
-	// モード判定
-	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
-
-	// モードに応じて種目情報とトレーニングセッション情報を並列取得
-	let eventInfo: any = null;
-	let isMultiJudge = false;
-
-	if (isTrainingMode) {
-		const [eventResult, trainingSessionResult] = await Promise.all([
-			supabase
-				.from('training_events')
-				.select('*')
-				.eq('id', eventId)
-				.eq('session_id', sessionId)
-				.single(),
-			supabase
-				.from('training_sessions')
-				.select('is_multi_judge')
-				.eq('session_id', sessionId)
-				.maybeSingle()
-		]);
-
-		if (eventResult.error) {
-			throw error(404, '種目が見つかりません。');
-		}
-		eventInfo = eventResult.data;
-		isMultiJudge = trainingSessionResult.data?.is_multi_judge || false;
-	} else {
-		const { data: customEvent, error: eventError } = await supabase
-			.from('custom_events')
-			.select('*')
-			.eq('id', eventId)
-			.eq('session_id', sessionId)
-			.single();
-
-		if (eventError) {
-			throw error(404, '種目が見つかりません。');
-		}
-		eventInfo = customEvent;
-
-		if (modeType === 'tournament') {
-			// 大会モードは常に複数検定員モードON
-			isMultiJudge = true;
-		} else {
-			isMultiJudge = sessionDetails.is_multi_judge || false;
-		}
-	}
-
-	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
-
-	// プロフィール情報を取得（認証ユーザーの場合のみ）
-	let profile = null;
-
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
-	}
+	const isTrainingMode = isTrainingModeCheck(modeType, sessionDetails);
+	const [eventInfo, isMultiJudge, isChief, profile] = await Promise.all([
+		fetchEventInfo(supabase, eventId, sessionId, isTrainingMode),
+		getMultiJudgeMode(supabase, sessionId, modeType, sessionDetails),
+		Promise.resolve(isChiefJudge(user, sessionDetails)),
+		fetchUserProfile(supabase, user)
+	]);
 
 	return {
 		sessionDetails,
@@ -176,44 +125,21 @@ export const actions: Actions = {
 			return fail(400, { error: '参加者IDが指定されていません。' });
 		}
 
-		// 2. bibNumber のバリデーション（部分パース防止 + NaN チェック）
-		// 正規表現で文字列全体が正の整数かチェック
-		if (!bibNumberRaw || !/^\d+$/.test(bibNumberRaw.trim())) {
-			console.error('[submitScore] bibNumber が不正な形式:', bibNumberRaw);
-			return fail(400, { error: 'ゼッケン番号は正の整数で入力してください。' });
+		// 2. bibNumber のバリデーション
+		const bibResult = validateBib(bibNumberRaw);
+		if (!bibResult.success) {
+			console.error('[submitScore] bibNumber が不正:', bibNumberRaw);
+			return fail(400, { error: bibResult.error });
 		}
+		const bibNumber = bibResult.value;
 
-		const bibNumber = Number(bibNumberRaw);
-
-		if (isNaN(bibNumber) || bibNumber <= 0 || !Number.isInteger(bibNumber)) {
-			console.error('[submitScore] bibNumber が無効:', bibNumber);
-			return fail(400, { error: 'ゼッケン番号は正の整数である必要があります。' });
+		// 3. score のバリデーション
+		const scoreResult = validateScoreInput(scoreRaw);
+		if (!scoreResult.success) {
+			console.error('[submitScore] score が不正:', scoreRaw);
+			return fail(400, { error: scoreResult.error });
 		}
-
-		// 3. score のバリデーション（部分パース防止 + NaN・Infinity・整数チェック）
-		// 正規表現で文字列全体が数値（整数または小数）かチェック
-		if (!scoreRaw || !/^-?\d+(\.\d+)?$/.test(scoreRaw.trim())) {
-			console.error('[submitScore] score が不正な形式:', scoreRaw);
-			return fail(400, { error: '得点は数値で入力してください。' });
-		}
-
-		const score = Number(scoreRaw);
-
-		if (isNaN(score)) {
-			console.error('[submitScore] score が NaN です');
-			return fail(400, { error: '得点は数値で入力してください。' });
-		}
-
-		if (!isFinite(score)) {
-			console.error('[submitScore] score が無限大です:', score);
-			return fail(400, { error: '得点が無効です。' });
-		}
-
-		// UI仕様が整数前提なので整数チェック
-		if (!Number.isInteger(score)) {
-			console.error('[submitScore] score が整数ではありません:', score);
-			return fail(400, { error: '得点は整数で入力してください。' });
-		}
+		const score = scoreResult.value;
 
 		// 4. bibNumber と participantId の整合性チェック
 		const { data: participant, error: participantError } = await supabase
@@ -277,11 +203,10 @@ export const actions: Actions = {
 		}
 
 		// 6. 得点範囲チェック
-		if (score < minScore || score > maxScore) {
+		const rangeResult = validateScoreRange(score, minScore, maxScore);
+		if (!rangeResult.success) {
 			console.error('[submitScore] 得点範囲外:', { score, minScore, maxScore });
-			return fail(400, {
-				error: `得点は${minScore}～${maxScore}の範囲で入力してください。`
-			});
+			return fail(400, { error: rangeResult.error });
 		}
 
 		console.log('[submitScore] バリデーション完了。得点を保存します。');
@@ -359,23 +284,12 @@ export const actions: Actions = {
 			}
 
 			// 検定員名を取得（通常ユーザーまたはゲストユーザー）
-			let judgeName: string;
-			if (guestParticipant) {
-				// ゲストの場合: 識別用 suffix を追加（認証ユーザーとの衝突回避）
-				judgeName = `${guestParticipant.guest_name} (ゲスト)`;
-				console.log('[submitScore] Using guest name with suffix:', judgeName);
-			} else if (user) {
-				const { data: profile } = await supabase
-					.from('profiles')
-					.select('full_name')
-					.eq('id', user.id)
-					.single();
-				judgeName = profile?.full_name || user.email || 'Unknown';
-				console.log('[submitScore] Using user name:', judgeName);
-			} else {
+			const judgeName = await getJudgeName(supabase, user, guestParticipant, { addGuestSuffix: true });
+			if (!judgeName) {
 				console.error('[submitScore] Neither user nor guest found!');
 				return fail(401, { error: '認証が必要です。' });
 			}
+			console.log('[submitScore] Using judge name:', judgeName);
 
 			console.log('[submitScore] Inserting result:', {
 				session_id: sessionIdInt,

@@ -192,6 +192,12 @@ export function createRealtimeChannelWithRetry(
 		getChannel: () => channel,
 		hasConnectionError: () => connectionError,
 		manualRefresh: async (refreshFn?: () => Promise<void>) => {
+			// Clear pending retry timer to prevent duplicate setupChannel() calls
+			if (retryTimer) {
+				clearTimeout(retryTimer);
+				retryTimer = null;
+			}
+
 			connectionError = false;
 			retryCount = 0;
 			config.onConnectionError?.(false);
@@ -231,6 +237,7 @@ export function createSessionMonitorChannel(
 	const prefix = config.channelPrefix || 'session-monitor';
 	const channelName = `${prefix}-${config.sessionId}`;
 	let channel: RealtimeChannel | null = null;
+	let errorReloadTimer: ReturnType<typeof setTimeout> | null = null;
 
 	channel = supabase
 		.channel(channelName)
@@ -250,13 +257,22 @@ export function createSessionMonitorChannel(
 			console.log(`[realtime/${channelName}] status:`, status);
 			if (status === 'SUBSCRIBED') {
 				console.log(`[realtime/${channelName}] connected`);
+				// Cancel pending error reload — connection recovered
+				if (errorReloadTimer) {
+					clearTimeout(errorReloadTimer);
+					errorReloadTimer = null;
+				}
 			} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 				console.error(`[realtime/${channelName}] error:`, status);
 				if (config.onError) {
 					config.onError();
 				} else {
+					// Clear previous reload timer to prevent duplicates
+					if (errorReloadTimer) {
+						clearTimeout(errorReloadTimer);
+					}
 					// Default: reload page after 2s
-					setTimeout(() => {
+					errorReloadTimer = setTimeout(() => {
 						if (channel) {
 							supabase.removeChannel(channel);
 						}
@@ -268,6 +284,10 @@ export function createSessionMonitorChannel(
 
 	return {
 		cleanup: () => {
+			if (errorReloadTimer) {
+				clearTimeout(errorReloadTimer);
+				errorReloadTimer = null;
+			}
 			if (channel) {
 				supabase.removeChannel(channel);
 				channel = null;
@@ -297,6 +317,29 @@ export function createSessionMonitorWithPolling(
 	const pollingMs = config.pollingIntervalMs ?? 3000;
 	let channel: RealtimeChannel | null = null;
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
+	let errorReloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function stopPolling() {
+		if (pollingInterval) {
+			clearInterval(pollingInterval);
+			pollingInterval = null;
+		}
+	}
+
+	function startPolling() {
+		stopPolling();
+		pollingInterval = setInterval(async () => {
+			const { data, error } = await supabase
+				.from('sessions')
+				.select('is_active, active_prompt_id')
+				.eq('id', config.sessionId)
+				.single();
+
+			if (!error && data) {
+				config.onPollingData(data as any);
+			}
+		}, pollingMs);
+	}
 
 	channel = supabase
 		.channel(channelName)
@@ -317,24 +360,29 @@ export function createSessionMonitorWithPolling(
 			if (status === 'SUBSCRIBED') {
 				console.log(`[realtime/${channelName}] connected`);
 
-				// Start backup polling
-				pollingInterval = setInterval(async () => {
-					const { data, error } = await supabase
-						.from('sessions')
-						.select('is_active, active_prompt_id')
-						.eq('id', config.sessionId)
-						.single();
+				// Cancel pending error reload — connection recovered
+				if (errorReloadTimer) {
+					clearTimeout(errorReloadTimer);
+					errorReloadTimer = null;
+				}
 
-					if (!error && data) {
-						config.onPollingData(data as any);
-					}
-				}, pollingMs);
+				// Supabase can fire SUBSCRIBED multiple times (reconnect, network
+				// recovery). startPolling() clears any existing interval first so
+				// we never accumulate duplicate setInterval handles.
+				startPolling();
 			} else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 				console.error(`[realtime/${channelName}] error:`, status);
+				// Stop polling during error state to avoid stale requests
+				stopPolling();
+
 				if (config.onError) {
 					config.onError();
 				} else {
-					setTimeout(() => {
+					// Clear previous reload timer to prevent duplicates
+					if (errorReloadTimer) {
+						clearTimeout(errorReloadTimer);
+					}
+					errorReloadTimer = setTimeout(() => {
 						if (channel) {
 							supabase.removeChannel(channel);
 						}
@@ -346,14 +394,15 @@ export function createSessionMonitorWithPolling(
 
 	return {
 		cleanup: () => {
+			if (errorReloadTimer) {
+				clearTimeout(errorReloadTimer);
+				errorReloadTimer = null;
+			}
 			if (channel) {
 				supabase.removeChannel(channel);
 				channel = null;
 			}
-			if (pollingInterval) {
-				clearInterval(pollingInterval);
-				pollingInterval = null;
-			}
+			stopPolling();
 		},
 		getChannel: () => channel
 	};

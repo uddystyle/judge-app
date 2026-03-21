@@ -8,7 +8,10 @@
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import * as XLSX from 'xlsx';
-	import QRCode from 'qrcode';
+	import QRInviteModal from '$lib/components/QRInviteModal.svelte';
+	import EventManagement from '$lib/components/EventManagement.svelte';
+	import TournamentSettings from '$lib/components/TournamentSettings.svelte';
+	import MultiJudgeSettings from '$lib/components/MultiJudgeSettings.svelte';
 	import { onMount } from 'svelte';
 
 	export let data: PageData;
@@ -16,9 +19,6 @@
 
 	$: sessionName = data.sessionDetails.name;
 	$: participantCount = data.participants?.length || 0;
-
-	let isMultiJudge = data.sessionDetails.is_multi_judge;
-	let requiredJudges = data.sessionDetails.required_judges;
 
 	// セッション名編集用の状態
 	let isEditingName = false;
@@ -42,62 +42,8 @@
 		editedName = data.sessionDetails.name;
 	}
 
-	// 大会モード用の採点方式
-	let selectedMethod: '3judges' | '5judges' = data.sessionDetails.exclude_extremes
-		? '5judges'
-		: '3judges';
-
-	// 点差コントロール用の変数
-	let enableScoreDiffControl = data.sessionDetails.max_score_diff !== null;
-	let maxScoreDiff = data.sessionDetails.max_score_diff || 2;
-
-	// 検定員数に基づく採点方式の制限
-	$: canUse3Judges = participantCount === 3;
-	$: canUse5Judges = participantCount === 5;
-
-	// 検定員数が条件に合わない場合、選択を自動調整
-	$: if (!canUse5Judges && selectedMethod === '5judges') {
-		// 5審3採が選択できない場合、3審3採に変更（3審3採が使える場合のみ）
-		if (canUse3Judges) {
-			selectedMethod = '3judges';
-		}
-	}
-	$: if (!canUse3Judges && selectedMethod === '3judges') {
-		// 3審3採が選択できない場合、5審3採に変更（5審3採が使える場合のみ）
-		if (canUse5Judges) {
-			selectedMethod = '5judges';
-		}
-	}
-
 	let exportLoading = false;
 	let deleteDataForm: HTMLFormElement;
-
-	// 種目管理用の変数
-	let eventName = '';
-	let editingEventId: number | null = null;
-	let editEventName = '';
-
-	function startEditEvent(event: any) {
-		editingEventId = event.id;
-		editEventName = data.isTrainingMode ? event.name : event.event_name;
-	}
-
-	function cancelEditEvent() {
-		editingEventId = null;
-		editEventName = '';
-	}
-
-	function clearEventForm() {
-		eventName = '';
-	}
-
-	// 研修モード設定
-	let isMultiJudgeTraining = data.trainingSession?.is_multi_judge || false;
-
-	// ローディング状態
-	let isSavingTournamentSettings = false;
-	let isSavingTrainingSettings = false;
-	let isSavingCertificationSettings = false;
 
 	// ゲストユーザー削除確認ダイアログ
 	let showRemoveGuestDialog = false;
@@ -172,7 +118,6 @@
 
 	// QRコード関連
 	let showQRModal = false;
-	let qrCodeDataUrl = '';
 	let inviteUrl = '';
 	let copiedInviteUrl = false;
 
@@ -182,50 +127,12 @@
 		inviteUrl = `${baseUrl}/session/invite/${data.sessionDetails.invite_token}`;
 	});
 
-	async function generateQRCode() {
-		try {
-			qrCodeDataUrl = await QRCode.toDataURL(inviteUrl, {
-				width: 300,
-				margin: 2,
-				color: {
-					dark: '#171717',
-					light: '#FFFFFF'
-				}
-			});
-			showQRModal = true;
-		} catch (err) {
-			console.error('QRコード生成エラー:', err);
-			alertMessage = 'QRコードの生成に失敗しました。';
-			showAlert = true;
-		}
+	function openQRModal() {
+		showQRModal = true;
 	}
 
 	function closeQRModal() {
 		showQRModal = false;
-	}
-
-	async function downloadQR() {
-		try {
-			// 高解像度QRコードを生成
-			const qrCodeDataUrlHD = await QRCode.toDataURL(inviteUrl, {
-				width: 512,
-				margin: 2
-			});
-
-			// ダウンロード
-			const link = document.createElement('a');
-			link.href = qrCodeDataUrlHD;
-			link.download = `${data.sessionDetails.name}_招待QRコード.png`;
-			link.click();
-		} catch (err) {
-			console.error('QRコードダウンロードエラー:', err);
-			alertMessage = 'QRコードのダウンロードに失敗しました。';
-			showAlert = true;
-		}
-	}
-
-	function printQR() {
-		window.print();
 	}
 
 	function copyInviteUrl() {
@@ -411,7 +318,7 @@
 
 			<div class="invite-item">
 				<span class="invite-label">QRコード</span>
-				<button class="qr-btn" on:click={generateQRCode}>
+				<button class="qr-btn" on:click={openQRModal}>
 					QRコードを表示
 				</button>
 			</div>
@@ -516,438 +423,45 @@
 
 	<!-- 種目管理セクション（大会・研修モードのみ） -->
 	{#if data.isTournamentMode || data.isTrainingMode}
-		<div class="settings-section">
-			<h3 class="settings-title">種目管理</h3>
-
-			{#if form?.eventSuccess}
-				<div class="success-message">{form.eventSuccess}</div>
-			{/if}
-
-			{#if form?.eventError}
-				<div class="error-message">{form.eventError}</div>
-			{/if}
-
-			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
-				<!-- 主任検定員のみ編集可能 -->
-				<!-- 登録済み種目一覧 -->
-				{#if data.events && data.events.length > 0}
-					<div class="events-list">
-						{#each data.events as event, index}
-							<div class="event-item">
-								{#if editingEventId === event.id}
-									<!-- 編集モード -->
-									<form method="POST" action="?/updateEvent" use:enhance class="edit-form">
-										<input type="hidden" name="eventId" value={event.id} />
-										<input type="hidden" name="isTraining" value={data.isTrainingMode} />
-										<input
-											type="text"
-											name="eventName"
-											bind:value={editEventName}
-											placeholder="種目名"
-											class="edit-input"
-											required
-										/>
-										<div class="edit-actions">
-											<button type="submit" class="save-btn-small">保存</button>
-											<button type="button" class="cancel-btn-small" on:click={cancelEditEvent}>
-												キャンセル
-											</button>
-										</div>
-									</form>
-								{:else}
-									<!-- 表示モード -->
-									<div class="event-info">
-										<span class="event-number">{index + 1}.</span>
-										<span class="event-text">
-											{data.isTrainingMode ? event.name : event.event_name}
-										</span>
-									</div>
-									<div class="event-actions">
-										<button class="edit-btn-small" on:click={() => startEditEvent(event)}>
-											編集
-										</button>
-										<form method="POST" action="?/deleteEvent" use:enhance style="display: inline;">
-											<input type="hidden" name="eventId" value={event.id} />
-											<input type="hidden" name="isTraining" value={data.isTrainingMode} />
-											<button
-												type="submit"
-												class="delete-btn-small"
-												on:click={(e) => {
-													if (!confirm('この種目を削除しますか？')) {
-														e.preventDefault();
-													}
-												}}
-											>
-												削除
-											</button>
-										</form>
-									</div>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<p class="empty-message">種目が登録されていません</p>
-				{/if}
-
-				<!-- 新しい種目を追加 -->
-				<form method="POST" action="?/addEvent" use:enhance on:submit={clearEventForm}>
-					<div class="add-event-form">
-						<input
-							type="text"
-							name="eventName"
-							bind:value={eventName}
-							placeholder="種目名 (例: 大回り)"
-							required
-						/>
-						<button type="submit" class="add-event-btn">追加</button>
-					</div>
-				</form>
-			{:else}
-				<!-- 一般検定員: 表示のみ -->
-				{#if data.events && data.events.length > 0}
-					<div class="events-list readonly">
-						{#each data.events as event, index}
-							<div class="event-item readonly">
-								<div class="event-info">
-									<span class="event-number">{index + 1}.</span>
-									<span class="event-text">
-										{data.isTrainingMode ? event.name : event.event_name}
-									</span>
-								</div>
-							</div>
-						{/each}
-					</div>
-				{:else}
-					<p class="empty-message">種目が登録されていません</p>
-				{/if}
-				<p class="readonly-notice">※ 種目の追加・編集・削除は主任検定員のみ可能です</p>
-			{/if}
-		</div>
-
+		<EventManagement
+			events={data.events}
+			isTrainingMode={data.isTrainingMode}
+			isChief={data.currentUserId === data.sessionDetails.chief_judge_id}
+			eventSuccess={form?.eventSuccess}
+			eventError={form?.eventError}
+		/>
 		<hr class="divider" />
 	{/if}
 
 	{#if data.sessionDetails.is_tournament_mode}
-		<!-- 大会モード: 採点方法設定 -->
-		<div class="settings-section">
-			<h3 class="settings-title">採点方法設定</h3>
-
-			{#if form?.tournamentSettingsSuccess}
-				<div class="success-message">{form.tournamentSettingsSuccess}</div>
-			{/if}
-
-			{#if form?.tournamentSettingsError}
-				<div class="error-message">{form.tournamentSettingsError}</div>
-			{/if}
-
-			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
-				<!-- 主任検定員のみ編集可能 -->
-				<form
-					method="POST"
-					action="?/updateTournamentSettings"
-					use:enhance={() => {
-						isSavingTournamentSettings = true;
-						return async ({ update }) => {
-							await update({ reset: false });
-							isSavingTournamentSettings = false;
-						};
-					}}
-				>
-					{#if !canUse3Judges && !canUse5Judges}
-						<div class="error-message">
-							採点を開始するには、3人または5人の検定員が必要です。現在の検定員数: {participantCount}人
-						</div>
-					{/if}
-
-					<div class="scoring-options">
-						<!-- 3審3採 -->
-						<label class="scoring-option" class:selected={selectedMethod === '3judges'} class:disabled={!canUse3Judges}>
-							<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} disabled={!canUse3Judges} />
-							<div class="option-content">
-								<div class="option-header">
-									<span class="option-title">3審3採</span>
-									{#if !canUse3Judges}
-										<span class="required-badge">3人必要</span>
-									{/if}
-								</div>
-								<div class="option-description">3人の検定員の点数の合計</div>
-								<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
-							</div>
-						</label>
-
-						<!-- 5審3採 -->
-						<label class="scoring-option" class:selected={selectedMethod === '5judges'} class:disabled={!canUse5Judges}>
-							<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} disabled={!canUse5Judges} />
-							<div class="option-content">
-								<div class="option-header">
-									<span class="option-title">5審3採</span>
-									{#if !canUse5Judges}
-										<span class="required-badge">5人必要</span>
-									{/if}
-								</div>
-								<div class="option-description">
-									5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
-								</div>
-								<div class="option-example">
-									例: 8.5 + 8.0 + <span class="excluded">9.0</span> + 8.5 +
-									<span class="excluded">7.5</span> = 25.0点
-								</div>
-							</div>
-						</label>
-					</div>
-
-					<!-- 点差コントロール設定 -->
-					<div class="score-diff-section">
-						<h4 class="subsection-title">点差コントロール</h4>
-
-						<div class="score-diff-toggle">
-							<input
-								type="checkbox"
-								id="enableScoreDiffControl"
-								name="enableScoreDiffControl"
-								bind:checked={enableScoreDiffControl}
-							/>
-							<label for="enableScoreDiffControl">点差制限を有効にする</label>
-						</div>
-
-						{#if enableScoreDiffControl}
-							<div class="score-diff-input-group">
-								<label for="maxScoreDiff" class="input-label">最大許容点差</label>
-								<div class="input-with-unit">
-									<input
-										type="number"
-										id="maxScoreDiff"
-										name="maxScoreDiff"
-										min="1"
-										max="10"
-										step="1"
-										bind:value={maxScoreDiff}
-										class="score-diff-input"
-									/>
-									<span class="unit">点</span>
-								</div>
-								<p class="help-text">
-									最高点と最低点の差がこの値を超えた場合、得点を確定できません。
-								</p>
-							</div>
-						{/if}
-					</div>
-
-					<div class="form-actions">
-						<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges || isSavingTournamentSettings}>
-							{#if isSavingTournamentSettings}
-								<span class="loading-spinner"></span>
-								保存中...
-							{:else}
-								設定を保存
-							{/if}
-						</button>
-					</div>
-				</form>
-			{:else}
-				<!-- 一般検定員: 表示のみ -->
-				<div class="readonly-scoring-method">
-					<div class="method-display">
-						<div class="method-title">
-							{selectedMethod === '5judges' ? '5審3採' : '3審3採'}
-						</div>
-						<div class="method-description">
-							{#if selectedMethod === '5judges'}
-								5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
-							{:else}
-								3人の検定員の点数の合計
-							{/if}
-						</div>
-					</div>
-				</div>
-				<p class="readonly-notice">※ 採点方法の変更は主任検定員のみ可能です</p>
-			{/if}
-		</div>
+		<TournamentSettings
+			isChief={data.currentUserId === data.sessionDetails.chief_judge_id}
+			{participantCount}
+			initialExcludeExtremes={data.sessionDetails.exclude_extremes}
+			initialMaxScoreDiff={data.sessionDetails.max_score_diff}
+			tournamentSettingsSuccess={form?.tournamentSettingsSuccess}
+			tournamentSettingsError={form?.tournamentSettingsError}
+		/>
 		<hr class="divider" />
 	{:else if data.isTrainingMode}
-		<!-- 研修モード: 複数検定員モード設定 -->
-		<div class="settings-section">
-			<h3 class="settings-title">研修モード設定</h3>
-
-			{#if form?.trainingSettingsSuccess}
-				<div class="success-message">{form.trainingSettingsSuccess}</div>
-			{/if}
-
-			{#if form?.trainingSettingsError}
-				<div class="error-message">{form.trainingSettingsError}</div>
-			{/if}
-
-			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
-				<!-- 主任検定員のみ編集可能 -->
-				<form
-					method="POST"
-					action="?/updateTrainingSettings"
-					use:enhance={() => {
-						isSavingTrainingSettings = true;
-						return async ({ update }) => {
-							await update({ reset: false });
-							isSavingTrainingSettings = false;
-						};
-					}}
-				>
-					<div class="setting-item">
-						<label for="multi-judge-toggle-training" class="form-label">複数検定員モード</label>
-						<div class="toggle-switch">
-							<input
-								type="checkbox"
-								id="multi-judge-toggle-training"
-								name="isMultiJudge"
-								bind:checked={isMultiJudgeTraining}
-								value={isMultiJudgeTraining}
-							/>
-							<label for="multi-judge-toggle-training"></label>
-						</div>
-					</div>
-
-					<div class="info-box">
-						{#if isMultiJudgeTraining}
-							<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
-						{:else}
-							<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
-						{/if}
-					</div>
-
-					<div class="form-actions">
-						<button type="submit" class="save-btn" disabled={isSavingTrainingSettings}>
-							{#if isSavingTrainingSettings}
-								<span class="loading-spinner"></span>
-								保存中...
-							{:else}
-								設定を保存
-							{/if}
-						</button>
-					</div>
-				</form>
-			{:else}
-				<!-- 一般検定員: 表示のみ -->
-				<div class="setting-item">
-					<span class="form-label">複数検定員モード</span>
-					<div class="readonly-value">
-						{isMultiJudgeTraining ? 'ON' : 'OFF'}
-					</div>
-				</div>
-
-				<div class="info-box">
-					{#if isMultiJudgeTraining}
-						<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
-					{:else}
-						<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
-					{/if}
-				</div>
-
-				<p class="readonly-notice">※ 設定の変更は主任検定員のみ可能です</p>
-			{/if}
-		</div>
+		<MultiJudgeSettings
+			mode="training"
+			isChief={data.currentUserId === data.sessionDetails.chief_judge_id}
+			isMultiJudge={data.trainingSession?.is_multi_judge || false}
+			settingsSuccess={form?.trainingSettingsSuccess}
+			settingsError={form?.trainingSettingsError}
+		/>
 		<hr class="divider" />
 	{:else}
-		<!-- 検定モード: 従来の採点ルール設定 -->
-		<div class="settings-section">
-			<h3 class="settings-title">採点ルール設定</h3>
-
-			{#if data.currentUserId === data.sessionDetails.chief_judge_id}
-				<!-- 主任検定員のみ編集可能 -->
-				<form
-					method="POST"
-					action="?/updateSettings"
-					use:enhance={() => {
-						isSavingCertificationSettings = true;
-						return async ({ update }) => {
-							await update({ reset: false });
-							isSavingCertificationSettings = false;
-						};
-					}}
-				>
-					<div class="setting-item">
-						<label for="multi-judge-toggle" class="form-label">複数審判モード</label>
-						<div class="toggle-switch">
-							<input
-								type="checkbox"
-								id="multi-judge-toggle"
-								name="isMultiJudge"
-								bind:checked={isMultiJudge}
-								value={isMultiJudge}
-							/>
-							<label for="multi-judge-toggle"></label>
-						</div>
-					</div>
-
-					<div class="info-box">
-						{#if isMultiJudge}
-							<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
-						{:else}
-							<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
-						{/if}
-					</div>
-
-					{#if isMultiJudge}
-					<div class="setting-item">
-						<label for="required-judges-input" class="form-label">
-							必須審判員数
-							<span class="helper-text">(現在: {participantCount}人)</span>
-						</label>
-						<input
-							type="number"
-							id="required-judges-input"
-							name="requiredJudges"
-							bind:value={requiredJudges}
-							min="1"
-							max={participantCount}
-							class="short-input"
-						/>
-					</div>
-				{/if}
-
-					{#if form?.settingsError}
-						<p class="message">{form.settingsError}</p>
-					{/if}
-					{#if form?.settingsSuccess}
-						<p class="message success">{form.settingsSuccess}</p>
-					{/if}
-
-					<div class="form-actions">
-						<button type="submit" class="save-btn" disabled={isSavingCertificationSettings}>
-							{#if isSavingCertificationSettings}
-								<span class="loading-spinner"></span>
-								保存中...
-							{:else}
-								設定を保存
-							{/if}
-						</button>
-					</div>
-				</form>
-			{:else}
-				<!-- 一般検定員: 表示のみ -->
-				<div class="setting-item">
-					<span class="form-label">複数審判モード</span>
-					<div class="readonly-value">
-						{isMultiJudge ? 'ON' : 'OFF'}
-					</div>
-				</div>
-
-				<div class="info-box">
-					{#if isMultiJudge}
-						<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
-					{:else}
-						<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
-					{/if}
-				</div>
-
-				{#if isMultiJudge}
-					<div class="setting-item">
-						<span class="form-label">必須審判員数</span>
-						<div class="readonly-value">{requiredJudges}人</div>
-					</div>
-				{/if}
-
-				<p class="readonly-notice">※ 設定の変更は主任検定員のみ可能です</p>
-			{/if}
-		</div>
+		<MultiJudgeSettings
+			mode="certification"
+			isChief={data.currentUserId === data.sessionDetails.chief_judge_id}
+			isMultiJudge={data.sessionDetails.is_multi_judge}
+			requiredJudges={data.sessionDetails.required_judges}
+			{participantCount}
+			settingsSuccess={form?.settingsSuccess}
+			settingsError={form?.settingsError}
+		/>
 		<hr class="divider" />
 	{/if}
 
@@ -1045,35 +559,7 @@
 </div>
 
 <!-- QRコードモーダル -->
-{#if showQRModal}
-	<div class="modal-overlay" on:click={closeQRModal} role="button" tabindex="0" on:keydown={(e) => e.key === 'Escape' && closeQRModal()}>
-		<div class="modal-content" on:click|stopPropagation role="button" tabindex="0" on:keydown={() => {}}>
-			<div class="modal-header">
-				<h2 class="modal-title">{data.sessionDetails.name}</h2>
-				<button class="modal-close" on:click={closeQRModal} aria-label="閉じる">×</button>
-			</div>
-
-			<div class="modal-body">
-				{#if qrCodeDataUrl}
-					<img src={qrCodeDataUrl} alt="招待QRコード" class="qr-image" />
-				{/if}
-				<p class="qr-instruction">カメラで読み取ってください</p>
-			</div>
-
-			<div class="modal-actions">
-				<button class="modal-btn secondary" on:click={downloadQR}>
-					ダウンロード
-				</button>
-				<button class="modal-btn secondary" on:click={printQR}>
-					印刷
-				</button>
-				<button class="modal-btn primary" on:click={closeQRModal}>
-					閉じる
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<QRInviteModal {inviteUrl} sessionName={data.sessionDetails.name} show={showQRModal} on:close={closeQRModal} />
 
 <!-- 非表示フォーム: 採点データ削除 -->
 <form
@@ -1147,7 +633,6 @@
 	.settings-section {
 		margin-bottom: 1.5rem;
 	}
-	.form-label,
 	.settings-title {
 		font-size: 17px;
 		font-weight: 600;
@@ -1204,12 +689,6 @@
 		to {
 			transform: rotate(360deg);
 		}
-	}
-	.helper-text {
-		font-size: 14px;
-		font-weight: 400;
-		color: var(--secondary-text);
-		margin-left: 8px;
 	}
 	input {
 		width: 100%;
@@ -1282,14 +761,6 @@
 		margin-left: auto;
 		margin-right: auto;
 	}
-	.message {
-		text-align: center;
-		margin-top: 1rem;
-		color: #dc3545;
-	}
-	.message.success {
-		color: #2d7a3e;
-	}
 	.appoint-btn {
 		background-color: var(--keypad-bg);
 		color: var(--primary-text);
@@ -1322,164 +793,6 @@
 	.settings-section {
 		text-align: left;
 	}
-	.setting-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 16px;
-		background: white;
-		padding: 12px 16px;
-		border-radius: 12px;
-	}
-	.short-input {
-		width: 70px;
-		padding: 10px !important;
-		text-align: center;
-	}
-	.toggle-switch {
-		position: relative;
-		display: inline-block;
-		width: 51px;
-		height: 31px;
-	}
-	.toggle-switch input {
-		opacity: 0;
-		width: 0;
-		height: 0;
-	}
-	.toggle-switch label {
-		position: absolute;
-		cursor: pointer;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background-color: var(--keypad-bg);
-		transition: 0.4s;
-		border-radius: 34px;
-	}
-	.toggle-switch label:before {
-		position: absolute;
-		content: '';
-		height: 27px;
-		width: 27px;
-		left: 2px;
-		bottom: 2px;
-		background-color: white;
-		transition: 0.4s;
-		border-radius: 50%;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-	}
-	.toggle-switch input:checked + label {
-		background-color: #2d7a3e;
-	}
-	.toggle-switch input:checked + label:before {
-		transform: translateX(20px);
-	}
-
-	/* 採点方式設定（大会モード） */
-	.success-message {
-		background: #e6f6e8;
-		border: 1px solid #2d7a3e;
-		color: #1e5c2e;
-		padding: 12px;
-		border-radius: 8px;
-		margin-bottom: 20px;
-		text-align: center;
-	}
-	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
-		padding: 12px;
-		border-radius: 8px;
-		margin-bottom: 20px;
-		text-align: center;
-	}
-
-	.scoring-options {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		margin-bottom: 24px;
-	}
-	.scoring-option {
-		background: white;
-		border: 2px solid var(--separator-gray);
-		border-radius: 12px;
-		padding: 20px;
-		cursor: pointer;
-		transition: all 0.2s;
-		position: relative;
-	}
-	.scoring-option input[type='radio'] {
-		position: absolute;
-		opacity: 0;
-		pointer-events: none;
-	}
-	.scoring-option.selected {
-		border-color: var(--ios-blue);
-		background: #f0f8ff;
-	}
-	.scoring-option:hover {
-		border-color: var(--ios-blue);
-	}
-	.scoring-option.disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-		background: #f5f5f5;
-	}
-	.scoring-option.disabled:hover {
-		border-color: var(--separator-gray);
-	}
-	.option-content {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-	.option-header {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin-bottom: 4px;
-		flex-wrap: wrap;
-	}
-	.option-title {
-		font-size: 20px;
-		font-weight: 600;
-		color: var(--primary-text);
-	}
-	.required-badge {
-		display: inline-block;
-		background: #ff9800;
-		color: white;
-		padding: 4px 10px;
-		border-radius: 12px;
-		font-size: 12px;
-		font-weight: 600;
-	}
-	.option-description {
-		font-size: 15px;
-		color: var(--secondary-text);
-		line-height: 1.5;
-	}
-	.option-example {
-		font-size: 14px;
-		color: var(--secondary-text);
-		font-family: 'SF Mono', Monaco, monospace;
-		background: #f8f9fa;
-		padding: 8px 12px;
-		border-radius: 6px;
-		margin-top: 4px;
-	}
-	.excluded {
-		text-decoration: line-through;
-		color: #dc3545;
-	}
-
-	.form-actions {
-		margin-bottom: 12px;
-	}
 	.save-btn {
 		width: 100%;
 		background: var(--ios-blue);
@@ -1501,192 +814,12 @@
 		opacity: 0.6;
 	}
 
-	/* ローディングスピナー */
-	.loading-spinner {
-		display: inline-block;
-		width: 16px;
-		height: 16px;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top-color: white;
-		border-radius: 50%;
-		animation: spinner-rotate 0.6s linear infinite;
-		margin-right: 8px;
-		vertical-align: middle;
-	}
-
-	@keyframes spinner-rotate {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	.save-btn:disabled .loading-spinner {
-		border-color: rgba(0, 0, 0, 0.2);
-		border-top-color: rgba(0, 0, 0, 0.5);
-	}
-
-	/* 種目管理のスタイル */
-	.events-list {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		margin-bottom: 16px;
-	}
-	.events-list.readonly {
-		gap: 8px;
-	}
-	.event-item {
-		background: white;
-		border: 1px solid var(--separator-gray);
-		border-radius: 8px;
-		padding: 12px;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-	.event-item.readonly {
-		border: 2px solid var(--separator-gray);
-		background: var(--bg-primary);
-	}
-	.event-info {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		flex: 1;
-	}
-	.event-number {
-		font-weight: 600;
-		color: var(--secondary-text);
-		min-width: 24px;
-	}
-	.event-text {
-		color: var(--primary-text);
-		font-size: 16px;
-	}
-	.event-actions {
-		display: flex;
-		gap: 8px;
-	}
-	.edit-btn-small,
-	.delete-btn-small,
-	.save-btn-small,
-	.cancel-btn-small {
-		padding: 10px 16px;
-		border-radius: 6px;
-		border: none;
-		font-size: 14px;
-		cursor: pointer;
-		transition: opacity 0.2s;
-		font-weight: 500;
-		min-height: 44px;
-	}
-	.edit-btn-small {
-		background: var(--ios-blue);
-		color: white;
-	}
-	.delete-btn-small {
-		background: transparent;
-		color: #dc3545;
-		border: 1.5px solid #dc3545;
-	}
-	.delete-btn-small:hover {
-		background: #ffe6e6;
-		opacity: 1;
-	}
-	.delete-btn-small:active {
-		background: #ffcccc;
-		opacity: 1;
-	}
-	.save-btn-small {
-		background: #2d7a3e;
-		color: white;
-	}
-	.cancel-btn-small {
-		background: var(--light-gray);
-		color: var(--primary-text);
-	}
-	.edit-btn-small:active,
-	.delete-btn-small:active,
-	.save-btn-small:active,
-	.cancel-btn-small:active {
-		opacity: 0.7;
-	}
-	.edit-form {
-		width: 100%;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-	.edit-input {
-		padding: 8px !important;
-		font-size: 14px !important;
-		border-radius: 6px !important;
-	}
-	.edit-actions {
-		display: flex;
-		gap: 8px;
-	}
-	.add-event-form {
-		display: flex;
-		gap: 8px;
-		margin-top: 16px;
-	}
-	.add-event-form input {
-		flex: 1;
-		padding: 10px;
-		border: 1px solid var(--separator-gray);
-		border-radius: 8px;
-		font-size: 14px;
-	}
-	.add-event-btn {
-		background: var(--ios-blue);
-		color: white;
-		padding: 10px 20px;
-		border: none;
-		border-radius: 8px;
-		font-size: 14px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: opacity 0.2s;
-		white-space: nowrap;
-	}
-	.add-event-btn:active {
-		opacity: 0.7;
-	}
-	.empty-message {
-		text-align: center;
-		color: var(--secondary-text);
-		padding: 20px;
-		font-size: 14px;
-		background: #f8f9fa;
-		border-radius: 8px;
-		margin-bottom: 16px;
-	}
-	.info-box {
-		background: #f0f8ff;
-		border: 1px solid var(--ios-blue);
-		border-radius: 8px;
-		padding: 12px 16px;
-		margin: 16px 0;
-		text-align: left;
-	}
-	.info-box p {
-		margin: 0;
-		font-size: 14px;
-		line-height: 1.5;
-		color: var(--primary-text);
-	}
-	.info-box strong {
-		color: var(--ios-blue);
-	}
-
 	/* PC対応: タブレット以上 */
 	@media (min-width: 768px) {
 		.container {
 			padding: 60px 40px;
 			max-width: 900px;
 		}
-		.form-label,
 		.settings-title {
 			font-size: 20px;
 		}
@@ -1705,15 +838,6 @@
 		}
 		.appoint-btn {
 			padding: 8px 16px;
-			font-size: 16px;
-		}
-		.scoring-option {
-			padding: 24px;
-		}
-		.option-title {
-			font-size: 22px;
-		}
-		.option-description {
 			font-size: 16px;
 		}
 		.nav-buttons {
@@ -1779,48 +903,6 @@
 		font-size: 12px;
 		color: #666;
 		margin-top: 2px;
-	}
-
-	/* 一般検定員向けの表示のみスタイル */
-	.readonly-value {
-		font-size: 16px;
-		font-weight: 600;
-		color: var(--primary-text);
-		padding: 8px 0;
-	}
-
-	.readonly-notice {
-		font-size: 14px;
-		color: #666;
-		font-style: italic;
-		margin-top: 12px;
-		text-align: center;
-	}
-
-	/* 採点方法の読み取り専用表示 */
-	.readonly-scoring-method {
-		background: var(--bg-primary);
-		border: 2px solid var(--separator-gray);
-		border-radius: 12px;
-		padding: 20px;
-		margin-bottom: 12px;
-	}
-
-	.method-display {
-		text-align: center;
-	}
-
-	.method-title {
-		font-size: 24px;
-		font-weight: 600;
-		color: var(--primary-text);
-		margin-bottom: 12px;
-	}
-
-	.method-description {
-		font-size: 15px;
-		color: var(--secondary-text);
-		line-height: 1.5;
 	}
 
 	/* セッション名ヘッダー */
@@ -2078,226 +1160,6 @@
 		}
 	}
 
-	/* QRコードモーダル */
-	.modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		z-index: 1000;
-		padding: 20px;
-	}
-
-	.modal-content {
-		background: white;
-		border-radius: 16px;
-		max-width: 400px;
-		width: 100%;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-		animation: modalFadeIn 0.2s ease-out;
-	}
-
-	@keyframes modalFadeIn {
-		from {
-			opacity: 0;
-			transform: scale(0.95);
-		}
-		to {
-			opacity: 1;
-			transform: scale(1);
-		}
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 20px 24px;
-		border-bottom: 2px solid var(--border-light);
-	}
-
-	.modal-title {
-		font-size: 18px;
-		font-weight: 700;
-		color: var(--text-primary);
-		margin: 0;
-	}
-
-	.modal-close {
-		width: 32px;
-		height: 32px;
-		border: none;
-		background: var(--bg-secondary);
-		border-radius: 50%;
-		font-size: 24px;
-		line-height: 1;
-		cursor: pointer;
-		color: var(--text-secondary);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s;
-	}
-
-	.modal-close:hover {
-		background: var(--border-medium);
-		color: var(--text-primary);
-	}
-
-	.modal-body {
-		padding: 32px 24px;
-		text-align: center;
-	}
-
-	.qr-image {
-		width: 300px;
-		height: 300px;
-		border: 2px solid var(--border-medium);
-		border-radius: 12px;
-		padding: 16px;
-		background: white;
-		margin: 0 auto 20px;
-	}
-
-	.qr-instruction {
-		font-size: 15px;
-		color: var(--text-secondary);
-		margin: 0;
-	}
-
-	.modal-actions {
-		padding: 16px 24px 24px;
-		display: flex;
-		gap: 12px;
-		justify-content: center;
-	}
-
-	.modal-btn {
-		padding: 14px 24px;
-		border: none;
-		border-radius: 10px;
-		font-size: 15px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-		font-family: inherit;
-	}
-
-	.modal-btn.primary {
-		background: var(--accent-primary);
-		color: white;
-		flex: 1;
-	}
-
-	.modal-btn.primary:hover {
-		opacity: 0.9;
-		transform: translateY(-1px);
-	}
-
-	.modal-btn.secondary {
-		background: var(--bg-secondary);
-		color: var(--text-primary);
-		border: 2px solid var(--border-medium);
-	}
-
-	.modal-btn.secondary:hover {
-		background: var(--border-light);
-	}
-
-	.modal-btn:active {
-		transform: translateY(0);
-	}
-
-	/* 点差コントロール */
-	.score-diff-section {
-		margin-top: 32px;
-		margin-bottom: 24px;
-		padding: 24px;
-		background: var(--bg-secondary);
-		border-radius: 12px;
-		border: 1px solid var(--border-medium);
-	}
-
-	.subsection-title {
-		font-size: 18px;
-		font-weight: 700;
-		color: var(--text-primary);
-		margin-bottom: 16px;
-	}
-
-	.score-diff-toggle {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-bottom: 20px;
-	}
-
-	.score-diff-toggle input[type="checkbox"] {
-		width: 20px;
-		height: 20px;
-		cursor: pointer;
-	}
-
-	.score-diff-toggle label {
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-primary);
-		cursor: pointer;
-	}
-
-	.score-diff-input-group {
-		padding-left: 32px;
-		margin-top: 16px;
-	}
-
-	.input-label {
-		display: block;
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin-bottom: 8px;
-	}
-
-	.input-with-unit {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin-bottom: 12px;
-	}
-
-	.score-diff-input {
-		width: 100px;
-		padding: 10px 12px;
-		font-size: 16px;
-		border: 2px solid var(--border-medium);
-		border-radius: 8px;
-		font-family: inherit;
-		transition: all 0.2s;
-	}
-
-	.score-diff-input:focus {
-		outline: none;
-		border-color: var(--accent-primary);
-		box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.1);
-	}
-
-	.unit {
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-secondary);
-	}
-
-	.help-text {
-		font-size: 13px;
-		color: var(--text-secondary);
-		line-height: 1.5;
-		margin: 0;
-	}
 
 	@media (max-width: 768px) {
 		.scoreboard-header,
@@ -2309,14 +1171,6 @@
 
 		.athlete-name {
 			font-size: 11px;
-		}
-
-		.score-diff-section {
-			padding: 16px;
-		}
-
-		.subsection-title {
-			font-size: 16px;
 		}
 	}
 </style>

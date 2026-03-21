@@ -1,6 +1,11 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	isChiefJudge
+} from '$lib/server/sessionHelpers';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id, discipline, level, event } = params;
@@ -19,18 +24,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw error(400, 'ゼッケン番号が指定されていません。');
 	}
 
-	// セッション情報を取得（複数検定員モードか確認）
-	const { data: sessionDetails, error: sessionError } = await supabase
-		.from('sessions')
-		.select('id, name, is_multi_judge, required_judges, chief_judge_id, is_tournament_mode, session_date')
-		.eq('id', id)
-		.single();
-
-	if (sessionError) {
-		throw error(404, '検定が見つかりません。');
-	}
-
-	const isChief = user ? sessionDetails.chief_judge_id === user.id : false;
+	const sessionDetails = await fetchSessionDetails(supabase, id);
+	const isChief = isChiefJudge(user, sessionDetails);
+	const profile = await fetchUserProfile(supabase, user);
 
 	// 全検定員の得点を取得
 	const { data: scores, error: scoresError } = await supabase
@@ -45,19 +41,6 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	if (scoresError) {
 		console.error('Failed to fetch scores:', scoresError);
 		throw error(500, '得点の取得に失敗しました。');
-	}
-
-	// プロフィール情報を取得（認証ユーザーの場合のみ）
-	let profile = null;
-
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
 	}
 
 	return {
@@ -89,21 +72,13 @@ export const actions: Actions = {
 
 		const { user } = authResult;
 
-		// セッション情報を取得して権限確認
-		const { data: session, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, is_tournament_mode, is_multi_judge')
-			.eq('id', id)
-			.single();
-
-		if (sessionError) {
+		const session = await fetchSessionDetails(supabase, id, { throwOnError: false });
+		if (!session) {
 			return fail(404, { error: '検定が見つかりません。' });
 		}
-
-		const isChief = user ? session.chief_judge_id === user.id : false;
+		const isChief = isChiefJudge(user, session);
 
 		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
-		// ゲストユーザーは複数検定員モードOFFの場合のみ可能
 		if (!isChief && session.is_multi_judge) {
 			return fail(403, { error: '種目を変更する権限がありません。' });
 		}
@@ -123,7 +98,6 @@ export const actions: Actions = {
 		if (session.is_tournament_mode) {
 			throw redirect(303, `/session/${id}/tournament-events${guestParam}`);
 		} else {
-			// 検定モード: 種目選択画面にリダイレクト
 			const { discipline, level } = params;
 			throw redirect(303, `/session/${id}/${discipline}/${level}${guestParam}`);
 		}
@@ -142,27 +116,18 @@ export const actions: Actions = {
 
 		const { user } = authResult;
 
-		// セッション情報を取得して権限確認
-		const { data: session, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, is_multi_judge')
-			.eq('id', id)
-			.single();
-
-		if (sessionError) {
+		const session = await fetchSessionDetails(supabase, id, { throwOnError: false });
+		if (!session) {
 			return fail(404, { error: '検定が見つかりません。' });
 		}
-
-		const isChief = user ? session.chief_judge_id === user.id : false;
+		const isChief = isChiefJudge(user, session);
 
 		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
-		// ゲストユーザーは複数検定員モードOFFの場合のみ可能
 		if (!isChief && session.is_multi_judge) {
 			return fail(403, { error: 'セッションを終了する権限がありません。' });
 		}
 
 		// セッションを終了状態に更新
-		// status を 'ended' に設定し、is_active と active_prompt_id をクリア
 		const { error: updateError } = await supabase
 			.from('sessions')
 			.update({
@@ -179,7 +144,6 @@ export const actions: Actions = {
 
 		console.log('[主任検定員] ✅ セッションを終了しました', { sessionId: id });
 
-		// セッション詳細画面（終了画面）にリダイレクト
 		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
 		throw redirect(303, `/session/${id}?ended=true${guestParam}`);
 	}

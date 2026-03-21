@@ -1,6 +1,13 @@
 import { redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	isChiefJudge,
+	getJudgeName
+} from '$lib/server/sessionHelpers';
+import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const { id: sessionId } = params;
@@ -13,7 +20,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		guestIdentifier
 	);
 
-	// セッション情報を取得して、主任検定員かどうかを確認
+	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
 		.select('id, name, chief_judge_id, is_multi_judge, session_date')
@@ -28,20 +35,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		};
 	}
 
-	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
-
-	// プロフィール情報を取得（認証ユーザーの場合のみ）
-	let profile = null;
-
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
-	}
+	const isChief = isChiefJudge(user, sessionDetails);
+	const profile = await fetchUserProfile(supabase, user);
 
 	return {
 		isChief,
@@ -101,44 +96,21 @@ export const actions: Actions = {
 		// バリデーション
 		// ============================================================
 
-		// 1. bib のバリデーション（部分パース防止 + NaN チェック）
-		// 正規表現で文字列全体が正の整数かチェック
-		if (!bibRaw || !/^\d+$/.test(bibRaw.trim())) {
-			console.error('[submitScore/inspection] bib が不正な形式:', bibRaw);
-			return fail(400, { error: 'ゼッケン番号は正の整数で入力してください。' });
+		// 1. bib のバリデーション
+		const bibResult = validateBib(bibRaw);
+		if (!bibResult.success) {
+			console.error('[submitScore/inspection] bib が不正:', bibRaw);
+			return fail(400, { error: bibResult.error });
 		}
+		const bib = bibResult.value;
 
-		const bib = Number(bibRaw);
-
-		if (isNaN(bib) || bib <= 0 || !Number.isInteger(bib)) {
-			console.error('[submitScore/inspection] bib が無効:', bib);
-			return fail(400, { error: 'ゼッケン番号は正の整数である必要があります。' });
+		// 2. score のバリデーション
+		const scoreResult = validateScoreInput(scoreRaw);
+		if (!scoreResult.success) {
+			console.error('[submitScore/inspection] score が不正:', scoreRaw);
+			return fail(400, { error: scoreResult.error });
 		}
-
-		// 2. score のバリデーション（部分パース防止 + NaN・Infinity・整数チェック）
-		// 正規表現で文字列全体が数値（整数または小数）かチェック
-		if (!scoreRaw || !/^-?\d+(\.\d+)?$/.test(scoreRaw.trim())) {
-			console.error('[submitScore/inspection] score が不正な形式:', scoreRaw);
-			return fail(400, { error: '得点は数値で入力してください。' });
-		}
-
-		const score = Number(scoreRaw);
-
-		if (isNaN(score)) {
-			console.error('[submitScore/inspection] score が NaN です');
-			return fail(400, { error: '得点は数値で入力してください。' });
-		}
-
-		if (!isFinite(score)) {
-			console.error('[submitScore/inspection] score が無限大です:', score);
-			return fail(400, { error: '得点が無効です。' });
-		}
-
-		// UI仕様が整数前提なので整数チェック
-		if (!Number.isInteger(score)) {
-			console.error('[submitScore/inspection] score が整数ではありません:', score);
-			return fail(400, { error: '得点は整数で入力してください。' });
-		}
+		const score = scoreResult.value;
 
 		// 3. ゼッケン番号の存在確認（なければ自動作成）
 		let participant: { id: string; bib_number: number } | null = null;
@@ -180,32 +152,21 @@ export const actions: Actions = {
 		const minScore = 0;
 		const maxScore = 99;
 
-		if (score < minScore || score > maxScore) {
+		const rangeResult = validateScoreRange(score, minScore, maxScore);
+		if (!rangeResult.success) {
 			console.error('[submitScore/inspection] 得点範囲外:', { score, minScore, maxScore });
-			return fail(400, {
-				error: `得点は${minScore}～${maxScore}の範囲で入力してください。`
-			});
+			return fail(400, { error: rangeResult.error });
 		}
 
 		console.log('[submitScore/inspection] バリデーション完了。得点を保存します。');
 
 		// 検定員名を取得（通常ユーザーまたはゲストユーザー）
-		let judgeName: string;
-		if (guestParticipant) {
-			judgeName = guestParticipant.guest_name;
-			console.log('[submitScore/inspection] Using guest name:', judgeName);
-		} else if (user) {
-			const { data: profile } = await supabase
-				.from('profiles')
-				.select('full_name')
-				.eq('id', user.id)
-				.single();
-			judgeName = profile?.full_name || user.email || 'Unknown';
-			console.log('[submitScore/inspection] Using user name:', judgeName);
-		} else {
+		const judgeName = await getJudgeName(supabase, user, guestParticipant);
+		if (!judgeName) {
 			console.error('[submitScore/inspection] Neither user nor guest found!');
 			return fail(401, { error: '認証が必要です。' });
 		}
+		console.log('[submitScore/inspection] Using judge name:', judgeName);
 
 		console.log('[submitScore/inspection] Inserting result:', {
 			session_id: sessionId,

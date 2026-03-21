@@ -1,6 +1,14 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	getMultiJudgeMode,
+	fetchEventInfo,
+	isChiefJudge,
+	isTrainingModeCheck
+} from '$lib/server/sessionHelpers';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -19,65 +27,12 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}`);
 	}
 
-	// セッション情報を取得
-	const { data: sessionDetails, error: sessionError } = await supabase
-		.from('sessions')
-		.select('*')
-		.eq('id', sessionId)
-		.single();
-
-	if (sessionError) {
-		throw error(404, '検定が見つかりません。');
-	}
-
-	const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
-	const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
-
-	// プロフィール情報を取得（認証ユーザーの場合のみ）
-	let profile = null;
-
-	if (user) {
-		const { data: profileData } = await supabase
-			.from('profiles')
-			.select('*')
-			.eq('id', user.id)
-			.single();
-
-		profile = profileData;
-	}
-
-	// 研修モードの場合、training_sessionsからis_multi_judgeを取得
-	let isMultiJudge = false;
-	if (isTrainingMode) {
-		const { data: trainingSession } = await supabase
-			.from('training_sessions')
-			.select('is_multi_judge')
-			.eq('session_id', sessionId)
-			.maybeSingle();
-		isMultiJudge = trainingSession?.is_multi_judge || false;
-	} else {
-		isMultiJudge = sessionDetails.is_multi_judge || false;
-	}
-
-	// モードに応じて種目情報を取得
-	let eventInfo: any = null;
-	if (isTrainingMode) {
-		const { data: trainingEvent } = await supabase
-			.from('training_events')
-			.select('*')
-			.eq('id', eventId)
-			.eq('session_id', sessionId)
-			.single();
-		eventInfo = trainingEvent;
-	} else {
-		const { data: customEvent } = await supabase
-			.from('custom_events')
-			.select('*')
-			.eq('id', eventId)
-			.eq('session_id', sessionId)
-			.single();
-		eventInfo = customEvent;
-	}
+	const sessionDetails = await fetchSessionDetails(supabase, sessionId);
+	const isChief = isChiefJudge(user, sessionDetails);
+	const isTrainingMode = isTrainingModeCheck(modeType, sessionDetails);
+	const profile = await fetchUserProfile(supabase, user);
+	const isMultiJudge = await getMultiJudgeMode(supabase, sessionId, modeType, sessionDetails);
+	const eventInfo = await fetchEventInfo(supabase, eventId, sessionId, isTrainingMode);
 
 	// 得点情報を取得
 	let scores: any[] = [];
@@ -207,35 +162,12 @@ export const actions: Actions = {
 		const { user, guestParticipant } = authResult;
 
 		// セッション情報を取得して権限確認
-		const { data: sessionDetails, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, is_multi_judge, mode')
-			.eq('id', sessionId)
-			.single();
-
-		if (sessionError) {
-			console.error('Error fetching session:', sessionError);
+		const sessionDetails = await fetchSessionDetails(supabase, sessionId, { throwOnError: false });
+		if (!sessionDetails) {
 			return { success: false, error: '検定が見つかりません。' };
 		}
-
-		const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
-		const isTrainingMode = modeType === 'training' || sessionDetails.mode === 'training';
-
-		// 研修モードの場合、training_sessionsからis_multi_judgeを取得
-		let isMultiJudge = false;
-		if (isTrainingMode) {
-			const { data: trainingSession } = await supabase
-				.from('training_sessions')
-				.select('is_multi_judge')
-				.eq('session_id', sessionId)
-				.maybeSingle();
-			isMultiJudge = trainingSession?.is_multi_judge || false;
-		} else if (modeType === 'tournament') {
-			// 大会モードは常に複数検定員モードON
-			isMultiJudge = true;
-		} else {
-			isMultiJudge = sessionDetails.is_multi_judge || false;
-		}
+		const isChief = isChiefJudge(user, sessionDetails);
+		const isMultiJudge = await getMultiJudgeMode(supabase, sessionId, modeType, sessionDetails);
 
 		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
 		if (!isChief && isMultiJudge) {
@@ -295,34 +227,12 @@ export const actions: Actions = {
 		const { user, guestParticipant } = authResult;
 
 		// セッション情報を取得して権限確認
-		const { data: sessionDetails, error: sessionError } = await supabase
-			.from('sessions')
-			.select('chief_judge_id, is_multi_judge')
-			.eq('id', sessionId)
-			.single();
-
-		if (sessionError) {
-			console.error('Error fetching session:', sessionError);
+		const sessionDetails = await fetchSessionDetails(supabase, sessionId, { throwOnError: false });
+		if (!sessionDetails) {
 			return { success: false, error: '検定が見つかりません。' };
 		}
-
-		const isChief = user ? user.id === sessionDetails.chief_judge_id : false;
-
-		// 研修モードの場合、training_sessionsからis_multi_judgeを取得
-		let isMultiJudge = false;
-		if (modeType === 'training') {
-			const { data: trainingSession } = await supabase
-				.from('training_sessions')
-				.select('is_multi_judge')
-				.eq('session_id', sessionId)
-				.maybeSingle();
-			isMultiJudge = trainingSession?.is_multi_judge || false;
-		} else if (modeType === 'tournament') {
-			// 大会モードは常に複数検定員モードON
-			isMultiJudge = true;
-		} else {
-			isMultiJudge = sessionDetails.is_multi_judge || false;
-		}
+		const isChief = isChiefJudge(user, sessionDetails);
+		const isMultiJudge = await getMultiJudgeMode(supabase, sessionId, modeType, sessionDetails);
 
 		// 主任検定員または複数検定員モードOFFの場合のみ実行可能
 		if (!isChief && isMultiJudge) {

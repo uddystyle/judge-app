@@ -199,6 +199,83 @@ export function validateScore(score: string | number | null | undefined): {
 	return { valid: true, value: scoreNum };
 }
 
+// ============================================================
+// 採点フォーム用バリデーション（submitScore アクション共通）
+// ============================================================
+
+/**
+ * ゼッケン番号のバリデーション（採点フォーム用）
+ * 文字列全体が正の整数であることを厳密にチェックする（部分パース防止）
+ */
+export function validateBib(bibRaw: string | null | undefined): {
+	success: true;
+	value: number;
+} | {
+	success: false;
+	error: string;
+} {
+	if (!bibRaw || !/^\d+$/.test(bibRaw.trim())) {
+		return { success: false, error: 'ゼッケン番号は正の整数で入力してください。' };
+	}
+
+	const bib = Number(bibRaw);
+
+	if (isNaN(bib) || bib <= 0 || !Number.isInteger(bib)) {
+		return { success: false, error: 'ゼッケン番号は正の整数である必要があります。' };
+	}
+
+	return { success: true, value: bib };
+}
+
+/**
+ * 得点のバリデーション（採点フォーム用）
+ * 文字列全体が数値（整数または小数）であることを厳密にチェックする（部分パース防止）
+ * NaN・Infinity・非整数をすべて拒否する
+ */
+export function validateScoreInput(scoreRaw: string | null | undefined): {
+	success: true;
+	value: number;
+} | {
+	success: false;
+	error: string;
+} {
+	if (!scoreRaw || !/^-?\d+(\.\d+)?$/.test(scoreRaw.trim())) {
+		return { success: false, error: '得点は数値で入力してください。' };
+	}
+
+	const score = Number(scoreRaw);
+
+	if (isNaN(score)) {
+		return { success: false, error: '得点は数値で入力してください。' };
+	}
+
+	if (!isFinite(score)) {
+		return { success: false, error: '得点が無効です。' };
+	}
+
+	if (!Number.isInteger(score)) {
+		return { success: false, error: '得点は整数で入力してください。' };
+	}
+
+	return { success: true, value: score };
+}
+
+/**
+ * 得点範囲チェック（採点フォーム用）
+ */
+export function validateScoreRange(score: number, minScore: number, maxScore: number): {
+	success: true;
+} | {
+	success: false;
+	error: string;
+} {
+	if (score < minScore || score > maxScore) {
+		return { success: false, error: `得点は${minScore}～${maxScore}の範囲で入力してください。` };
+	}
+
+	return { success: true };
+}
+
 /**
  * UUIDのバリデーション
  */
