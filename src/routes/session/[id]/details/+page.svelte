@@ -56,6 +56,30 @@
 	let participantToRemove: { userId: string; name: string } | null = null;
 	let removeParticipantForms: { [key: string]: HTMLFormElement } = {};
 
+	// 採点データ削除確認ダイアログ
+	let showDeleteDataDialog = false;
+	let deleteDataTarget: 'training' | 'certification' | null = null;
+
+	function openDeleteDataDialog(target: 'training' | 'certification') {
+		deleteDataTarget = target;
+		showDeleteDataDialog = true;
+	}
+
+	function handleDeleteDataConfirm() {
+		if (deleteDataTarget === 'training' && deleteDataForm) {
+			deleteDataForm.requestSubmit();
+		} else if (deleteDataTarget === 'certification' && deleteCertificationDataForm) {
+			deleteCertificationDataForm.requestSubmit();
+		}
+		showDeleteDataDialog = false;
+		deleteDataTarget = null;
+	}
+
+	function handleDeleteDataCancel() {
+		showDeleteDataDialog = false;
+		deleteDataTarget = null;
+	}
+
 	// 参加コードコピー機能
 	let copiedCode = false;
 
@@ -516,33 +540,14 @@
 					{#if data.isTrainingMode}
 						<NavButton
 							variant="danger"
-							on:click={() => {
-								console.log('[UI] 採点データ削除ボタンがクリックされました');
-								if (confirm('研修モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
-									console.log('[UI] 削除が確認されました。フォームを送信します...');
-									if (deleteDataForm) {
-										console.log('[UI] フォーム要素:', deleteDataForm);
-										deleteDataForm.requestSubmit();
-									} else {
-										console.error('[UI] ❌ フォーム要素が見つかりません');
-									}
-								} else {
-									console.log('[UI] 削除がキャンセルされました');
-								}
-							}}
+							on:click={() => openDeleteDataDialog('training')}
 						>
 							採点データを削除
 						</NavButton>
 					{:else if !data.sessionDetails.is_tournament_mode}
 						<NavButton
 							variant="danger"
-							on:click={() => {
-								if (confirm('検定モードの採点データを全て削除します。この操作は取り消せません。\n\n本当に削除しますか？')) {
-									if (deleteCertificationDataForm) {
-										deleteCertificationDataForm.requestSubmit();
-									}
-								}
-							}}
+							on:click={() => openDeleteDataDialog('certification')}
 						>
 							採点データを削除
 						</NavButton>
@@ -625,6 +630,20 @@
 	}}
 	style="display: none;"
 ></form>
+
+<!-- 採点データ削除確認ダイアログ -->
+<ConfirmDialog
+	bind:isOpen={showDeleteDataDialog}
+	title="採点データを削除"
+	message={deleteDataTarget === 'training'
+		? '研修モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'
+		: '検定モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'}
+	confirmText="削除する"
+	cancelText="キャンセル"
+	variant="danger"
+	on:confirm={handleDeleteDataConfirm}
+	on:cancel={handleDeleteDataCancel}
+/>
 
 <!-- ゲストユーザー削除確認ダイアログ -->
 <ConfirmDialog
