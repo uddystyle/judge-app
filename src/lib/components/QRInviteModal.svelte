@@ -1,6 +1,7 @@
 <script lang="ts">
 	import QRCode from 'qrcode';
 	import { createEventDispatcher } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let inviteUrl: string;
 	export let sessionName: string;
@@ -61,7 +62,7 @@
 		<div class="modal-content" on:click|stopPropagation role="button" tabindex="0" on:keydown={() => {}}>
 			<div class="modal-header">
 				<h2 class="modal-title">{sessionName}</h2>
-				<button class="modal-close" on:click={close} aria-label="閉じる">×</button>
+				<button class="modal-close" on:click={close} aria-label={m.common_close()}>×</button>
 			</div>
 
 			<div class="modal-body">
@@ -79,7 +80,7 @@
 					印刷
 				</button>
 				<button class="modal-btn primary" on:click={close}>
-					閉じる
+					{m.common_close()}
 				</button>
 			</div>
 		</div>

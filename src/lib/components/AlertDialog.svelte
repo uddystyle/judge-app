@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let isOpen = false;
-	export let title = '通知';
+	export let title = m.dialog_notification();
 	export let message = '';
-	export let confirmText = 'OK';
+	export let confirmText = m.common_ok();
 
 	const dispatch = createEventDispatcher();
 

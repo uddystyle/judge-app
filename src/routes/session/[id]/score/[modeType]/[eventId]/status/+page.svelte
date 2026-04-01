@@ -13,6 +13,7 @@
 	import { createScoreStatusManager, type ScoreStatusManagerHandle } from '$lib/scoreStatusManager';
 	import { createSessionNavigationMonitor } from '$lib/sessionNavigationMonitor';
 	import type { RealtimeChannelHandle } from '$lib/realtime';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
 	let scoreStatus: any = data.initialScoreStatus || { scores: [], requiredJudges: 1 };
@@ -47,7 +48,7 @@
 
 		// ヘッダー情報を設定
 		currentSession.set({ name: data.sessionDetails?.name || '' });
-		currentDiscipline.set(data.isTrainingMode ? '研修モード' : '大会モード');
+		currentDiscipline.set(data.isTrainingMode ? m.mode_training() : m.mode_tournament());
 		currentEvent.set(data.eventInfo?.name || data.eventInfo?.event_name || '');
 		currentBib.set(bib ? parseInt(bib) : null);
 

@@ -13,6 +13,8 @@
 	import TournamentSettings from '$lib/components/TournamentSettings.svelte';
 	import MultiJudgeSettings from '$lib/components/MultiJudgeSettings.svelte';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -29,7 +31,7 @@
 	// アラートダイアログの状態
 	let showAlert = false;
 	let alertMessage = '';
-	let alertTitle = 'エラー';
+	let alertTitle = m.common_error();
 
 	function startEditingName() {
 		if (!isCreator) return;
@@ -110,8 +112,8 @@
 				}, 2000);
 			},
 			(err) => {
-				console.error('コピーに失敗しました:', err);
-				alert('コピーに失敗しました。');
+				console.error('Copy failed:', err);
+				alert(m.details_copyFailed());
 			}
 		);
 	}
@@ -187,8 +189,8 @@
 				}, 2000);
 			},
 			(err) => {
-				console.error('コピーに失敗しました:', err);
-				alertMessage = 'URLのコピーに失敗しました。';
+				console.error('Copy failed:', err);
+				alertMessage = m.details_urlCopyFailed();
 				showAlert = true;
 			}
 		);
@@ -202,28 +204,28 @@
 			const jsonData = await response.json();
 
 			if (!response.ok || !jsonData.results || jsonData.results.length === 0) {
-				alertMessage = 'エクスポートするデータがありません。';
+				alertMessage = m.details_noExportData();
 				showAlert = true;
 				return;
 			}
 
 			// 2. Prepare the data for the Excel sheet
 			const exportData = jsonData.results.map((item: any) => ({
-				採点日時: new Date(item.created_at).toLocaleString('ja-JP'),
-				ゼッケン: item.bib,
-				得点: item.score,
-				種別: item.discipline,
-				級: item.level,
-				種目: item.event_name,
-				検定員: item.judge_name
+				[m.details_exportDateTime()]: new Date(item.created_at).toLocaleString(getLocale()),
+				[m.details_exportBib()]: item.bib,
+				[m.details_exportScore()]: item.score,
+				[m.details_exportDiscipline()]: item.discipline,
+				[m.details_exportLevel()]: item.level,
+				[m.details_exportEvent()]: item.event_name,
+				[m.details_exportJudge()]: item.judge_name
 			}));
 
 			// 3. Create the Excel file in the browser
 			const worksheet = XLSX.utils.json_to_sheet(exportData);
 			const workbook = XLSX.utils.book_new();
-			XLSX.utils.book_append_sheet(workbook, worksheet, '採点結果');
+			XLSX.utils.book_append_sheet(workbook, worksheet, m.details_exportSheetName());
 
-			const fileName = `${data.sessionDetails.name}_採点結果.xlsx`;
+			const fileName = `${data.sessionDetails.name}_${m.details_exportSheetName()}.xlsx`;
 
 			// 4. モバイル環境かどうかを判定（Web Share API対応 & 画面幅768px未満）
 			const isMobile = window.innerWidth < 768;
@@ -240,8 +242,8 @@
 				});
 
 				await navigator.share({
-					title: '採点結果',
-					text: `${data.sessionDetails.name}の採点結果`,
+					title: m.details_exportShareTitle(),
+					text: m.details_exportShareText({ name: data.sessionDetails.name }),
 					files: [file]
 				});
 			} else {
@@ -250,7 +252,7 @@
 			}
 		} catch (err) {
 			console.error('Export failed:', err);
-			alertMessage = 'エクスポート処理中にエラーが発生しました。';
+			alertMessage = m.details_exportError();
 			showAlert = true;
 		} finally {
 			exportLoading = false;
@@ -294,17 +296,17 @@
 					name="name"
 					bind:value={editedName}
 					class="name-input"
-					placeholder="セッション名を入力"
+					placeholder={m.details_enterSessionName()}
 					required
 					maxlength="200"
 					disabled={isSubmittingName}
 				/>
 				<div class="name-edit-buttons">
 					<button type="submit" class="save-btn" disabled={isSubmittingName}>
-						{isSubmittingName ? '保存中...' : '保存'}
+						{isSubmittingName ? m.settings_saving() : m.common_save()}
 					</button>
 					<button type="button" class="cancel-btn" on:click={cancelEditingName} disabled={isSubmittingName}>
-						キャンセル
+						{m.common_cancel()}
 					</button>
 				</div>
 			</form>
@@ -313,7 +315,7 @@
 			<div class="name-display">
 				<h1 class="session-title">{data.sessionDetails.name}</h1>
 				{#if isCreator}
-					<button class="edit-name-btn" on:click={startEditingName} title="セッション名を編集">
+					<button class="edit-name-btn" on:click={startEditingName} title={m.details_editSessionName()}>
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 							<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
 							<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -326,47 +328,43 @@
 
 	<!-- ユーザーを招待セクション -->
 	<div class="settings-section">
-		<h3 class="settings-title">ユーザーを招待</h3>
+		<h3 class="settings-title">{m.details_inviteUsers()}</h3>
 		<div class="invite-container">
 			<div class="invite-item">
-				<span class="invite-label">参加コード</span>
+				<span class="invite-label">{m.details_joinCode()}</span>
 				<div class="code-display">
 					<input type="text" value={data.sessionDetails.join_code} readonly class="code-input" />
 					<button class="copy-btn" on:click={copyJoinCode}>
-						{#if copiedCode}
-							✓ コピー済
-						{:else}
-							コピー
-						{/if}
+						{copiedCode ? m.details_copied() : m.details_copy()}
 					</button>
 				</div>
 			</div>
-			<p class="invite-note">※ ログイン済みのユーザーが<br class="mobile-break" />このコードを使用してセッションに参加できます</p>
+			<p class="invite-note">{m.details_inviteNote()}</p>
 		</div>
 	</div>
 
 	<!-- ゲスト招待セクション -->
 	<div class="settings-section">
-		<h3 class="settings-title">ゲストを招待</h3>
+		<h3 class="settings-title">{m.details_inviteGuests()}</h3>
 		<div class="invite-container">
 			<div class="invite-item">
-				<span class="invite-label">招待URL</span>
+				<span class="invite-label">{m.details_inviteUrl()}</span>
 				<div class="url-display">
 					<input type="text" value={inviteUrl} readonly class="url-input" />
 					<button class="copy-btn" on:click={copyInviteUrl}>
-						{copiedInviteUrl ? '✓ コピー済' : 'コピー'}
+						{copiedInviteUrl ? m.details_copied() : m.details_copy()}
 					</button>
 				</div>
 			</div>
 
 			<div class="invite-item">
-				<span class="invite-label">QRコード</span>
+				<span class="invite-label">{m.details_qrCode()}</span>
 				<button class="qr-btn" on:click={openQRModal}>
-					QRコードを表示
+					{m.details_showQR()}
 				</button>
 			</div>
 
-			<p class="invite-note">※ アカウント登録不要で参加できます</p>
+			<p class="invite-note">{m.details_guestInviteNote()}</p>
 		</div>
 	</div>
 
@@ -374,12 +372,12 @@
 
 	<div class="settings-section">
 		<div class="section-header-with-action">
-			<h3 class="settings-title">参加中の検定員</h3>
-			<button class="refresh-btn-with-label" class:refreshing={isRefreshing} on:click={handleRefresh} title="参加者リストを更新">
+			<h3 class="settings-title">{m.details_activeJudges()}</h3>
+			<button class="refresh-btn-with-label" class:refreshing={isRefreshing} on:click={handleRefresh} title={m.details_refreshList()}>
 				<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 					<path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
 				</svg>
-				<span class="refresh-label">リストを更新</span>
+				<span class="refresh-label">{m.details_refreshList()}</span>
 			</button>
 		</div>
 		<div class="participants-container">
@@ -389,14 +387,14 @@
 						<span class="participant-name">
 							{#if p.is_guest}
 								{p.guest_name}
-								<span class="guest-badge">(ゲスト)</span>
+								<span class="guest-badge">{m.details_guest()}</span>
 							{:else}
-								{p.profiles?.full_name || 'プロフィール未設定'}
+								{p.profiles?.full_name || m.details_profileNotSet()}
 								{#if data.sessionDetails.chief_judge_id === p.user_id}
-									<span class="chief-badge">(主任)</span>
+									<span class="chief-badge">{m.details_chief()}</span>
 								{/if}
 								{#if p.removed_at}
-									<span class="removed-badge">(退会済み)</span>
+									<span class="removed-badge">{m.details_removed()}</span>
 								{/if}
 							{/if}
 						</span>
@@ -410,9 +408,9 @@
 										class="appoint-btn"
 									>
 										{#if data.sessionDetails.chief_judge_id === p.user_id}
-											主任を解除
+											{m.details_removeChief()}
 										{:else}
-											主任に任命
+											{m.details_appointChief()}
 										{/if}
 									</button>
 								</form>
@@ -428,9 +426,9 @@
 										<button
 											type="button"
 											class="appoint-btn danger"
-											on:click={() => openRemoveParticipantDialog(p.user_id, p.profiles?.full_name || 'プロフィール未設定')}
+											on:click={() => openRemoveParticipantDialog(p.user_id, p.profiles?.full_name || m.details_profileNotSet())}
 										>
-											削除
+											{m.common_delete()}
 										</button>
 									</form>
 								{/if}
@@ -449,7 +447,7 @@
 										class="appoint-btn danger"
 										on:click={() => openRemoveGuestDialog(p.guest_identifier, p.guest_name)}
 									>
-										削除
+										{m.common_delete()}
 									</button>
 								</form>
 							{/if}
@@ -457,7 +455,7 @@
 					</div>
 				{/each}
 			{:else}
-				<p>参加者はいません。</p>
+				<p>{m.details_noParticipants()}</p>
 			{/if}
 		</div>
 	</div>
@@ -511,13 +509,13 @@
 	<!-- 研修モード: スコアボード表示 -->
 	{#if data.isTrainingMode && data.trainingScores && data.trainingScores.length > 0}
 		<div class="settings-section">
-			<h3 class="settings-title">採点結果</h3>
+			<h3 class="settings-title">{m.details_scoringResults()}</h3>
 			<div class="scoreboard">
 				<div class="scoreboard-header">
-					<div class="col-event">種目</div>
-					<div class="col-athlete">選手</div>
-					<div class="col-judge">検定員</div>
-					<div class="col-score">得点</div>
+					<div class="col-event">{m.details_event()}</div>
+					<div class="col-athlete">{m.details_athlete()}</div>
+					<div class="col-judge">{m.details_judge()}</div>
+					<div class="col-score">{m.details_score()}</div>
 				</div>
 				{#each data.trainingScores as score}
 					<div class="scoreboard-row">
@@ -531,7 +529,7 @@
 						<div class="col-judge">
 							{score.judge?.full_name || '-'}
 						</div>
-						<div class="col-score">{score.score}点</div>
+						<div class="col-score">{m.details_scorePoints({ score: String(score.score) })}</div>
 					</div>
 				{/each}
 			</div>
@@ -541,40 +539,40 @@
 
 	{#if data.sessionDetails.is_tournament_mode || data.currentUserId === data.sessionDetails.created_by}
 		<div class="settings-section">
-			<h3 class="settings-title">データ管理</h3>
+			<h3 class="settings-title">{m.details_dataManagement()}</h3>
 			<div class="nav-buttons">
 				{#if data.sessionDetails.is_tournament_mode}
 					<NavButton
 						variant="primary"
 						on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}
 					>
-						スコアボードを表示
+						{m.details_showScoreboard()}
 					</NavButton>
 				{/if}
 				{#if data.currentUserId === data.sessionDetails.created_by}
 					<NavButton on:click={handleExport} disabled={exportLoading}>
-						{exportLoading ? '準備中...' : '採点結果をエクスポート'}
+						{exportLoading ? m.details_preparing() : m.details_exportResults()}
 					</NavButton>
 					{#if data.isTrainingMode}
 						<NavButton
 							variant="danger"
 							on:click={() => openDeleteDataDialog('training')}
 						>
-							採点データを削除
+							{m.details_deleteScoreData()}
 						</NavButton>
 					{:else if data.sessionDetails.is_tournament_mode}
 						<NavButton
 							variant="danger"
 							on:click={() => openDeleteDataDialog('tournament')}
 						>
-							採点データを削除
+							{m.details_deleteScoreData()}
 						</NavButton>
 					{:else}
 						<NavButton
 							variant="danger"
 							on:click={() => openDeleteDataDialog('certification')}
 						>
-							採点データを削除
+							{m.details_deleteScoreData()}
 						</NavButton>
 					{/if}
 				{/if}
@@ -586,7 +584,7 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={() => goto('/dashboard')}>
-			セッション選択画面に戻る
+			{m.session_backToSelection()}
 		</NavButton>
 	</div>
 
@@ -596,7 +594,7 @@
 				variant="danger"
 				on:click={() => { showDeleteSessionDialog = true; }}
 			>
-				この{data.isTrainingMode ? '研修' : data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除
+				{m.details_deleteSession({ mode: data.isTrainingMode ? m.mode_training() : data.sessionDetails.is_tournament_mode ? m.mode_tournament() : m.mode_certification() })}
 			</NavButton>
 		</div>
 	{/if}
@@ -622,7 +620,7 @@
 				console.error('[UI/enhance] ❌ 削除失敗:', result.data);
 				await update();
 				if (result.data?.error) {
-					alert(`エラー: ${result.data.error}`);
+					alert(`${m.common_error()}: ${result.data.error}`);
 				}
 			} else {
 				console.log('[UI/enhance] その他の結果:', result.type);
@@ -646,7 +644,7 @@
 			} else if (result.type === 'failure') {
 				await update();
 				if (result.data?.error) {
-					alert(`エラー: ${result.data.error}`);
+					alert(`${m.common_error()}: ${result.data.error}`);
 				}
 			} else {
 				await update();
@@ -669,7 +667,7 @@
 			} else if (result.type === 'failure') {
 				await update();
 				if (result.data?.error) {
-					alert(`エラー: ${result.data.error}`);
+					alert(`${m.common_error()}: ${result.data.error}`);
 				}
 			} else {
 				await update();
@@ -682,14 +680,14 @@
 <!-- 採点データ削除確認ダイアログ -->
 <ConfirmDialog
 	bind:isOpen={showDeleteDataDialog}
-	title="採点データを削除"
+	title={m.details_deleteScoreDataTitle()}
 	message={deleteDataTarget === 'training'
-		? '研修モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'
+		? m.details_deleteScoreDataMessage({ mode: m.mode_training() })
 		: deleteDataTarget === 'tournament'
-		? '大会モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'
-		: '検定モードの採点データを全て削除します。\n現在の採点進行状態もリセットされます。\n\nこの操作は取り消せません。'}
-	confirmText="削除する"
-	cancelText="キャンセル"
+		? m.details_deleteScoreDataMessage({ mode: m.mode_tournament() })
+		: m.details_deleteScoreDataMessage({ mode: m.mode_certification() })}
+	confirmText={m.details_deleteConfirm()}
+	cancelText={m.common_cancel()}
 	variant="danger"
 	on:confirm={handleDeleteDataConfirm}
 	on:cancel={handleDeleteDataCancel}
@@ -698,10 +696,10 @@
 <!-- ゲストユーザー削除確認ダイアログ -->
 <ConfirmDialog
 	bind:isOpen={showRemoveGuestDialog}
-	title="ゲストユーザーを削除"
-	message={guestToRemove ? `ゲストユーザー「${guestToRemove.name}」をセッションから削除しますか？\n\nこの操作は取り消せません。` : ''}
-	confirmText="削除"
-	cancelText="キャンセル"
+	title={m.details_removeGuest()}
+	message={guestToRemove ? m.details_removeGuestMessage({ name: guestToRemove.name }) : ''}
+	confirmText={m.common_delete()}
+	cancelText={m.common_cancel()}
 	variant="danger"
 	on:confirm={handleRemoveGuestConfirm}
 	on:cancel={handleRemoveGuestCancel}
@@ -710,10 +708,10 @@
 <!-- 一般検定員削除確認ダイアログ -->
 <ConfirmDialog
 	bind:isOpen={showRemoveParticipantDialog}
-	title="検定員を削除"
-	message={participantToRemove ? `検定員「${participantToRemove.name}」をセッションから削除しますか？\n\nこの操作は取り消せません。` : ''}
-	confirmText="削除"
-	cancelText="キャンセル"
+	title={m.details_removeJudge()}
+	message={participantToRemove ? m.details_removeJudgeMessage({ name: participantToRemove.name }) : ''}
+	confirmText={m.common_delete()}
+	cancelText={m.common_cancel()}
 	variant="danger"
 	on:confirm={handleRemoveParticipantConfirm}
 	on:cancel={handleRemoveParticipantCancel}
@@ -722,10 +720,10 @@
 <!-- セッション削除確認ダイアログ -->
 <ConfirmDialog
 	bind:isOpen={showDeleteSessionDialog}
-	title="この{data.isTrainingMode ? '研修' : data.sessionDetails.is_tournament_mode ? '大会' : '検定'}を削除"
-	message={'セッション「' + data.sessionDetails.name + '」を完全に削除します。\n採点データ・参加者情報など全てのデータが失われます。\n\nこの操作は取り消せません。'}
-	confirmText="削除する"
-	cancelText="キャンセル"
+	title={m.details_deleteSession({ mode: data.isTrainingMode ? m.mode_training() : data.sessionDetails.is_tournament_mode ? m.mode_tournament() : m.mode_certification() })}
+	message={m.details_deleteSessionMessage({ name: data.sessionDetails.name })}
+	confirmText={m.details_deleteConfirm()}
+	cancelText={m.common_cancel()}
 	variant="danger"
 	on:confirm={handleDeleteSessionConfirm}
 	on:cancel={handleDeleteSessionCancel}
@@ -743,7 +741,7 @@
 			} else if (result.type === 'failure') {
 				await update();
 				if (result.data?.error) {
-					alertTitle = 'エラー';
+					alertTitle = m.common_error();
 					alertMessage = result.data.error;
 					showAlert = true;
 				}

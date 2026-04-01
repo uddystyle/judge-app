@@ -4,6 +4,7 @@
  */
 
 import { PUBLIC_SITE_URL } from '$env/static/public';
+import * as m from '$lib/paraglide/messages.js';
 
 /**
  * 文字列をサニタイズ（XSS対策）
@@ -28,7 +29,7 @@ export function validateEmail(email: string | null | undefined): {
 	sanitized?: string;
 } {
 	if (!email) {
-		return { valid: false, error: 'メールアドレスを入力してください。' };
+		return { valid: false, error: m.validation_emailRequired() };
 	}
 
 	const sanitized = sanitizeString(email);
@@ -37,11 +38,11 @@ export function validateEmail(email: string | null | undefined): {
 	const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 	if (!emailRegex.test(sanitized)) {
-		return { valid: false, error: '有効なメールアドレスを入力してください。' };
+		return { valid: false, error: m.validation_emailInvalid() };
 	}
 
 	if (sanitized.length > 255) {
-		return { valid: false, error: 'メールアドレスが長すぎます。' };
+		return { valid: false, error: m.validation_emailTooLong() };
 	}
 
 	return { valid: true, sanitized };
@@ -56,17 +57,17 @@ export function validateName(name: string | null | undefined): {
 	sanitized?: string;
 } {
 	if (!name) {
-		return { valid: false, error: '名前を入力してください。' };
+		return { valid: false, error: m.validation_nameRequired() };
 	}
 
 	const sanitized = sanitizeString(name);
 
 	if (sanitized.length === 0) {
-		return { valid: false, error: '名前を入力してください。' };
+		return { valid: false, error: m.validation_nameRequired() };
 	}
 
 	if (sanitized.length > 100) {
-		return { valid: false, error: '名前は100文字以内で入力してください。' };
+		return { valid: false, error: m.validation_nameTooLong({ max: '100' }) };
 	}
 
 	return { valid: true, sanitized };
@@ -80,16 +81,16 @@ export function validatePassword(password: string | null | undefined): {
 	error?: string;
 } {
 	if (!password) {
-		return { valid: false, error: 'パスワードを入力してください。' };
+		return { valid: false, error: m.validation_passwordRequired() };
 	}
 
 	if (password.length < 6) {
-		return { valid: false, error: 'パスワードは6文字以上で入力してください。' };
+		return { valid: false, error: m.validation_passwordTooShort({ min: '6' }) };
 	}
 
 	if (password.length > 72) {
 		// bcrypt の制限（72バイト）に基づく
-		return { valid: false, error: 'パスワードは72文字以内で入力してください。' };
+		return { valid: false, error: m.validation_passwordTooLong({ max: '72' }) };
 	}
 
 	return { valid: true };
@@ -104,21 +105,21 @@ export function validateOrganizationName(name: string | null | undefined): {
 	sanitized?: string;
 } {
 	if (!name) {
-		return { valid: false, error: '組織名を入力してください。' };
+		return { valid: false, error: m.validation_orgNameRequired() };
 	}
 
 	const sanitized = sanitizeString(name);
 
 	if (sanitized.length === 0) {
-		return { valid: false, error: '組織名を入力してください。' };
+		return { valid: false, error: m.validation_orgNameRequired() };
 	}
 
 	if (sanitized.length < 2) {
-		return { valid: false, error: '組織名は2文字以上で入力してください。' };
+		return { valid: false, error: m.validation_orgNameTooShort({ min: '2' }) };
 	}
 
 	if (sanitized.length > 100) {
-		return { valid: false, error: '組織名は100文字以内で入力してください。' };
+		return { valid: false, error: m.validation_orgNameTooLong({ max: '100' }) };
 	}
 
 	return { valid: true, sanitized };
@@ -133,17 +134,17 @@ export function validateSessionName(name: string | null | undefined): {
 	sanitized?: string;
 } {
 	if (!name) {
-		return { valid: false, error: 'セッション名を入力してください。' };
+		return { valid: false, error: m.validation_sessionNameRequired() };
 	}
 
 	const sanitized = sanitizeString(name);
 
 	if (sanitized.length === 0) {
-		return { valid: false, error: 'セッション名を入力してください。' };
+		return { valid: false, error: m.validation_sessionNameRequired() };
 	}
 
 	if (sanitized.length > 200) {
-		return { valid: false, error: 'セッション名は200文字以内で入力してください。' };
+		return { valid: false, error: m.validation_sessionNameTooLong({ max: '200' }) };
 	}
 
 	return { valid: true, sanitized };
@@ -158,17 +159,17 @@ export function validateBibNumber(bib: string | number | null | undefined): {
 	value?: number;
 } {
 	if (bib === null || bib === undefined || bib === '') {
-		return { valid: false, error: 'ゼッケン番号を入力してください。' };
+		return { valid: false, error: m.validation_bibRequired() };
 	}
 
 	const bibNum = typeof bib === 'string' ? parseInt(bib, 10) : bib;
 
 	if (isNaN(bibNum)) {
-		return { valid: false, error: 'ゼッケン番号は数値で入力してください。' };
+		return { valid: false, error: m.validation_bibInvalid() };
 	}
 
 	if (bibNum < 1 || bibNum > 9999) {
-		return { valid: false, error: 'ゼッケン番号は1〜9999の範囲で入力してください。' };
+		return { valid: false, error: m.validation_bibRange({ min: '1', max: '9999' }) };
 	}
 
 	return { valid: true, value: bibNum };
@@ -183,17 +184,17 @@ export function validateScore(score: string | number | null | undefined): {
 	value?: number;
 } {
 	if (score === null || score === undefined || score === '') {
-		return { valid: false, error: 'スコアを入力してください。' };
+		return { valid: false, error: m.validation_scoreRequired() };
 	}
 
 	const scoreNum = typeof score === 'string' ? parseFloat(score) : score;
 
 	if (isNaN(scoreNum)) {
-		return { valid: false, error: 'スコアは数値で入力してください。' };
+		return { valid: false, error: m.validation_scoreInvalid() };
 	}
 
 	if (scoreNum < 0 || scoreNum > 100) {
-		return { valid: false, error: 'スコアは0〜100の範囲で入力してください。' };
+		return { valid: false, error: m.validation_scoreRange({ min: '0', max: '100' }) };
 	}
 
 	return { valid: true, value: scoreNum };
@@ -215,13 +216,13 @@ export function validateBib(bibRaw: string | null | undefined): {
 	error: string;
 } {
 	if (!bibRaw || !/^\d+$/.test(bibRaw.trim())) {
-		return { success: false, error: 'ゼッケン番号は正の整数で入力してください。' };
+		return { success: false, error: m.validation_bibPositiveInteger() };
 	}
 
 	const bib = Number(bibRaw);
 
 	if (isNaN(bib) || bib <= 0 || !Number.isInteger(bib)) {
-		return { success: false, error: 'ゼッケン番号は正の整数である必要があります。' };
+		return { success: false, error: m.validation_bibMustBePositive() };
 	}
 
 	return { success: true, value: bib };
@@ -240,21 +241,21 @@ export function validateScoreInput(scoreRaw: string | null | undefined): {
 	error: string;
 } {
 	if (!scoreRaw || !/^-?\d+(\.\d+)?$/.test(scoreRaw.trim())) {
-		return { success: false, error: '得点は数値で入力してください。' };
+		return { success: false, error: m.validation_scoreInputRequired() };
 	}
 
 	const score = Number(scoreRaw);
 
 	if (isNaN(score)) {
-		return { success: false, error: '得点は数値で入力してください。' };
+		return { success: false, error: m.validation_scoreInputRequired() };
 	}
 
 	if (!isFinite(score)) {
-		return { success: false, error: '得点が無効です。' };
+		return { success: false, error: m.validation_scoreInputInvalid() };
 	}
 
 	if (!Number.isInteger(score)) {
-		return { success: false, error: '得点は整数で入力してください。' };
+		return { success: false, error: m.validation_scoreInputInteger() };
 	}
 
 	return { success: true, value: score };
@@ -270,7 +271,7 @@ export function validateScoreRange(score: number, minScore: number, maxScore: nu
 	error: string;
 } {
 	if (score < minScore || score > maxScore) {
-		return { success: false, error: `得点は${minScore}～${maxScore}の範囲で入力してください。` };
+		return { success: false, error: m.validation_scoreInputRange({ min: String(minScore), max: String(maxScore) }) };
 	}
 
 	return { success: true };
@@ -284,14 +285,14 @@ export function validateUUID(uuid: string | null | undefined): {
 	error?: string;
 } {
 	if (!uuid) {
-		return { valid: false, error: 'IDが指定されていません。' };
+		return { valid: false, error: m.validation_idRequired() };
 	}
 
 	const uuidRegex =
 		/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 	if (!uuidRegex.test(uuid)) {
-		return { valid: false, error: '無効なIDです。' };
+		return { valid: false, error: m.validation_idInvalid() };
 	}
 
 	return { valid: true };
@@ -306,13 +307,13 @@ export function validateIntegerId(id: string | number | null | undefined): {
 	value?: number;
 } {
 	if (id === null || id === undefined || id === '') {
-		return { valid: false, error: 'IDが指定されていません。' };
+		return { valid: false, error: m.validation_idRequired() };
 	}
 
 	const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
 
 	if (isNaN(idNum) || idNum < 1) {
-		return { valid: false, error: '無効なIDです。' };
+		return { valid: false, error: m.validation_idInvalid() };
 	}
 
 	return { valid: true, value: idNum };
@@ -327,13 +328,13 @@ export function validateDate(date: string | null | undefined): {
 	value?: Date;
 } {
 	if (!date) {
-		return { valid: false, error: '日付を入力してください。' };
+		return { valid: false, error: m.validation_dateRequired() };
 	}
 
 	const dateObj = new Date(date);
 
 	if (isNaN(dateObj.getTime())) {
-		return { valid: false, error: '有効な日付を入力してください。' };
+		return { valid: false, error: m.validation_dateInvalid() };
 	}
 
 	return { valid: true, value: dateObj };
@@ -352,26 +353,26 @@ export function validateText(
 	sanitized?: string;
 } {
 	if (!text) {
-		return { valid: false, error: 'テキストを入力してください。' };
+		return { valid: false, error: m.validation_textRequired() };
 	}
 
 	const sanitized = sanitizeString(text);
 
 	if (sanitized.length === 0) {
-		return { valid: false, error: 'テキストを入力してください。' };
+		return { valid: false, error: m.validation_textRequired() };
 	}
 
 	if (sanitized.length < minLength) {
 		return {
 			valid: false,
-			error: `テキストは${minLength}文字以上で入力してください。`
+			error: m.validation_textTooShort({ min: String(minLength) })
 		};
 	}
 
 	if (sanitized.length > maxLength) {
 		return {
 			valid: false,
-			error: `テキストは${maxLength}文字以内で入力してください。`
+			error: m.validation_textTooLong({ max: String(maxLength) })
 		};
 	}
 

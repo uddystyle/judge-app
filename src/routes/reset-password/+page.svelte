@@ -5,6 +5,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let form: ActionData;
 
@@ -58,7 +59,7 @@
 					type="email"
 					name="email"
 					bind:value={email}
-					placeholder="メールアドレス"
+					placeholder={m.auth_email()}
 					autocomplete="email"
 					disabled={loading}
 					required

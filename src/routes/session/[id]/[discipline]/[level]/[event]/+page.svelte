@@ -3,6 +3,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 	import { currentBib as bibStore, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
@@ -18,7 +19,7 @@
 	// アラートダイアログの状態
 	let showAlert = false;
 	let alertMessage = '';
-	let alertTitle = '入力エラー';
+	let alertTitle = m.score_inputError();
 
 	$: ({ id, discipline, level, event } = $page.params);
 	$: isTournamentMode = data.isTournamentMode;
@@ -118,7 +119,7 @@
 	bind:isOpen={showAlert}
 	title={alertTitle}
 	message={alertMessage}
-	confirmText="OK"
+	confirmText={m.common_ok()}
 	on:confirm={() => {}}
 />
 

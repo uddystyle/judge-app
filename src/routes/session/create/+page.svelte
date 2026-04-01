@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// This `form` variable will hold the data returned from the server action
 	export let form: ActionData;
@@ -18,7 +19,7 @@
 </script>
 
 <div class="container">
-	<div class="instruction">新しいセッションを作成</div>
+	<div class="instruction">{m.session_createTitle()}</div>
 
 	<form
 		method="POST"
@@ -36,7 +37,7 @@
 				type="text"
 				name="sessionName"
 				id="session-name-input"
-				placeholder="セッション名 (例: 2025冬期検定)"
+				placeholder={m.session_namePlaceholder()}
 				value={form?.sessionName ?? ''}
 				disabled={isSubmitting}
 			/>
@@ -44,7 +45,7 @@
 			<!-- 組織選択（複数組織対応） -->
 			{#if data.organizations.length > 1}
 				<div class="organization-selection">
-					<h3>組織選択</h3>
+					<h3>{m.session_selectOrg()}</h3>
 					<select
 						name="organizationId"
 						bind:value={selectedOrganization}
@@ -55,7 +56,7 @@
 							<option value={org.id}>{org.name}</option>
 						{/each}
 					</select>
-					<p class="help-text">セッションを作成する組織を選択してください</p>
+					<p class="help-text">{m.session_selectOrgHelp()}</p>
 				</div>
 			{:else}
 				<!-- 組織が1つだけの場合は非表示のinputで送信 -->
@@ -63,7 +64,7 @@
 			{/if}
 
 			<div class="mode-selection">
-				<h3>モード選択</h3>
+				<h3>{m.session_modeSelection()}</h3>
 
 				<label class="mode-option" class:selected={selectedMode === 'kentei'}>
 					<input
@@ -74,8 +75,8 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title">検定モード</div>
-						<div class="mode-description">既定の種目で検定を実施</div>
+						<div class="mode-title">{m.session_certMode()}</div>
+						<div class="mode-description">{m.session_certModeDesc()}</div>
 					</div>
 				</label>
 
@@ -88,8 +89,8 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title">大会モード</div>
-						<div class="mode-description">カスタム種目・採点方式・スコアボード</div>
+						<div class="mode-title">{m.session_tournamentMode()}</div>
+						<div class="mode-description">{m.session_tournamentModeDesc()}</div>
 					</div>
 				</label>
 
@@ -102,22 +103,22 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title">研修モード</div>
-						<div class="mode-description">最大100名の検定員・個別採点表示</div>
+						<div class="mode-title">{m.session_trainingMode()}</div>
+						<div class="mode-description">{m.session_trainingModeDesc()}</div>
 					</div>
 				</label>
 			</div>
 
 			<div class="help-link-section">
-				<a href="/modes" class="help-link"> セッションモードについて → </a>
+				<a href="/modes" class="help-link"> {m.dashboard_aboutModes()} </a>
 			</div>
 
 			{#if selectedMode === 'training'}
 				<div class="training-settings">
-					<h4>研修モード設定</h4>
+					<h4>{m.session_trainingSettings()}</h4>
 
 					<div class="setting-item number-item">
-						<label for="max-judges" class="setting-label">最大検定員数（1〜100）</label>
+						<label for="max-judges" class="setting-label">{m.session_maxJudges()}</label>
 						<input
 							type="number"
 							id="max-judges"
@@ -131,7 +132,7 @@
 					</div>
 
 					<div class="setting-item toggle-item">
-						<label for="multi-judge-toggle" class="setting-label">複数検定員モード</label>
+						<label for="multi-judge-toggle" class="setting-label">{m.settings_multiJudgeTraining()}</label>
 						<div class="toggle-switch">
 							<input
 								type="checkbox"
@@ -147,15 +148,14 @@
 
 					<div class="info-box">
 						{#if isMultiJudge}
-							<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+							<p><strong>ON:</strong> {m.settings_multiJudgeOn()}</p>
 						{:else}
-							<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+							<p><strong>OFF:</strong> {m.settings_multiJudgeOff()}</p>
 						{/if}
 					</div>
 
 					<p class="info-text">
-						研修モードでは、検定員ごとの採点を個別に表示します。<br />
-						3審3採・5審3採のような集計は行いません。
+						{m.session_trainingInfo()}
 					</p>
 				</div>
 			{/if}
@@ -165,7 +165,7 @@
 					<p class="error-message">{form.error}</p>
 					{#if form?.upgradeUrl}
 						<button type="button" class="upgrade-btn" on:click={() => goto(form.upgradeUrl)}>
-							プランをアップグレード
+							{m.session_upgradePlan()}
 						</button>
 					{/if}
 				</div>
@@ -175,11 +175,11 @@
 				<NavButton variant="primary" type="submit" disabled={isSubmitting}>
 					{#if isSubmitting}
 						<span style="display: inline-flex; align-items: center; gap: 8px;">
-							作成中
+							{m.session_creating()}
 							<LoadingSpinner size="small" inline={true} />
 						</span>
 					{:else}
-						作成
+						{m.session_create()}
 					{/if}
 				</NavButton>
 			</div>
@@ -187,7 +187,7 @@
 	</form>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/dashboard')}>セッション選択画面に戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>{m.session_backToSelection()}</NavButton>
 	</div>
 </div>
 

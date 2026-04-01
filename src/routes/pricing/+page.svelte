@@ -5,6 +5,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
+	import * as m from '$lib/paraglide/messages.js';
+
 	export let data: PageData;
 
 	let billingInterval: 'month' | 'year' = 'month';
@@ -22,7 +24,7 @@
 	const plans = [
 		{
 			id: 'free',
-			name: 'フリー',
+			name: m.landing_planFree(),
 			subtitle: '個人利用',
 			monthlyPrice: 0,
 			yearlyPrice: 0,
@@ -192,7 +194,7 @@
 			{@const isCurrentPlanAndInterval = isSamePlan && (plan.id === 'free' || isSameInterval)}
 			<div class="plan-card" class:recommended={plan.recommended} class:current={isCurrentPlanAndInterval}>
 				{#if plan.recommended}
-					<div class="recommended-badge">おすすめ</div>
+					<div class="recommended-badge">{m.landing_recommended()}</div>
 				{/if}
 				{#if isCurrentPlanAndInterval}
 					<div class="current-badge">現在のプラン</div>
@@ -296,7 +298,7 @@
 				<thead>
 					<tr>
 						<th>機能</th>
-						<th>フリー</th>
+						<th>{m.landing_planFree()}</th>
 						<th>Basic</th>
 						<th>Standard</th>
 						<th>Premium</th>
@@ -412,7 +414,7 @@
 			{/if}
 		{:else}
 			<button class="back-btn" on:click={() => goto('/')}>
-				トップページに戻る
+				{m.nav_topPage()}
 			</button>
 		{/if}
 	</div>

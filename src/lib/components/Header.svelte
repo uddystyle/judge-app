@@ -4,6 +4,8 @@
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import LanguageSwitcher from './LanguageSwitcher.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// Props
 	export let showAppName = false; // 料金プランページなどで使用
@@ -55,7 +57,7 @@
 			parts.push(`No.${bib}`);
 		}
 
-		return parts.length > 0 ? parts.join(' / ') : '未選択';
+		return parts.length > 0 ? parts.join(' / ') : m.nav_unselected();
 	}
 
 	function handleAppNameClick() {
@@ -116,6 +118,8 @@
 				</span>
 			{/if}
 		</div>
+		<div class="header-actions">
+			<LanguageSwitcher />
 		{#if !showAppName || user}
 			<div class="account-menu-wrapper">
 				{#if isGuest}
@@ -127,7 +131,7 @@
 								<text x="8" y="11" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">G</text>
 							</svg>
 						</span>
-						{guestName || 'ゲスト'}
+						{guestName || m.nav_guest()}
 					</div>
 				{:else}
 					<!-- 通常ユーザー: メニュー付き -->
@@ -142,7 +146,7 @@
 
 					<!-- タブレット・PC: プロフィールボタン -->
 					<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
-						{profile?.full_name || 'アカウント'}
+						{profile?.full_name || m.nav_account()}
 						<span class="menu-icon" class:rotated={showMenu}>
 							<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
 								<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -153,34 +157,35 @@
 					{#if showMenu}
 						<div class="dropdown-menu">
 							<button class="menu-item" on:click={() => handleMenuClick('/account')}>
-								<span class="menu-label">プロフィール</span>
+								<span class="menu-label">{m.nav_profile()}</span>
 							</button>
 							<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
-								<span class="menu-label">組織</span>
+								<span class="menu-label">{m.nav_organizations()}</span>
 							</button>
 							<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
-								<span class="menu-label">セッション</span>
+								<span class="menu-label">{m.nav_sessions()}</span>
 							</button>
 							{#if user}
 								<div class="menu-divider"></div>
 								<button class="menu-item logout" on:click={handleLogout}>
-									<span class="menu-label">ログアウト</span>
+									<span class="menu-label">{m.common_logout()}</span>
 								</button>
 							{/if}
 						</div>
 					{/if}
 				{/if}
 			</div>
-		{/if}
+			{/if}
+		</div>
 	</div>
 </div>
 
 <ConfirmDialog
 	bind:isOpen={showLogoutDialog}
-	title="ログアウト"
-	message="ログアウトしますか？"
-	confirmText="ログアウト"
-	cancelText="キャンセル"
+	title={m.common_logout()}
+	message={m.common_logout() + '?'}
+	confirmText={m.common_logout()}
+	cancelText={m.common_cancel()}
 	on:confirm={confirmLogout}
 />
 
@@ -288,6 +293,11 @@
 	}
 	.menu-icon svg {
 		display: block;
+	}
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 	.account-menu-wrapper {
 		position: relative;

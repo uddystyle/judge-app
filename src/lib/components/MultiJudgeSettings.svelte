@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let isChief: boolean;
 	export let mode: 'training' | 'certification';
@@ -13,10 +14,10 @@
 	let localRequiredJudges = requiredJudges;
 	let isSaving = false;
 
-	$: title = mode === 'training' ? '研修モード設定' : '採点ルール設定';
+	$: title = mode === 'training' ? m.settings_trainingMode() : m.settings_scoringRules();
 	$: action = mode === 'training' ? '?/updateTrainingSettings' : '?/updateSettings';
 	$: toggleId = mode === 'training' ? 'multi-judge-toggle-training' : 'multi-judge-toggle';
-	$: toggleLabel = mode === 'training' ? '複数検定員モード' : '複数審判モード';
+	$: toggleLabel = mode === 'training' ? m.settings_multiJudgeTraining() : m.settings_multiJudgeCert();
 </script>
 
 <div class="settings-section">
@@ -58,17 +59,17 @@
 
 			<div class="info-box">
 				{#if localIsMultiJudge}
-					<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+					<p><strong>ON:</strong> {m.settings_multiJudgeOn()}</p>
 				{:else}
-					<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+					<p><strong>OFF:</strong> {m.settings_multiJudgeOff()}</p>
 				{/if}
 			</div>
 
 			{#if mode === 'certification' && localIsMultiJudge}
 				<div class="setting-item">
 					<label for="required-judges-input" class="form-label">
-						必須審判員数
-						<span class="helper-text">(現在: {participantCount}人)</span>
+						{m.settings_requiredJudges()}
+						<span class="helper-text">{m.settings_currentCount({ count: String(participantCount) })}</span>
 					</label>
 					<input
 						type="number"
@@ -86,9 +87,9 @@
 				<button type="submit" class="save-btn" disabled={isSaving}>
 					{#if isSaving}
 						<span class="loading-spinner"></span>
-						保存中...
+						{m.settings_saving()}
 					{:else}
-						設定を保存
+						{m.settings_save()}
 					{/if}
 				</button>
 			</div>
@@ -103,20 +104,20 @@
 
 		<div class="info-box">
 			{#if localIsMultiJudge}
-				<p><strong>ON:</strong> 主任検定員が採点指示を出し、全検定員が同じ選手・種目を採点します</p>
+				<p><strong>ON:</strong> {m.settings_multiJudgeOn()}</p>
 			{:else}
-				<p><strong>OFF:</strong> 各検定員が自由に選手・種目を選んで採点できます</p>
+				<p><strong>OFF:</strong> {m.settings_multiJudgeOff()}</p>
 			{/if}
 		</div>
 
 		{#if mode === 'certification' && localIsMultiJudge}
 			<div class="setting-item">
-				<span class="form-label">必須審判員数</span>
+				<span class="form-label">{m.settings_requiredJudges()}</span>
 				<div class="readonly-value">{localRequiredJudges}人</div>
 			</div>
 		{/if}
 
-		<p class="readonly-notice">※ 設定の変更は主任検定員のみ可能です</p>
+		<p class="readonly-notice">{m.settings_chiefOnly()}</p>
 	{/if}
 </div>
 

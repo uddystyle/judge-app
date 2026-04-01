@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let form: ActionData;
 	let loading = false;
@@ -14,22 +15,21 @@
 
 <div class="container">
 	{#if form?.success}
-		<div class="instruction">確認メールを送信しました</div>
+		<div class="instruction">{m.auth_confirmEmailSent()}</div>
 		<div class="success-container">
 			<p class="success-message">
-				ご登録いただいたメールアドレスに確認メールを送信しました。<br />
-				メール内のリンクをクリックして、アカウント登録を完了してください。
+				{m.auth_confirmEmailDescription()}
 			</p>
 			<p class="info-message">
-				メールが届かない場合は、迷惑メールフォルダをご確認ください。
+				{m.auth_emailCheckSpam()}
 			</p>
 		</div>
 		<div class="nav-buttons">
-			<NavButton on:click={() => goto('/login')}>ログイン画面</NavButton>
-			<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+			<NavButton on:click={() => goto('/login')}>{m.auth_loginScreen()}</NavButton>
+			<NavButton on:click={() => goto('/')}>{m.nav_topPage()}</NavButton>
 		</div>
 	{:else}
-		<div class="instruction">新規アカウント登録</div>
+		<div class="instruction">{m.auth_signupTitle()}</div>
 
 		<form
 			method="POST"
@@ -46,7 +46,7 @@
 				<input
 					type="text"
 					name="fullName"
-					placeholder="氏名"
+					placeholder={m.auth_name()}
 					autocomplete="name"
 					value={form?.fullName ?? ''}
 					required
@@ -54,7 +54,7 @@
 				<input
 					type="email"
 					name="email"
-					placeholder="メールアドレス"
+					placeholder={m.auth_email()}
 					autocomplete="email"
 					value={form?.email ?? ''}
 					required
@@ -62,7 +62,7 @@
 				<input
 					type="password"
 					name="password"
-					placeholder="パスワード (6文字以上)"
+					placeholder={m.auth_passwordPlaceholder()}
 					autocomplete="new-password"
 					required
 				/>
@@ -75,11 +75,11 @@
 					<NavButton variant="primary" type="submit" disabled={loading}>
 						{#if loading}
 							<span style="display: inline-flex; align-items: center; gap: 8px;">
-								登録中
+								{m.auth_registering()}
 								<LoadingSpinner size="small" inline={true} />
 							</span>
 						{:else}
-							登録する
+							{m.auth_register()}
 						{/if}
 					</NavButton>
 				</div>
@@ -87,8 +87,8 @@
 		</form>
 
 		<div class="nav-buttons">
-			<NavButton on:click={() => goto('/login')}>ログイン画面</NavButton>
-			<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+			<NavButton on:click={() => goto('/login')}>{m.auth_loginScreen()}</NavButton>
+			<NavButton on:click={() => goto('/')}>{m.nav_topPage()}</NavButton>
 		</div>
 	{/if}
 </div>

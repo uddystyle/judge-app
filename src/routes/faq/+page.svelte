@@ -3,6 +3,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// クライアントサイドでユーザー情報を取得
 	let user: any = null;
@@ -187,14 +188,14 @@
 </script>
 
 <svelte:head>
-	<title>よくある質問 - TENTO</title>
+	<title>{m.footer_faq()} - TENTO</title>
 </svelte:head>
 
 <Header showAppName={true} pageUser={user} pageProfile={profile} />
 
 <div class="container">
 	<div class="header-section">
-		<h1 class="title">よくある質問</h1>
+		<h1 class="title">{m.footer_faq()}</h1>
 		<p class="subtitle">
 			TENTOの使い方や機能について、<br class="mobile-br" />よくお問い合わせいただく質問をまとめました。<br />
 			解決しない場合は、<br class="mobile-br" />お問い合わせフォームからご連絡ください。
@@ -230,7 +231,7 @@
 	<div class="contact-cta">
 		<h2 class="cta-title">解決しませんでしたか？</h2>
 		<p class="cta-description">他にご質問がございましたら、お気軽にお問い合わせください。</p>
-		<button class="contact-btn" on:click={() => goto('/contact')}> お問い合わせフォームへ </button>
+		<button class="contact-btn" on:click={() => goto('/contact')}> {m.footer_contact()} </button>
 	</div>
 </div>
 

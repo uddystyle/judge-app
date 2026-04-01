@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let isChief: boolean;
 	export let participantCount: number;
@@ -29,7 +30,7 @@
 </script>
 
 <div class="settings-section">
-	<h3 class="settings-title">採点方法設定</h3>
+	<h3 class="settings-title">{m.settings_scoringMethod()}</h3>
 
 	{#if tournamentSettingsSuccess}
 		<div class="success-message">{tournamentSettingsSuccess}</div>
@@ -53,7 +54,7 @@
 		>
 			{#if !canUse3Judges && !canUse5Judges}
 				<div class="error-message">
-					採点を開始するには、3人または5人の検定員が必要です。現在の検定員数: {participantCount}人
+					{m.settings_needJudges({ count: String(participantCount) })}
 				</div>
 			{/if}
 
@@ -62,13 +63,13 @@
 					<input type="radio" name="scoringMethod" value="3judges" bind:group={selectedMethod} disabled={!canUse3Judges} />
 					<div class="option-content">
 						<div class="option-header">
-							<span class="option-title">3審3採</span>
+							<span class="option-title">{m.settings_3judge3score()}</span>
 							{#if !canUse3Judges}
-								<span class="required-badge">3人必要</span>
+								<span class="required-badge">{m.settings_need3judges()}</span>
 							{/if}
 						</div>
-						<div class="option-description">3人の検定員の点数の合計</div>
-						<div class="option-example">例: 8.5 + 8.0 + 8.5 = 25.0点</div>
+						<div class="option-description">{m.settings_3judgeDesc()}</div>
+						<div class="option-example">{m.settings_3judgeExample()}</div>
 					</div>
 				</label>
 
@@ -76,24 +77,23 @@
 					<input type="radio" name="scoringMethod" value="5judges" bind:group={selectedMethod} disabled={!canUse5Judges} />
 					<div class="option-content">
 						<div class="option-header">
-							<span class="option-title">5審3採</span>
+							<span class="option-title">{m.settings_5judge3score()}</span>
 							{#if !canUse5Judges}
-								<span class="required-badge">5人必要</span>
+								<span class="required-badge">{m.settings_need5judges()}</span>
 							{/if}
 						</div>
 						<div class="option-description">
-							5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
+							{m.settings_5judgeDesc()}
 						</div>
 						<div class="option-example">
-							例: 8.5 + 8.0 + <span class="excluded">9.0</span> + 8.5 +
-							<span class="excluded">7.5</span> = 25.0点
+							{@html m.settings_5judgeExample()}
 						</div>
 					</div>
 				</label>
 			</div>
 
 			<div class="score-diff-section">
-				<h4 class="subsection-title">点差コントロール</h4>
+				<h4 class="subsection-title">{m.settings_scoreDiffControl()}</h4>
 
 				<div class="score-diff-toggle">
 					<input
@@ -102,12 +102,12 @@
 						name="enableScoreDiffControl"
 						bind:checked={enableScoreDiffControl}
 					/>
-					<label for="enableScoreDiffControl">点差制限を有効にする</label>
+					<label for="enableScoreDiffControl">{m.settings_enableScoreDiff()}</label>
 				</div>
 
 				{#if enableScoreDiffControl}
 					<div class="score-diff-input-group">
-						<label for="maxScoreDiff" class="input-label">最大許容点差</label>
+						<label for="maxScoreDiff" class="input-label">{m.settings_maxScoreDiff()}</label>
 						<div class="input-with-unit">
 							<input
 								type="number"
@@ -119,10 +119,10 @@
 								bind:value={maxScoreDiff}
 								class="score-diff-input"
 							/>
-							<span class="unit">点</span>
+							<span class="unit">{m.settings_scoreDiffUnit()}</span>
 						</div>
 						<p class="help-text">
-							最高点と最低点の差がこの値を超えた場合、得点を確定できません。
+							{m.settings_scoreDiffHelp()}
 						</p>
 					</div>
 				{/if}
@@ -132,9 +132,9 @@
 				<button type="submit" class="save-btn" disabled={!canUse3Judges && !canUse5Judges || isSaving}>
 					{#if isSaving}
 						<span class="loading-spinner"></span>
-						保存中...
+						{m.settings_saving()}
 					{:else}
-						設定を保存
+						{m.settings_save()}
 					{/if}
 				</button>
 			</div>
@@ -143,18 +143,18 @@
 		<div class="readonly-scoring-method">
 			<div class="method-display">
 				<div class="method-title">
-					{selectedMethod === '5judges' ? '5審3採' : '3審3採'}
+					{selectedMethod === '5judges' ? m.settings_5judge3score() : m.settings_3judge3score()}
 				</div>
 				<div class="method-description">
 					{#if selectedMethod === '5judges'}
-						5人の検定員で、最大点数と最小点数を除く、3人の検定員の合計点
+						{m.settings_5judgeDesc()}
 					{:else}
-						3人の検定員の点数の合計
+						{m.settings_3judgeDesc()}
 					{/if}
 				</div>
 			</div>
 		</div>
-		<p class="readonly-notice">※ 採点方法の変更は主任検定員のみ可能です</p>
+		<p class="readonly-notice">{m.settings_scoringMethodChiefOnly()}</p>
 	{/if}
 </div>
 
@@ -263,7 +263,8 @@
 		border-radius: 6px;
 		margin-top: 4px;
 	}
-	.excluded {
+	/* Used inside {@html} block - scoped via parent */
+	.option-example :global(.excluded) {
 		text-decoration: line-through;
 		color: #dc3545;
 	}

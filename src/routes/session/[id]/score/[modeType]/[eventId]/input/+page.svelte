@@ -7,6 +7,7 @@
 	import { enhance } from '$app/forms';
 	import { currentSession, currentDiscipline, currentEvent, currentBib } from '$lib/stores';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -31,7 +32,7 @@
 	// ヘッダー情報を設定
 	onMount(() => {
 		currentSession.set({ name: sessionName });
-		currentDiscipline.set(data.isTrainingMode ? '研修モード' : '大会モード');
+		currentDiscipline.set(data.isTrainingMode ? m.mode_training() : m.mode_tournament());
 		currentEvent.set(eventName);
 		currentBib.set(bibNumber);
 	});

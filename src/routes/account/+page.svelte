@@ -8,6 +8,8 @@
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { invalidateAll } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
@@ -40,7 +42,7 @@
 	// 「名前を更新」ボタンが押されたときの処理
 	async function handleUpdateName() {
 		if (!data.user) {
-			message = 'エラー: ユーザー情報が見つかりません。';
+			message = m.account_userNotFound();
 			return;
 		}
 		loading = true;
@@ -53,9 +55,9 @@
 			.eq('id', data.user.id);
 
 		if (error) {
-			message = 'エラー: 名前の更新に失敗しました。' + error.message;
+			message = m.account_nameUpdateFailed() + ' ' + error.message;
 		} else {
-			message = '名前を更新しました。';
+			message = m.account_nameUpdated();
 			await invalidateAll();
 		}
 		loading = false;
@@ -64,11 +66,11 @@
 	async function handleUpdatePassword() {
 		// Basic validation
 		if (newPassword.length < 6) {
-			passwordMessage = 'エラー: パスワードは6文字以上で入力してください。';
+			passwordMessage = m.account_passwordTooShort();
 			return;
 		}
 		if (newPassword !== confirmPassword) {
-			passwordMessage = 'エラー: パスワードが一致しません。';
+			passwordMessage = m.account_passwordMismatch();
 			return;
 		}
 
@@ -81,9 +83,9 @@
 		});
 
 		if (error) {
-			passwordMessage = 'エラー: パスワードの更新に失敗しました。' + error.message;
+			passwordMessage = m.account_passwordUpdateFailed() + ' ' + error.message;
 		} else {
-			passwordMessage = 'パスワードを更新しました。';
+			passwordMessage = m.account_passwordUpdated();
 			// Clear input fields on success
 			newPassword = '';
 			confirmPassword = '';
@@ -123,7 +125,7 @@
 			window.location.href = data.url;
 		} catch (error) {
 			console.error('Customer Portal Error:', error);
-			alert('プラン管理画面の表示に失敗しました。');
+			alert(m.account_portalFailed());
 		} finally {
 			portalLoading = false;
 		}
@@ -133,7 +135,7 @@
 	function getPlanName(planType: string): string {
 		switch (planType) {
 			case 'free':
-				return 'フリー';
+				return m.plan_free();
 			case 'basic':
 				return 'Basic';
 			case 'standard':
@@ -141,7 +143,7 @@
 			case 'premium':
 				return 'Premium';
 			default:
-				return 'フリー';
+				return m.plan_free();
 		}
 	}
 
@@ -149,7 +151,7 @@
 	function getPlanPrice(planType: string): string {
 		switch (planType) {
 			case 'free':
-				return '無料';
+				return m.plan_freePrice();
 			case 'basic':
 				return '¥8,800/月';
 			case 'standard':
@@ -157,15 +159,16 @@
 			case 'premium':
 				return '¥49,800/月';
 			default:
-				return '無料';
+				return m.plan_freePrice();
 		}
 	}
 
 	// 日付のフォーマット
 	function formatDate(dateString: string | null): string {
 		if (!dateString) return '-';
+		const locale = getLocale();
 		const date = new Date(dateString);
-		return date.toLocaleDateString('ja-JP');
+		return date.toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US');
 	}
 
 	// 使用率の計算
@@ -199,36 +202,36 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} pageOrganizations={data.organizations || []} />
 
 <div class="container">
-	<div class="instruction">アカウント設定</div>
+	<div class="instruction">{m.account_title()}</div>
 
 	<!-- アカウント情報セクション -->
-	<h2 class="section-title">アカウント情報</h2>
+	<h2 class="section-title">{m.account_info()}</h2>
 	<div class="info-card">
 		<div class="info-row">
-			<span class="info-label">メールアドレス</span>
+			<span class="info-label">{m.auth_email()}</span>
 			<span class="info-value">{data.user?.email || '-'}</span>
 		</div>
 	</div>
 
 	<!-- プロフィール情報セクション -->
-	<h2 class="section-title">プロフィール</h2>
+	<h2 class="section-title">{m.account_profile()}</h2>
 	<div class="form-container">
 		<label for="account-name" class="form-label">
-			氏名
+			{m.account_nameLabel()}
 			{#if data.profile?.full_name}
-				<span class="current-value">（現在: {data.profile.full_name}）</span>
+				<span class="current-value">{m.account_currentName({ name: data.profile.full_name })}</span>
 			{/if}
 		</label>
 		<input
 			type="text"
 			id="account-name"
-			placeholder="氏名を入力してください"
+			placeholder={m.account_namePlaceholder()}
 			bind:value={fullName}
 		/>
 
 		<div class="nav-buttons" style="margin-top: 0;">
 			<NavButton variant="primary" on:click={handleUpdateName} disabled={loading}>
-				{loading ? '更新中...' : '名前を更新'}
+				{loading ? m.account_updating() : m.account_updateName()}
 			</NavButton>
 		</div>
 
@@ -238,22 +241,22 @@
 	</div>
 
 	<div class="form-container">
-		<label for="account-password" class="form-label">新しいパスワード</label>
+		<label for="account-password" class="form-label">{m.account_newPassword()}</label>
 		<input
 			type="password"
 			id="account-password"
-			placeholder="新しいパスワード (6文字以上)"
+			placeholder={m.account_newPasswordPlaceholder()}
 			bind:value={newPassword}
 		/>
 		<input
 			type="password"
 			id="account-password-confirm"
-			placeholder="新しいパスワード (確認)"
+			placeholder={m.account_confirmPasswordPlaceholder()}
 			bind:value={confirmPassword}
 		/>
 		<div class="nav-buttons" style="margin-top: 0;">
 			<NavButton variant="primary" on:click={handleUpdatePassword} disabled={passwordLoading}>
-				{passwordLoading ? '更新中...' : 'パスワードを更新'}
+				{passwordLoading ? m.account_updating() : m.account_updatePassword()}
 			</NavButton>
 		</div>
 		{#if passwordMessage}
@@ -264,20 +267,20 @@
 	<div class="nav-buttons">
 		<hr class="divider" />
 
-		<NavButton on:click={() => goto('/dashboard')}>ダッシュボードに戻る</NavButton>
-		<NavButton variant="danger" on:click={handleLogout}>ログアウト</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>{m.account_backToDashboard()}</NavButton>
+		<NavButton variant="danger" on:click={handleLogout}>{m.common_logout()}</NavButton>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
-			アカウントを削除
+			{m.account_deleteAccount()}
 		</NavButton>
 	</div>
 </div>
 
 <ConfirmDialog
 	bind:isOpen={showLogoutDialog}
-	title="ログアウト"
-	message="ログアウトしますか？"
-	confirmText="ログアウト"
-	cancelText="キャンセル"
+	title={m.common_logout()}
+	message={m.account_logoutConfirm()}
+	confirmText={m.common_logout()}
+	cancelText={m.common_cancel()}
 	on:confirm={confirmLogout}
 />
 

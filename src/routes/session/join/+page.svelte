@@ -4,6 +4,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// サーバーアクションから返されるデータ（エラーメッセージなど）を保持
 	export let form: ActionData;
@@ -12,7 +13,7 @@
 </script>
 
 <div class="container">
-	<div class="instruction">参加コードで合流</div>
+	<div class="instruction">{m.session_joinTitle()}</div>
 
 	<!-- モード切り替え -->
 	<div class="mode-toggle">
@@ -22,7 +23,7 @@
 			class:active={isGuestMode}
 			on:click={() => (isGuestMode = true)}
 		>
-			ゲストとして参加
+			{m.session_joinAsGuest()}
 		</button>
 		<button
 			type="button"
@@ -30,7 +31,7 @@
 			class:active={!isGuestMode}
 			on:click={() => (isGuestMode = false)}
 		>
-			会員として参加
+			{m.session_joinAsMember()}
 		</button>
 	</div>
 
@@ -40,7 +41,7 @@
 				<input
 					type="text"
 					name="guestName"
-					placeholder="お名前"
+					placeholder={m.session_guestName()}
 					value={form?.guestName ?? ''}
 					required
 				/>
@@ -50,7 +51,7 @@
 				type="text"
 				name="joinCode"
 				id="join-code-input"
-				placeholder="6桁の参加コード"
+				placeholder={m.session_joinCode()}
 				maxlength="6"
 				style="text-transform: uppercase;"
 				value={form?.joinCode ?? ''}
@@ -64,13 +65,13 @@
 			{/if}
 
 			<div class="nav-buttons">
-				<NavButton variant="primary" type="submit">参加</NavButton>
+				<NavButton variant="primary" type="submit">{m.session_join()}</NavButton>
 			</div>
 		</div>
 	</form>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+		<NavButton on:click={() => goto('/')}>{m.nav_topPage()}</NavButton>
 	</div>
 </div>
 

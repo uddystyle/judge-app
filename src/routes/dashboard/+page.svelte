@@ -7,6 +7,7 @@
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
+	import * as m from '$lib/paraglide/messages.js';
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
@@ -74,15 +75,15 @@
 	function getPlanName(planType: string): string {
 		switch (planType) {
 			case 'free':
-				return 'フリー';
+				return m.plan_free();
 			case 'basic':
-				return 'Basic';
+				return m.plan_basic();
 			case 'standard':
-				return 'Standard';
+				return m.plan_standard();
 			case 'premium':
-				return 'Premium';
+				return m.plan_premium();
 			default:
-				return 'フリー';
+				return m.plan_free();
 		}
 	}
 
@@ -94,13 +95,13 @@
 	// アラートダイアログの状態
 	let showAlert = false;
 	let alertMessage = '';
-	let alertTitle = '開始できません';
+	let alertTitle = m.dashboard_cannotStart();
 
 	// セッションクリック時の処理
 	function handleSessionClick(session: any) {
 		// 大会モードで検定員数が揃っていない場合
 		if (session.mode === 'tournament' && !canStartTournament(session.participantCount)) {
-			alertMessage = `大会モードを開始するには、\n3人または5人の検定員が必要です。\n\n現在の検定員数: ${session.participantCount}人`;
+			alertMessage = m.dashboard_tournamentNeedJudges({ count: String(session.participantCount) });
 			showAlert = true;
 			return;
 		}
@@ -117,7 +118,7 @@
 
 <div class="container">
 	<div class="section">
-		<h2 class="section-title">参加中のセッション</h2>
+		<h2 class="section-title">{m.dashboard_activeSessions()}</h2>
 		<div class="list-keypad">
 			{#if data.sessions && data.sessions.length > 0}
 				{#each data.sessions as session}
@@ -128,21 +129,21 @@
 							<div class="session-left-section">
 								<div class="badges-container">
 									{#if session.mode === 'tournament'}
-										<span class="mode-badge tournament">大会</span>
+										<span class="mode-badge tournament">{m.mode_tournament()}</span>
 										{#if canStart}
 											<span class="scoring-method-badge">
-												{session.exclude_extremes ? '5審3採' : '3審3採'}
+												{session.exclude_extremes ? m.mode_5judge3score() : m.mode_3judge3score()}
 											</span>
 										{/if}
 									{:else if session.mode === 'training'}
-										<span class="mode-badge training">研修</span>
+										<span class="mode-badge training">{m.mode_training()}</span>
 										<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-											{session.isMultiJudge ? '合同採点' : '個別採点'}
+											{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
 										</span>
 									{:else}
-										<span class="mode-badge">検定</span>
+										<span class="mode-badge">{m.mode_certification()}</span>
 										<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-											{session.isMultiJudge ? '合同採点' : '個別採点'}
+											{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
 										</span>
 									{/if}
 									{#if session.organizations?.name}
@@ -157,28 +158,28 @@
 							</div>
 							{#if isTournament && !canStart}
 								<div class="participant-count">
-									<span class="participant-label">検定員:</span>
+									<span class="participant-label">{m.dashboard_judgeCount()}</span>
 									<span class="participant-value warning">
-										{session.participantCount}人
+										{m.dashboard_judgeCountValue({ count: String(session.participantCount) })}
 									</span>
-									<span class="warning-text">(3人または5人必要)</span>
+									<span class="warning-text">{m.dashboard_needJudges()}</span>
 								</div>
 							{/if}
 							<div class="session-buttons">
-								<a href="/session/{session.id}/details" class="details-btn"> 詳細 </a>
+								<a href="/session/{session.id}/details" class="details-btn"> {m.dashboard_details()} </a>
 								<button
 									class="start-btn"
 									class:disabled={!canStart}
 									on:click={() => handleSessionClick(session)}
 								>
-									セッションを開始
+									{m.dashboard_startSession()}
 								</button>
 							</div>
 						</div>
 					</div>
 				{/each}
 			{:else}
-				<p style="color: var(--secondary-text);">参加中の検定・大会・研修はありません。</p>
+				<p style="color: var(--secondary-text);">{m.dashboard_noSessions()}</p>
 			{/if}
 		</div>
 	</div>
@@ -188,14 +189,14 @@
 	<div class="nav-buttons">
 		{#if data.organizations && data.organizations.length > 0}
 			<NavButton variant="primary" on:click={() => goto('/session/create')}>
-				新しいセッションを作成
+				{m.dashboard_createNewSession()}
 			</NavButton>
 		{/if}
-		<NavButton on:click={() => goto('/session/join')}>コードでセッションに参加</NavButton>
+		<NavButton on:click={() => goto('/session/join')}>{m.dashboard_joinByCode()}</NavButton>
 	</div>
 
 	<div class="help-link-section">
-		<a href="/modes" class="help-link"> セッションモードについて → </a>
+		<a href="/modes" class="help-link"> {m.dashboard_aboutModes()} </a>
 	</div>
 </div>
 

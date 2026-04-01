@@ -4,6 +4,7 @@ import { validateSessionName } from '$lib/server/validation';
 import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
+import * as m from '$lib/paraglide/messages.js';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -28,7 +29,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	if (sessionError) {
 		// RLSが原因でデータが見つからない場合、Supabaseは404エラーではなく、エラーオブジェクトを返すため、ここで404を投げる
 		throw error(404, {
-			message: '検定が見つかりません。データベースのアクセス権限を確認してください。'
+			message: m.action_sessionNotFoundLoad()
 		});
 	}
 
@@ -40,7 +41,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.eq('session_id', sessionId);
 
 	if (participantsError) {
-		throw error(500, '参加者情報の取得に失敗しました。');
+		throw error(500, m.action_participantsFetchFailed());
 	}
 
 	// 各参加者のプロフィール情報を一括取得（N+1問題を解決）
@@ -170,7 +171,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 			trainingScores = scores.map((score) => ({
 				...score,
 				judge: {
-					full_name: judgeProfileMap.get(score.judge_id)?.full_name || '不明'
+					full_name: judgeProfileMap.get(score.judge_id)?.full_name || '-'
 				}
 			}));
 		} else {
@@ -236,7 +237,7 @@ export const actions: Actions = {
 			.single();
 
 		if (participantData?.is_guest) {
-			return fail(400, { error: 'ゲストユーザーは主任検定員に任命できません。' });
+			return fail(400, { error: m.action_guestCannotBeChief() });
 		}
 
 		// データベースを更新
@@ -247,7 +248,7 @@ export const actions: Actions = {
 			.single();
 
 		if (fetchError) {
-			return fail(500, { error: '現在のセッション情報の取得に失敗しました。' });
+			return fail(500, { error: m.action_fetchSessionFailed() });
 		}
 
 		const newChiefId = currentSession?.chief_judge_id === userIdToAppoint ? null : userIdToAppoint;
@@ -258,7 +259,7 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (appointError) {
-			return fail(500, { error: '主任の任命/解除に失敗しました。' });
+			return fail(500, { error: m.action_appointFailed() });
 		}
 
 		return { success: true };
@@ -278,7 +279,7 @@ export const actions: Actions = {
 		const guestIdentifier = formData.get('guestIdentifier') as string;
 
 		if (!guestIdentifier) {
-			return fail(400, { error: 'ゲスト識別子が指定されていません。' });
+			return fail(400, { error: m.action_guestIdMissing() });
 		}
 
 		// セッションの作成者であることを確認
@@ -289,11 +290,11 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError || !session) {
-			return fail(404, { error: 'セッションが見つかりません。' });
+			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		if (session.created_by !== user.id) {
-			return fail(403, { error: 'ゲストユーザーを削除する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionRemoveGuest() });
 		}
 
 		// ゲストユーザーをsession_participantsから削除
@@ -305,10 +306,10 @@ export const actions: Actions = {
 			.eq('is_guest', true);
 
 		if (deleteError) {
-			return fail(500, { error: 'ゲストユーザーの削除に失敗しました。' });
+			return fail(500, { error: m.action_removeGuestFailed() });
 		}
 
-		return { success: true, message: 'ゲストユーザーを削除しました。' };
+		return { success: true, message: m.action_guestRemoved() };
 	},
 
 	removeParticipant: async ({ request, params, locals: { supabase } }) => {
@@ -325,7 +326,7 @@ export const actions: Actions = {
 		const participantUserId = formData.get('userId') as string;
 
 		if (!participantUserId) {
-			return fail(400, { error: 'ユーザーIDが指定されていません。' });
+			return fail(400, { error: m.action_userIdMissing() });
 		}
 
 		// セッションの詳細を取得（作成者と主任検定員を確認）
@@ -336,22 +337,22 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError || !session) {
-			return fail(404, { error: 'セッションが見つかりません。' });
+			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// 作成者のみが検定員を削除できる
 		if (session.created_by !== user.id) {
-			return fail(403, { error: '検定員を削除する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionRemoveJudge() });
 		}
 
 		// 自分自身を削除しようとしている場合はエラー
 		if (participantUserId === user.id) {
-			return fail(400, { error: '自分自身を削除することはできません。' });
+			return fail(400, { error: m.action_cannotRemoveSelf() });
 		}
 
 		// 主任検定員を削除しようとしている場合はエラー
 		if (participantUserId === session.chief_judge_id) {
-			return fail(400, { error: '主任検定員を削除することはできません。先に主任を解除してください。' });
+			return fail(400, { error: m.action_cannotRemoveChief() });
 		}
 
 		// 検定員をsession_participantsから削除
@@ -363,10 +364,10 @@ export const actions: Actions = {
 			.eq('is_guest', false);
 
 		if (deleteError) {
-			return fail(500, { error: '検定員の削除に失敗しました。' });
+			return fail(500, { error: m.action_removeJudgeFailed() });
 		}
 
-		return { success: true, message: '検定員を削除しました。' };
+		return { success: true, message: m.action_judgeRemoved() };
 	},
 
 	updateTrainingSettings: async ({ request, params, locals: { supabase } }) => {
@@ -415,11 +416,11 @@ export const actions: Actions = {
 
 			if (insertError) {
 				console.error('[updateTrainingSettings] ❌ 作成失敗:', insertError);
-				return fail(500, { trainingSettingsError: '研修モード設定の作成に失敗しました。' });
+				return fail(500, { trainingSettingsError: m.action_trainingSettingsCreateFailed() });
 			}
 
 			console.log('[updateTrainingSettings] ✅ 作成成功');
-			return { trainingSettingsSuccess: '研修設定を作成しました。' };
+			return { trainingSettingsSuccess: m.action_trainingSettingsCreated() };
 		}
 
 		// レコードが存在する場合は更新
@@ -435,11 +436,11 @@ export const actions: Actions = {
 
 		if (updateError) {
 			console.error('[updateTrainingSettings] ❌ 更新失敗:', updateError);
-			return fail(500, { trainingSettingsError: '設定の更新に失敗しました。' });
+			return fail(500, { trainingSettingsError: m.action_settingsUpdateFailed() });
 		}
 
 		console.log('[updateTrainingSettings] ✅ 更新成功');
-		return { trainingSettingsSuccess: '研修設定を更新しました。' };
+		return { trainingSettingsSuccess: m.action_trainingSettingsUpdated() };
 	},
 
 	updateTournamentSettings: async ({ request, params, locals: { supabase } }) => {
@@ -467,7 +468,7 @@ export const actions: Actions = {
 		if (enableScoreDiffControl && maxScoreDiff !== null) {
 			if (isNaN(maxScoreDiff) || maxScoreDiff < 1 || maxScoreDiff > 10) {
 				return fail(400, {
-					tournamentSettingsError: '点差制限は1〜10点の範囲で設定してください。'
+					tournamentSettingsError: m.action_scoreDiffRange()
 				});
 			}
 		}
@@ -481,10 +482,10 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (updateError) {
-			return fail(500, { tournamentSettingsError: '設定の更新に失敗しました。' });
+			return fail(500, { tournamentSettingsError: m.action_settingsUpdateFailed() });
 		}
 
-		return { tournamentSettingsSuccess: '採点方法を更新しました。' };
+		return { tournamentSettingsSuccess: m.action_scoringMethodUpdated() };
 	},
 
 	updateSettings: async ({ request, params, locals: { supabase } }) => {
@@ -503,7 +504,7 @@ export const actions: Actions = {
 
 		// Validate requiredJudges
 		if (isMultiJudge && (!requiredJudges || requiredJudges < 1)) {
-			return fail(400, { settingsError: '必須審判員数を正しく入力してください。' });
+			return fail(400, { settingsError: m.action_requiredJudgesInvalid() });
 		}
 
 		// Check participant count if multi-judge mode is enabled
@@ -514,12 +515,12 @@ export const actions: Actions = {
 				.eq('session_id', params.id);
 
 			if (countError) {
-				return fail(500, { settingsError: '参加者数の確認に失敗しました。' });
+				return fail(500, { settingsError: m.action_participantCountFailed() });
 			}
 
 			if (requiredJudges > (count || 0)) {
 				return fail(400, {
-					settingsError: `必須審判員数は参加者数（${count}人）以下にしてください。`
+					settingsError: m.action_requiredJudgesExceed({ count: String(count) })
 				});
 			}
 		}
@@ -533,10 +534,10 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (updateError) {
-			return fail(500, { settingsError: '設定の更新に失敗しました。' });
+			return fail(500, { settingsError: m.action_settingsUpdateFailed() });
 		}
 
-		return { settingsSuccess: '設定を更新しました。' };
+		return { settingsSuccess: m.action_settingsUpdated() };
 	},
 
 	// 種目を追加（大会・研修共通）
@@ -547,14 +548,14 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			return fail(401, { eventError: '認証が必要です。' });
+			return fail(401, { eventError: m.action_authRequired() });
 		}
 
 		const formData = await request.formData();
 		const eventName = formData.get('eventName') as string;
 
 		if (!eventName || !eventName.trim()) {
-			return fail(400, { eventError: '種目名を入力してください。' });
+			return fail(400, { eventError: m.action_eventNameRequired() });
 		}
 
 		// セッション情報を取得してモードを確認
@@ -565,7 +566,7 @@ export const actions: Actions = {
 			.single();
 
 		if (!session) {
-			return fail(404, { eventError: 'セッションが見つかりません。' });
+			return fail(404, { eventError: m.action_sessionNotFound() });
 		}
 
 		const isTournament = session.is_tournament_mode || session.mode === 'tournament';
@@ -592,7 +593,7 @@ export const actions: Actions = {
 			});
 
 			if (insertError) {
-				return fail(500, { eventError: '種目の追加に失敗しました。' });
+				return fail(500, { eventError: m.action_eventAddFailed() });
 			}
 		} else if (isTraining) {
 			// 研修モード: training_events
@@ -617,11 +618,11 @@ export const actions: Actions = {
 			});
 
 			if (insertError) {
-				return fail(500, { eventError: '種目の追加に失敗しました。' });
+				return fail(500, { eventError: m.action_eventAddFailed() });
 			}
 		}
 
-		return { eventSuccess: '種目を追加しました。' };
+		return { eventSuccess: m.action_eventAdded() };
 	},
 
 	// 種目を更新（大会・研修共通）
@@ -632,7 +633,7 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			return fail(401, { eventError: '認証が必要です。' });
+			return fail(401, { eventError: m.action_authRequired() });
 		}
 
 		const formData = await request.formData();
@@ -641,7 +642,7 @@ export const actions: Actions = {
 		const isTraining = formData.get('isTraining') === 'true';
 
 		if (!eventName || !eventName.trim()) {
-			return fail(400, { eventError: '種目名を入力してください。' });
+			return fail(400, { eventError: m.action_eventNameRequired() });
 		}
 
 		if (isTraining) {
@@ -653,7 +654,7 @@ export const actions: Actions = {
 				.eq('session_id', params.id);
 
 			if (updateError) {
-				return fail(500, { eventError: '種目の更新に失敗しました。' });
+				return fail(500, { eventError: m.action_eventUpdateFailed() });
 			}
 		} else {
 			// 大会モード: custom_events
@@ -664,11 +665,11 @@ export const actions: Actions = {
 				.eq('session_id', params.id);
 
 			if (updateError) {
-				return fail(500, { eventError: '種目の更新に失敗しました。' });
+				return fail(500, { eventError: m.action_eventUpdateFailed() });
 			}
 		}
 
-		return { eventSuccess: '種目を更新しました。' };
+		return { eventSuccess: m.action_eventUpdated() };
 	},
 
 	// 種目を削除（大会・研修共通）
@@ -679,7 +680,7 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			return fail(401, { eventError: '認証が必要です。' });
+			return fail(401, { eventError: m.action_authRequired() });
 		}
 
 		const formData = await request.formData();
@@ -687,7 +688,7 @@ export const actions: Actions = {
 		const isTraining = formData.get('isTraining') === 'true';
 
 		if (!eventId) {
-			return fail(400, { eventError: '種目IDが指定されていません。' });
+			return fail(400, { eventError: m.action_eventIdMissing() });
 		}
 
 		if (isTraining) {
@@ -699,7 +700,7 @@ export const actions: Actions = {
 				.eq('session_id', params.id);
 
 			if (deleteError) {
-				return fail(500, { eventError: '種目の削除に失敗しました。' });
+				return fail(500, { eventError: m.action_eventDeleteFailed() });
 			}
 		} else {
 			// 大会モード: custom_events
@@ -710,11 +711,11 @@ export const actions: Actions = {
 				.eq('session_id', params.id);
 
 			if (deleteError) {
-				return fail(500, { eventError: '種目の削除に失敗しました。' });
+				return fail(500, { eventError: m.action_eventDeleteFailed() });
 			}
 		}
 
-		return { eventSuccess: '種目を削除しました。' };
+		return { eventSuccess: m.action_eventDeleted() };
 	},
 
 	// セッション名を更新
@@ -725,7 +726,7 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			return fail(401, { error: 'ログインが必要です。' });
+			return fail(401, { error: m.action_loginRequired() });
 		}
 
 		const sessionId = params.id;
@@ -738,11 +739,11 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError || !session) {
-			return fail(404, { error: 'セッションが見つかりません。' });
+			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		if (session.created_by !== user.id) {
-			return fail(403, { error: 'セッション名を変更する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionEditName() });
 		}
 
 		const formData = await request.formData();
@@ -752,7 +753,7 @@ export const actions: Actions = {
 		const nameValidation = validateSessionName(nameRaw);
 		if (!nameValidation.valid) {
 			return fail(400, {
-				error: nameValidation.error || 'セッション名が無効です。',
+				error: nameValidation.error || m.action_sessionNameInvalid(),
 				name: nameRaw
 			});
 		}
@@ -768,12 +769,12 @@ export const actions: Actions = {
 		if (updateError) {
 			console.error('Session name update error:', updateError);
 			return fail(500, {
-				error: 'セッション名の更新に失敗しました。しばらくしてから再度お試しください。',
+				error: m.action_sessionNameUpdateFailed(),
 				name: nameRaw
 			});
 		}
 
-		return { success: true, message: 'セッション名を更新しました。' };
+		return { success: true, message: m.action_sessionNameUpdated() };
 	},
 
 	deleteSession: async ({ params, locals: { supabase } }) => {
@@ -796,7 +797,7 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionData?.created_by !== user.id) {
-			return fail(403, { error: '検定を削除する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionDeleteSession() });
 		}
 
 		// Delete related data in the correct order to respect database constraints
@@ -808,7 +809,7 @@ export const actions: Actions = {
 		const { error: deleteError } = await supabase.from('sessions').delete().eq('id', sessionId);
 
 		if (deleteError) {
-			return fail(500, { error: '検定の削除に失敗しました。' });
+			return fail(500, { error: m.action_sessionDeleteFailed() });
 		}
 
 		// If successful, redirect to the dashboard
@@ -844,19 +845,19 @@ export const actions: Actions = {
 
 		if (sessionError || !sessionData) {
 			console.error('[deleteTrainingData] セッション取得エラー:', sessionError);
-			return fail(404, { error: 'セッションが見つかりません。' });
+			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
 			console.error('[deleteTrainingData] 権限エラー: 作成者ではない');
-			return fail(403, { error: 'データを削除する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionDeleteData() });
 		}
 
 		// 研修モードのみデータ削除可能
 		if (sessionData.mode !== 'training') {
 			console.error('[deleteTrainingData] モードエラー:', sessionData.mode);
-			return fail(400, { error: '研修モードのセッションのみデータ削除が可能です。' });
+			return fail(400, { error: m.action_trainingModeOnly() });
 		}
 
 		console.log('[deleteTrainingData] 権限チェック完了');
@@ -875,7 +876,7 @@ export const actions: Actions = {
 
 		if (eventsError) {
 			console.error('[deleteTrainingData] training_events取得エラー:', eventsError);
-			return fail(500, { error: '種目情報の取得に失敗しました。' });
+			return fail(500, { error: m.action_eventFetchFailed() });
 		}
 
 		if (trainingEvents && trainingEvents.length > 0) {
@@ -904,7 +905,7 @@ export const actions: Actions = {
 			if (deleteScoresError) {
 				console.error('[deleteTrainingData] 採点データの削除エラー:', deleteScoresError);
 				return fail(500, {
-					error: `採点データの削除に失敗しました。${deleteScoresError.message || ''}`
+					error: m.action_scoreDeleteFailed({ detail: deleteScoresError.message || '' })
 				});
 			}
 
@@ -924,7 +925,7 @@ export const actions: Actions = {
 		}
 
 		console.log('[deleteTrainingData] ========== 採点データ削除完了 ==========');
-		return { success: true, message: '研修モードの採点データを削除しました。' };
+		return { success: true, message: m.action_trainingDataDeleted() };
 	},
 
 	deleteCertificationData: async ({ params, locals: { supabase } }) => {
@@ -952,19 +953,19 @@ export const actions: Actions = {
 
 		if (sessionError || !sessionData) {
 			console.error('[deleteCertificationData] セッション取得エラー:', sessionError);
-			return fail(404, { error: 'セッションが見つかりません。' });
+			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
 			console.error('[deleteCertificationData] 権限エラー: 作成者ではない');
-			return fail(403, { error: 'データを削除する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionDeleteData() });
 		}
 
 		// 検定モードのみデータ削除可能
 		if (sessionData.mode !== 'certification') {
 			console.error('[deleteCertificationData] モードエラー:', sessionData.mode);
-			return fail(400, { error: '検定モードのセッションのみデータ削除が可能です。' });
+			return fail(400, { error: m.action_certModeOnly() });
 		}
 
 		// RLSをバイパスするためにService Roleクライアントを使用
@@ -986,7 +987,7 @@ export const actions: Actions = {
 		if (deleteError) {
 			console.error('[deleteCertificationData] 採点データの削除エラー:', deleteError);
 			return fail(500, {
-				error: `採点データの削除に失敗しました。${deleteError.message || ''}`
+				error: m.action_scoreDeleteFailed({ detail: deleteError.message || '' })
 			});
 		}
 
@@ -1003,7 +1004,7 @@ export const actions: Actions = {
 		}
 
 		console.log('[deleteCertificationData] ========== 採点データ削除完了 ==========');
-		return { success: true, message: '検定モードの採点データを削除しました。' };
+		return { success: true, message: m.action_certDataDeleted() };
 	},
 
 	deleteTournamentData: async ({ params, locals: { supabase } }) => {
@@ -1031,19 +1032,19 @@ export const actions: Actions = {
 
 		if (sessionError || !sessionData) {
 			console.error('[deleteTournamentData] セッション取得エラー:', sessionError);
-			return fail(404, { error: 'セッションが見つかりません。' });
+			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
 			console.error('[deleteTournamentData] 権限エラー: 作成者ではない');
-			return fail(403, { error: 'データを削除する権限がありません。' });
+			return fail(403, { error: m.action_noPermissionDeleteData() });
 		}
 
 		// 大会モードのみデータ削除可能
 		if (sessionData.mode !== 'tournament') {
 			console.error('[deleteTournamentData] モードエラー:', sessionData.mode);
-			return fail(400, { error: '大会モードのセッションのみデータ削除が可能です。' });
+			return fail(400, { error: m.action_tournamentModeOnly() });
 		}
 
 		// RLSをバイパスするためにService Roleクライアントを使用
@@ -1065,7 +1066,7 @@ export const actions: Actions = {
 		if (deleteError) {
 			console.error('[deleteTournamentData] 採点データの削除エラー:', deleteError);
 			return fail(500, {
-				error: `採点データの削除に失敗しました。${deleteError.message || ''}`
+				error: m.action_scoreDeleteFailed({ detail: deleteError.message || '' })
 			});
 		}
 
@@ -1082,6 +1083,6 @@ export const actions: Actions = {
 		}
 
 		console.log('[deleteTournamentData] ========== 採点データ削除完了 ==========');
-		return { success: true, message: '大会モードの採点データを削除しました。' };
+		return { success: true, message: m.action_tournamentDataDeleted() };
 	}
 };

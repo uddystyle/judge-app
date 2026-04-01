@@ -4,12 +4,15 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 
 	export let data: PageData;
 
 	function formatDate(dateString: string): string {
+		const locale = getLocale();
 		const date = new Date(dateString);
-		return date.toLocaleDateString('ja-JP', {
+		return date.toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', {
 			year: 'numeric',
 			month: 'long',
 			day: 'numeric'
@@ -20,20 +23,19 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} pageOrganizations={data.organizations || []} />
 
 <div class="container">
-	<div class="instruction">組織</div>
+	<div class="instruction">{m.org_title()}</div>
 
 	{#if !data.organizations || data.organizations.length === 0}
 		<!-- 組織未作成の場合 -->
 		<div class="no-organization-card">
 			<div class="warning-icon">⚠️</div>
-			<h3 class="warning-title">組織が作成されていません</h3>
+			<h3 class="warning-title">{m.org_noOrganization()}</h3>
 			<p class="warning-message">
-				TENTOでは、すべてのセッションは組織に属します。<br />
-				まずは組織を作成してください。
+				{@html m.org_noOrgMessage()}
 			</p>
 			<div class="actions">
 				<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
-					組織を作成する
+					{m.org_createOrganization()}
 				</NavButton>
 			</div>
 		</div>
@@ -45,15 +47,15 @@
 					<h3 class="org-name">{org.name}</h3>
 					<div class="org-details">
 						<span class="org-role" class:admin={org.userRole === 'admin'}>
-							{org.userRole === 'admin' ? '管理者' : 'メンバー'}
+							{org.userRole === 'admin' ? m.org_admin() : m.org_member()}
 						</span>
-						<span class="org-date">作成日: {formatDate(org.created_at)}</span>
+						<span class="org-date">{m.org_createdDate({ date: formatDate(org.created_at) })}</span>
 					</div>
 				</div>
 
 				<div class="actions">
 					<NavButton on:click={() => goto(`/organization/${org.id}`)}>
-						組織詳細を見る
+						{m.org_viewDetails()}
 					</NavButton>
 				</div>
 			</div>
@@ -61,9 +63,9 @@
 
 		<!-- 新しい組織を作成 -->
 		<div class="create-org-card">
-			<p class="create-org-text">複数の組織を作成・管理できます</p>
+			<p class="create-org-text">{m.org_multipleOrgs()}</p>
 			<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
-				新しい組織を作成
+				{m.org_createNew()}
 			</NavButton>
 		</div>
 	{/if}

@@ -5,6 +5,8 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { PageData, ActionData } from './$types';
+	import * as m from '$lib/paraglide/messages.js';
+	import { getLocale } from '$lib/paraglide/runtime.js';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -36,14 +38,15 @@
 	};
 
 	// 役割名のマッピング
-	const roleNames: Record<string, string> = {
-		admin: '管理者',
-		member: 'メンバー'
-	};
+	$: roleNames = {
+		admin: m.org_admin(),
+		member: m.org_member()
+	} as Record<string, string>;
 
 	function formatDate(dateString: string) {
+		const locale = getLocale();
 		const date = new Date(dateString);
-		return date.toLocaleDateString('ja-JP', {
+		return date.toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', {
 			year: 'numeric',
 			month: 'long',
 			day: 'numeric'
@@ -211,10 +214,10 @@
 				/>
 				<div class="name-edit-buttons">
 					<button type="submit" class="save-btn" disabled={isSubmittingName}>
-						{isSubmittingName ? '保存中...' : '保存'}
+						{isSubmittingName ? `${m.common_save()}...` : m.common_save()}
 					</button>
 					<button type="button" class="cancel-btn" on:click={cancelEditingName} disabled={isSubmittingName}>
-						キャンセル
+						{m.common_cancel()}
 					</button>
 				</div>
 			</form>
@@ -223,7 +226,7 @@
 			<div class="name-display">
 				<h1 class="page-title">{data.organization.name}</h1>
 				{#if isAdmin}
-					<button class="edit-name-btn" on:click={startEditingName} title="組織名を編集">
+					<button class="edit-name-btn" on:click={startEditingName} title={m.common_edit()}>
 						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 							<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
 							<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -273,12 +276,12 @@
 			{#if isAdmin}
 				<div class="info-row">
 					<span class="info-label">あなたの役割</span>
-					<span class="info-value admin-badge">管理者</span>
+					<span class="info-value admin-badge">{m.org_admin()}</span>
 				</div>
 			{:else}
 				<div class="info-row">
 					<span class="info-label">あなたの役割</span>
-					<span class="info-value">メンバー</span>
+					<span class="info-value">{m.org_member()}</span>
 				</div>
 			{/if}
 		</div>
@@ -318,9 +321,9 @@
 							<button
 								class="delete-member-btn"
 								on:click={() => confirmDeleteMember(member)}
-								title="メンバーを削除"
+								title={m.common_delete()}
 							>
-								削除
+								{m.common_delete()}
 							</button>
 						{/if}
 					</div>
@@ -408,7 +411,7 @@
 
 	<!-- ナビゲーションボタン -->
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto('/dashboard')}>ダッシュボードに戻る</NavButton>
+		<NavButton on:click={() => goto('/dashboard')}>{m.nav_dashboard()}</NavButton>
 	</div>
 </div>
 
@@ -430,14 +433,14 @@
 					on:click={cancelDeleteMember}
 					disabled={deletingMember}
 				>
-					キャンセル
+					{m.common_cancel()}
 				</button>
 				<button
 					class="modal-btn delete-btn"
 					on:click={deleteMember}
 					disabled={deletingMember}
 				>
-					{deletingMember ? '削除中...' : '削除'}
+					{deletingMember ? `${m.common_delete()}...` : m.common_delete()}
 				</button>
 			</div>
 		</div>

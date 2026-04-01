@@ -4,6 +4,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -12,14 +13,14 @@
 </script>
 
 <svelte:head>
-	<title>お問い合わせ - TENTO</title>
+	<title>{m.footer_contact()} - TENTO</title>
 </svelte:head>
 
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} />
 
 <div class="container">
 	<div class="header-section">
-		<h1 class="title">お問い合わせ</h1>
+		<h1 class="title">{m.footer_contact()}</h1>
 		<p class="subtitle">
 			ご質問やご要望がございましたら、<br class="mobile-br" />お気軽にお問い合わせください。<br />
 			通常、1-2営業日以内に返信いたします。
@@ -31,7 +32,7 @@
 			<div class="success-icon">✓</div>
 			<h2>お問い合わせを受け付けました</h2>
 			<p>ご連絡ありがとうございます。担当者より折り返しご連絡いたします。</p>
-			<button class="back-btn" on:click={() => goto('/')}>トップページに戻る</button>
+			<button class="back-btn" on:click={() => goto('/')}>{m.nav_topPage()}</button>
 		</div>
 	{:else}
 		<div class="form-container">
@@ -63,7 +64,7 @@
 				</div>
 
 				<div class="form-group">
-					<label for="email" class="label">メールアドレス <span class="required">*</span></label>
+					<label for="email" class="label">{m.auth_email()} <span class="required">*</span></label>
 					<input
 						type="email"
 						id="email"
@@ -162,7 +163,7 @@
 					<button type="submit" class="submit-btn" disabled={isSubmitting}>
 						{isSubmitting ? '送信中...' : '送信する'}
 					</button>
-					<button type="button" class="cancel-btn" on:click={() => goto('/')}> キャンセル </button>
+					<button type="button" class="cancel-btn" on:click={() => goto('/')}> {m.common_cancel()} </button>
 				</div>
 			</form>
 		</div>

@@ -3,6 +3,8 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import type { Handle } from '@sveltejs/kit';
 import { randomBytes } from 'crypto';
+import { paraglideMiddleware } from '$lib/paraglide/server';
+import { getTextDirection } from '$lib/paraglide/runtime';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// リクエストIDを生成して追跡
@@ -75,10 +77,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 		};
 	};
 
-	const response = await resolve(event, {
-		filterSerializedResponseHeaders(name) {
-			return name === 'content-range' || name === 'cache-control';
-		}
+	const response = await paraglideMiddleware(event.request, ({ request: localizedRequest, locale }) => {
+		event.request = localizedRequest;
+		event.locals.lang = locale as 'ja' | 'en';
+		return resolve(event, {
+			filterSerializedResponseHeaders(name) {
+				return name === 'content-range' || name === 'cache-control';
+			},
+			transformPageChunk: ({ html }) => {
+				return html
+					.replace('%lang%', locale)
+					.replace('%dir%', getTextDirection(locale));
+			}
+		});
 	});
 
 	// リクエストIDをレスポンスヘッダーに追加

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let events: any[];
 	export let isTrainingMode: boolean;
@@ -27,7 +28,7 @@
 </script>
 
 <div class="settings-section">
-	<h3 class="settings-title">種目管理</h3>
+	<h3 class="settings-title">{m.event_management()}</h3>
 
 	{#if eventSuccess}
 		<div class="success-message">{eventSuccess}</div>
@@ -51,14 +52,14 @@
 									type="text"
 									name="eventName"
 									bind:value={editEventName}
-									placeholder="種目名"
+									placeholder={m.event_name()}
 									class="edit-input"
 									required
 								/>
 								<div class="edit-actions">
-									<button type="submit" class="save-btn-small">保存</button>
+									<button type="submit" class="save-btn-small">{m.common_save()}</button>
 									<button type="button" class="cancel-btn-small" on:click={cancelEditEvent}>
-										キャンセル
+										{m.common_cancel()}
 									</button>
 								</div>
 							</form>
@@ -71,7 +72,7 @@
 							</div>
 							<div class="event-actions">
 								<button class="edit-btn-small" on:click={() => startEditEvent(event)}>
-									編集
+									{m.common_edit()}
 								</button>
 								<form method="POST" action="?/deleteEvent" use:enhance style="display: inline;">
 									<input type="hidden" name="eventId" value={event.id} />
@@ -80,12 +81,12 @@
 										type="submit"
 										class="delete-btn-small"
 										on:click={(e) => {
-											if (!confirm('この種目を削除しますか？')) {
+											if (!confirm(m.event_deleteConfirm())) {
 												e.preventDefault();
 											}
 										}}
 									>
-										削除
+										{m.common_delete()}
 									</button>
 								</form>
 							</div>
@@ -94,7 +95,7 @@
 				{/each}
 			</div>
 		{:else}
-			<p class="empty-message">種目が登録されていません</p>
+			<p class="empty-message">{m.event_noEvents()}</p>
 		{/if}
 
 		<form method="POST" action="?/addEvent" use:enhance on:submit={clearEventForm}>
@@ -103,10 +104,10 @@
 					type="text"
 					name="eventName"
 					bind:value={eventName}
-					placeholder="種目名 (例: 大回り)"
+					placeholder={m.event_namePlaceholder()}
 					required
 				/>
-				<button type="submit" class="add-event-btn">追加</button>
+				<button type="submit" class="add-event-btn">{m.event_add()}</button>
 			</div>
 		</form>
 	{:else}
@@ -125,7 +126,7 @@
 				{/each}
 			</div>
 		{:else}
-			<p class="empty-message">種目が登録されていません</p>
+			<p class="empty-message">{m.event_noEvents()}</p>
 		{/if}
 		<p class="readonly-notice">※ 種目の追加・編集・削除は主任検定員のみ可能です</p>
 	{/if}

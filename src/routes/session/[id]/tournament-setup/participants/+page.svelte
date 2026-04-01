@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -146,9 +147,9 @@
 									/>
 								</div>
 								<div class="edit-actions">
-									<button type="submit" class="save-btn">保存</button>
+									<button type="submit" class="save-btn">{m.common_save()}</button>
 									<button type="button" class="cancel-btn" on:click={cancelEdit}>
-										キャンセル
+										{m.common_cancel()}
 									</button>
 								</div>
 							</form>
@@ -176,7 +177,7 @@
 											}
 										}}
 									>
-										削除
+										{m.common_delete()}
 									</button>
 								</form>
 							</div>

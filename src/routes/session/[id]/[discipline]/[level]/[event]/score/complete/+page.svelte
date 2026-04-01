@@ -1,6 +1,7 @@
 <script lang="ts">
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { currentBib as bibStore, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
@@ -151,28 +152,28 @@
 
 	{#if data.isMultiJudge && data.scores.length > 1}
 		<div class="scores-container">
-			<h3 class="scores-title">各検定員の得点</h3>
+			<h3 class="scores-title">{m.score_judgeScores()}</h3>
 			<div class="scores-list">
 				{#each data.scores as score}
 					<div class="score-item">
 						<span class="judge-name">{score.judge_name}</span>
-						<span class="score-value">{score.score}点</span>
+						<span class="score-value">{m.score_points({ score: score.score })}</span>
 					</div>
 				{/each}
 			</div>
 			<div class="average-score">
 				<strong>
 					{#if data.isTournamentMode}
-						{data.averageScore}点
+						{m.score_points({ score: data.averageScore })}
 					{:else}
-						平均点: {data.averageScore}点
+						平均点: {m.score_points({ score: data.averageScore })}
 					{/if}
 				</strong>
 			</div>
 		</div>
 	{:else}
 		<div class="single-score">
-			<strong>得点: {data.averageScore}点</strong>
+			<strong>得点: {m.score_points({ score: data.averageScore })}</strong>
 		</div>
 	{/if}
 

@@ -8,6 +8,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
@@ -520,9 +521,9 @@
 
 	{#if isSessionEnded}
 		<!-- 終了画面（主任・一般共通） -->
-		<div class="instruction">{data.isTournamentMode ? '大会終了' : data.isTrainingMode ? '研修終了' : '検定終了'}</div>
+		<div class="instruction">{data.isTournamentMode ? `${m.mode_tournament()}終了` : data.isTrainingMode ? `${m.mode_training()}終了` : `${m.mode_certification()}終了`}</div>
 		<div class="end-message">
-			<p>この{data.isTournamentMode ? '大会' : data.isTrainingMode ? '研修' : '検定'}は終了しました。</p>
+			<p>この{data.isTournamentMode ? m.mode_tournament() : data.isTrainingMode ? m.mode_training() : m.mode_certification()}は終了しました。</p>
 
 			{#if !data.isChief && data.isTrainingMode}
 				<!-- 研修モード: 主任検定員以外（一般検定員とゲストユーザー）に現在の設定を表示 -->
@@ -568,7 +569,7 @@
 			{:else if !data.isChief && data.isTournamentMode}
 				<!-- 大会モード: 主任検定員以外（一般検定員とゲストユーザー）に採点方式を表示 -->
 				<p class="info-text" style="margin-top: 16px;">
-					採点方式：{#if data.sessionDetails.exclude_extremes}5審3採（最高点・最低点を除く）{:else}3審3採{/if}
+					採点方式：{#if data.sessionDetails.exclude_extremes}{m.mode_5judge3score()}（最高点・最低点を除く）{:else}{m.mode_3judge3score()}{/if}
 				</p>
 
 				{#if data.guestIdentifier}
@@ -604,7 +605,7 @@
 	{:else if data.isChief && data.isTrainingMode}
 		<!-- 研修モード: 主任検定員の画面 -->
 		{#if data.hasEvents}
-			<div class="instruction">研修モード</div>
+			<div class="instruction">{m.mode_training()}モード</div>
 			<div class="tournament-info">
 				{#if data.trainingSession?.is_multi_judge}
 					<p>種目選択画面に進んでください</p>
@@ -637,7 +638,7 @@
 		{#if data.isTournamentMode}
 			<!-- 大会モード: 種目選択へ -->
 			{#if data.hasEvents}
-				<div class="instruction">大会モード</div>
+				<div class="instruction">{m.mode_tournament()}モード</div>
 				<div class="tournament-info">
 					<p>種目選択画面に進んでください</p>
 				</div>
@@ -760,7 +761,7 @@
 	{#if !data.guestIdentifier}
 		<div class="nav-buttons">
 			<NavButton on:click={() => goto('/dashboard')}>
-				セッション選択画面に戻る
+				{m.session_backToSelection()}
 			</NavButton>
 		</div>
 	{/if}

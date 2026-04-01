@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// アンカーリンク付きで遷移する関数
 	async function navigateWithAnchor(path: string) {
@@ -28,35 +29,35 @@
 	<div class="footer-container">
 		<div class="footer-brand">
 			<button class="brand-name" on:click={() => goto('/?view=landing')}>TENTO</button>
-			<p class="brand-description">スキー・スノーボード検定・大会のための<br />採点管理システム</p>
+			<p class="brand-description">{m.footer_description()}</p>
 		</div>
 
 		<div class="footer-links">
 			<div class="footer-column">
-				<h4 class="column-title">製品</h4>
+				<h4 class="column-title">{m.footer_product()}</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => navigateWithAnchor('/#features')}>機能</button></li>
-					<li><button class="link-button" on:click={() => goto('/pricing')}>料金プラン</button></li>
+					<li><button class="link-button" on:click={() => navigateWithAnchor('/#features')}>{m.footer_features()}</button></li>
+					<li><button class="link-button" on:click={() => goto('/pricing')}>{m.footer_pricing()}</button></li>
 					<li>
-						<button class="link-button" on:click={() => navigateWithAnchor('/#how-it-works')}>使い方</button>
+						<button class="link-button" on:click={() => navigateWithAnchor('/#how-it-works')}>{m.footer_howToUse()}</button>
 					</li>
 				</ul>
 			</div>
 
 			<div class="footer-column">
-				<h4 class="column-title">サポート</h4>
+				<h4 class="column-title">{m.footer_support()}</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => goto('/contact')}>お問い合わせ</button></li>
-					<li><button class="link-button" on:click={() => goto('/faq')}>よくある質問</button></li>
+					<li><button class="link-button" on:click={() => goto('/contact')}>{m.footer_contact()}</button></li>
+					<li><button class="link-button" on:click={() => goto('/faq')}>{m.footer_faq()}</button></li>
 				</ul>
 			</div>
 
 			<div class="footer-column">
-				<h4 class="column-title">法的事項</h4>
+				<h4 class="column-title">{m.footer_legal()}</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => goto('/terms')}>利用規約</button></li>
-					<li><button class="link-button" on:click={() => goto('/privacy')}>プライバシーポリシー</button></li>
-					<li><button class="link-button" on:click={() => goto('/legal')}>特定商取引法表記</button></li>
+					<li><button class="link-button" on:click={() => goto('/terms')}>{m.footer_terms()}</button></li>
+					<li><button class="link-button" on:click={() => goto('/privacy')}>{m.footer_privacy()}</button></li>
+					<li><button class="link-button" on:click={() => goto('/legal')}>{m.footer_commercialLaw()}</button></li>
 				</ul>
 			</div>
 		</div>

@@ -7,6 +7,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { onMount } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
@@ -24,7 +25,7 @@
 
 	// URLパラメータから成功メッセージを取得
 	$: if (!checkingAuth && $page.url.searchParams.get('success') === 'password-reset') {
-		successMessage = 'パスワードが正常に更新されました。新しいパスワードでログインしてください。';
+		successMessage = m.auth_passwordResetSuccess();
 	}
 
 	/**
@@ -64,22 +65,22 @@
 
 				// 無効な認証情報
 				if (error.code === 'invalid_credentials') {
-					throw new Error('メールアドレスまたはパスワードが正しくありません。');
+					throw new Error(m.auth_invalidCredentials());
 				}
 
 				// メール未確認
 				if (error.code === 'email_not_confirmed') {
-					throw new Error('メールアドレスが確認されていません。確認メールをご確認ください。');
+					throw new Error(m.auth_emailNotConfirmed());
 				}
 
 				// レート制限
 				if (error.code === 'too_many_requests' || (error as any).status === 429) {
-					throw new Error('ログイン試行回数が上限に達しました。しばらく待ってから再度お試しください。');
+					throw new Error(m.auth_rateLimited());
 				}
 
 				// その他の予期しないエラー
 				console.error('[login] Unexpected error code:', error.code);
-				throw new Error('ログインに失敗しました。再度お試しください。');
+				throw new Error(m.auth_loginFailed());
 			}
 
 			console.log('[login] ログイン成功');
@@ -115,20 +116,20 @@
 	</div>
 {:else}
 <div class="container">
-	<div class="instruction">ログイン</div>
+	<div class="instruction">{m.auth_loginTitle()}</div>
 
 	<div class="form-container">
 		<input
 			type="email"
 			bind:value={email}
-			placeholder="メールアドレス"
+			placeholder={m.auth_email()}
 			class="input-field"
 			disabled={loading}
 		/>
 		<input
 			type="password"
 			bind:value={password}
-			placeholder="パスワード"
+			placeholder={m.auth_password()}
 			class="input-field"
 			disabled={loading}
 		/>
@@ -142,26 +143,26 @@
 		{/if}
 
 		<div class="forgot-password-link">
-			<a href="/reset-password">パスワードを忘れた場合</a>
+			<a href="/reset-password">{m.auth_forgotPassword()}</a>
 		</div>
 
 		<div class="nav-buttons">
 			<NavButton variant="primary" on:click={handleLogin} disabled={loading}>
 				{#if loading}
 					<span style="display: inline-flex; align-items: center; gap: 8px;">
-						ログイン中
+						{m.auth_loggingIn()}
 						<LoadingSpinner size="small" inline={true} />
 					</span>
 				{:else}
-					ログイン
+					{m.common_login()}
 				{/if}
 			</NavButton>
-			<NavButton on:click={() => goto('/signup')}>新規登録</NavButton>
+			<NavButton on:click={() => goto('/signup')}>{m.auth_newRegistration()}</NavButton>
 		</div>
 	</div>
 
 	<div class="nav-buttons" style="margin-top: 16px;">
-		<NavButton on:click={() => goto('/')}>トップページに戻る</NavButton>
+		<NavButton on:click={() => goto('/')}>{m.nav_topPage()}</NavButton>
 	</div>
 </div>
 {/if}

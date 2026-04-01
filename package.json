@@ -25,6 +25,7 @@
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",
 		"@eslint/js": "^9.36.0",
+		"@inlang/paraglide-js": "^2.15.1",
 		"@playwright/test": "^1.58.2",
 		"@sveltejs/adapter-auto": "^6.1.0",
 		"@sveltejs/adapter-vercel": "^6.2.0",

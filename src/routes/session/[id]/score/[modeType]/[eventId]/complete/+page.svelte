@@ -9,6 +9,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { onMount, onDestroy } from 'svelte';
 	import { createSessionMonitorWithPolling, type RealtimeChannelHandle } from '$lib/realtime';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
 
@@ -113,7 +114,7 @@
 
 	{#if data.isMultiJudge && data.scores.length > 1}
 		<div class="scores-container">
-			<h3 class="scores-title">各検定員の得点</h3>
+			<h3 class="scores-title">{m.score_judgeScores()}</h3>
 			<div class="scores-list">
 				{#each data.scores as score}
 					<div class="score-item">

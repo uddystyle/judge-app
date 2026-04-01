@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance, applyAction } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
+	import * as m from '$lib/paraglide/messages.js';
 
 	export let scores: Array<{
 		judge_name: string;
@@ -52,7 +53,7 @@
 	};
 </script>
 
-<h3 class="settings-title">各検定員の得点</h3>
+<h3 class="settings-title">{m.score_judgeScores()}</h3>
 <div class="participants-container">
 	{#if scores && scores.length > 0}
 		{#each scores as s}
@@ -64,7 +65,7 @@
 						class:max-score={highlightExtremes && isChief && isMaxScore(s.score, scores)}
 						class:min-score={highlightExtremes && isChief && isMinScore(s.score, scores)}
 					>
-						{s.score} 点
+						{m.score_points({ score: String(s.score) })}
 					</span>
 				</div>
 				{#if isChief}
@@ -74,21 +75,21 @@
 						<input type="hidden" name="judgeId" value={s.judge_id || ''} />
 						<input type="hidden" name="guestIdentifier" value={s.guest_identifier || ''} />
 						<button type="submit" class="correction-btn">
-							修正
+							{m.score_correction()}
 						</button>
 					</form>
 				{/if}
 			</div>
 		{/each}
 	{:else}
-		<p>採点結果を待っています...</p>
+		<p>{m.score_waitingForScores()}</p>
 	{/if}
 </div>
 
 {#if isChief}
 	<div class="status-count">
 		<p>
-			現在の採点者数: <strong>{scores?.length || 0} / {requiredJudges} 人</strong>
+			{m.score_currentJudges({ current: String(scores?.length || 0), required: String(requiredJudges) })}
 		</p>
 	</div>
 {/if}

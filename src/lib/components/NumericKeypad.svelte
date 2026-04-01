@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	type KeypadEvent = {
 		input: string;
@@ -29,7 +30,7 @@
 	<button type="button" class="numeric-key clear" on:click={() => dispatch('clear')} {disabled}>C</button>
 
 	<button type="button" class="numeric-key confirm" on:click={() => dispatch('confirm')} {disabled}
-		>確定</button
+		>{m.score_confirm()}</button
 	>
 </div>
 

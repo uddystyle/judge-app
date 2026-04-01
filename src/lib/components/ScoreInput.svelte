@@ -4,6 +4,7 @@
 	import NavButton from './NavButton.svelte';
 	import AlertDialog from './AlertDialog.svelte';
 	import LoadingSpinner from './LoadingSpinner.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 
 	// Props
 	export let minScore: number = 0;
@@ -12,7 +13,7 @@
 	export let loading: boolean = false;
 	export let disabled: boolean = false;
 	export let showBackButton: boolean = true;
-	export let instructionText: string = '得点を入力してください';
+	export let instructionText: string = m.score_enterScore();
 
 	// Events
 	const dispatch = createEventDispatcher<{
@@ -25,7 +26,7 @@
 	let currentScore = '';
 	let showAlert = false;
 	let alertMessage = '';
-	let alertTitle = '入力エラー';
+	let alertTitle = m.score_inputError();
 
 	// Event handlers
 	function handleInput(event: CustomEvent<string>) {
@@ -44,8 +45,8 @@
 
 		// Validation: Range check
 		if (score < minScore || score > maxScore) {
-			alertTitle = '入力エラー';
-			alertMessage = `得点は${minScore}～${maxScore}の範囲で入力してください`;
+			alertTitle = m.score_inputError();
+			alertMessage = m.score_rangeError({ min: String(minScore), max: String(maxScore) });
 			showAlert = true;
 			dispatch('error', { title: alertTitle, message: alertMessage });
 			return;
@@ -53,8 +54,8 @@
 
 		// Validation: Integer check
 		if (!Number.isInteger(score)) {
-			alertTitle = '入力エラー';
-			alertMessage = '得点は整数で入力してください';
+			alertTitle = m.score_inputError();
+			alertMessage = m.score_integerError();
 			showAlert = true;
 			dispatch('error', { title: alertTitle, message: alertMessage });
 			return;
@@ -84,13 +85,13 @@
 	{#if loading}
 		<div class="loading-overlay">
 			<LoadingSpinner size="large" />
-			<p class="loading-text">送信中...</p>
+			<p class="loading-text">{m.score_submitting()}</p>
 		</div>
 	{/if}
 
 	{#if showBackButton}
 		<div class="nav-buttons">
-			<NavButton on:click={handleBack}>ゼッケン番号入力に戻る</NavButton>
+			<NavButton on:click={handleBack}>{m.score_backToBib()}</NavButton>
 		</div>
 	{/if}
 </div>

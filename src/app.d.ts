@@ -8,6 +8,7 @@ declare global {
 			supabase: SupabaseClient;
 			supabaseAdmin?: SupabaseClient;
 			getSession(): Promise<Session | null>;
+			lang: 'ja' | 'en';
 		}
 		// interface PageData {}
 		// interface PageState {}

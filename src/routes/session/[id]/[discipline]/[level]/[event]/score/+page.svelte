@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ScoreInput from '$lib/components/ScoreInput.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import * as m from '$lib/paraglide/messages.js';
 	import { page } from '$app/stores';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
