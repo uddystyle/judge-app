@@ -297,7 +297,7 @@
 	.header-actions {
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 16px;
 	}
 	.account-menu-wrapper {
 		position: relative;
