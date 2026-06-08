@@ -71,6 +71,15 @@ export function getClientIdentifier(request: Request, userId?: string): string {
   return `ip:${ip}`;
 }
 
+/**
+ * レート制限の判定結果。
+ * 判別可能なユニオンにすることで、呼び出し側で `if (!result.success)` と分岐したときに
+ * `result.response` が必ず Response であることを TypeScript に認識させる。
+ */
+export type RateLimitResult =
+  | { success: true }
+  | { success: false; response: Response };
+
 // レート制限チェック（Redis未設定の場合は常に成功）
 // Fail-safe ポリシー: fail-open（障害時は通す）
 // Redis/Upstashの一時的な障害でサービス全体が停止しないようにする
@@ -78,7 +87,7 @@ export async function checkRateLimit(
   request: Request,
   limiter: Ratelimit | null | undefined,
   userId?: string
-): Promise<{ success: boolean; response?: Response }> {
+): Promise<RateLimitResult> {
   // Redis未設定またはlimiterがnull/undefinedの場合は常に成功
   if (!isRateLimitEnabled || !limiter) {
     return { success: true };

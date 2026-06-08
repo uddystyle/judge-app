@@ -3,14 +3,16 @@ import { redirect } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-	const session = await locals.supabase.auth.getSession();
+	// getUser() で JWT を Supabase Auth サーバー側で検証する
+	// getSession() はクッキーをパースするだけで検証を行わないため、認可判定には使わない
+	const {
+		data: { user },
+		error: userError
+	} = await locals.supabase.auth.getUser();
 
-	// 未ログインの場合はログインページへリダイレクト
-	if (!session.data.session) {
+	if (userError || !user) {
 		throw redirect(303, '/login');
 	}
-
-	const user = session.data.session.user;
 
 	// ユーザーのアクティブなサブスクリプション情報を取得
 	// 既に組織に紐づいているサブスクリプションは除外

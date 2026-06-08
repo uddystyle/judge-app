@@ -23,15 +23,16 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 	try {
 		// 認証チェック
+		// getUser() で JWT を Supabase Auth サーバー側で検証する
+		// getSession() はクッキーをパースするだけで検証を行わないため、認可判定には使わない
 		const {
-			data: { session }
-		} = await supabase.auth.getSession();
+			data: { user },
+			error: userError
+		} = await supabase.auth.getUser();
 
-		if (!session) {
+		if (userError || !user) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
-
-		const user = session.user;
 		const { organizationName, planType } = await request.json();
 
 		// バリデーション

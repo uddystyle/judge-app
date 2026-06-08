@@ -8,6 +8,10 @@
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages.js';
+	import { getSafeRedirectPath } from '$lib/safeRedirect';
+	import type { PageData } from './$types';
+
+	export let data: PageData;
 
 	const supabase = getContext<SupabaseClient>('supabase');
 
@@ -17,6 +21,10 @@
 	let successMessage = '';
 	let loading = false;
 	let checkingAuth = true;
+
+	// ログイン成功後の遷移先。サーバー側で検証済みの next を初期値とし、
+	// クライアント側でも検証してオープンリダイレクトを防ぐ。
+	$: redirectTarget = getSafeRedirectPath($page.url.searchParams.get('next'), data.next ?? '/dashboard');
 
 	// URLパラメータからエラーメッセージを取得（認証チェック後のみ）
 	$: if (!checkingAuth && $page.url.searchParams.get('error')) {
@@ -83,8 +91,8 @@
 				throw new Error(m.auth_loginFailed());
 			}
 
-			console.log('[login] ログイン成功');
-			await goto('/dashboard');
+			console.log('[login] ログイン成功。リダイレクト先:', redirectTarget);
+			await goto(redirectTarget);
 		} catch (error: any) {
 			errorMessage = error.message;
 		} finally {
@@ -99,8 +107,8 @@
 		} = await supabase.auth.getUser();
 
 		if (user) {
-			console.log('[login/onMount] 既に認証済み。ダッシュボードへリダイレクト');
-			goto('/dashboard', { replaceState: true });
+			console.log('[login/onMount] 既に認証済み。リダイレクト:', redirectTarget);
+			goto(redirectTarget, { replaceState: true });
 		} else {
 			console.log('[login/onMount] 未認証。ログインページを表示');
 			checkingAuth = false;
@@ -118,9 +126,11 @@
 <div class="container">
 	<div class="instruction">{m.auth_loginTitle()}</div>
 
-	<div class="form-container">
+	<form class="form-container" on:submit|preventDefault={handleLogin}>
 		<input
 			type="email"
+			name="email"
+			autocomplete="email"
 			bind:value={email}
 			placeholder={m.auth_email()}
 			class="input-field"
@@ -128,6 +138,8 @@
 		/>
 		<input
 			type="password"
+			name="password"
+			autocomplete="current-password"
 			bind:value={password}
 			placeholder={m.auth_password()}
 			class="input-field"
@@ -147,7 +159,7 @@
 		</div>
 
 		<div class="nav-buttons">
-			<NavButton variant="primary" on:click={handleLogin} disabled={loading}>
+			<NavButton variant="primary" type="submit" disabled={loading}>
 				{#if loading}
 					<span style="display: inline-flex; align-items: center; gap: 8px;">
 						{m.auth_loggingIn()}
@@ -157,9 +169,9 @@
 					{m.common_login()}
 				{/if}
 			</NavButton>
-			<NavButton on:click={() => goto('/signup')}>{m.auth_newRegistration()}</NavButton>
+			<NavButton type="button" on:click={() => goto('/signup')}>{m.auth_newRegistration()}</NavButton>
 		</div>
-	</div>
+	</form>
 
 	<div class="nav-buttons" style="margin-top: 16px;">
 		<NavButton on:click={() => goto('/')}>{m.nav_topPage()}</NavButton>
