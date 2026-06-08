@@ -1,7 +1,8 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { checkCanAddMember } from '$lib/server/organizationLimits';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase, supabaseAdmin } }) => {
 	const { token } = params;
 
 	const {
@@ -59,6 +60,13 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	if (existingMember) {
 		// 既にメンバーの場合はダッシュボードへ
 		throw redirect(303, '/dashboard');
+	}
+
+	// メンバー上限チェック（受諾時に強制）。参加者本人はまだ非メンバーで RLS により
+	// 正確なメンバー数を取得できないため、service role で集計する
+	const memberLimitCheck = await checkCanAddMember(supabaseAdmin ?? supabase, invitation.organization_id);
+	if (!memberLimitCheck.allowed) {
+		throw error(403, memberLimitCheck.reason || '組織のメンバー数が上限に達しています。');
 	}
 
 	// 組織にメンバーとして追加

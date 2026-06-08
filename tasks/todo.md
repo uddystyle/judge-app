@@ -2,7 +2,24 @@
 
 ## Active
 
-- [ ] None
+### 堅牢性監査 — High重大度の修正（feature ブランチ）— ✅ 完了
+
+- [x] **#6** `restartSession` の `?guest=任意文字` バイパス → `session/[id]/+page.server.ts:509-515`：`authResult.guestParticipant` で判定
+- [x] **#1a** `updateGuestName` に認可追加（IDOR）→ `authenticateAction` + JWT検証済み自分の `guest_identifier` のみ更新
+- [x] **#1b** `session_participants` RLS開放是正 → 新マイグレ `1002_harden_session_participants_rls.sql` + ゲストINSERTを `supabaseAdmin` へ（`session/join`・`session/invite/[token]`）
+- [x] **#2** `changePlan` 管理者チェック欠落 → Stripe呼び出し前に admin判定（`removed_at` null付き）
+- [x] **#3** Stripe Webhook Basil非互換 → `getSubscriptionPeriod`/`getInvoiceSubscriptionId` ヘルパー + イベント由来5箇所修正
+- [x] **#5(limits-1)** ゲスト参加が検定員上限を回避 → `session/join`：`if(!isGuestMode)` ガード除去
+- [x] **#5(limits-2)** メンバー上限が受諾時未強制 → 3経路で `checkCanAddMember`
+- [x] **#4** アカウント削除の孤児化（削除をブロック）→ `api/delete-user`：唯一管理者の有料組織で409、個人サブスク解約後に削除 + UI文言整合
+
+## レビュー（2026-06-09）
+- 型チェック: `npm run check` → 既存306エラーのまま（**自分の変更で新規エラー0件**、stash比較で確認）。残存は既存の Stripe Basil 型 vs acacia ランタイム等。
+- テスト: `npx vitest run src/` → **662 passed (38 files)**。
+  - `session/join`・`session/invite` のアクションテストは `locals.supabaseAdmin` を追加して実態に整合。
+  - `invite/[token]/complete` に上限ブロックの新規テストを追加（403で挿入されないこと）。
+- ⚠️ **要デプロイ作業**: RLSマイグレ `1002_harden_session_participants_rls.sql` を本番Supabaseへ適用必須（このリポジトリからは適用不可）。適用前はDBレベルのIDOR（#1b）が残るため、ステージング検証→本番適用を推奨。
+- ⚠️ **#3 要確認**: Stripeダッシュボードの webhook エンドポイントAPIバージョン。コードは両形状対応にしたが、Basil形状の実イベントでの疎通確認を推奨。
 
 ## Completed
 

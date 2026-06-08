@@ -228,6 +228,20 @@ export const actions: Actions = {
 			return fail(404, { error: '組織が見つかりません。' });
 		}
 
+		// 管理者権限を確認（Stripe へのプラン変更呼び出しより前に必ず実施する）
+		// cancelSubscription / load と同じ admin 判定。退会済みメンバーは removed_at で除外。
+		const { data: member } = await supabase
+			.from('organization_members')
+			.select('role')
+			.eq('organization_id', params.id)
+			.eq('user_id', user.id)
+			.is('removed_at', null)
+			.single();
+
+		if (!member || member.role !== 'admin') {
+			return fail(403, { error: '組織の管理者権限が必要です。' });
+		}
+
 		// フリープランからの変更の場合は、upgradeページへリダイレクト
 		if (organization.plan_type === 'free') {
 			throw redirect(303, `/organization/${params.id}/upgrade?plan=${newPlanType}`);

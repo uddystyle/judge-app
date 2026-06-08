@@ -23,8 +23,14 @@ vi.mock('@supabase/supabase-js', () => ({
 	createClient: vi.fn(() => mockSupabaseAdmin)
 }));
 
+// メンバー上限チェックのモック（デフォルトは許可）
+vi.mock('$lib/server/organizationLimits', () => ({
+	checkCanAddMember: vi.fn(() => Promise.resolve({ allowed: true }))
+}));
+
 // モックセットアップ後にインポート
 const { load } = await import('./+page.server');
+const { checkCanAddMember } = await import('$lib/server/organizationLimits');
 
 describe('invite/[token]/complete - race condition handling', () => {
 	beforeEach(() => {
@@ -130,6 +136,62 @@ describe('invite/[token]/complete - race condition handling', () => {
 			expect(err.status).toBe(303);
 			expect(err.location).toBe('/organization/org-123');
 		}
+	});
+
+	it('メンバー上限に達している場合は403を返し、メンバー追加を行わない', async () => {
+		const params = { token: 'test-token' };
+		const locals = createMockLocals();
+
+		mockSupabase.auth.getUser.mockResolvedValue({
+			data: { user: mockUser },
+			error: null
+		});
+
+		// 上限チェックを「不可」に設定（受諾時の上限強制を検証）
+		vi.mocked(checkCanAddMember).mockResolvedValueOnce({
+			allowed: false,
+			reason: '組織メンバー数の上限（1人）に達しています。'
+		});
+
+		const invitationQuery = {
+			select: vi.fn().mockReturnThis(),
+			eq: vi.fn().mockReturnThis(),
+			single: vi.fn().mockResolvedValue({ data: mockInvitation, error: null })
+		};
+		const membershipQuery = {
+			select: vi.fn().mockReturnThis(),
+			eq: vi.fn().mockReturnThis(),
+			is: vi.fn().mockReturnThis(),
+			single: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } })
+		};
+		const profileQuery = {
+			select: vi.fn().mockReturnThis(),
+			eq: vi.fn().mockReturnThis(),
+			single: vi.fn().mockResolvedValue({ data: { id: mockUser.id }, error: null })
+		};
+		const memberInsertQuery = {
+			insert: vi.fn().mockResolvedValue({ data: null, error: null })
+		};
+
+		mockSupabaseAdmin.from.mockImplementation((table: string) => {
+			if (table === 'invitations') return invitationQuery;
+			if (table === 'organization_members' && membershipQuery.select.mock.calls.length === 0) {
+				return membershipQuery;
+			}
+			if (table === 'organization_members') return memberInsertQuery;
+			if (table === 'profiles') return profileQuery;
+			return {};
+		});
+
+		try {
+			await load({ params, locals } as any);
+			expect.fail('Expected error(403) to be thrown');
+		} catch (err: any) {
+			expect(err.status).toBe(403);
+		}
+
+		// メンバー上限超過時はメンバー追加INSERTを行わない
+		expect(memberInsertQuery.insert).not.toHaveBeenCalled();
 	});
 
 	it('プロフィール作成時の一意制約違反（23505）を成功として扱う', async () => {

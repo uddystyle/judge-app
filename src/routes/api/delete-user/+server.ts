@@ -2,6 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { json, error as svelteError } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { stripe } from '$lib/server/stripe';
+
+// 稼働中とみなすサブスクリプションのステータス
+const ACTIVE_SUB_STATUSES = ['active', 'trialing', 'past_due', 'unpaid'];
 
 export async function POST({ request }) {
 	// レート制限チェックを最初に実行
@@ -25,7 +29,7 @@ export async function POST({ request }) {
 		throw svelteError(401, '認証トークンが必要です。');
 	}
 
-	// Get the user object from the provided token
+	// Get the user object from the provided token（トークン所有者=削除対象を検証）
 	const {
 		data: { user },
 		error: userError
@@ -35,7 +39,114 @@ export async function POST({ request }) {
 		throw svelteError(404, 'ユーザーが見つかりません。');
 	}
 
-	// Use the admin client to delete the user by their ID
+	// ============================================================
+	// ガード: 稼働中の有料サブスクを持つ組織の「唯一の管理者」は削除をブロック
+	// （アカウント削除が組織を孤児化し、解約できないまま課金が継続するのを防ぐ）
+	// ============================================================
+	const { data: adminMemberships, error: adminError } = await supabaseAdmin
+		.from('organization_members')
+		.select('organization_id')
+		.eq('user_id', user.id)
+		.eq('role', 'admin')
+		.is('removed_at', null);
+
+	if (adminError) {
+		console.error('[delete-user] 管理メンバーシップ取得エラー:', adminError.message);
+		throw svelteError(500, 'アカウント情報の確認に失敗しました。');
+	}
+
+	const adminOrgIds = (adminMemberships ?? []).map((m) => m.organization_id);
+
+	if (adminOrgIds.length > 0) {
+		// 管理対象組織のうち、稼働中サブスクを持つものを特定
+		const { data: activeOrgSubs, error: orgSubError } = await supabaseAdmin
+			.from('subscriptions')
+			.select('organization_id')
+			.in('organization_id', adminOrgIds)
+			.in('status', ACTIVE_SUB_STATUSES);
+
+		if (orgSubError) {
+			console.error('[delete-user] 組織サブスク取得エラー:', orgSubError.message);
+			throw svelteError(500, 'アカウント情報の確認に失敗しました。');
+		}
+
+		const billingActiveOrgIds = Array.from(
+			new Set((activeOrgSubs ?? []).map((s) => s.organization_id).filter(Boolean))
+		);
+
+		const blockingOrgNames: string[] = [];
+		for (const orgId of billingActiveOrgIds) {
+			// この組織の有効な管理者数を数える
+			const { count: adminCount, error: countError } = await supabaseAdmin
+				.from('organization_members')
+				.select('id', { count: 'exact', head: true })
+				.eq('organization_id', orgId)
+				.eq('role', 'admin')
+				.is('removed_at', null);
+
+			if (countError) {
+				console.error('[delete-user] 管理者数カウントエラー:', countError.message);
+				throw svelteError(500, 'アカウント情報の確認に失敗しました。');
+			}
+
+			// 自分が唯一の管理者の場合のみブロック対象
+			if ((adminCount ?? 0) <= 1) {
+				const { data: org } = await supabaseAdmin
+					.from('organizations')
+					.select('name')
+					.eq('id', orgId)
+					.single();
+				blockingOrgNames.push(org?.name || orgId);
+			}
+		}
+
+		if (blockingOrgNames.length > 0) {
+			// 409 Conflict: ユーザーに先に解約/管理者委譲を促す（破壊的処理は行わない）
+			throw svelteError(
+				409,
+				`有料プランの組織（${blockingOrgNames.join('、')}）の唯一の管理者であるため、アカウントを削除できません。` +
+					`先に該当組織のプランを解約するか、別のメンバーを管理者に設定してから再度お試しください。`
+			);
+		}
+	}
+
+	// ============================================================
+	// 個人サブスクリプション（組織に紐づかないもの）を Stripe で解約
+	// （DB行は auth.users 削除でカスケードされるが、Stripe 側は別途解約が必要）
+	// ============================================================
+	const { data: personalSubs, error: personalSubError } = await supabaseAdmin
+		.from('subscriptions')
+		.select('stripe_subscription_id, status')
+		.eq('user_id', user.id)
+		.is('organization_id', null)
+		.in('status', ACTIVE_SUB_STATUSES)
+		.not('stripe_subscription_id', 'is', null);
+
+	if (personalSubError) {
+		console.error('[delete-user] 個人サブスク取得エラー:', personalSubError.message);
+		throw svelteError(500, 'アカウント情報の確認に失敗しました。');
+	}
+
+	for (const sub of personalSubs ?? []) {
+		if (!sub.stripe_subscription_id) continue;
+		try {
+			await stripe.subscriptions.cancel(sub.stripe_subscription_id);
+			console.log('[delete-user] 個人サブスクを解約:', sub.stripe_subscription_id);
+		} catch (err: any) {
+			// 既に解約済み/存在しない場合は成功扱いで継続
+			if (err?.code === 'resource_missing') {
+				console.warn('[delete-user] サブスクは既に存在しません（解約済み扱い）:', sub.stripe_subscription_id);
+				continue;
+			}
+			// それ以外の Stripe エラーは削除を中断（課金継続を防ぐため）
+			console.error('[delete-user] サブスク解約失敗:', err?.message);
+			throw svelteError(500, 'サブスクリプションの解約に失敗したため、アカウントを削除できませんでした。時間をおいて再度お試しください。');
+		}
+	}
+
+	// ============================================================
+	// ユーザーを削除（関連データは FK の ON DELETE CASCADE で削除される）
+	// ============================================================
 	const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
 
 	if (deleteError) {

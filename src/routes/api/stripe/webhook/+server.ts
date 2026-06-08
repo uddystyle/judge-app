@@ -490,6 +490,27 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 }
 
 /**
+ * Stripe Basil（API 2025-03-31 以降）では Subscription.current_period_start/end が
+ * トップレベルから削除され subscription.items.data[].current_period_* へ移動した。
+ * また Invoice.subscription も削除され invoice.parent.subscription_details.subscription へ移動した。
+ * Webhook エンドポイントに設定された API バージョンに依存せず動くよう、両形状を防御的に読む
+ * （pin された SDK 経由の subscriptions.retrieve() は acacia 形状=トップレベルを返す）。
+ */
+function getSubscriptionPeriod(subscription: any): { start: number; end: number } | null {
+	const item = subscription?.items?.data?.[0];
+	const start = subscription?.current_period_start ?? item?.current_period_start;
+	const end = subscription?.current_period_end ?? item?.current_period_end;
+	if (typeof start !== 'number' || typeof end !== 'number') return null;
+	return { start, end };
+}
+
+function getInvoiceSubscriptionId(invoice: any): string | null {
+	const sub = invoice?.subscription ?? invoice?.parent?.subscription_details?.subscription;
+	if (!sub) return null;
+	return typeof sub === 'string' ? sub : (sub?.id ?? null);
+}
+
+/**
  * customer.subscription.created
  * サブスクリプション作成時（checkoutの後に来る）
  */
@@ -530,6 +551,14 @@ async function handleSubscriptionCreated(subscription: any) {
 	const planType = getPlanTypeFromPrice(item.price.id);
 	const billingInterval = item.price.recurring?.interval || 'month';
 
+	// 期間フィールドは API バージョン差異に強い方法で取得（Basil 対応）
+	const period = getSubscriptionPeriod(subscription);
+	if (!period) {
+		throw new RetryableError(
+			'subscription の current_period が取得できません（Stripe API バージョン不一致の可能性）'
+		);
+	}
+
 	// 1. subscriptionsテーブルを更新
 	const { error: updateError } = await supabaseAdmin
 		.from('subscriptions')
@@ -538,8 +567,8 @@ async function handleSubscriptionCreated(subscription: any) {
 			plan_type: planType,
 			billing_interval: billingInterval,
 			status: subscription.status,
-			current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-			current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+			current_period_start: new Date(period.start * 1000).toISOString(),
+			current_period_end: new Date(period.end * 1000).toISOString(),
 			cancel_at_period_end: subscription.cancel_at_period_end
 		})
 		.eq('stripe_subscription_id', subscription.id);
@@ -625,6 +654,14 @@ async function handleSubscriptionUpdated(subscription: any) {
 	const planType = getPlanTypeFromPrice(item.price.id);
 	const billingInterval = item.price.recurring?.interval || 'month';
 
+	// 期間フィールドは API バージョン差異に強い方法で取得（Basil 対応）
+	const period = getSubscriptionPeriod(subscription);
+	if (!period) {
+		throw new RetryableError(
+			'subscription の current_period が取得できません（Stripe API バージョン不一致の可能性）'
+		);
+	}
+
 	// T13: subscriptionsテーブルから組織IDと現在の期間を取得
 	const { data: subscriptionData, error: fetchError } = await supabaseAdmin
 		.from('subscriptions')
@@ -643,7 +680,7 @@ async function handleSubscriptionUpdated(subscription: any) {
 
 	// T13: リプレイ防御 - イベントの方が古い場合はスキップ
 	// 同一期間内の状態変化（プラン変更、status変化など）は許可するため、< を使用
-	const eventPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+	const eventPeriodEnd = new Date(period.end * 1000).toISOString();
 	if (subscriptionData.current_period_end) {
 		const currentPeriodEnd = new Date(subscriptionData.current_period_end).getTime();
 		const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
@@ -675,8 +712,8 @@ async function handleSubscriptionUpdated(subscription: any) {
 			plan_type: planType,
 			billing_interval: billingInterval,
 			status: subscription.status,
-			current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-			current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+			current_period_start: new Date(period.start * 1000).toISOString(),
+			current_period_end: new Date(period.end * 1000).toISOString(),
 			cancel_at_period_end: subscription.cancel_at_period_end
 		})
 		.eq('stripe_subscription_id', subscription.id);
@@ -843,7 +880,7 @@ async function handleSubscriptionDeleted(subscription: any) {
 async function handlePaymentSucceeded(invoice: any) {
 	console.log('[Webhook] 支払い成功:', invoice.id);
 
-	const subscriptionId = invoice.subscription;
+	const subscriptionId = getInvoiceSubscriptionId(invoice);
 
 	if (!subscriptionId) {
 		console.log('[Webhook] サブスクリプションIDがありません（単発支払い？）');
@@ -928,7 +965,7 @@ async function handlePaymentSucceeded(invoice: any) {
 async function handlePaymentFailed(invoice: any) {
 	console.log('[Webhook] 支払い失敗:', invoice.id);
 
-	const subscriptionId = invoice.subscription;
+	const subscriptionId = getInvoiceSubscriptionId(invoice);
 
 	if (!subscriptionId) {
 		console.log('[Webhook] サブスクリプションIDがありません');

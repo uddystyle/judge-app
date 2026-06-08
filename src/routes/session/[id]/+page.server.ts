@@ -451,12 +451,11 @@ export const actions: Actions = {
 	},
 
 	// ゲストユーザーの名前を更新
-	updateGuestName: async ({ request, params, locals: { supabase } }) => {
+	updateGuestName: async ({ request, params, locals: { supabase }, url }) => {
 		const formData = await request.formData();
-		const guestIdentifier = formData.get('guestIdentifier') as string;
 		const newGuestName = formData.get('guestName') as string;
 
-		if (!guestIdentifier || !newGuestName || newGuestName.trim().length === 0) {
+		if (!newGuestName || newGuestName.trim().length === 0) {
 			return fail(400, { guestNameError: '名前を入力してください。' });
 		}
 
@@ -466,7 +465,15 @@ export const actions: Actions = {
 
 		const sessionId = params.id;
 
-		// ゲスト参加者の名前を更新
+		// 認可：フォームの guest_identifier は信用せず、JWT検証済みの自分自身の
+		// ゲスト識別子のみ更新を許可（他セッションのゲスト改名=IDORを防ぐ）
+		const authResult = await authenticateAction(supabase, sessionId, url.searchParams.get('guest'));
+		if (!authResult || !authResult.guestParticipant) {
+			return fail(403, { guestNameError: '名前を変更する権限がありません。' });
+		}
+		const guestIdentifier = authResult.guestParticipant.guest_identifier;
+
+		// ゲスト参加者の名前を更新（自分の行のみ）
 		const { error: updateError } = await supabase
 			.from('session_participants')
 			.update({ guest_name: newGuestName.trim() })
@@ -508,9 +515,13 @@ export const actions: Actions = {
 
 		const isChief = user ? session.chief_judge_id === user.id : false;
 
+		// ゲスト判定は生のクエリパラメータ（攻撃者が任意に付与可能）ではなく、
+		// JWT検証済みの authResult.guestParticipant を使う（?guest=任意文字 による回避を防ぐ）
+		const isGuest = !!authResult.guestParticipant;
+
 		// 主任検定員、複数検定員モードOFF、またはゲストユーザーの場合のみ実行可能
 		// 通常の一般検定員は複数検定員モードONの場合は再開不可
-		if (!isChief && session.is_multi_judge && !guestIdentifier) {
+		if (!isChief && session.is_multi_judge && !isGuest) {
 			return fail(403, { error: 'セッションを再開する権限がありません。' });
 		}
 

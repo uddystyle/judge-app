@@ -59,7 +59,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 };
 
 export const actions: Actions = {
-	join: async ({ request, params, locals: { supabase } }) => {
+	join: async ({ request, params, locals: { supabase, supabaseAdmin } }) => {
 		const token = params.token;
 		const formData = await request.formData();
 		const guestName = formData.get('guestName')?.toString();
@@ -92,11 +92,20 @@ export const actions: Actions = {
 			});
 		}
 
+		// ゲスト登録は RLS をバイパスする service role で実行する（migration 1002 で
+		// anon からの session_participants 直接INSERTを禁止したため）。
+		if (!supabaseAdmin) {
+			console.error('[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）');
+			return fail(500, {
+				error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+			});
+		}
+
 		// ゲスト識別子を生成
 		const guestIdentifier = crypto.randomUUID();
 
-		// Step 1: session_participants に登録
-		const { error: insertError } = await supabase.from('session_participants').insert({
+		// Step 1: session_participants に登録（service role）
+		const { error: insertError } = await supabaseAdmin.from('session_participants').insert({
 			session_id: session.id,
 			is_guest: true,
 			guest_name: guestName.trim(),
@@ -128,7 +137,7 @@ export const actions: Actions = {
 
 			// ⚠️ CRITICAL: JWT発行失敗時は session_participants レコードをロールバック
 			console.log('[Guest Invite] JWT発行失敗のため、参加者レコードをロールバック中...');
-			const { error: rollbackError } = await supabase
+			const { error: rollbackError } = await supabaseAdmin
 				.from('session_participants')
 				.delete()
 				.eq('guest_identifier', guestIdentifier);

@@ -3,6 +3,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { checkCanAddMember } from '$lib/server/organizationLimits';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -121,6 +122,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 				});
 			}
 		}
+	}
+
+	// メンバー上限チェック（招待「作成」時だけでなく「受諾」時にも強制する。
+	// max_uses:null の招待や永続 invite_code が上限を超えて受諾されるのを防ぐ）
+	const memberLimitCheck = await checkCanAddMember(supabaseAdmin, invitation.organization_id);
+	if (!memberLimitCheck.allowed) {
+		console.warn('[Invite Complete] メンバー上限により参加拒否:', memberLimitCheck.reason);
+		throw error(403, memberLimitCheck.reason || '組織のメンバー数が上限に達しています。');
 	}
 
 	// 組織メンバーとして追加

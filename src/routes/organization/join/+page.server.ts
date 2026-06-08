@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { checkCanAddMember } from '$lib/server/organizationLimits';
 
 export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	const {
@@ -38,7 +39,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 };
 
 export const actions: Actions = {
-	join: async ({ request, locals: { supabase } }) => {
+	join: async ({ request, locals: { supabase, supabaseAdmin } }) => {
 		const {
 			data: { user },
 			error: userError
@@ -86,6 +87,17 @@ export const actions: Actions = {
 
 		if (existingMember) {
 			return fail(400, { joinCode, error: '既にこの組織のメンバーです。' });
+		}
+
+		// メンバー上限チェック（受諾時に強制）。参加者本人はまだ非メンバーで RLS により
+		// 正確なメンバー数を取得できないため、service role で集計する
+		const memberLimitCheck = await checkCanAddMember(supabaseAdmin ?? supabase, organizationData.id);
+		if (!memberLimitCheck.allowed) {
+			return fail(403, {
+				joinCode,
+				error: memberLimitCheck.reason || '組織のメンバー数が上限に達しています。',
+				upgradeUrl: memberLimitCheck.upgradeUrl
+			});
 		}
 
 		// 組織にメンバーとして追加

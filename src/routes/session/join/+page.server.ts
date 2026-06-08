@@ -5,7 +5,7 @@ import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
-	join: async ({ request, locals: { supabase } }) => {
+	join: async ({ request, locals: { supabase, supabaseAdmin } }) => {
 		// レート制限チェックを最初に実行
 		const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
 		if (!rateLimitResult.success) {
@@ -117,24 +117,25 @@ export const actions: Actions = {
 			return fail(400, { joinCode, guestName, error: 'このセッションは参加受付を終了しています。' });
 		}
 
-		// 検定員数制限チェック（認証ユーザーの場合のみ）
-		if (!isGuestMode) {
-			console.log('[Join Session] 検定員数制限チェック開始:', {
-				sessionId: sessionData.id,
-				organizationId: sessionData.organization_id
-			});
-			const judgeCheck = await checkCanAddJudgeToSession(supabase, sessionData.id);
-			console.log('[Join Session] 検定員数制限チェック結果:', judgeCheck);
+		// 検定員数制限チェック（ゲスト・認証ユーザー共通）
+		// ゲストも session_participants に検定員として登録されカウント対象になるため、
+		// ゲスト参加でも有料プランの検定員上限を回避できないよう必ずチェックする
+		console.log('[Join Session] 検定員数制限チェック開始:', {
+			sessionId: sessionData.id,
+			organizationId: sessionData.organization_id,
+			isGuestMode
+		});
+		const judgeCheck = await checkCanAddJudgeToSession(supabase, sessionData.id);
+		console.log('[Join Session] 検定員数制限チェック結果:', judgeCheck);
 
-			if (!judgeCheck.allowed) {
-				console.log('[Join Session] 検定員数制限により参加拒否:', judgeCheck.reason);
-				return fail(403, {
-					joinCode,
-					guestName,
-					error: judgeCheck.reason || 'セッションの検定員数上限に達しています。',
-					upgradeUrl: judgeCheck.upgradeUrl
-				});
-			}
+		if (!judgeCheck.allowed) {
+			console.log('[Join Session] 検定員数制限により参加拒否:', judgeCheck.reason);
+			return fail(403, {
+				joinCode,
+				guestName,
+				error: judgeCheck.reason || 'セッションの検定員数上限に達しています。',
+				upgradeUrl: judgeCheck.upgradeUrl
+			});
 		}
 
 		// ゲストユーザーの場合
@@ -144,10 +145,24 @@ export const actions: Actions = {
 				guestName: guestName.trim()
 			});
 
+			// ゲスト登録は RLS をバイパスする service role で実行する。
+			// anon キーからの session_participants への直接INSERTはRLSで禁止し
+			// （migration 1002）、ロック/受付終了/検定員上限などサーバ側チェックを
+			// 通過した後にのみサーバ側で登録することで、公開anonキーによる
+			// 任意セッションへの参加者注入を防ぐ。
+			if (!supabaseAdmin) {
+				console.error('[Join Session] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）');
+				return fail(500, {
+					joinCode,
+					guestName,
+					error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+				});
+			}
+
 			const guestIdentifier = crypto.randomUUID();
 
-			// Step 1: session_participantsに登録
-			const { error: insertError } = await supabase.from('session_participants').insert({
+			// Step 1: session_participantsに登録（service role）
+			const { error: insertError } = await supabaseAdmin.from('session_participants').insert({
 				session_id: sessionData.id,
 				is_guest: true,
 				guest_name: guestName.trim(),
@@ -181,7 +196,7 @@ export const actions: Actions = {
 
 				// ⚠️ CRITICAL: JWT発行失敗時は session_participants レコードをロールバック
 				console.log('[Join Session] JWT発行失敗のため、参加者レコードをロールバック中...');
-				const { error: rollbackError } = await supabase
+				const { error: rollbackError } = await supabaseAdmin
 					.from('session_participants')
 					.delete()
 					.eq('guest_identifier', guestIdentifier);

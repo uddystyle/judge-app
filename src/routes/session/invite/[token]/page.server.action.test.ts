@@ -118,7 +118,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			const result = await actions.join({
 				request: mockRequest,
 				params: mockParams,
-				locals: { supabase: mockSupabase }
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 			} as any);
 
 			// 検証
@@ -182,7 +182,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				actions.join({
 					request: mockRequest,
 					params: mockParams,
-					locals: { supabase: mockSupabase }
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 				} as any)
 			).rejects.toThrow('Redirecting to /session/session-invite-456');
 
@@ -240,7 +240,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			const result = await actions.join({
 				request: mockRequest,
 				params: mockParams,
-				locals: { supabase: mockSupabase }
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 			} as any);
 
 			// 検証: ロールバック失敗でも、ユーザーには認証失敗として通知
@@ -305,7 +305,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				await actions.join({
 					request: mockRequest,
 					params: mockParams,
-					locals: { supabase: mockSupabase }
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 				} as any);
 			} catch (e) {
 				// redirect を無視
@@ -382,7 +382,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				await actions.join({
 					request: mockRequest,
 					params: mockParams,
-					locals: { supabase: mockSupabase }
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 				} as any);
 			} catch (e) {
 				// redirect を無視
@@ -451,7 +451,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				await actions.join({
 					request: mockRequest,
 					params: mockParams,
-					locals: { supabase: mockSupabase }
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 				} as any);
 			} catch (e) {
 				// redirect を無視
@@ -512,7 +512,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				await actions.join({
 					request: mockRequest,
 					params: mockParams,
-					locals: { supabase: mockSupabase }
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 				} as any);
 			} catch (e) {
 				// redirect を無視
@@ -579,7 +579,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				await actions.join({
 					request: mockRequest,
 					params: mockParams,
-					locals: { supabase: mockSupabase }
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 				} as any);
 			} catch (e) {
 				// redirect を無視
@@ -637,7 +637,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			const result = await actions.join({
 				request: mockRequest,
 				params: mockParams,
-				locals: { supabase: mockSupabase }
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 			} as any);
 
 			// 検証
@@ -672,7 +672,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			const result = await actions.join({
 				request: mockRequest,
 				params: mockParams,
-				locals: { supabase: mockSupabase }
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 			} as any);
 
 			// 検証
@@ -698,7 +698,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			const result = await actions.join({
 				request: mockRequest,
 				params: mockParams,
-				locals: { supabase: mockSupabase }
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
 			} as any);
 
 			// 検証
