@@ -31,6 +31,16 @@
 レビュー: `npx vitest run src/` → **662 passed**。`npm run check` → 既存306のまま（新規エラー0）。アプリ層のみ（DBマイグレ不要）。
 注記: `signup/+page.svelte` の `{#if form?.success}` は応答統一で未到達（無害・任意で除去可）。
 
+### 監査 — レート制限クラスタ #2（login-hooks-1 / ratelimit-5）— ✅ 完了（2026-06-09）
+- [x] ログインをクライアント側 `signInWithPassword` から**サーバー form action**へ移行し `checkRateLimit(auth)` を適用（signup/reset と同パターン）
+  - `login/+page.server.ts`：`actions.default`（レート制限→正規化→signInWithPassword→成功時 `redirect(303, 検証済みnext)`、エラーは fail で i18n メッセージ）
+  - `login/+page.svelte`：`<form method=POST use:enhance>` + hidden `next`、クライアント側 signIn と onMount 認証チェックを削除（load がSSRでリダイレクト）
+  - `login.test.ts`：サーバーアクションの新規テスト8件（レート制限優先・正規化・各エラーコード・オープンリダイレクト・303）
+- 事前調査（workflow）で確認: Cookie互換OK（同一 `sb-<ref>-auth-token` 形式）、Vercel `getClientAddress()` は raw XFF で詐称可能（XFF修正は別途 ratelimit-1）。
+- レビュー: `npx vitest run src/` → **670 passed**。`npm run check` → 306（新規0）。
+- ⚠️ **要・実地スモークテスト**: 認証フロー変更のためユニットテストだけでは Cookie/セッションのE2Eを保証できない。デプロイ前に「実ログイン→/dashboard到達→ハードリロードで維持」を確認すること。
+- 未実装（#2の残り・未選択）: ratelimit-1(XFF信頼IP化), ratelimit-2(userIdキー), ratelimit-3(fail-closed)。
+
 ## Completed
 
 ### 2026-03-04 (Session 3)

@@ -1,149 +1,63 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
-	import type { SupabaseClient } from '@supabase/supabase-js';
 	import { goto } from '$app/navigation';
+	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
-	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages.js';
-	import { getSafeRedirectPath } from '$lib/safeRedirect';
-	import type { PageData } from './$types';
+	import type { PageData, ActionData } from './$types';
 
 	export let data: PageData;
+	export let form: ActionData;
 
-	const supabase = getContext<SupabaseClient>('supabase');
-
-	let email = '';
-	let password = '';
-	let errorMessage = '';
-	let successMessage = '';
 	let loading = false;
-	let checkingAuth = true;
 
-	// ログイン成功後の遷移先。サーバー側で検証済みの next を初期値とし、
-	// クライアント側でも検証してオープンリダイレクトを防ぐ。
-	$: redirectTarget = getSafeRedirectPath($page.url.searchParams.get('next'), data.next ?? '/dashboard');
+	// URLパラメータからのメッセージ（auth/callback 等からのリダイレクト時）
+	$: urlError = $page.url.searchParams.get('error') ?? '';
+	$: successMessage =
+		$page.url.searchParams.get('success') === 'password-reset' ? m.auth_passwordResetSuccess() : '';
 
-	// URLパラメータからエラーメッセージを取得（認証チェック後のみ）
-	$: if (!checkingAuth && $page.url.searchParams.get('error')) {
-		errorMessage = $page.url.searchParams.get('error') || '';
-	}
+	// 表示するエラー：サーバーアクションの結果を優先、無ければURLパラメータ
+	$: errorMessage = form?.error ?? urlError;
 
-	// URLパラメータから成功メッセージを取得
-	$: if (!checkingAuth && $page.url.searchParams.get('success') === 'password-reset') {
-		successMessage = m.auth_passwordResetSuccess();
-	}
-
-	/**
-	 * メールアドレスを正規化（小文字化 + トリム）
-	 * サインアップと同じ正規化を適用し、一貫性を保つ
-	 */
-	function normalizeEmail(email: string): string {
-		return email.trim().toLowerCase();
-	}
-
-	async function handleLogin() {
+	// ログインはサーバーアクションで実行（レート制限が適用される）。
+	// 成功時はサーバーが 303 リダイレクトするため enhance がそのまま遷移する。
+	const handleEnhance = () => {
 		loading = true;
-		errorMessage = '';
-		try {
-			// メールアドレスを正規化してログイン
-			const normalizedEmail = normalizeEmail(email);
-
-			console.log('[login] ログイン試行:', {
-				originalEmail: email,
-				normalizedEmail
-			});
-
-			const { error } = await supabase.auth.signInWithPassword({
-				email: normalizedEmail,
-				password: password
-			});
-
-			if (error) {
-				console.error('[login] signIn error:', {
-					code: error.code,
-					message: error.message,
-					status: (error as any).status
-				});
-
-				// エラーコードベースの判定（文字列マッチングではなくコード判定）
-				// Supabase Auth Error Codes: https://supabase.com/docs/guides/auth/debugging/error-codes
-
-				// 無効な認証情報
-				if (error.code === 'invalid_credentials') {
-					throw new Error(m.auth_invalidCredentials());
-				}
-
-				// メール未確認
-				if (error.code === 'email_not_confirmed') {
-					throw new Error(m.auth_emailNotConfirmed());
-				}
-
-				// レート制限
-				if (error.code === 'too_many_requests' || (error as any).status === 429) {
-					throw new Error(m.auth_rateLimited());
-				}
-
-				// その他の予期しないエラー
-				console.error('[login] Unexpected error code:', error.code);
-				throw new Error(m.auth_loginFailed());
-			}
-
-			console.log('[login] ログイン成功。リダイレクト先:', redirectTarget);
-			await goto(redirectTarget);
-		} catch (error: any) {
-			errorMessage = error.message;
-		} finally {
+		return async ({ update }: { update: (opts?: { reset?: boolean }) => Promise<void> }) => {
+			// reset:false で入力値（メール）を保持。失敗時は form 更新でエラー表示。
+			await update({ reset: false });
 			loading = false;
-		}
-	}
-
-	onMount(async () => {
-		console.log('[login/onMount] 認証状態をチェック中...');
-		const {
-			data: { user }
-		} = await supabase.auth.getUser();
-
-		if (user) {
-			console.log('[login/onMount] 既に認証済み。リダイレクト:', redirectTarget);
-			goto(redirectTarget, { replaceState: true });
-		} else {
-			console.log('[login/onMount] 未認証。ログインページを表示');
-			checkingAuth = false;
-		}
-	});
+		};
+	};
 </script>
 
 <Header showAppName={true} pageUser={null} />
 
-{#if checkingAuth}
-	<div class="container">
-		<LoadingSpinner />
-	</div>
-{:else}
 <div class="container">
 	<div class="instruction">{m.auth_loginTitle()}</div>
 
-	<form class="form-container" on:submit|preventDefault={handleLogin}>
+	<form class="form-container" method="POST" use:enhance={handleEnhance}>
+		<input type="hidden" name="next" value={data.next ?? '/dashboard'} />
 		<input
 			type="email"
 			name="email"
 			autocomplete="email"
-			bind:value={email}
+			value={form?.email ?? ''}
 			placeholder={m.auth_email()}
 			class="input-field"
 			disabled={loading}
+			required
 		/>
 		<input
 			type="password"
 			name="password"
 			autocomplete="current-password"
-			bind:value={password}
 			placeholder={m.auth_password()}
 			class="input-field"
 			disabled={loading}
+			required
 		/>
 
 		{#if successMessage}
@@ -177,7 +91,6 @@
 		<NavButton on:click={() => goto('/')}>{m.nav_topPage()}</NavButton>
 	</div>
 </div>
-{/if}
 
 <style>
 	.container {
