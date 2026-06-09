@@ -120,7 +120,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.url.pathname.startsWith('/session') ||
 		event.url.pathname.startsWith('/account') ||
 		event.url.pathname.startsWith('/organization') ||
-		event.url.pathname.startsWith('/onboarding')
+		event.url.pathname.startsWith('/onboarding') ||
+		// API は全て per-user/動的（/api/me は認証ユーザー＋プロフィールを返す）。
+		// PII が共有端末やプロキシのキャッシュに残らないよう no-store にする。
+		event.url.pathname.startsWith('/api/')
 	) {
 		response.headers.set('cache-control', 'private, no-cache, no-store, must-revalidate');
 		response.headers.set('pragma', 'no-cache');

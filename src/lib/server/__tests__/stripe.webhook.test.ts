@@ -139,7 +139,7 @@ describe('livemode検証（T14）', () => {
 		} as unknown as Request;
 	};
 
-	it('テスト環境でlivemode=trueのイベントを受信した場合は200を返しDB更新をスキップする（T14）', async () => {
+	it('テスト環境でlivemode=trueの本番イベントは503を投げて可視化する（T14 / stripe-webhook-6）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
 		const event = { request } as RequestEvent;
 
@@ -166,18 +166,16 @@ describe('livemode検証（T14）', () => {
 			}
 		} as any);
 
-		const response = await POST(event);
+		// stripe-webhook-6: 危険な方向（テスト鍵の環境に本番イベント）は 200 で握り潰さず、
+		// 503 を投げて Stripe に再送させ、構成ミスをダッシュボードで可視化する。
+		try {
+			await POST(event);
+			expect.fail('Expected POST to throw a 503');
+		} catch (err: any) {
+			expect(err.status).toBe(503);
+		}
 
-		// T14: livemode不一致時は200で応答しDB更新をスキップ
-		expect(response.status).toBe(200);
-		const body = await response.json();
-		expect(body).toEqual({
-			received: true,
-			skipped: true,
-			reason: 'livemode_mismatch'
-		});
-
-		// T14: DB更新が呼ばれていないことを確認
+		// DB更新が呼ばれていないことを確認
 		expect(mockSupabaseClient.from).not.toHaveBeenCalled();
 	});
 

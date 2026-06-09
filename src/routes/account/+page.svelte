@@ -33,6 +33,7 @@
 		}
 	}
 
+	let currentPassword = '';
 	let newPassword = '';
 	let confirmPassword = '';
 	let passwordLoading = false;
@@ -45,13 +46,26 @@
 			message = m.account_userNotFound();
 			return;
 		}
+		// 名前のバリデーション（空・長さ上限100）。表示はエスケープ済みだがデータ整合のため制限する
+		const trimmedName = fullName.trim();
+		if (trimmedName.length === 0) {
+			message = getLocale() === 'ja' ? 'お名前を入力してください。' : 'Please enter your name.';
+			return;
+		}
+		if (trimmedName.length > 100) {
+			message =
+				getLocale() === 'ja'
+					? 'お名前は100文字以内で入力してください。'
+					: 'Name must be 100 characters or fewer.';
+			return;
+		}
 		loading = true;
 		message = '';
 
 		// profilesテーブルのfull_nameを更新
 		const { error } = await supabase
 			.from('profiles')
-			.update({ full_name: fullName })
+			.update({ full_name: trimmedName })
 			.eq('id', data.user.id);
 
 		if (error) {
@@ -64,7 +78,20 @@
 	}
 
 	async function handleUpdatePassword() {
-		// Basic validation
+		const isJa = getLocale() === 'ja';
+
+		// 現在のパスワードによる再認証を必須化（セッション奪取時に現PWを知らずに
+		// パスワードを変更され乗っ取りが固定化されるのを防ぐ）
+		if (!data.user?.email) {
+			passwordMessage = m.account_userNotFound();
+			return;
+		}
+		if (!currentPassword) {
+			passwordMessage = isJa
+				? '現在のパスワードを入力してください。'
+				: 'Please enter your current password.';
+			return;
+		}
 		if (newPassword.length < 6) {
 			passwordMessage = m.account_passwordTooShort();
 			return;
@@ -77,20 +104,37 @@
 		passwordLoading = true;
 		passwordMessage = '';
 
-		// Update the user's password in Supabase Auth
+		// 1. 現在のパスワードで再認証
+		const { error: reauthError } = await supabase.auth.signInWithPassword({
+			email: data.user.email,
+			password: currentPassword
+		});
+		if (reauthError) {
+			passwordMessage = isJa
+				? '現在のパスワードが正しくありません。'
+				: 'Current password is incorrect.';
+			passwordLoading = false;
+			return;
+		}
+
+		// 2. パスワードを更新
 		const { error } = await supabase.auth.updateUser({
 			password: newPassword
 		});
-
 		if (error) {
 			passwordMessage = m.account_passwordUpdateFailed() + ' ' + error.message;
-		} else {
-			passwordMessage = m.account_passwordUpdated();
-			// Clear input fields on success
-			newPassword = '';
-			confirmPassword = '';
+			passwordLoading = false;
+			return;
 		}
-		passwordLoading = false;
+
+		// 3. 全セッションを無効化（他端末のセッションも失効）し、再ログインを促す
+		await supabase.auth.signOut({ scope: 'global' });
+		alert(
+			isJa
+				? 'パスワードを変更しました。安全のため再度ログインしてください。'
+				: 'Password changed. Please sign in again for security.'
+		);
+		goto('/login');
 	}
 
 	async function handleLogout() {
@@ -226,6 +270,7 @@
 			type="text"
 			id="account-name"
 			placeholder={m.account_namePlaceholder()}
+			maxlength="100"
 			bind:value={fullName}
 		/>
 
@@ -244,7 +289,15 @@
 		<label for="account-password" class="form-label">{m.account_newPassword()}</label>
 		<input
 			type="password"
+			id="account-current-password"
+			autocomplete="current-password"
+			placeholder={getLocale() === 'ja' ? '現在のパスワード' : 'Current password'}
+			bind:value={currentPassword}
+		/>
+		<input
+			type="password"
 			id="account-password"
+			autocomplete="new-password"
 			placeholder={m.account_newPasswordPlaceholder()}
 			bind:value={newPassword}
 		/>

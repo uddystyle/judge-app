@@ -222,7 +222,9 @@ export const actions: Actions = {
 
 			if (guestParticipant) {
 				// ゲストユーザーの場合
-				existingScoreQuery = existingScoreQuery.eq('guest_identifier', guestIdentifier);
+				// 生のURL値ではなく JWT 検証済みの guest_identifier を使う（同セッション内での
+				// スコア偽造・上書きをアプリ側で防ぐ。RLS(1001)だけに依存しない）
+				existingScoreQuery = existingScoreQuery.eq('guest_identifier', guestParticipant.guest_identifier);
 			} else {
 				// 認証ユーザーの場合
 				existingScoreQuery = existingScoreQuery.eq('judge_id', user.id);
@@ -253,9 +255,9 @@ export const actions: Actions = {
 				};
 
 				if (guestParticipant) {
-					// ゲストユーザーの場合
-					scoreData.guest_identifier = guestIdentifier;
-					console.log('[submitScore] Inserting training score for guest:', guestIdentifier);
+					// ゲストユーザーの場合: JWT 検証済みの guest_identifier を使う（生のURL値は使わない）
+					scoreData.guest_identifier = guestParticipant.guest_identifier;
+					console.log('[submitScore] Inserting training score for guest:', guestParticipant.guest_identifier);
 				} else {
 					// 認証ユーザーの場合
 					scoreData.judge_id = user.id;
@@ -284,7 +286,10 @@ export const actions: Actions = {
 			}
 
 			// 検定員名を取得（通常ユーザーまたはゲストユーザー）
-			const judgeName = await getJudgeName(supabase, user, guestParticipant, { addGuestSuffix: true });
+			// results.judge_name は素の guest_name を保存する。RLS(1000/1001) は judge_name = 素の
+			// guest_name 一致を要求するため、"(ゲスト)" 接尾辞を付けると保存が拒否される（可用性バグ）。
+			// 接尾辞が必要なら表示時に付与する。
+			const judgeName = await getJudgeName(supabase, user, guestParticipant);
 			if (!judgeName) {
 				console.error('[submitScore] Neither user nor guest found!');
 				return fail(401, { error: '認証が必要です。' });

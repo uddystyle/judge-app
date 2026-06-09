@@ -80,11 +80,24 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (expectedLivemode !== eventLivemode) {
 			const envType = expectedLivemode ? '本番' : 'テスト';
 			const eventType = eventLivemode ? '本番' : 'テスト';
-			console.warn(
+			// 構成ミス検知のため高重大度で記録（warn ではなく error）
+			console.error(
 				`[Webhook] T14: livemode不一致を検出 - 環境: ${envType}, イベント: ${eventType}, event.id: ${event.id}`
 			);
-			console.warn('[Webhook] T14: 不一致イベントはDB更新をスキップします');
-			// 不一致イベントは200で応答してStripeに再送させない（ログのみ記録）
+			// TODO: 監視アラート（Sentry等）を送信
+
+			// 危険な方向: テスト鍵の環境に「本番」イベントが届いている。
+			// 200 で握り潰すと本物の課金イベントが恒久ドロップされるため、非2xxで再送させ、
+			// Stripe ダッシュボード上にエラーとして可視化する（構成ミスを検知可能にする）。
+			if (!expectedLivemode && eventLivemode) {
+				throw error(
+					503,
+					`livemode不一致: テスト鍵の環境に本番イベントが届いています（event.id: ${event.id}）。STRIPE_SECRET_KEY を確認してください。`
+				);
+			}
+
+			// 逆方向（本番環境にテストイベント）は無害なのでスキップ（200で再送させない）
+			console.warn('[Webhook] T14: 本番環境のテストイベントをスキップします');
 			return json({ received: true, skipped: true, reason: 'livemode_mismatch' });
 		}
 	}

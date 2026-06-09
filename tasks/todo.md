@@ -54,6 +54,23 @@
 - ⚠️ **要デプロイ**: webhook-4 / limits-4 はアプリ層（feature→main→デプロイ）。**1006 トリガーは本番/開発DBへ手動適用が必要**（アプリ無変更でも安全に先行適用可）。
 - 残（follow-up）: 検定員(session_participants)の TOCTOU トリガーは未対応（cap算出がアプリ logic と乖離しやすく要慎重・影響小）。stripe-webhook の retrieve由来の current_period_* 型エラーは既存（acacia ランタイムでは安全）。
 
+### 監査 — 優先順クリーン修正（グループ1〜3, 7件）— ✅ 完了（2026-06-10・未コミット）
+- [x] **guest-core-4** 大会スコアの judge_name を素の guest_name で保存（`addGuestSuffix` 除去）→ RLS(1000/1001)拒否＝保存不可の可用性バグ解消（`input/+page.server.ts`）
+- [x] **guest-core-3** スコア保存に生の `?guest=` でなく JWT検証済み `guestParticipant.guest_identifier` を使用（同セッションのスコア偽造をアプリ側で防止）
+- [x] **account-2** パスワード変更に現PWでの再認証を必須化＋成功時 global signOut（セッション奪取での乗っ取り固定化を防止、`account/+page.svelte`）
+- [x] **login-hooks-3** `hooks.server.ts` の no-store に `/api/` 追加（`/api/me` 等のPIIキャッシュ防止）
+- [x] **callback-1** `auth/callback` に `checkRateLimit(auth)` 追加（唯一未保護の認証経路）
+- [x] **account-3** プロフィール名にクライアント検証（trim・100字上限）＋ input maxlength=100
+- [x] **stripe-webhook-6** livemode不一致を error ログ化＋危険方向（テスト鍵に本番イベント）は503で可視化（テスト1件を新挙動に更新）
+- レビュー: `npx vitest run src/` → **676 passed**。`npm run check` → 306（新規0。input等の `user possibly null` は既存・行ずれ表示）。
+- 注: account-2/3 はクライアント側。account-3 の完全な保証はDB CHECK制約（任意マイグレ）。
+
+## 次の予定（グループ4・トレードオフ要相談）
+- **ratelimit-2**（userIdキー・15ファイル＋getUser再順序のトレードオフ）
+- **ratelimit-3**（fail-closed・可用性トレードオフ＋監視未配線）
+- **広いSELECT**（session_participants・ゲスト読取を壊さないよう要慎重）
+- **検定員TOCTOU**（cap算出がアプリlogicと乖離しやすい）
+
 ## Completed
 
 ### 2026-03-04 (Session 3)

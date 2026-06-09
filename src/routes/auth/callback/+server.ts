@@ -1,7 +1,14 @@
 import { redirect, isRedirect, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 
-export const GET: RequestHandler = async ({ url, locals: { supabase } }) => {
+export const GET: RequestHandler = async ({ request, url, locals: { supabase } }) => {
+	// レート制限（唯一未保護だった認証経路。トークン総当たり試行・Auth quota浪費を抑止）
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
+	if (!rateLimitResult.success) {
+		return rateLimitResult.response;
+	}
+
 	const token_hash = url.searchParams.get('token_hash');
 	const type = url.searchParams.get('type');
 	const code = url.searchParams.get('code');
