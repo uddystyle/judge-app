@@ -6,7 +6,7 @@ import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
-	const rateLimitResult = await checkRateLimit(request, rateLimiters?.api);
+	const rateLimitResult = await checkRateLimit(request, rateLimiters?.expensive);
 	if (!rateLimitResult.success) {
 		return rateLimitResult.response;
 	}

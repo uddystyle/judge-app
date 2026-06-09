@@ -50,10 +50,11 @@ describe('signup action', () => {
 				error: null
 			});
 
-			const result = await actions.signup(event);
-
-			// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
-			expect(result).toEqual({ success: true });
+			// 既存ユーザーも新規ユーザーと同一の応答（303 → /signup/success）を返す（ユーザー列挙対策）
+			await expect(actions.signup(event)).rejects.toMatchObject({
+				status: 303,
+				location: '/signup/success'
+			});
 		});
 
 			it('identitiesが存在する場合、正常にサインアップ処理を継続', async () => {
@@ -112,10 +113,11 @@ describe('signup action', () => {
 				}
 			});
 
-				const result = await actions.signup(event);
-
-				// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
-				expect(result).toEqual({ success: true });
+				// 既存ユーザーも新規ユーザーと同一の応答（303 → /signup/success）を返す（ユーザー列挙対策）
+				await expect(actions.signup(event)).rejects.toMatchObject({
+					status: 303,
+					location: '/signup/success'
+				});
 			});
 
 			it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出し成功レスポンスを返す', async () => {
@@ -140,10 +142,11 @@ describe('signup action', () => {
 				}
 			});
 
-			const result = await actions.signup(event);
-
-			// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
-			expect(result).toEqual({ success: true });
+			// 既存ユーザーも新規ユーザーと同一の応答（303 → /signup/success）を返す（ユーザー列挙対策）
+			await expect(actions.signup(event)).rejects.toMatchObject({
+				status: 303,
+				location: '/signup/success'
+			});
 		});
 
 		it('codeが未定義で messageに"already exists"が含まれる場合も既存ユーザーを検出し成功レスポンスを返す', async () => {
@@ -168,10 +171,11 @@ describe('signup action', () => {
 				} as any
 			});
 
-			const result = await actions.signup(event);
-
-			// ユーザー列挙攻撃を防ぐため、成功レスポンスを返す
-			expect(result).toEqual({ success: true });
+			// 既存ユーザーも新規ユーザーと同一の応答（303 → /signup/success）を返す（ユーザー列挙対策）
+			await expect(actions.signup(event)).rejects.toMatchObject({
+				status: 303,
+				location: '/signup/success'
+			});
 		});
 
 		it('codeが空でmessageがマッチしない場合は500エラーを返す', async () => {

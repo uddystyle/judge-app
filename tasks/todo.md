@@ -21,6 +21,16 @@
 - ⚠️ **要デプロイ作業**: RLSマイグレ `1002_harden_session_participants_rls.sql` を本番Supabaseへ適用必須（このリポジトリからは適用不可）。適用前はDBレベルのIDOR（#1b）が残るため、ステージング検証→本番適用を推奨。
 - ⚠️ **#3 要確認**: Stripeダッシュボードの webhook エンドポイントAPIバージョン。コードは両形状対応にしたが、Basil形状の実イベントでの疎通確認を推奨。
 
+### 監査 — クイックウィン（Medium/Low）— ✅ 完了（2026-06-09）
+- [x] **guest-join-6** 参加コード入力 `maxlength` 6→8（`session/join/+page.svelte`）
+- [x] **guest-join-3** ゲスト名を `validateName` でサニタイズ（`session/join`・`session/invite/[token]`、INSERT＋JWTメタデータ両方）
+- [x] **signup-1** 既存ユーザーも新規と同一応答（303 → /signup/success）に統一（列挙対策）。`signup.test.ts` も更新
+- [x] **authz-model-1** `removed_at IS NULL` を残り4箇所の admin判定に追加（change-plan load/cancelSubscription、organization/[id]/delete load/action）
+- [x] **ratelimit-4** Stripeオブジェクト生成系4エンドポイントを `api`→`expensive`（checkout/portal/customer-portal/upgrade）
+
+レビュー: `npx vitest run src/` → **662 passed**。`npm run check` → 既存306のまま（新規エラー0）。アプリ層のみ（DBマイグレ不要）。
+注記: `signup/+page.svelte` の `{#if form?.success}` は応答統一で未到達（無害・任意で除去可）。
+
 ## Completed
 
 ### 2026-03-04 (Session 3)

@@ -20,6 +20,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.select('role, organizations(id, name, plan_type, stripe_customer_id, stripe_subscription_id)')
 		.eq('organization_id', organizationId)
 		.eq('user_id', user.id)
+		.is('removed_at', null)
 		.single();
 
 	if (!membership || membership.role !== 'admin') {
@@ -110,6 +111,7 @@ export const actions: Actions = {
 			.select('role')
 			.eq('organization_id', organizationId)
 			.eq('user_id', user.id)
+			.is('removed_at', null)
 			.single();
 
 		if (!membership || membership.role !== 'admin') {

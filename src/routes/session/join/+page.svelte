@@ -52,7 +52,7 @@
 				name="joinCode"
 				id="join-code-input"
 				placeholder={m.session_joinCode()}
-				maxlength="6"
+				maxlength="8"
 				style="text-transform: uppercase;"
 				value={form?.joinCode ?? ''}
 				required

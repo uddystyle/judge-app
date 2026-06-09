@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
+import { validateName } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const token = params.token;
@@ -64,11 +65,14 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const guestName = formData.get('guestName')?.toString();
 
-		if (!guestName || guestName.trim().length === 0) {
+		// signup と同じく validateName でサニタイズ（XSS対策・長さ上限100・前後空白除去）
+		const nameValidation = validateName(guestName);
+		if (!nameValidation.valid) {
 			return fail(400, {
-				error: '名前を入力してください。'
+				error: nameValidation.error || '名前を入力してください。'
 			});
 		}
+		const sanitizedGuestName = nameValidation.sanitized!;
 
 		// トークンからセッション情報を取得
 		const { data: session, error: sessionError } = await supabase
@@ -108,7 +112,7 @@ export const actions: Actions = {
 		const { error: insertError } = await supabaseAdmin.from('session_participants').insert({
 			session_id: session.id,
 			is_guest: true,
-			guest_name: guestName.trim(),
+			guest_name: sanitizedGuestName,
 			guest_identifier: guestIdentifier
 		});
 
@@ -126,7 +130,7 @@ export const actions: Actions = {
 				data: {
 					session_id: session.id,
 					guest_identifier: guestIdentifier,
-					guest_name: guestName.trim(),
+					guest_name: sanitizedGuestName,
 					is_guest: true
 				}
 			}

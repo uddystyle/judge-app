@@ -38,6 +38,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		.select('role')
 		.eq('organization_id', params.id)
 		.eq('user_id', user.id)
+		.is('removed_at', null)
 		.single();
 
 	if (!member || member.role !== 'admin') {
@@ -112,6 +113,7 @@ export const actions: Actions = {
 			.select('role')
 			.eq('organization_id', params.id)
 			.eq('user_id', user.id)
+			.is('removed_at', null)
 			.single();
 
 		if (!member || member.role !== 'admin') {

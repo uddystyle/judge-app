@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { validateName } from '$lib/server/validation';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
@@ -23,10 +24,14 @@ export const actions: Actions = {
 		const isGuestMode = formData.get('isGuest') === 'true';
 
 		// ゲストモードの場合は名前が必須、認証ユーザーの場合はユーザー情報が必須
+		let sanitizedGuestName = '';
 		if (isGuestMode) {
-			if (!guestName || guestName.trim().length === 0) {
-				return fail(400, { joinCode, guestName, error: 'お名前を入力してください。' });
+			// signup と同じく validateName でサニタイズ（XSS対策・長さ上限100・前後空白除去）
+			const nameValidation = validateName(guestName);
+			if (!nameValidation.valid) {
+				return fail(400, { joinCode, guestName, error: nameValidation.error });
 			}
+			sanitizedGuestName = nameValidation.sanitized!;
 		} else {
 			if (userError || !user) {
 				throw redirect(303, '/login');
@@ -165,7 +170,7 @@ export const actions: Actions = {
 			const { error: insertError } = await supabaseAdmin.from('session_participants').insert({
 				session_id: sessionData.id,
 				is_guest: true,
-				guest_name: guestName.trim(),
+				guest_name: sanitizedGuestName,
 				guest_identifier: guestIdentifier
 			});
 
@@ -185,7 +190,7 @@ export const actions: Actions = {
 					data: {
 						session_id: sessionData.id,
 						guest_identifier: guestIdentifier,
-						guest_name: guestName.trim(),
+						guest_name: sanitizedGuestName,
 						is_guest: true
 					}
 				}

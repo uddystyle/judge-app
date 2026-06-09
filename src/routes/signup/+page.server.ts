@@ -94,8 +94,9 @@ export const actions: Actions = {
 			if (authError.code === 'user_already_exists' ||
 			    authError.code === 'email_exists') {
 				console.log('[signup] 既存ユーザー検出 - 成功レスポンスを返す（セキュリティ対策）');
-				// 既存ユーザーには確認メールが送信されないが、新規ユーザーと同じレスポンスを返す
-				return { success: true };
+				// 既存ユーザーには確認メールが送信されないが、新規ユーザーと完全に同一の
+				// レスポンス（303 → /signup/success）を返す。応答差によるユーザー列挙を防ぐ。
+				throw redirect(303, '/signup/success');
 			}
 
 			// メール送信レート制限
@@ -119,7 +120,7 @@ export const actions: Actions = {
 				    message.includes('already exists') ||
 				    message.includes('already been registered')) {
 					console.log('[signup] 既存ユーザー検出（メッセージフォールバック） - 成功レスポンスを返す');
-					return { success: true };
+					throw redirect(303, '/signup/success');
 				}
 			}
 
@@ -141,7 +142,7 @@ export const actions: Actions = {
 				userId: authData.user.id,
 				reason: 'このケースではメールは送信されません'
 			});
-			return { success: true };
+			throw redirect(303, '/signup/success');
 		}
 
 		if (!authData.user) {
