@@ -39,7 +39,12 @@
 - 事前調査（workflow）で確認: Cookie互換OK（同一 `sb-<ref>-auth-token` 形式）、Vercel `getClientAddress()` は raw XFF で詐称可能（XFF修正は別途 ratelimit-1）。
 - レビュー: `npx vitest run src/` → **670 passed**。`npm run check` → 306（新規0）。
 - ⚠️ **要・実地スモークテスト**: 認証フロー変更のためユニットテストだけでは Cookie/セッションのE2Eを保証できない。デプロイ前に「実ログイン→/dashboard到達→ハードリロードで維持」を確認すること。
-- 未実装（#2の残り・未選択）: ratelimit-1(XFF信頼IP化), ratelimit-2(userIdキー), ratelimit-3(fail-closed)。
+- 未実装（#2の残り・未選択）: ratelimit-2(userIdキー), ratelimit-3(fail-closed)。
+
+### 監査 — レート制限クラスタ #2b（ratelimit-1 / login-hooks-2）— ✅ 完了（2026-06-09）
+- [x] `getClientIdentifier` のIP導出を「x-real-ip 優先 → x-forwarded-for 右端ホップ」に変更（左端=クライアント詐称可能を使わない）。`rateLimit.ts` のみ・呼び出し20箇所は無変更
+- [x] `rateLimit.test.ts` 新規6件（user:id優先、x-real-ip優先、右端ホップ、左端偽値でバイパス不可、単一ホップ、unknown）
+- レビュー: `npx vitest run src/` → **676 passed**。`npm run check` → 306（新規0）。アプリ層のみ・低リスク。
 
 ## Completed
 

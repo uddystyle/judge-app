@@ -52,18 +52,20 @@ export function getClientIdentifier(request: Request, userId?: string): string {
     return `user:${userId}`;
   }
 
-  // x-forwarded-for の先頭IP（実際のクライアントIP）を取得
-  // x-forwarded-for フォーマット: "client_ip, proxy1, proxy2, ..."
-  // 先頭IPが実際のクライアントアドレス
-  const forwardedFor = request.headers.get('x-forwarded-for');
+  // 【セキュリティ】詐称耐性のあるクライアントIP取得（Vercel）
+  // x-forwarded-for の「先頭(左端)」はクライアントが prepend できるため詐称可能
+  // （`attacker-ip, real-client-ip` のように偽値を左に挿入できる）。
+  // Vercel はエッジで実接続元IPを x-real-ip に設定し、x-forwarded-for の「末尾(右端)」にも付与する。
+  // よって x-real-ip を優先し、無い場合のみ x-forwarded-for の右端ホップ（Vercel付与=クライアント制御不可）を使う。
   const realIp = request.headers.get('x-real-ip');
+  const forwardedFor = request.headers.get('x-forwarded-for');
 
   let ip = 'unknown';
-  if (forwardedFor) {
-    // カンマ区切りの先頭IPを取得し、空白を除去
-    ip = forwardedFor.split(',')[0].trim();
-  } else if (realIp) {
+  if (realIp) {
     ip = realIp.trim();
+  } else if (forwardedFor) {
+    const hops = forwardedFor.split(',');
+    ip = hops[hops.length - 1].trim(); // 右端 = プラットフォームが付与した実接続元IP
   }
 
   // 匿名ユーザーはIPのみ
