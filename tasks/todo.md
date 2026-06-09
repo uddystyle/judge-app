@@ -46,6 +46,14 @@
 - [x] `rateLimit.test.ts` 新規6件（user:id優先、x-real-ip優先、右端ホップ、左端偽値でバイパス不可、単一ホップ、unknown）
 - レビュー: `npx vitest run src/` → **676 passed**。`npm run check` → 306（新規0）。アプリ層のみ・低リスク。
 
+### 監査 — 決済の堅牢性 #3 — ✅ 完了（2026-06-09）
+- [x] **stripe-webhook-4** subscription/created・updated でマッピング行が未作成（順序レース）の場合、`NonRetryableError(400)`→`RetryableError(500)` に変更。Stripeが再送し恒久ドロップを回避（`webhook/+server.ts`）。テスト1件を新挙動(500)に更新
+- [x] **limits-4** `handleSubscriptionUpdated`：非課金ステータス（unpaid/canceled 等）では org を free 制限に降格。past_due は猶予として現プラン維持。`getOrganizationPlanLimits` は org.plan_type 参照のまま（RLS安全）
+- [x] **limits-3** organization_members の上限を **DBトリガー**でアトミック強制（新マイグレ `1006_*`、org行を FOR UPDATE ロック→再カウント→超過は例外）。アプリ層 checkCanAddMember は維持（通常時メッセージ用）
+- レビュー: `npx vitest run src/` → **676 passed**（webhook/limits テスト更新含む）。`npm run check` → 306（新規0）。
+- ⚠️ **要デプロイ**: webhook-4 / limits-4 はアプリ層（feature→main→デプロイ）。**1006 トリガーは本番/開発DBへ手動適用が必要**（アプリ無変更でも安全に先行適用可）。
+- 残（follow-up）: 検定員(session_participants)の TOCTOU トリガーは未対応（cap算出がアプリ logic と乖離しやすく要慎重・影響小）。stripe-webhook の retrieve由来の current_period_* 型エラーは既存（acacia ランタイムでは安全）。
+
 ## Completed
 
 ### 2026-03-04 (Session 3)

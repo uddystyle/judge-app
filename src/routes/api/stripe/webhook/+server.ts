@@ -527,10 +527,13 @@ async function handleSubscriptionCreated(subscription: any) {
 		.single();
 
 	if (fetchError || !subData) {
+		// イベント順序レース対策: customer.subscription.created が checkout.session.completed より
+		// 先に届くと subscriptions 行がまだ存在しない。NonRetryable(400) だと Stripe が再送せず
+		// イベントが恒久的にドロップされるため、Retryable(500) にして行が作られるまで再送させる。
 		const errMsg = `Customer ID: ${customerId} のsubscriptionが見つかりません`;
 		console.error('[Webhook] subscription取得エラー:', fetchError);
 		console.error('[Webhook]', errMsg);
-		throw new NonRetryableError(errMsg);
+		throw new RetryableError(errMsg);
 	}
 
 	// T10/T11: Stripe Subscriptionレスポンスの異常データ検証
@@ -670,10 +673,13 @@ async function handleSubscriptionUpdated(subscription: any) {
 		.single();
 
 	if (fetchError || !subscriptionData) {
+		// イベント順序レース対策: customer.subscription.updated が checkout.session.completed より
+		// 先に届くと該当行がまだ存在しない。NonRetryable(400) だと Stripe が再送せず恒久ドロップに
+		// なるため、Retryable(500) にして行が作られるまで再送させる。
 		const errMsg = `Subscription ID: ${subscription.id} が見つかりません`;
 		console.error('[Webhook] subscription取得エラー:', fetchError);
 		console.error('[Webhook]', errMsg);
-		throw new NonRetryableError(errMsg);
+		throw new RetryableError(errMsg);
 	}
 
 	const organizationId = subscriptionData.organization_id;
@@ -727,15 +733,21 @@ async function handleSubscriptionUpdated(subscription: any) {
 
 	// 3. organizationIdが存在する場合のみorganizationsテーブルを更新
 	if (organizationId) {
-		// plan_limitsから新しいプランのmax_membersを取得
+		// 支払い停止（unpaid / canceled 等の非課金ステータス）の場合は free 制限に降格する。
+		// past_due は Stripe のリトライ猶予期間として現プランを維持（active / trialing も維持）。
+		// これにより past_due/unpaid のまま上位プランの上限を保持し続ける問題を防ぐ。
+		const ENTITLED_STATUSES = ['active', 'trialing', 'past_due'];
+		const effectivePlanType = ENTITLED_STATUSES.includes(subscription.status) ? planType : 'free';
+
+		// plan_limitsから有効プランのmax_membersを取得
 		const { data: planLimits, error: planLimitsError } = await supabaseAdmin
 			.from('plan_limits')
 			.select('max_organization_members')
-			.eq('plan_type', planType)
+			.eq('plan_type', effectivePlanType)
 			.single();
 
 		if (planLimitsError) {
-			const errMsg = `プランタイプ: ${planType} のplan_limitsが見つかりません`;
+			const errMsg = `プランタイプ: ${effectivePlanType} のplan_limitsが見つかりません`;
 			console.error('[Webhook] plan_limits取得エラー:', planLimitsError);
 			console.error('[Webhook]', errMsg);
 			throw new NonRetryableError(errMsg);
@@ -743,11 +755,11 @@ async function handleSubscriptionUpdated(subscription: any) {
 
 		const maxMembers = planLimits.max_organization_members;
 
-		// organizationsテーブルを更新
+		// organizationsテーブルを更新（非課金ステータス時は free に降格）
 		const { error: orgUpdateError } = await supabaseAdmin
 			.from('organizations')
 			.update({
-				plan_type: planType,
+				plan_type: effectivePlanType,
 				max_members: maxMembers
 			})
 			.eq('id', organizationId);

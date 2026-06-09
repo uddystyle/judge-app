@@ -224,7 +224,9 @@ describe('Webhookエラー分類（P0-2）', () => {
 		} as unknown as Request;
 	};
 
-	it('NonRetryableErrorが発生した場合は400を返す', async () => {
+	// stripe-webhook-4: subscription 行が未作成（順序レース）の場合は Retryable(500) を返し、
+	// Stripe に再送させる（NonRetryable(400) だと恒久ドロップになるため）。
+	it('subscription行が見つからない場合（順序レース）は再送可能な500を返す', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
 		const event = { request } as RequestEvent;
 
@@ -259,8 +261,8 @@ describe('Webhookエラー分類（P0-2）', () => {
 			await POST(event);
 			expect.fail('Expected POST to throw an error');
 		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('リトライ不要なエラー');
+			expect(err.status).toBe(500);
+			expect(err.body?.message).toContain('リトライ可能なエラー');
 		}
 	});
 
