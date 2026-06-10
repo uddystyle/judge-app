@@ -65,11 +65,24 @@
 - レビュー: `npx vitest run src/` → **676 passed**。`npm run check` → 306（新規0。input等の `user possibly null` は既存・行ずれ表示）。
 - 注: account-2/3 はクライアント側。account-3 の完全な保証はDB CHECK制約（任意マイグレ）。
 
-## 次の予定（グループ4・トレードオフ要相談）
-- **ratelimit-2**（userIdキー・15ファイル＋getUser再順序のトレードオフ）
-- **ratelimit-3**（fail-closed・可用性トレードオフ＋監視未配線）
-- **広いSELECT**（session_participants・ゲスト読取を壊さないよう要慎重）
-- **検定員TOCTOU**（cap算出がアプリlogicと乖離しやすい）
+## グループ4の判断結果（2026-06-10）
+- **ratelimit-2** → **見送り（C）**。ratelimit-1(XFF信頼IP化)済みでIPベースが堅牢になり、getUser再順序のトレードオフ＋15ファイル変更に見合わないため。
+- **広いSELECT（session_participants）** → **据え置き（既知Low）**。調査(workflow)結果＝「絞り込みは可能だが前提あり」:
+  - 公開スコアボードは session_participants を読まない（最大懸念はクリア）。リアルタイムも無関係。
+  - ただし **bare-anon(JWTなし)読み取りが3つ**: ①`checkCanAddJudgeToSession`(organizationLimits.ts:243) がゲスト参加で signIn前に anon 実行→絞ると検定員上限が静かにバイパス（要 supabaseAdmin 化）、②`session/[id]:30` 旧`?guest=`移行パス、③`api/score-status:23` レガシー。
+  - **本番限定の未確認2点**: `is_session_member()` 定義（ソース管理外）、ゲストが results/training_scores でどのロール実行か（1000/1001は `TO anon`、これが壊れると採点リグレッション）。
+  - 結論: 採点フローへのリグレッションリスク＋本番検証必須 vs 低機微PII(ゲスト名＋参加関係)のため据え置き。再開する場合の段階案は会話ログ参照（Stage1=カウントをsupabaseAdmin化、Stage2=scoped SELECTマイグレ＋本番2クエリ検証）。
+
+## 未着手で残っている項目
+- **ratelimit-3**（fail-closed・可用性トレードオフ＋監視(Sentry等)未配線）— 未相談
+- **検定員TOCTOU**（session_participants 検定員上限の原子化。cap算出がアプリlogicと乖離しやすく要慎重・影響小）
+- **広いSELECT**（上記・据え置き）
+
+## 中断時点のブランチ/デプロイ状態（2026-06-10）
+- `main`（本番デプロイ対象）: High6件 + session_participants RLS(1002/1004/1005) + クイックウィン + ログインサーバ化 + XFF + 決済堅牢性 まで取り込み済み。
+- `feature` は `a944a17`（優先クラスタ7件: guest-core-3/4, account-2/3, login-hooks-3, callback-1, stripe-webhook-6）が main より1コミット先（**未マージ・未デプロイ**）。
+- DBマイグレ適用済み（両DB）: 1002/1004/1005/1006。
+- ⚠️ 宿題: **ログインのサーバ化(1b32153, main済)の実地スモークテスト未確認**。**`a944a17` の feature→main マージ＋デプロイ**（account/scoreのフロー確認推奨）。
 
 ## Completed
 
