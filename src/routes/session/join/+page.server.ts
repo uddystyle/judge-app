@@ -56,7 +56,9 @@ export const actions: Actions = {
 		console.log('[Join Session] 参加コードでセッション検索:', joinCode);
 		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
-			.select('id, is_accepting_participants, organization_id, failed_join_attempts, is_locked, join_code')
+			.select(
+				'id, is_accepting_participants, organization_id, failed_join_attempts, is_locked, join_code'
+			)
 			.eq('join_code', joinCode)
 			.maybeSingle();
 
@@ -64,7 +66,7 @@ export const actions: Actions = {
 
 		if (sessionError) {
 			console.error('[Join Session] セッション検索エラー:', sessionError);
-			return fail(500, { joinCode, error: `セッションの検索に失敗しました。${sessionError.message || ''}` });
+			return fail(500, { joinCode, error: 'セッションの検索に失敗しました。' });
 		}
 
 		if (!sessionData) {
@@ -74,7 +76,9 @@ export const actions: Actions = {
 
 		// セッションがロックされているかチェック
 		if (sessionData.is_locked) {
-			console.log('[Join Session] ロックされたセッションへのアクセス試行:', { sessionId: sessionData.id });
+			console.log('[Join Session] ロックされたセッションへのアクセス試行:', {
+				sessionId: sessionData.id
+			});
 			return fail(423, {
 				joinCode,
 				guestName,
@@ -119,7 +123,11 @@ export const actions: Actions = {
 
 		// セッションが参加受付中かチェック
 		if (!sessionData.is_accepting_participants) {
-			return fail(400, { joinCode, guestName, error: 'このセッションは参加受付を終了しています。' });
+			return fail(400, {
+				joinCode,
+				guestName,
+				error: 'このセッションは参加受付を終了しています。'
+			});
 		}
 
 		// 検定員数制限チェック（ゲスト・認証ユーザー共通）
@@ -156,7 +164,9 @@ export const actions: Actions = {
 			// 通過した後にのみサーバ側で登録することで、公開anonキーによる
 			// 任意セッションへの参加者注入を防ぐ。
 			if (!supabaseAdmin) {
-				console.error('[Join Session] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）');
+				console.error(
+					'[Join Session] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+				);
 				return fail(500, {
 					joinCode,
 					guestName,
@@ -179,7 +189,7 @@ export const actions: Actions = {
 				return fail(500, {
 					joinCode,
 					guestName,
-					error: `検定への参加に失敗しました。${insertError.message || ''}`
+					error: '検定への参加に失敗しました。'
 				});
 			}
 
@@ -220,7 +230,10 @@ export const actions: Actions = {
 				});
 			}
 
-			console.log('[Join Session] ゲスト参加成功。JWT発行完了。リダイレクト先:', `/session/${sessionData.id}`);
+			console.log(
+				'[Join Session] ゲスト参加成功。JWT発行完了。リダイレクト先:',
+				`/session/${sessionData.id}`
+			);
 			// Step 3: URLパラメータなしでリダイレクト（JWTがcookieに保存される）
 			throw redirect(303, `/session/${sessionData.id}`);
 		}
@@ -245,7 +258,7 @@ export const actions: Actions = {
 			return fail(500, {
 				joinCode,
 				guestName,
-				error: `検定への参加に失敗しました。${joinError.message || ''}`
+				error: '検定への参加に失敗しました。'
 			});
 		}
 

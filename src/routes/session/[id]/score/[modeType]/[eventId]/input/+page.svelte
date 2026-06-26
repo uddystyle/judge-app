@@ -57,7 +57,9 @@
 		if (data.isMultiJudge) {
 			goto(`/session/${sessionId}/score/${modeType}/${eventId}/status?bib=${form.bibNumber}`);
 		} else {
-			goto(`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}`);
+			goto(
+				`/session/${sessionId}/score/${modeType}/${eventId}/complete?bib=${form.bibNumber}&score=${form.score}`
+			);
 		}
 	}
 
@@ -82,16 +84,29 @@
 {/if}
 
 <ScoreInput
-	minScore={minScore}
-	maxScore={maxScore}
+	{minScore}
+	{maxScore}
 	maxDigits={3}
-	loading={loading}
-	showBackButton={showBackButton}
+	{loading}
+	{showBackButton}
 	on:submit={handleSubmit}
 	on:back={handleBackToBib}
 />
 
-<form id="scoreForm" method="POST" action={formAction} use:enhance style="display: none;">
+<form
+	id="scoreForm"
+	method="POST"
+	action={formAction}
+	use:enhance={() => {
+		// 送信完了後に loading を必ず解除する。
+		// これがないと失敗時 (fail) にキーパッド/確定ボタンが disabled のまま固まり、再入力できなくなる。
+		return async ({ update }) => {
+			await update({ reset: false });
+			loading = false;
+		};
+	}}
+	style="display: none;"
+>
 	<input type="hidden" name="score" bind:this={scoreInput} />
 	<input type="hidden" name="participantId" value={participantId} />
 	<input type="hidden" name="bibNumber" value={bibNumber} />
@@ -108,4 +123,3 @@
 		text-align: center;
 	}
 </style>
-

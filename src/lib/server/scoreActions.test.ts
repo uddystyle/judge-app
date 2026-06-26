@@ -143,7 +143,8 @@ describe('deleteTrainingScore', () => {
 		expect(result.success).toBe(false);
 		if (!result.success) {
 			expect(result.error).toContain('得点の削除に失敗しました');
-			expect(result.error).toContain('RLS policy violation');
+			// 生の DB エラーメッセージはクライアントに漏らさない（info-disclosure 対策）
+			expect(result.error).not.toContain('RLS policy violation');
 		}
 	});
 

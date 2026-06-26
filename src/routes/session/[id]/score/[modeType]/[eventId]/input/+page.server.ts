@@ -55,6 +55,12 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		fetchUserProfile(supabase, user)
 	]);
 
+	// 種目が見つからない/RLSで不可視の場合は 404 を返す（participant ガードと対称）。
+	// これがないと +page.svelte が data.eventInfo.* を参照して 500 クラッシュする。
+	if (!eventInfo) {
+		throw error(404, '種目が見つかりません。');
+	}
+
 	return {
 		sessionDetails,
 		eventInfo,
@@ -74,11 +80,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 export const actions: Actions = {
 	submitScore: async ({ request, params, url, locals: { supabase } }) => {
 		console.log('[submitScore] Action called');
-		console.log('[submitScore] URL:', url.toString());
-		console.log('[submitScore] URL search params:', Object.fromEntries(url.searchParams));
 
 		const guestIdentifier = url.searchParams.get('guest');
-		console.log('[submitScore] Guest identifier from URL:', guestIdentifier);
 
 		// セッション認証
 		const authResult = await authenticateAction(supabase, params.id, guestIdentifier);
@@ -91,10 +94,6 @@ export const actions: Actions = {
 		const { user, guestParticipant } = authResult;
 		console.log('[submitScore] User check:', { hasUser: !!user, hasGuest: !!guestParticipant });
 
-		if (guestParticipant) {
-			console.log('[submitScore] Guest authenticated:', guestParticipant.guest_name);
-		}
-
 		const formData = await request.formData();
 		const participantId = formData.get('participantId') as string;
 		const scoreRaw = formData.get('score') as string;
@@ -102,18 +101,6 @@ export const actions: Actions = {
 
 		const { id: sessionId, modeType, eventId } = params;
 		const sessionIdInt = parseInt(sessionId);
-
-		console.log('[submitScore] Score submission (raw):', {
-			scoreRaw,
-			bibNumberRaw,
-			participantId,
-			sessionId: sessionIdInt,
-			modeType,
-			eventId,
-			hasUser: !!user,
-			hasGuest: !!guestParticipant,
-			guestName: guestParticipant?.guest_name
-		});
 
 		// ============================================================
 		// バリデーション
@@ -224,7 +211,10 @@ export const actions: Actions = {
 				// ゲストユーザーの場合
 				// 生のURL値ではなく JWT 検証済みの guest_identifier を使う（同セッション内での
 				// スコア偽造・上書きをアプリ側で防ぐ。RLS(1001)だけに依存しない）
-				existingScoreQuery = existingScoreQuery.eq('guest_identifier', guestParticipant.guest_identifier);
+				existingScoreQuery = existingScoreQuery.eq(
+					'guest_identifier',
+					guestParticipant.guest_identifier
+				);
 			} else {
 				// 認証ユーザーの場合
 				existingScoreQuery = existingScoreQuery.eq('judge_id', user.id);
@@ -257,11 +247,11 @@ export const actions: Actions = {
 				if (guestParticipant) {
 					// ゲストユーザーの場合: JWT 検証済みの guest_identifier を使う（生のURL値は使わない）
 					scoreData.guest_identifier = guestParticipant.guest_identifier;
-					console.log('[submitScore] Inserting training score for guest:', guestParticipant.guest_identifier);
+					console.log('[submitScore] Inserting training score for guest');
 				} else {
 					// 認証ユーザーの場合
 					scoreData.judge_id = user.id;
-					console.log('[submitScore] Inserting training score for user:', user.id);
+					console.log('[submitScore] Inserting training score for user');
 				}
 
 				const { error } = await supabase.from('training_scores').insert(scoreData);
@@ -270,7 +260,7 @@ export const actions: Actions = {
 
 			if (saveError) {
 				console.error('[submitScore] Error saving training score:', saveError);
-				return fail(500, { error: `採点の保存に失敗しました。${saveError.message || ''}` });
+				return fail(500, { error: '採点の保存に失敗しました。時間をおいて再度お試しください。' });
 			}
 		} else {
 			// 大会モード - resultsテーブルに保存
@@ -294,18 +284,6 @@ export const actions: Actions = {
 				console.error('[submitScore] Neither user nor guest found!');
 				return fail(401, { error: '認証が必要です。' });
 			}
-			console.log('[submitScore] Using judge name:', judgeName);
-
-			console.log('[submitScore] Inserting result:', {
-				session_id: sessionIdInt,
-				bib: bibNumber,
-				score,
-				judge_name: judgeName,
-				discipline: eventData.discipline,
-				level: eventData.level,
-				event_name: eventData.event_name
-			});
-
 			// 同時採点対応: Exponential backoff でリトライ
 			const MAX_RETRIES = 3;
 			let insertError = null;
@@ -368,11 +346,10 @@ export const actions: Actions = {
 					hint: insertError.hint
 				});
 				return fail(500, {
-					error: `採点の保存に失敗しました。${
+					error:
 						insertError.code === '40001' || insertError.code === '40P01'
-							? '複数の検定員が同時に採点したため、再度お試しください。'
-							: insertError.message || ''
-					}`
+							? '採点の保存に失敗しました。複数の検定員が同時に採点したため、再度お試しください。'
+							: '採点の保存に失敗しました。時間をおいて再度お試しください。'
 				});
 			}
 

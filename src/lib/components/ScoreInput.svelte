@@ -41,6 +41,16 @@
 	}
 
 	function handleConfirm() {
+		// 空入力のまま確定された場合は弾く。
+		// parseFloat('') || 0 で 0 点が記録され、既存得点を 0 で上書きしてしまうのを防ぐ。
+		if (currentScore === '') {
+			alertTitle = m.score_inputError();
+			alertMessage = m.score_enterScore();
+			showAlert = true;
+			dispatch('error', { title: alertTitle, message: alertMessage });
+			return;
+		}
+
 		const score = parseFloat(currentScore) || 0;
 
 		// Validation: Range check

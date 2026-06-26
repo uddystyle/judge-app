@@ -54,7 +54,7 @@ export async function deleteTrainingScore(
 
 	if (deleteError) {
 		console.error('[deleteTrainingScore] Error:', deleteError);
-		return { success: false, error: `得点の削除に失敗しました。${deleteError.message || ''}` };
+		return { success: false, error: '得点の削除に失敗しました。時間をおいて再度お試しください。' };
 	}
 
 	return { success: true };

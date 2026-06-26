@@ -91,7 +91,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.eq('session_id', sessionId);
 
 		if (trainingEvents && trainingEvents.length > 0) {
-			const eventIds = trainingEvents.map(e => e.id);
+			const eventIds = trainingEvents.map((e) => e.id);
 
 			// training_scoresから取得（種目情報も含む、全種目）
 			let scoresQuery = supabase
@@ -99,17 +99,23 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				.select('*, participants(bib_number), training_events(id, name)')
 				.in('event_id', eventIds);
 
-			if (guestIdentifier) {
-				// ゲストユーザーの場合
-				scoresQuery = scoresQuery.eq('guest_identifier', guestIdentifier);
+			if (guestParticipant) {
+				// ゲストユーザーの場合: JWT 検証済みの guest_identifier で絞り込む（URLの ?guest= には依存しない）。
+				// これがないと ?guest= が無いリクエストで judge_id=anon UID にフォールバックし、
+				// ゲストの得点 (judge_id=NULL) が 0 件になって結果が空表示になる。
+				scoresQuery = scoresQuery.eq('guest_identifier', guestParticipant.guest_identifier);
 			} else if (currentUserId) {
 				// 認証ユーザーの場合
 				scoresQuery = scoresQuery.eq('judge_id', currentUserId);
 			}
 
-			const { data: trainingScores, error: scoresError } = await scoresQuery.order('created_at', { ascending: true });
+			const { data: trainingScores, error: scoresError } = await scoresQuery.order('created_at', {
+				ascending: true
+			});
 
-			console.log('[results/load] training_scores取得:', { trainingScores, scoresError, guestIdentifier, currentUserId });
+			if (scoresError) {
+				console.error('[results/load] training_scores取得エラー:', scoresError);
+			}
 
 			if (trainingScores) {
 				myScores = trainingScores.map((s: any) => ({
@@ -133,12 +139,14 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				.eq('judge_name', judgeName)
 				.order('created_at', { ascending: true });
 
-			console.log('[results/load] results取得:', { results, resultsError, judgeName });
+			if (resultsError) {
+				console.error('[results/load] results取得エラー:', resultsError);
+			}
 
 			if (results) {
 				myScores = results.map((r: any) => {
 					// event_idを event_name から探す
-					const event = allEvents.find(e => e.name === r.event_name);
+					const event = allEvents.find((e) => e.name === r.event_name);
 					return {
 						bib_number: r.bib,
 						score: r.score,

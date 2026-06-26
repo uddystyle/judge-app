@@ -36,17 +36,31 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// 研修モードで複数検定員ONの場合、参加検定員の総数を取得
 	let totalJudges = 1;
 	if (isTrainingMode && isMultiJudge) {
-		const { data: participants, count, error: countError } = await supabase
+		const {
+			data: participants,
+			count,
+			error: countError
+		} = await supabase
 			.from('session_participants')
 			.select('*', { count: 'exact' })
 			.eq('session_id', sessionId);
 
-		console.log('[status/load] 参加検定員の取得:', { sessionId, isTrainingMode, isMultiJudge, count, participants, countError });
+		console.log('[status/load] 参加検定員の取得:', {
+			sessionId,
+			isTrainingMode,
+			isMultiJudge,
+			count,
+			participants,
+			countError
+		});
 		totalJudges = count || 1;
 	}
 
 	// 初期スコアデータを取得
-	let initialScoreStatus: { scores: any[]; requiredJudges: number } = { scores: [], requiredJudges: 1 };
+	let initialScoreStatus: { scores: any[]; requiredJudges: number } = {
+		scores: [],
+		requiredJudges: 1
+	};
 	let athleteId: string | null = null;
 
 	if (bib) {
@@ -70,9 +84,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 				if (trainingScores && trainingScores.length > 0) {
 					// 検定員名をバッチ取得
-					const judgeIds = trainingScores
-						.filter((s) => s.judge_id)
-						.map((s) => s.judge_id);
+					const judgeIds = trainingScores.filter((s) => s.judge_id).map((s) => s.judge_id);
 					const guestIdentifiers = trainingScores
 						.filter((s) => s.guest_identifier)
 						.map((s) => s.guest_identifier);
@@ -84,9 +96,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 							.select('id, full_name')
 							.in('id', judgeIds);
 						if (profiles) {
-							judgeNames = Object.fromEntries(
-								profiles.map((p) => [p.id, p.full_name || '不明'])
-							);
+							judgeNames = Object.fromEntries(profiles.map((p) => [p.id, p.full_name || '不明']));
 						}
 					}
 
@@ -128,9 +138,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				.select('judge_name, score')
 				.eq('session_id', sessionId)
 				.eq('bib', parseInt(bib))
-				.eq('discipline', eventInfo.discipline)
-				.eq('level', eventInfo.level)
-				.eq('event_name', eventInfo.event_name);
+				.eq('discipline', eventInfo?.discipline)
+				.eq('level', eventInfo?.level)
+				.eq('event_name', eventInfo?.event_name);
 
 			const requiredJudges = sessionDetails.exclude_extremes ? 5 : 3;
 			initialScoreStatus = {
@@ -291,7 +301,10 @@ export const actions: Actions = {
 		// 研修モードの場合はスコア計算なしで完了画面へ
 		if (isTrainingMode) {
 			const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
-			throw redirect(303, `/session/${sessionId}/score/training/${eventId}/complete?bib=${bib}${guestParam}`);
+			throw redirect(
+				303,
+				`/session/${sessionId}/score/training/${eventId}/complete?bib=${bib}${guestParam}`
+			);
 		}
 
 		// 大会モードの場合はスコアを計算（合計点）

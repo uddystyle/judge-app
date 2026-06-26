@@ -340,3 +340,28 @@
 - Monitor signup email delivery in production
 - Verify all authentication flows work correctly
 - Test organization plan upgrade flow end-to-end
+
+---
+
+## ゲスト得点入力 監査 → バッチ1 修正（2026-06-27）
+
+多エージェント監査（7次元／敵対的検証、確定23件）の結果のうち、**RLS/DBスキーマを触らない局所修正**だけを実施。
+本番RLSドリフトや所有権キー設計を要する項目（#1,#6〜#10,A/B）は **バッチ2** に分離（未着手）。
+
+### 実施した修正
+- [x] **#2 eventInfo=null で500クラッシュ** — `input/+page.server.ts` の `load` に `if (!eventInfo) throw error(404, …)` を追加（participantガードと対称）。あわせて `status/+page.server.ts` の大会モードクエリを `eventInfo?.discipline/level/event_name` に（completeページと対称化）。
+- [x] **#3 失敗submit後にキーパッドが固まる** — `input/+page.svelte` の `use:enhance` を `async ({ update }) => { await update({ reset:false }); loading=false; }` に変更。失敗時も再入力可能に。
+- [x] **#4 空入力の確定で幻の0点** — `ScoreInput.svelte` の `handleConfirm` 先頭で `currentScore===''` を弾く（`m.score_inputError()` / `m.score_enterScore()` 再利用、新規i18nキー無し）。
+- [x] **#5 研修結果ページがゲストに空表示** — `results/+page.server.ts` を URL `?guest=` ではなく JWT検証済み `guestParticipant.guest_identifier` で絞り込み。
+- [x] **#11 生DBエラーのクライアント返却を停止** — `input/+page.server.ts`（saveError/insertError）、`join/+page.server.ts`（×3）、`scoreActions.ts` を固定文言に。`console.error` には raw error を保持。
+- [x] **#12 PII/capabilityログ削減** — `input/+page.server.ts`・`results/+page.server.ts` から guest_identifier・guest_name・フルURL・score・judge_name のinfoログを除去。
+
+### 検証
+- [x] 新規 `src/lib/components/ScoreInput.test.ts`（4テスト）: 空確定→アラート/未送信、通常値→送信、明示的0→送信、範囲外→範囲エラー。
+- [x] 既存 `scoreActions.test.ts` を更新: 生DBメッセージ非開示を検証（`not.toContain('RLS policy violation')`）。
+- [x] **全テスト 680 passed / 0 failed**（+4、11 skipped）。
+- [x] **型チェック**: 新規エラー0。`@testing-library/jest-dom/vitest` 取り込みで既存matcher型エラーも解消し 311→256 に減少。
+- [ ] 手動E2E（稼働中Supabase必要）: 種目不正ID→404、失敗submit後の再入力、空確定の警告、研修結果表示 — 未実施（要ステージング）。
+
+### バッチ2（未着手・要設計判断/DB変更）
+#1 ゲスト判定のJWT化（`+layout.svelte`/`supabaseClient.ts`）、#6 研修scoreのidempotent化、#7 `results` 所有者列＋RLS/onConflict（同名なりすまし上書き）、#8 `training_events` anon SELECT migration、#9 join rate-limit、#10 旧検定フロー是正、A（横断SELECT `USING(true)`）、B（マルチ審判 requiredJudges 算出）。
