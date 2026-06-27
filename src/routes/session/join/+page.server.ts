@@ -8,11 +8,9 @@ import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
 	join: async ({ request, locals: { supabase, supabaseAdmin } }) => {
-		// レート制限チェックを最初に実行
-		const rateLimitResult = await checkRateLimit(request, rateLimiters?.auth);
-		if (!rateLimitResult.success) {
-			return rateLimitResult.response;
-		}
+		// レート制限は「失敗（誤コード）」のみ IP 単位で計上する（下の 404 分岐）。
+		// 会場では多数の参加者が同一 NAT IP を共有するため、成功 join を一律に縛ると
+		// 6人目以降が 429 になり一斉参加が破綻する。正しいコードでの join は制限しない。
 
 		const {
 			data: { user },
@@ -70,9 +68,7 @@ export const actions: Actions = {
 		console.log('[Join Session] 参加コードでセッション検索:', joinCode);
 		const { data: sessionData, error: sessionError } = await supabaseAdmin
 			.from('sessions')
-			.select(
-				'id, is_accepting_participants, organization_id, failed_join_attempts, is_locked, join_code'
-			)
+			.select('id, is_accepting_participants, organization_id, is_locked')
 			.eq('join_code', joinCode)
 			.maybeSingle();
 
@@ -84,6 +80,11 @@ export const actions: Actions = {
 		}
 
 		if (!sessionData) {
+			// 誤コード（総当たりの兆候）のみ IP 単位でレート制限。閾値超過で 429。
+			const rl = await checkRateLimit(request, rateLimiters?.joinFail);
+			if (!rl.success) {
+				return rl.response;
+			}
 			console.log('[Join Session] 参加コードに一致するセッションが見つかりません');
 			return fail(404, { joinCode, error: '無効な参加コードです。' });
 		}
@@ -98,41 +99,6 @@ export const actions: Actions = {
 				guestName,
 				error: '不正なアクセスが検出されたため、このセッションはロックされました。'
 			});
-		}
-
-		// 参加コードが正しいことを確認（念のため）
-		if (sessionData.join_code !== joinCode) {
-			// 失敗回数をインクリメント
-			const newFailedAttempts = (sessionData.failed_join_attempts || 0) + 1;
-
-			console.log('[Join Session] 参加コード不一致。失敗回数:', newFailedAttempts);
-
-			// 10回失敗でロック
-			if (newFailedAttempts >= 10) {
-				await supabase
-					.from('sessions')
-					.update({
-						is_locked: true,
-						failed_join_attempts: newFailedAttempts
-					})
-					.eq('id', sessionData.id);
-
-				console.log('[Join Session] セッションをロックしました:', { sessionId: sessionData.id });
-
-				return fail(423, {
-					joinCode,
-					guestName,
-					error: '不正なアクセスが検出されたため、このセッションはロックされました。'
-				});
-			}
-
-			// 失敗回数のみ更新
-			await supabase
-				.from('sessions')
-				.update({ failed_join_attempts: newFailedAttempts })
-				.eq('id', sessionData.id);
-
-			return fail(401, { joinCode, guestName, error: '参加コードが正しくありません。' });
 		}
 
 		// セッションが参加受付中かチェック

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { actions } from './+page.server';
 import { redirect } from '@sveltejs/kit';
+import { checkRateLimit } from '$lib/server/rateLimit';
 
 // @sveltejs/kit のモック
 vi.mock('@sveltejs/kit', () => ({
@@ -72,6 +73,106 @@ describe('join action - JWT ロールバック検証', () => {
 			},
 			from: vi.fn()
 		};
+	});
+
+	describe('レート制限（会場共有IP対策）', () => {
+		// セッションが見つからない（誤コード）モック
+		const mockSessionsNotFound = () => {
+			mockSupabase.from = vi.fn((table: string) => {
+				if (table === 'sessions') {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null }))
+							}))
+						}))
+					};
+				}
+				return {};
+			});
+		};
+
+		// 正しいコードでの成功 join モック（既存の成功テストと同形）
+		const mockSuccessfulJoin = () => {
+			mockSupabase.from = vi.fn((table: string) => {
+				if (table === 'sessions') {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								maybeSingle: vi.fn(() =>
+									Promise.resolve({
+										data: {
+											id: 'session-123',
+											is_accepting_participants: true,
+											organization_id: 'org-123',
+											is_locked: false
+										},
+										error: null
+									})
+								)
+							}))
+						}))
+					};
+				} else if (table === 'session_participants') {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
+						insert: vi.fn(() => Promise.resolve({ error: null })),
+						delete: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) }))
+					};
+				}
+				return {};
+			});
+			mockSupabase.auth.signInAnonymously.mockResolvedValue({
+				data: { session: { access_token: 'valid_token', user: { id: 'anon-user-123' } } },
+				error: null
+			});
+		};
+
+		it('正しいコードでの成功 join は checkRateLimit を一切呼ばない（成功は計上しない＝会場で誤発火しない）', async () => {
+			vi.mocked(checkRateLimit).mockClear();
+			mockSuccessfulJoin();
+
+			try {
+				await actions.join({
+					request: mockRequest,
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
+				} as any);
+			} catch (e: any) {
+				// 成功時は redirect(303) が throw される
+				expect(e.status).toBe(303);
+			}
+
+			expect(checkRateLimit).not.toHaveBeenCalled();
+		});
+
+		it('誤コード（セッション無し）では失敗を計上し、上限内なら 404', async () => {
+			vi.mocked(checkRateLimit).mockClear();
+			mockSessionsNotFound();
+
+			const result: any = await actions.join({
+				request: mockRequest,
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
+			} as any);
+
+			// 失敗パスでのみレート制限を計上
+			expect(checkRateLimit).toHaveBeenCalledTimes(1);
+			expect(result.status).toBe(404);
+		});
+
+		it('誤コードが上限超過のときは joinFail が返す 429 をそのまま返す', async () => {
+			mockSessionsNotFound();
+			const limited = new Response(JSON.stringify({ error: 'too many' }), { status: 429 });
+			vi.mocked(checkRateLimit).mockResolvedValueOnce({ success: false, response: limited });
+
+			const result = await actions.join({
+				request: mockRequest,
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
+			} as any);
+
+			expect(result).toBe(limited);
+		});
 	});
 
 	describe('JWT発行失敗時のロールバック', () => {
