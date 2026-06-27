@@ -3,6 +3,7 @@ import { json, error as svelteError } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { stripe } from '$lib/server/stripe';
+import { computeOwnershipReassign } from '$lib/server/sessionOwnership';
 
 // 稼働中とみなすサブスクリプションのステータス
 const ACTIVE_SUB_STATUSES = ['active', 'trialing', 'past_due', 'unpaid'];
@@ -135,13 +136,67 @@ export async function POST({ request }) {
 		} catch (err: any) {
 			// 既に解約済み/存在しない場合は成功扱いで継続
 			if (err?.code === 'resource_missing') {
-				console.warn('[delete-user] サブスクは既に存在しません（解約済み扱い）:', sub.stripe_subscription_id);
+				console.warn(
+					'[delete-user] サブスクは既に存在しません（解約済み扱い）:',
+					sub.stripe_subscription_id
+				);
 				continue;
 			}
 			// それ以外の Stripe エラーは削除を中断（課金継続を防ぐため）
 			console.error('[delete-user] サブスク解約失敗:', err?.message);
-			throw svelteError(500, 'サブスクリプションの解約に失敗したため、アカウントを削除できませんでした。時間をおいて再度お試しください。');
+			throw svelteError(
+				500,
+				'サブスクリプションの解約に失敗したため、アカウントを削除できませんでした。時間をおいて再度お試しください。'
+			);
 		}
+	}
+
+	// ============================================================
+	// セッションの所有権（主任検定員 / 作成者）を残存メンバーへ引き継ぐ
+	// 削除済みユーザーの UUID が sessions.chief_judge_id / created_by にダングリングで残り、
+	// 採点制御・検定員管理が不能になるのを防ぐ（best-effort: 失敗しても削除は継続）。
+	// ============================================================
+	try {
+		const { data: ownedSessions, error: ownedError } = await supabaseAdmin
+			.from('sessions')
+			.select('id, chief_judge_id, created_by')
+			.or(`chief_judge_id.eq.${user.id},created_by.eq.${user.id}`);
+
+		if (ownedError) {
+			console.error('[delete-user] 所有セッション取得エラー:', ownedError.message);
+		} else {
+			for (const session of ownedSessions ?? []) {
+				// 残存する非ゲストメンバーを1名（引き継ぎ先）
+				const { data: replacement } = await supabaseAdmin
+					.from('session_participants')
+					.select('user_id')
+					.eq('session_id', session.id)
+					.eq('is_guest', false)
+					.neq('user_id', user.id)
+					.not('user_id', 'is', null)
+					.order('id', { ascending: true })
+					.limit(1)
+					.maybeSingle();
+
+				const update = computeOwnershipReassign(session, user.id, replacement?.user_id ?? null);
+
+				if (Object.keys(update).length > 0) {
+					const { error: reassignError } = await supabaseAdmin
+						.from('sessions')
+						.update(update)
+						.eq('id', session.id);
+					if (reassignError) {
+						console.error('[delete-user] 所有権引き継ぎエラー:', session.id, reassignError.message);
+					}
+				}
+			}
+		}
+	} catch (err) {
+		// best-effort: 引き継ぎ失敗でアカウント削除はブロックしない
+		console.error(
+			'[delete-user] 所有権引き継ぎ処理で例外:',
+			err instanceof Error ? err.message : String(err)
+		);
 	}
 
 	// ============================================================

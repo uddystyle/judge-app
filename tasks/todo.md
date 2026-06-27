@@ -388,3 +388,27 @@
 
 ### 次バッチ（要DB/設計）
 #2(対応不要)、#7 `results` judge_id 列＋RLS/onConflict、#8 delete-user 主任ガード＋`sessions.chief_judge_id` FK整備＋base sessions schema 収録、本番スキーマ/RLSドリフト突合。第1次バッチ2残件も継続。
+
+---
+
+## 第2次監査 #8 → アカウント削除の所有権引き継ぎ バッチ（2026-06-27）
+
+ユーザー判断によりアプリのみ（DB/FK/スキーマ変更なし）で実装。#7 は「アプリ暫定ガード」として次バッチへ分離、sessions の FK 移行も別途。
+
+### 調査で確定した前提
+- `sessions` の UPDATE RLS は **org メンバーシップ基準**（030 "Organization members can manage sessions" FOR ALL）。→ `chief_judge_id` がダングリング/NULL でも org メンバーが `appointChief` で再任命可能（chief は回復可能）。
+- `removeParticipant`/`removeGuest` は **`created_by === user.id` をアプリ層で必須** → `created_by` がダングリング/NULL だと検定員管理が恒久不能（再任命でしか回復しない）。
+- `sessions.chief_judge_id`/`created_by` は FK 喪失（030でdrop・再追加なし）、base sessions schema はリポジトリ未収録。
+
+### 実施した修正（#8）
+- [x] `src/routes/api/delete-user/+server.ts`：`deleteUser` 直前に **service role で所有権を残存メンバーへ引き継ぐ**処理を追加（全ガード通過後）。対象セッションを `.or(chief_judge_id.eq / created_by.eq)` で取得→各セッションの残存非ゲストメンバー1名へ `chief_judge_id`/`created_by` を再任命。置換者なしは chief のみ NULL（created_by は NOT NULL 回避のため不変）。**best-effort**（失敗してもアカウント削除は継続）。
+- [x] 純ロジックを `src/lib/server/sessionOwnership.ts` の `computeOwnershipReassign` に分離（env/stripe を import せずテスト可能に）。
+
+### 検証
+- [x] 新規 `sessionOwnership.test.ts`（6件）：置換者あり→両方再任命／なし→chief NULL・created_by不変／chief のみ・creator のみ・対象外・null セッション。
+- [x] **全テスト 694 passed / 0 failed**（+6、11 skipped）。
+- [x] 型チェック **256（新規エラー0）**、eslint 新規エラー0（残り1件は既存 Stripe catch の any）、prettier整形済み。
+- [ ] 手動E2E（要稼働Supabase）: (a) 複数メンバーで chief 兼 creator を削除→別メンバーへ引き継ぎ・管理継続／(b) 単独作成者を削除→chief NULL（appointChief 可）・削除成功／(c) org sole-admin・Stripe 失敗時は従来どおりブロック — 未実施（ステージング推奨）。
+
+### 次バッチ（要DB/設計・継続）
+#7 アプリ暫定ガード（join名前一意化＋自名義以外採点拒否）／results owner 列移行は将来。sessions の FK 移行（chief_judge_id/created_by に ON DELETE SET NULL）は base sessions schema 突合の上で。第1次バッチ2残件（JWTゲスト判定・training_events anon・join rate-limit・旧フロー・横断SELECT・requiredJudges）。
