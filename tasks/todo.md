@@ -434,3 +434,31 @@
 - TOCTOU（同名同時 join）：DB ユニーク制約が無いため best-effort。将来 `UNIQUE(session_id, guest_name) WHERE is_guest` で根治。
 - 認証 vs 認証の同名（profiles.full_name はグローバル）＋ 999 の authed INSERT RLS に judge_name チェック無し疑い → results owner 列（judge_id）＋RLS 改修（恒久 #7）で対応。
 - sessions FK 移行、本番スキーマ/RLS 突合、第1次バッチ2残件。
+
+---
+
+## 本番スキーマ/RLS 突合 診断 バッチ（2026-06-27）
+
+DB/RLS の残作業は全て破壊的変更だが本番が手動適用でドリフトしており repo migration は正本でない。推測での migration 化を避けるため、まず実態を吸い出す read-only 診断を用意（ユーザー判断）。
+
+### 成果物
+- [x] `database/diagnostics/audit_schema_rls.sql`（新規・**READ-ONLY**）。対象10テーブルについて 5クエリ：(1)列定義 (2)制約+FK ON DELETE (3)索引(部分/unique含む) (4)RLS有効フラグ (5)全ポリシー。
+- [x] read-only 検証：非コメント行に CREATE/ALTER/DROP/INSERT/UPDATE/DELETE/TRUNCATE/GRANT/REVOKE/MERGE 無し。SELECT×5。
+
+### 運用（ユーザー実行）
+- [x] Supabase SQL Editor で prod・dev 両方に実行し結果を受領（2026-06-27）。突合結果は memory [prod-schema-rls-drift] に記録。
+
+### 突合で判明した重大所見（再優先順位）
+- 🔴 **CRIT（本番のみ）**: `results` に `authenticated_users_{insert,select,update}_results = true` ポリシー → 任意の認証ユーザーが**全org/全セッションの results を読取・改変**可能。スコープ付き正ポリシーを OR で無効化。dev には無い。
+- 🟠 **HIGH（両環境）**: `sessions` anon SELECT `USING true` → anon が全セッション＝**join_code / invite_token を読める**（参加コードゲート実質バイパス）。prod に "Temporary realtime test" USING true も残存。
+- 🟠 **HIGH（本番）**: `scoring_prompts` anon INSERT/UPDATE `true` → 越境プロンプト改ざん。
+- 🟡 **MED**: `participants`/`session_participants` anon SELECT `true` → 越境PII（選手名・bib・ゲスト名）。
+- ℹ️ `sessions.created_by` FK：prod=auth.users **ON DELETE CASCADE**（作成者削除でセッション連鎖削除）／dev=profiles NO ACTION。batch-3 の再任命は replacement 有時に連鎖を回避。
+- ✅ 非問題確定：`training_events` anon SELECT 有り（両）／`training_scores.judge_id` uuid＋部分一意索引 有り（両）。
+- results 恒久#7 用：judge_id/guest_identifier **列なし**、score=bigint、UNIQUE名 prod=`results_unique_score_entry`+`unique_result_per_judge` / dev=`results_unique_score`+`unique_result_per_judge`、results.id は prod=bigint/dev=uuid。
+
+### 次バッチの推奨順（結果を踏まえ再優先）
+1. **RLS ロックダウン（最優先）**: results の `authenticated_users_*=true` を削除し owner/セッション基準へ；sessions の anon `USING true`＋"Temporary realtime test" を JWT/セッション参加スコープへ；scoring_prompts の anon write 制限；participants/session_participants の横断SELECT締め直し。prod/dev 差を吸収する冪等 migration。
+2. **#7 恒久**: results に owner 列（judge_id/guest_identifier）＋ owner 基準の UNIQUE/onConflict、既存二重UNIQUEを置換、アプリ write/read 改修。
+3. **#8 仕上げ**: sessions.chief_judge_id に FK(ON DELETE SET NULL)、created_by の prod CASCADE 方針確認、base sessions schema を repo 収録。
+※ いずれも prod/dev 双方へ手動適用する numbered migration＋ロールバック手順付きで設計。
