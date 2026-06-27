@@ -3,6 +3,7 @@ import type { Actions } from './$types';
 import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { validateName } from '$lib/server/validation';
+import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
@@ -171,6 +172,16 @@ export const actions: Actions = {
 					joinCode,
 					guestName,
 					error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+				});
+			}
+
+			// 同名の検定員がいると results が judge_name で衝突し上書きされるため、
+			// セッション内で表示名を一意化する（#7 暫定・アプリ側）。
+			if (await isJudgeNameTakenInSession(supabaseAdmin, sessionData.id, sanitizedGuestName)) {
+				return fail(409, {
+					joinCode,
+					guestName,
+					error: 'この名前は既にこの検定で使われています。別の名前を入力してください。'
 				});
 			}
 

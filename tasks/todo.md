@@ -412,3 +412,25 @@
 
 ### 次バッチ（要DB/設計・継続）
 #7 アプリ暫定ガード（join名前一意化＋自名義以外採点拒否）／results owner 列移行は将来。sessions の FK 移行（chief_judge_id/created_by に ON DELETE SET NULL）は base sessions schema 突合の上で。第1次バッチ2残件（JWTゲスト判定・training_events anon・join rate-limit・旧フロー・横断SELECT・requiredJudges）。
+
+---
+
+## #7 暫定 → セッション内の検定員名を join 時に一意化 バッチ（2026-06-27）
+
+ユーザー判断によりアプリのみ（results owner 列移行＝恒久対策は将来）。「自名義以外での採点拒否」は `getJudgeName` のサーバ側導出＋RLS(1000/1001) で**既に成立**しているため、本バッチの追加変更は join 名前一意化のみ。
+
+### 実施した修正
+- [x] `src/lib/server/sessionHelpers.ts`：`normalizeJudgeName`（trim+NFC+小文字）＋ `isJudgeNameTakenInSession(admin, sessionId, name)` を追加。セッション内の既存 guest_name と、認証メンバーの profiles.full_name を正規化一致で照合（ゲストが既存メンバー名を騙るのも防止）。
+- [x] `src/routes/session/join/+page.server.ts`（ゲスト分岐）＋ `src/routes/session/invite/[token]/+page.server.ts`：insert 直前に一意チェックを追加、衝突は **409**（ハードコード文言）。
+
+### 検証
+- [x] `sessionHelpers.test.ts` に `isJudgeNameTakenInSession` の6ケース（完全一致／空白・大小無視／メンバー名なりすまし／不一致／空候補／guest_name null）。
+- [x] join action test に「同名は409・INSERTしない」配線テストを追加。既存 join/invite action test の supabaseAdmin モックに `session_participants.select().eq()` を補い回帰修復。
+- [x] **全テスト 701 passed / 0 failed**（+7、11 skipped）。
+- [x] 型チェック **256（新規エラー0）**、eslint 変更ファイル0件、prettier整形済み。
+- [ ] 手動E2E（要稼働Supabase）: 既存 '田中'/認証 '山田太郎' のセッションに同名（'田中'/' 田中 '/'TANAKA'/'山田太郎'）でゲスト join→409・未登録／新規名は従来どおり join 可 — 未実施（ステージング推奨）。
+
+### 既知の残課題（DB/RLS 必要・将来）
+- TOCTOU（同名同時 join）：DB ユニーク制約が無いため best-effort。将来 `UNIQUE(session_id, guest_name) WHERE is_guest` で根治。
+- 認証 vs 認証の同名（profiles.full_name はグローバル）＋ 999 の authed INSERT RLS に judge_name チェック無し疑い → results owner 列（judge_id）＋RLS 改修（恒久 #7）で対応。
+- sessions FK 移行、本番スキーマ/RLS 突合、第1次バッチ2残件。

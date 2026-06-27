@@ -204,3 +204,58 @@ export async function fetchActivePrompt(
 
 	return prompt ?? null;
 }
+
+/**
+ * 検定員表示名の正規化（一意判定用）。
+ * 前後空白除去・NFC 正規化・小文字化で、紛らわしい同名/なりすましをまとめて判定する。
+ */
+export function normalizeJudgeName(name: string | null | undefined): string {
+	if (!name) return '';
+	return name.trim().normalize('NFC').toLowerCase();
+}
+
+/**
+ * 指定セッション内で、検定員の表示名（候補）が既に使われているかを判定する。
+ *
+ * results は judge_name だけで行を識別するため、同名の検定員2人が同じ bib/種目を採点すると
+ * 後勝ちで上書きされる。これを防ぐため、名前を選べるゲスト join 時にこの関数で一意化する。
+ * - (a) セッション内の既存ゲスト名（guest_name）
+ * - (b) セッション内の認証メンバーの profiles.full_name（ゲストが既存メンバー名を騙るのも防ぐ）
+ * を正規化一致で照合する。RLS をバイパスして確実に読むため service role クライアントを渡すこと。
+ *
+ * @returns 既に使われていれば true
+ */
+export async function isJudgeNameTakenInSession(
+	supabaseAdmin: SupabaseClient,
+	sessionId: number | string,
+	candidateName: string
+): Promise<boolean> {
+	const target = normalizeJudgeName(candidateName);
+	if (!target) return false;
+
+	const { data: participants } = await supabaseAdmin
+		.from('session_participants')
+		.select('guest_name, user_id, is_guest')
+		.eq('session_id', sessionId);
+
+	const memberUserIds: string[] = [];
+	for (const p of participants ?? []) {
+		if (p.is_guest) {
+			if (normalizeJudgeName(p.guest_name) === target) return true;
+		} else if (p.user_id) {
+			memberUserIds.push(p.user_id);
+		}
+	}
+
+	if (memberUserIds.length > 0) {
+		const { data: profiles } = await supabaseAdmin
+			.from('profiles')
+			.select('full_name')
+			.in('id', memberUserIds);
+		for (const pr of profiles ?? []) {
+			if (normalizeJudgeName(pr.full_name) === target) return true;
+		}
+	}
+
+	return false;
+}

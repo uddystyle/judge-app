@@ -102,6 +102,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn((data: any) => {
 							insertCallCount++;
 							// guest_identifierを記録
@@ -172,6 +175,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
@@ -236,6 +242,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
@@ -306,6 +315,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -384,6 +396,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn((data: any) => {
 							if (data.guest_identifier) {
 								capturedIdentifiers.push(data.guest_identifier);
@@ -478,6 +493,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -550,6 +568,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -614,6 +635,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -684,6 +708,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -750,6 +777,9 @@ describe('join action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => {
 							insertCallCount++;
 							// INSERT失敗をシミュレート
@@ -781,6 +811,63 @@ describe('join action - JWT ロールバック検証', () => {
 				joinCode: 'ABCD1234',
 				guestName: 'テストゲスト',
 				error: expect.stringContaining('検定への参加に失敗しました')
+			});
+		});
+
+		it('セッション内に同名の検定員が既にいる場合は409で拒否し、INSERTしない (#7)', async () => {
+			mockSupabase.from = vi.fn((table: string) => {
+				if (table === 'sessions') {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								maybeSingle: vi.fn(() =>
+									Promise.resolve({
+										data: {
+											id: 'session-123',
+											is_accepting_participants: true,
+											organization_id: 'org-123',
+											failed_join_attempts: 0,
+											is_locked: false,
+											join_code: 'ABCD1234'
+										},
+										error: null
+									})
+								)
+							}))
+						}))
+					};
+				} else if (table === 'session_participants') {
+					return {
+						// 既に同名のゲストがセッションにいる
+						select: vi.fn(() => ({
+							eq: vi.fn(() =>
+								Promise.resolve({
+									data: [{ is_guest: true, guest_name: 'テストゲスト', user_id: null }],
+									error: null
+								})
+							)
+						})),
+						insert: vi.fn(() => {
+							insertCallCount++;
+							return Promise.resolve({ error: null });
+						})
+					};
+				}
+				return {};
+			});
+
+			const result = await actions.join({
+				request: mockRequest,
+				locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
+			} as any);
+
+			expect(insertCallCount).toBe(0); // 登録されない
+			expect(mockSupabase.auth.signInAnonymously).not.toHaveBeenCalled(); // JWTも発行しない
+			expect(result).toEqual({
+				status: 409,
+				joinCode: 'ABCD1234',
+				guestName: 'テストゲスト',
+				error: expect.stringContaining('既にこの検定で使われています')
 			});
 		});
 

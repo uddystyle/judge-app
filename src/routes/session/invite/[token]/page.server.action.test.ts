@@ -87,6 +87,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn((data: any) => {
 							insertCallCount++;
 							if (data.guest_identifier) {
@@ -151,6 +154,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
@@ -212,6 +218,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
@@ -277,6 +286,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -356,6 +368,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -425,6 +440,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -486,6 +504,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -553,6 +574,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
@@ -616,6 +640,9 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 					};
 				} else if (table === 'session_participants') {
 					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
 						insert: vi.fn(() => {
 							insertCallCount++;
 							// INSERT失敗をシミュレート

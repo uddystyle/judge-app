@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { validateName } from '$lib/server/validation';
+import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const token = params.token;
@@ -99,9 +100,19 @@ export const actions: Actions = {
 		// ゲスト登録は RLS をバイパスする service role で実行する（migration 1002 で
 		// anon からの session_participants 直接INSERTを禁止したため）。
 		if (!supabaseAdmin) {
-			console.error('[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）');
+			console.error(
+				'[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+			);
 			return fail(500, {
 				error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+			});
+		}
+
+		// 同名の検定員がいると results が judge_name で衝突し上書きされるため、
+		// セッション内で表示名を一意化する（#7 暫定・アプリ側）。
+		if (await isJudgeNameTakenInSession(supabaseAdmin, session.id, sanitizedGuestName)) {
+			return fail(409, {
+				error: 'この名前は既にこの検定で使われています。別の名前を入力してください。'
 			});
 		}
 
@@ -158,7 +169,10 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log('[Guest Invite] ゲスト参加成功。JWT発行完了。リダイレクト先:', `/session/${session.id}`);
+		console.log(
+			'[Guest Invite] ゲスト参加成功。JWT発行完了。リダイレクト先:',
+			`/session/${session.id}`
+		);
 		// Step 3: セッションページへリダイレクト（JWTがcookieに保存される）
 		throw redirect(303, `/session/${session.id}`);
 	}
