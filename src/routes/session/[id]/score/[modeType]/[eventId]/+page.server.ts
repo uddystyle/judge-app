@@ -220,7 +220,9 @@ export const actions: Actions = {
 					details: createError.details,
 					hint: createError.hint
 				});
-				return fail(500, { error: `参加者レコードの作成に失敗しました。${createError.message || ''}` });
+				return fail(500, {
+					error: `参加者レコードの作成に失敗しました。${createError.message || ''}`
+				});
 			}
 
 			if (!newParticipant) {
@@ -304,15 +306,18 @@ export const actions: Actions = {
 						.update({
 							active_prompt_id: prompt.id,
 							is_active: true,
-							status: 'active'  // セッションを再開（ended → active）
+							status: 'active' // セッションを再開（ended → active）
 						})
 						.eq('id', sessionIdInt);
 
 					if (updateError) {
 						console.error('[submitBib] Error updating session:', updateError);
-					} else {
-						console.log('[submitBib] Session updated with active_prompt_id:', prompt.id);
+						// #5: UPDATE 失敗時に success を返すと、プロンプトが伝播しないのに送信者は成功表示になる
+						// （沈黙失敗）。挿入済みプロンプトを掃除してから明示的に失敗を返す。
+						await supabase.from('scoring_prompts').delete().eq('id', prompt.id);
+						return fail(500, { error: '採点の開始に失敗しました。再度お試しください。' });
 					}
+					console.log('[submitBib] Session updated with active_prompt_id:', prompt.id);
 				}
 			}
 		}

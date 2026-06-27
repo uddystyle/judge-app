@@ -25,7 +25,10 @@ describe('Concurrent Scoring - Retry Logic', () => {
 					if (upsertCallCount < 3) {
 						// 最初の2回は失敗
 						return Promise.resolve({
-							error: { code: '40001', message: 'could not serialize access due to concurrent update' }
+							error: {
+								code: '40001',
+								message: 'could not serialize access due to concurrent update'
+							}
 						});
 					} else {
 						// 3回目で成功
@@ -64,7 +67,9 @@ describe('Concurrent Scoring - Retry Logic', () => {
 			}
 
 			insertError = error;
-			console.warn(`[Test] Retryable error (${errorCode}) on attempt ${attempt + 1}/${MAX_RETRIES}`);
+			console.warn(
+				`[Test] Retryable error (${errorCode}) on attempt ${attempt + 1}/${MAX_RETRIES}`
+			);
 
 			if (attempt < MAX_RETRIES - 1) {
 				const delay = Math.min(100 * Math.pow(2, attempt) + Math.random() * 100, 1000);
@@ -409,5 +414,35 @@ describe('judge_name Collision Prevention', () => {
 		// ゲストのみsuffixを持つ
 		const guestJudges = judges.filter((j) => j.name.includes('(ゲスト)'));
 		expect(guestJudges).toHaveLength(1);
+	});
+});
+
+describe('Training Score - Concurrent Insert Idempotency (#1)', () => {
+	// input/+page.server.ts 研修分岐のロジックミラー:
+	// INSERT が 23505（部分ユニーク索引違反＝同一審判の並行重複）のときは UPDATE にフォールバックし、
+	// 成功なら 500 を返さない。23505 以外はそのまま失敗扱い。
+	function resolveSaveError(insertErr: any, updateErr: any) {
+		if (insertErr && insertErr.code === '23505') {
+			return updateErr; // フォールバック UPDATE の結果
+		}
+		return insertErr;
+	}
+
+	it('INSERT が 23505（並行重複）でも UPDATE 成功なら saveError は null（500 を返さない）', () => {
+		expect(resolveSaveError({ code: '23505', message: 'duplicate key' }, null)).toBeNull();
+	});
+
+	it('INSERT 成功時はそのまま成功（saveError null）', () => {
+		expect(resolveSaveError(null, null)).toBeNull();
+	});
+
+	it('23505 以外の INSERT エラーはフォールバックせず失敗のまま', () => {
+		const insertErr = { code: '42501', message: 'RLS' };
+		expect(resolveSaveError(insertErr, null)).toBe(insertErr);
+	});
+
+	it('23505 後の UPDATE も失敗した場合はその UPDATE エラーを返す', () => {
+		const updateErr = { code: '42501', message: 'RLS on update' };
+		expect(resolveSaveError({ code: '23505' }, updateErr)).toBe(updateErr);
 	});
 });

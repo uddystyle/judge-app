@@ -8,7 +8,8 @@ import {
 	fetchEventInfo,
 	isChiefJudge,
 	isTrainingModeCheck,
-	getJudgeName
+	getJudgeName,
+	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
 
@@ -25,9 +26,26 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		guestIdentifier
 	);
 
-	if (!bibNumber || !participantId) {
+	if (!bibNumber) {
 		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
 		throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
+	}
+
+	// participantId が無い場合は bib から解決する
+	// (#6: navigationMonitor の bib のみフォールバック遷移でも input に着地できるようにする)
+	let resolvedParticipantId = participantId;
+	if (!resolvedParticipantId) {
+		const { data: bibParticipant } = await supabase
+			.from('participants')
+			.select('id')
+			.eq('session_id', sessionId)
+			.eq('bib_number', parseInt(bibNumber))
+			.maybeSingle();
+		if (!bibParticipant) {
+			const guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+			throw redirect(303, `/session/${sessionId}/score/${modeType}/${eventId}${guestParam}`);
+		}
+		resolvedParticipantId = bibParticipant.id;
 	}
 
 	// セッション情報、参加者情報を並列取得（高速化）
@@ -36,7 +54,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		supabase
 			.from('participants')
 			.select('*')
-			.eq('id', participantId)
+			.eq('id', resolvedParticipantId)
 			.eq('session_id', sessionId)
 			.single()
 	]);
@@ -61,12 +79,25 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		throw error(404, '種目が見つかりません。');
 	}
 
+	// #4: 複数審判モードでは、非主任・非ゲストの審判は主任が指定した active prompt の bib のみ採点できる。
+	// 直URLで任意の bib を開いて採点することを防ぐ（主任・ゲストは従来どおり制約しない）。
+	if (isMultiJudge && !isChief && !guestParticipant) {
+		const activePrompt = await fetchActivePrompt(supabase, sessionId);
+		const bibAllowed =
+			!!activePrompt &&
+			activePrompt.bib_number === parseInt(bibNumber) &&
+			String(activePrompt.level) === String(eventId);
+		if (!bibAllowed) {
+			throw redirect(303, `/session/${sessionId}`);
+		}
+	}
+
 	return {
 		sessionDetails,
 		eventInfo,
 		participant,
 		bibNumber: parseInt(bibNumber),
-		participantId,
+		participantId: resolvedParticipantId,
 		isTrainingMode,
 		isMultiJudge,
 		isChief,
@@ -149,6 +180,29 @@ export const actions: Actions = {
 		}
 
 		console.log('[submitScore] 参加者確認成功:', participant);
+
+		// 4.5. #4: 複数審判モードでは、非主任・非ゲストの審判は主任が指定した bib のみ採点できる
+		{
+			const submitSessionDetails = await fetchSessionDetails(supabase, sessionId);
+			const submitIsChief = isChiefJudge(user, submitSessionDetails);
+			const submitIsMultiJudge = await getMultiJudgeMode(
+				supabase,
+				sessionId,
+				modeType,
+				submitSessionDetails
+			);
+			if (submitIsMultiJudge && !submitIsChief && !guestParticipant) {
+				const activePrompt = await fetchActivePrompt(supabase, sessionId);
+				if (
+					!activePrompt ||
+					activePrompt.bib_number !== bibNumber ||
+					String(activePrompt.level) !== String(eventId)
+				) {
+					console.error('[submitScore] 主任指定外の bib への採点を拒否:', { bibNumber, eventId });
+					return fail(403, { error: '主任検定員が指定した選手のみ採点できます。' });
+				}
+			}
+		}
 
 		// 5. イベント情報を取得して得点範囲をチェック
 		let minScore = 0;
@@ -254,8 +308,23 @@ export const actions: Actions = {
 					console.log('[submitScore] Inserting training score for user');
 				}
 
-				const { error } = await supabase.from('training_scores').insert(scoreData);
-				saveError = error;
+				const { error: insertErr } = await supabase.from('training_scores').insert(scoreData);
+				if (insertErr && insertErr.code === '23505') {
+					// #1: 同一審判の並行重複（部分ユニーク索引違反）。既存行を UPDATE して最新 score を
+					// 確定し、500 を返さない（1件目の INSERT は既に成功＝得点は保存済み）。
+					let dupUpdate = supabase
+						.from('training_scores')
+						.update({ score: score, is_finalized: true, updated_at: new Date().toISOString() })
+						.eq('event_id', eventId)
+						.eq('athlete_id', participantId);
+					dupUpdate = guestParticipant
+						? dupUpdate.eq('guest_identifier', guestParticipant.guest_identifier)
+						: dupUpdate.eq('judge_id', user!.id);
+					const { error: dupErr } = await dupUpdate;
+					saveError = dupErr;
+				} else {
+					saveError = insertErr;
+				}
 			}
 
 			if (saveError) {

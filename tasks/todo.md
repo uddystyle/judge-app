@@ -363,5 +363,28 @@
 - [x] **型チェック**: 新規エラー0。`@testing-library/jest-dom/vitest` 取り込みで既存matcher型エラーも解消し 311→256 に減少。
 - [ ] 手動E2E（稼働中Supabase必要）: 種目不正ID→404、失敗submit後の再入力、空確定の警告、研修結果表示 — 未実施（要ステージング）。
 
-### バッチ2（未着手・要設計判断/DB変更）
-#1 ゲスト判定のJWT化（`+layout.svelte`/`supabaseClient.ts`）、#6 研修scoreのidempotent化、#7 `results` 所有者列＋RLS/onConflict（同名なりすまし上書き）、#8 `training_events` anon SELECT migration、#9 join rate-limit、#10 旧検定フロー是正、A（横断SELECT `USING(true)`）、B（マルチ審判 requiredJudges 算出）。
+### バッチ2（第1次・未着手・要設計判断/DB変更）
+#1 ゲスト判定のJWT化（`+layout.svelte`/`supabaseClient.ts`）、#7 `results` 所有者列＋RLS/onConflict（同名なりすまし上書き）、#8 `training_events` anon SELECT migration、#9 join rate-limit、#10 旧検定フロー是正、A（横断SELECT `USING(true)`）、B（マルチ審判 requiredJudges 算出）。
+
+---
+
+## 第2次監査 → 採点フロー堅牢化 バッチ（2026-06-27）
+
+第2次監査8指摘を実コードで敵対的検証（confirmed/refuted/partial）し、**実在するコードのみ修正可能**な5件を実装。
+判定: #2=誤り(006が judge_id を uuid 化済・対応不要)、#8(同名delete) と #7(results judge_id) はDB変更要件のため次バッチへ。
+
+### 実施した修正（DB/RLS変更なし）
+- [x] **#4 採点入力ページの認可（Med・実在）** — `input/+page.server.ts` の `load`/`submitScore` に、`isMultiJudge && !isChief && !guestParticipant` のとき **主任が指定した active prompt の bib のみ**許可するガードを追加（不一致は load=redirect / submit=403）。主任・ゲストは従来どおり制約せず採点フローを壊さない。共通ヘルパ `fetchActivePrompt`（`sessionHelpers.ts`）を新設。
+- [x] **#6 navigationMonitor 停滞（Med・confirmed）** — `sessionNavigationMonitor.ts`：participant 未解決時は bib のみで input へ、prompt 取得失敗時はスコアベースへフォールバック遷移（無音no-op廃止）。`input/+page.server.ts` load：`participantId` 欠落時に bib から解決し着地できるように。
+- [x] **#1 研修保存の競合（Low）** — INSERT が `23505`（並行重複）なら同一アイデンティティで UPDATE にフォールバックし 500 を返さない（得点は1件目で保存済み）。
+- [x] **#5 submitBib の沈黙成功（Low）** — `+page.server.ts`：`active_prompt_id` UPDATE 失敗時に挿入済み prompt を掃除して `fail(500)` を返す（従来は success:true で伝播せず）。
+- [x] **#3 finalizeScore 冪等化（Low）** — `status/+page.server.ts`：`fetchActivePrompt` で今回の bib の prompt が active な場合のみ compare-and-swap で `active_prompt_id` をクリア（二度押し/次滑走者 prompt を誤消去しない）。
+
+### 検証
+- [x] 新規 `sessionHelpers.test.ts`（fetchActivePrompt 4件）＋ `input/page.server.test.ts` に #1 冪等ロジックミラー4件。
+- [x] **全テスト 688 passed / 0 failed**（+8、11 skipped）。
+- [x] 型チェック **256（新規エラー0）**、eslint 新規エラー0、prettier整形済み。
+- [ ] 手動E2E（要稼働Supabase）: 一般審判が直URLで別bib→403／主任が次滑走者へ進めると審判が遷移（participant解決失敗でもフォールバック）／研修二重送信で500なし／submitBib失敗でエラー表示／確定二度押しで次prompt不消去 — 未実施（ステージング推奨）。
+
+### 次バッチ（要DB/設計）
+#2(対応不要)、#7 `results` judge_id 列＋RLS/onConflict、#8 delete-user 主任ガード＋`sessions.chief_judge_id` FK整備＋base sessions schema 収録、本番スキーマ/RLSドリフト突合。第1次バッチ2残件も継続。

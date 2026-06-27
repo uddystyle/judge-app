@@ -8,7 +8,8 @@ import {
 	fetchEventInfo,
 	isChiefJudge,
 	isTrainingModeCheck,
-	isTournamentModeCheck
+	isTournamentModeCheck,
+	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
 import { deleteTrainingScore } from '$lib/server/scoreActions';
@@ -295,8 +296,17 @@ export const actions: Actions = {
 
 		const isTrainingMode = modeType === 'training';
 
-		// active_prompt_idをクリアして次の採点を受け付けられるようにする
-		await supabase.from('sessions').update({ active_prompt_id: null }).eq('id', sessionId);
+		// #3: active_prompt_id のクリアを冪等化する（compare-and-swap）。
+		// 今回確定する bib の prompt がまだ active な場合のみ消す。二度押しや、次の滑走者の
+		// prompt が既にセットされている場合に、それを誤って消さない。
+		const activePrompt = await fetchActivePrompt(supabase, sessionId);
+		if (activePrompt && activePrompt.bib_number === parseInt(bib)) {
+			await supabase
+				.from('sessions')
+				.update({ active_prompt_id: null })
+				.eq('id', sessionId)
+				.eq('active_prompt_id', activePrompt.id);
+		}
 
 		// 研修モードの場合はスコア計算なしで完了画面へ
 		if (isTrainingMode) {

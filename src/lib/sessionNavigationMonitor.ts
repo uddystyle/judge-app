@@ -47,13 +47,19 @@ export function createSessionNavigationMonitor(
 						.eq('bib_number', promptData.bib_number)
 						.maybeSingle();
 
-					if (participant) {
-						onNavigate(
-							`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-						);
-						return;
-					}
+					// #6: participant が解決できればそのまま、できなければ bib のみで input へ遷移する
+					// （input 側が bib から participantId を解決/リダイレクトする）。
+					// いずれにせよ無音 no-op で前の滑走者の画面に留まらせない。
+					const target = participant
+						? `/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+						: `/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${promptData.bib_number}`;
+					onNavigate(target);
+					return;
 				}
+
+				// #6: プロンプト自体が読めない場合もスコアベースへフォールバックし、停滞を防ぐ
+				onNavigate(`/session/${sessionId}/score/${modeType}/${eventId}`);
+				return;
 			}
 
 			// active_prompt_idがnullになったら、採点が確定された

@@ -33,10 +33,7 @@ export async function fetchSessionDetails(
  *
  * @returns profile data or null
  */
-export async function fetchUserProfile(
-	supabase: SupabaseClient,
-	user: User | null
-) {
+export async function fetchUserProfile(supabase: SupabaseClient, user: User | null) {
 	if (!user) return null;
 
 	const { data: profileData } = await supabase
@@ -123,10 +120,7 @@ export function isChiefJudge(
 /**
  * 研修モードかどうかを判定する
  */
-export function isTrainingModeCheck(
-	modeType: string,
-	sessionDetails: { mode?: string }
-): boolean {
+export function isTrainingModeCheck(modeType: string, sessionDetails: { mode?: string }): boolean {
 	return modeType === 'training' || sessionDetails.mode === 'training';
 }
 
@@ -137,7 +131,11 @@ export function isTournamentModeCheck(
 	modeType: string,
 	sessionDetails: { is_tournament_mode?: boolean; mode?: string }
 ): boolean {
-	return modeType === 'tournament' || sessionDetails.is_tournament_mode === true || sessionDetails.mode === 'tournament';
+	return (
+		modeType === 'tournament' ||
+		sessionDetails.is_tournament_mode === true ||
+		sessionDetails.mode === 'tournament'
+	);
 }
 
 /**
@@ -168,4 +166,41 @@ export async function getJudgeName(
 	}
 
 	return null;
+}
+
+/**
+ * セッションの現在アクティブな採点指示 (scoring_prompts) を取得する
+ *
+ * 主任検定員が submitBib で作成し sessions.active_prompt_id に設定したプロンプトを返す。
+ * 複数審判モードで「主任が指定した bib のみ採点可」を強制する用途（input 認可）と、
+ * finalizeScore の冪等クリア（compare-and-swap）に使う。
+ *
+ * @returns アクティブなプロンプト、または存在しなければ null
+ */
+export async function fetchActivePrompt(
+	supabase: SupabaseClient,
+	sessionId: string
+): Promise<{
+	id: number | string;
+	bib_number: number;
+	level: string | null;
+	discipline: string | null;
+} | null> {
+	const { data: session } = await supabase
+		.from('sessions')
+		.select('active_prompt_id')
+		.eq('id', sessionId)
+		.maybeSingle();
+
+	if (!session?.active_prompt_id) {
+		return null;
+	}
+
+	const { data: prompt } = await supabase
+		.from('scoring_prompts')
+		.select('id, bib_number, level, discipline')
+		.eq('id', session.active_prompt_id)
+		.maybeSingle();
+
+	return prompt ?? null;
 }
