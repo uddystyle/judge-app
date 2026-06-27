@@ -1,13 +1,19 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabaseAdmin } }) => {
 	const sessionId = params.sessionId;
 
-	// セッション情報を取得（認証不要）
-	const { data: sessionDetails, error: sessionError } = await supabase
+	// 公開ページ（認証不要）。anon の sessions 全読みを塞いだため、表示用データは service role で取得する。
+	// join_code / invite_token などの機微列は取得しない（公開ページに載せない）。
+	if (!supabaseAdmin) {
+		throw error(500, 'サーバー設定エラーによりスコアボードを表示できません。');
+	}
+
+	// セッション情報を取得
+	const { data: sessionDetails, error: sessionError } = await supabaseAdmin
 		.from('sessions')
-		.select('*')
+		.select('id, name, is_tournament_mode')
 		.eq('id', sessionId)
 		.single();
 
@@ -21,7 +27,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	}
 
 	// 種目一覧を取得
-	const { data: events, error: eventsError } = await supabase
+	const { data: events, error: eventsError } = await supabaseAdmin
 		.from('custom_events')
 		.select('*')
 		.eq('session_id', sessionId)
@@ -32,7 +38,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	}
 
 	// 全ての採点結果を取得
-	const { data: results, error: resultsError } = await supabase
+	const { data: results, error: resultsError } = await supabaseAdmin
 		.from('results')
 		.select('*')
 		.eq('session_id', sessionId);

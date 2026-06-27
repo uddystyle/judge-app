@@ -4,11 +4,19 @@ import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { validateName } from '$lib/server/validation';
 import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase, supabaseAdmin } }) => {
 	const token = params.token;
 
+	// anon の sessions 全読み（invite_token 漏洩）を塞いだため、トークン照合は service role で行う。
+	if (!supabaseAdmin) {
+		console.error(
+			'[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+		);
+		return { error: 'サーバー設定エラーにより招待ページを表示できません。', session: null };
+	}
+
 	// トークンからセッション情報を取得
-	const { data: session, error } = await supabase
+	const { data: session, error } = await supabaseAdmin
 		.from('sessions')
 		.select(
 			`
@@ -75,8 +83,18 @@ export const actions: Actions = {
 		}
 		const sanitizedGuestName = nameValidation.sanitized!;
 
+		// anon の sessions 全読み（invite_token 漏洩）を塞いだため、トークン照合は service role で行う。
+		if (!supabaseAdmin) {
+			console.error(
+				'[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+			);
+			return fail(500, {
+				error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+			});
+		}
+
 		// トークンからセッション情報を取得
-		const { data: session, error: sessionError } = await supabase
+		const { data: session, error: sessionError } = await supabaseAdmin
 			.from('sessions')
 			.select('id, organization_id')
 			.eq('invite_token', token)
@@ -89,7 +107,7 @@ export const actions: Actions = {
 		}
 
 		// 検定員数制限チェック
-		const limitCheck = await checkCanAddJudgeToSession(supabase, session.id);
+		const limitCheck = await checkCanAddJudgeToSession(supabaseAdmin, session.id);
 		if (!limitCheck.allowed) {
 			return fail(400, {
 				error: limitCheck.reason || 'セッションに参加できません。',

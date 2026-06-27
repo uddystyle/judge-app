@@ -53,9 +53,22 @@ export const actions: Actions = {
 			return fail(400, { joinCode, guestName, error: '参加コードは英数字8桁で入力してください。' });
 		}
 
+		// 以降の sessions 参照は RLS をバイパスする service role で行う。
+		// anon の sessions 全読み（join_code 漏洩）を塞いだため、join 時点（呼び出し元はまだ非メンバー）の
+		// 参加コード照合は anon クライアントでは読めない。
+		if (!supabaseAdmin) {
+			console.error(
+				'[Join Session] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+			);
+			return fail(500, {
+				joinCode,
+				error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+			});
+		}
+
 		// 参加コードに一致するセッションをデータベースから検索
 		console.log('[Join Session] 参加コードでセッション検索:', joinCode);
-		const { data: sessionData, error: sessionError } = await supabase
+		const { data: sessionData, error: sessionError } = await supabaseAdmin
 			.from('sessions')
 			.select(
 				'id, is_accepting_participants, organization_id, failed_join_attempts, is_locked, join_code'
@@ -139,7 +152,7 @@ export const actions: Actions = {
 			organizationId: sessionData.organization_id,
 			isGuestMode
 		});
-		const judgeCheck = await checkCanAddJudgeToSession(supabase, sessionData.id);
+		const judgeCheck = await checkCanAddJudgeToSession(supabaseAdmin, sessionData.id);
 		console.log('[Join Session] 検定員数制限チェック結果:', judgeCheck);
 
 		if (!judgeCheck.allowed) {
