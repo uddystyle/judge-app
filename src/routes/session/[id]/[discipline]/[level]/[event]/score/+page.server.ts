@@ -178,8 +178,33 @@ export const actions: Actions = {
 			event_name: eventName
 		});
 
-		const { error: insertError } = await supabase.from('results').upsert(
-			{
+		// #7: owner（認証=judge_id / ゲスト=guest_identifier）で識別（new flow と同方式）。
+		// owner が異なる審判は別行（部分一意索引）なので相互に上書きしない。
+		const ownerColumn = guestParticipant ? 'guest_identifier' : 'judge_id';
+		const ownerValue = guestParticipant ? guestParticipant.guest_identifier : user!.id;
+
+		const { data: existingResult } = await supabase
+			.from('results')
+			.select('id')
+			.eq('session_id', sessionId)
+			.eq('bib', bib)
+			.eq('discipline', discipline)
+			.eq('level', level)
+			.eq('event_name', eventName)
+			.eq(ownerColumn, ownerValue)
+			.maybeSingle();
+
+		let resultSaveError: { message?: string } | null = null;
+		let nameCollision = false;
+
+		if (existingResult) {
+			const { error } = await supabase
+				.from('results')
+				.update({ score: score, judge_name: judgeName })
+				.eq('id', existingResult.id);
+			resultSaveError = error;
+		} else {
+			const resultData: Record<string, unknown> = {
 				session_id: sessionId,
 				bib: bib,
 				score: score,
@@ -187,21 +212,36 @@ export const actions: Actions = {
 				discipline: discipline,
 				level: level,
 				event_name: eventName
-			},
-			{
-				onConflict: 'session_id, bib, discipline, level, event_name, judge_name'
-			}
-		);
+			};
+			resultData[ownerColumn] = ownerValue;
 
-		if (insertError) {
-			console.error('[submitScore/inspection] Error saving score:', insertError);
-			console.error('[submitScore/inspection] Error details:', {
-				code: insertError.code,
-				message: insertError.message,
-				details: insertError.details,
-				hint: insertError.hint
+			const { error: insErr } = await supabase.from('results').insert(resultData);
+			if (insErr && insErr.code === '23505') {
+				const { data: upd, error: updErr } = await supabase
+					.from('results')
+					.update({ score: score, judge_name: judgeName })
+					.eq('session_id', sessionId)
+					.eq('bib', bib)
+					.eq('discipline', discipline)
+					.eq('level', level)
+					.eq('event_name', eventName)
+					.eq(ownerColumn, ownerValue)
+					.select('id');
+				if (updErr) resultSaveError = updErr;
+				else if (!upd || upd.length === 0) nameCollision = true;
+			} else {
+				resultSaveError = insErr;
+			}
+		}
+
+		if (nameCollision) {
+			return fail(409, {
+				error: 'この名前は既にこの検定で使われています。別の名前で参加し直してください。'
 			});
-			return fail(500, { error: `採点の保存に失敗しました。${insertError.message || ''}` });
+		}
+		if (resultSaveError) {
+			console.error('[submitScore/inspection] Error saving score:', resultSaveError);
+			return fail(500, { error: '採点の保存に失敗しました。時間をおいて再度お試しください。' });
 		}
 
 		console.log('[submitScore/inspection] Score saved successfully');

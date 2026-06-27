@@ -128,16 +128,15 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			}
 		}
 	} else {
-		// 大会モードの場合、resultsから取得（全種目）
-		const judgeName = profile?.full_name || guestParticipant?.guest_name || '';
-
-		if (judgeName) {
-			const { data: results, error: resultsError } = await supabase
-				.from('results')
-				.select('*')
-				.eq('session_id', sessionId)
-				.eq('judge_name', judgeName)
-				.order('created_at', { ascending: true });
+		// 大会モード: 自分の得点を owner（guest_identifier / judge_id）で取得（judge_name 表示名に依存しない）
+		if (guestParticipant || user) {
+			let resultsQuery = supabase.from('results').select('*').eq('session_id', sessionId);
+			resultsQuery = guestParticipant
+				? resultsQuery.eq('guest_identifier', guestParticipant.guest_identifier)
+				: resultsQuery.eq('judge_id', user!.id);
+			const { data: results, error: resultsError } = await resultsQuery.order('created_at', {
+				ascending: true
+			});
 
 			if (resultsError) {
 				console.error('[results/load] results取得エラー:', resultsError);

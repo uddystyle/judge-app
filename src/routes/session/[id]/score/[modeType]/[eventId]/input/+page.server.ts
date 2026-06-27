@@ -353,73 +353,77 @@ export const actions: Actions = {
 				console.error('[submitScore] Neither user nor guest found!');
 				return fail(401, { error: '認証が必要です。' });
 			}
-			// 同時採点対応: Exponential backoff でリトライ
-			const MAX_RETRIES = 3;
-			let insertError = null;
+			// #7: owner（認証=judge_id / ゲスト=guest_identifier）で識別する。
+			// owner が異なる審判同士は別行（部分一意索引 results_unique_owner_*）なので相互に上書きしない。
+			// 自分の owner の既存行を SELECT → UPDATE by id / 無ければ INSERT。
+			// 23505 は「自分の owner の並行重複」なら UPDATE で吸収。owner 行が無ければ phase1 の旧 name-unique
+			// 衝突（同名・別 owner）なので明示的に 409 を返す（phase2 適用後は name-unique が無くなり起きない）。
+			const ownerColumn = guestParticipant ? 'guest_identifier' : 'judge_id';
+			const ownerValue = guestParticipant ? guestParticipant.guest_identifier : user!.id;
 
-			for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-				const { error } = await supabase.from('results').upsert(
-					{
-						session_id: sessionIdInt,
-						bib: bibNumber,
-						score: score,
-						judge_name: judgeName,
-						discipline: eventData.discipline,
-						level: eventData.level,
-						event_name: eventData.event_name
-					},
-					{
-						onConflict: 'session_id, bib, discipline, level, event_name, judge_name'
+			const { data: existingResult } = await supabase
+				.from('results')
+				.select('id')
+				.eq('session_id', sessionIdInt)
+				.eq('bib', bibNumber)
+				.eq('discipline', eventData.discipline)
+				.eq('level', eventData.level)
+				.eq('event_name', eventData.event_name)
+				.eq(ownerColumn, ownerValue)
+				.maybeSingle();
+
+			let resultSaveError: { message?: string } | null = null;
+			let nameCollision = false;
+
+			if (existingResult) {
+				const { error } = await supabase
+					.from('results')
+					.update({ score: score, judge_name: judgeName })
+					.eq('id', existingResult.id);
+				resultSaveError = error;
+			} else {
+				const resultData: Record<string, unknown> = {
+					session_id: sessionIdInt,
+					bib: bibNumber,
+					score: score,
+					judge_name: judgeName,
+					discipline: eventData.discipline,
+					level: eventData.level,
+					event_name: eventData.event_name
+				};
+				resultData[ownerColumn] = ownerValue;
+
+				const { error: insErr } = await supabase.from('results').insert(resultData);
+				if (insErr && insErr.code === '23505') {
+					const { data: upd, error: updErr } = await supabase
+						.from('results')
+						.update({ score: score, judge_name: judgeName })
+						.eq('session_id', sessionIdInt)
+						.eq('bib', bibNumber)
+						.eq('discipline', eventData.discipline)
+						.eq('level', eventData.level)
+						.eq('event_name', eventData.event_name)
+						.eq(ownerColumn, ownerValue)
+						.select('id');
+					if (updErr) {
+						resultSaveError = updErr;
+					} else if (!upd || upd.length === 0) {
+						// 自分の owner 行は無いのに 23505 ＝ 同名・別 owner の旧 name-unique 衝突（phase1 のみ）
+						nameCollision = true;
 					}
-				);
-
-				if (!error) {
-					// 成功
-					insertError = null;
-					break;
-				}
-
-				// エラーコードをチェック
-				const errorCode = error.code;
-				const isRetryable =
-					errorCode === '40001' || // SERIALIZATION FAILURE
-					errorCode === '40P01'; // DEADLOCK DETECTED
-
-				if (!isRetryable) {
-					// リトライ不可能なエラー（例: 制約違反）は即座に失敗
-					insertError = error;
-					break;
-				}
-
-				// リトライ可能なエラー
-				insertError = error;
-				console.warn(
-					`[submitScore] Retryable error (${errorCode}) on attempt ${attempt + 1}/${MAX_RETRIES}:`,
-					error.message
-				);
-
-				if (attempt < MAX_RETRIES - 1) {
-					// 最後の試行でない場合、exponential backoff
-					const delay = Math.min(100 * Math.pow(2, attempt) + Math.random() * 100, 1000);
-					console.log(`[submitScore] Retrying in ${delay}ms...`);
-					await new Promise((resolve) => setTimeout(resolve, delay));
+				} else {
+					resultSaveError = insErr;
 				}
 			}
 
-			if (insertError) {
-				console.error('[submitScore] Error saving tournament score:', insertError);
-				console.error('[submitScore] Error details:', {
-					code: insertError.code,
-					message: insertError.message,
-					details: insertError.details,
-					hint: insertError.hint
+			if (nameCollision) {
+				return fail(409, {
+					error: 'この名前は既にこの検定で使われています。別の名前で参加し直してください。'
 				});
-				return fail(500, {
-					error:
-						insertError.code === '40001' || insertError.code === '40P01'
-							? '採点の保存に失敗しました。複数の検定員が同時に採点したため、再度お試しください。'
-							: '採点の保存に失敗しました。時間をおいて再度お試しください。'
-				});
+			}
+			if (resultSaveError) {
+				console.error('[submitScore] Error saving tournament score:', resultSaveError);
+				return fail(500, { error: '採点の保存に失敗しました。時間をおいて再度お試しください。' });
 			}
 
 			console.log('[submitScore] Score saved successfully');
