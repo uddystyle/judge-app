@@ -134,9 +134,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			}
 		} else {
 			// 大会モード: results テーブルから取得
+			// owner 列(judge_id/guest_identifier)も載せて、修正要求の削除を owner 基準にできるようにする。
 			const { data: scores } = await supabase
 				.from('results')
-				.select('judge_name, score')
+				.select('judge_name, score, judge_id, guest_identifier')
 				.eq('session_id', sessionId)
 				.eq('bib', parseInt(bib))
 				.eq('discipline', eventInfo?.discipline)
@@ -245,15 +246,24 @@ export const actions: Actions = {
 				return fail(404, { error: '種目が見つかりません。' });
 			}
 
-			const { error: deleteError } = await supabase
+			// owner(judge_id/guest_identifier)で対象審判の行だけを削除する。フォームが owner を
+			// 渡すので、同名審判が居ても誤って別の行/両方を消さない。owner 未提供時のみ judge_name 後方互換。
+			let deleteQuery = supabase
 				.from('results')
 				.delete()
 				.eq('session_id', sessionId)
 				.eq('bib', parseInt(bib))
 				.eq('discipline', eventInfo.discipline)
 				.eq('level', eventInfo.level)
-				.eq('event_name', eventInfo.event_name)
-				.eq('judge_name', judgeName);
+				.eq('event_name', eventInfo.event_name);
+			if (formGuestIdentifier) {
+				deleteQuery = deleteQuery.eq('guest_identifier', formGuestIdentifier);
+			} else if (judgeId) {
+				deleteQuery = deleteQuery.eq('judge_id', judgeId);
+			} else {
+				deleteQuery = deleteQuery.eq('judge_name', judgeName);
+			}
+			const { error: deleteError } = await deleteQuery;
 
 			if (deleteError) {
 				console.error('Error deleting result:', deleteError);

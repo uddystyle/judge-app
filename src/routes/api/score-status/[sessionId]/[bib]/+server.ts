@@ -44,9 +44,10 @@ export const GET: RequestHandler = async ({ params, url, request, locals: { supa
 	}
 
 	// Get all scores for this specific entry
+	// owner 列(judge_id/guest_identifier)も返し、修正要求の削除を owner 基準にできるようにする。
 	const { data: scores, error: scoresError } = await supabase
 		.from('results')
-		.select('judge_name, score')
+		.select('judge_name, score, judge_id, guest_identifier')
 		.eq('session_id', sessionId)
 		.eq('bib', bib)
 		.eq('discipline', discipline)

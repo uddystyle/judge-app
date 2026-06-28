@@ -810,3 +810,18 @@ results/session_participants/sessions(1008)/custom_events(1012/1014)/organizatio
 
 ### 残（Low/別件）
 L3 大会削除 owner化／profiles email 列保護／complete の changeEvent CAS（任意）／name キャッシュ400／realtime 自動再購読／Safari-dev。
+
+---
+
+## L3 大会 requestCorrection 削除を owner 基準へバッチ（2026-06-29）
+
+大会(新フロー)の修正要求削除が judge_name 基準 → 同名審判で誤削除の恐れ。UI(ScoresTable)は既に judgeId/guestIdentifier を送信・アクションも読取済 → tournament の results 読取が owner 列を載せていないだけが欠落。
+
+### 修正（アプリのみ・DBなし・3箇所）
+- [x] status load 大会分岐: `.select(judge_name, score)` → `+ judge_id, guest_identifier`。
+- [x] score-status API: `.select(judge_name, score)` → `+ judge_id, guest_identifier`（live スコアにも owner・manager は透過）。
+- [x] requestCorrection 大会分岐: judge_name 削除 → owner 基準（formGuestIdentifier→guest_identifier / judgeId→judge_id / 無ければ judge_name 後方互換）。RLS chief_judge_can_delete_results 不変。
+- [x] 型 256（新規0）／`npm run test` 726／prettier。eslint 未使用 error import は既存。
+
+### Out of scope
+旧検定(certification)の correction owner 化（フォーム未連携・別途）、profiles email 列保護、別件（name キャッシュ400／realtime 自動再購読／Safari-dev）。
