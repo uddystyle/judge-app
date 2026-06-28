@@ -786,3 +786,13 @@ scoreStatusManager:75 の name キャッシュ 400（実害小）、realtime CLO
 
 ### RLS ロックダウン総括（全完了見込み）
 results/session_participants/sessions(1008)/custom_events(1012/1014)/organizations(1013/1016/1018)/organization_members(1015)/profiles(1017) — 機微テーブルの越境 read/write/delete/insert の =true を一掃。
+
+---
+
+## organizations admin UPDATE/DELETE を removed_at 込みに一本化（Low: 020 removed_at 締め）バッチ（2026-06-29）
+
+020 由来の inline admin UPDATE/DELETE（removed_at 未チェック）→ ソフト削除済み元 admin が同org を改変/削除できる緩み。1013 の is_organization_admin(removed_at込み) があるので冗長な inline を撤去し一本化。
+
+### 成果物（DBのみ・アプリなし）
+- [x] `1019_organizations_admin_consolidate.sql`＋rollback：`Admins can update their organization`/`Organization admins can update their organization`/`Admins can delete their organization` を DROP（1013 の authed_organizations_{update,delete}_by_admin を維持）。静的：破壊的DDLなし（3 drop）。`npm run test` 726。
+- [ ] DEV→prod 適用 → 現役 admin が org 更新/削除でき、UPDATE/DELETE が is_organization_admin ベースのみになること。問題時 1019_rollback。
