@@ -1,7 +1,12 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
-import { fetchSessionDetails, fetchUserProfile, isChiefJudge } from '$lib/server/sessionHelpers';
+import {
+	fetchSessionDetails,
+	fetchUserProfile,
+	isChiefJudge,
+	fetchActivePrompt
+} from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
@@ -210,8 +215,17 @@ export const actions: Actions = {
 
 		const finalScore = calcResult.finalScore;
 
-		// active_prompt_idをクリアして次の採点を受け付けられるようにする
-		await supabase.from('sessions').update({ active_prompt_id: null }).eq('id', id);
+		// active_prompt_id のクリアを compare-and-swap 化（新フロー #3 と同方針）。
+		// 二度押しや、次の滑走者の prompt が既にセットされている場合に、それを誤って消さない。
+		// 今確定する bib の prompt が依然 active な場合のみクリアする。
+		const activePrompt = await fetchActivePrompt(supabase, id);
+		if (activePrompt && activePrompt.bib_number === parseInt(bib)) {
+			await supabase
+				.from('sessions')
+				.update({ active_prompt_id: null })
+				.eq('id', id)
+				.eq('active_prompt_id', activePrompt.id);
+		}
 
 		// 完了画面へリダイレクト
 		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';

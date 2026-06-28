@@ -796,3 +796,17 @@ results/session_participants/sessions(1008)/custom_events(1012/1014)/organizatio
 ### 成果物（DBのみ・アプリなし）
 - [x] `1019_organizations_admin_consolidate.sql`＋rollback：`Admins can update their organization`/`Organization admins can update their organization`/`Admins can delete their organization` を DROP（1013 の authed_organizations_{update,delete}_by_admin を維持）。静的：破壊的DDLなし（3 drop）。`npm run test` 726。
 - [ ] DEV→prod 適用 → 現役 admin が org 更新/削除でき、UPDATE/DELETE が is_organization_admin ベースのみになること。問題時 1019_rollback。
+
+---
+
+## L2 旧検定フロー finalize の active_prompt クリアを CAS 化バッチ（2026-06-29）
+
+旧検定 finalizeScore（status:214）の `active_prompt_id` クリアが無条件（`.eq(id)` のみ）→ 二度押しや次の滑走者の prompt 既設時にそれを誤って消す競合。新フロー #3 と同じ compare-and-swap に。
+
+### 修正（アプリのみ・DBなし）
+- [x] `.../score/status/+page.server.ts` finalizeScore: `fetchActivePrompt` で現在の prompt を取得し、今確定する bib の prompt が依然 active な時のみ `.eq(active_prompt_id, activePrompt.id)` 付きでクリア。fetchActivePrompt を import。
+- [x] complete の changeEvent/endSession は据え置き（主任の意図的なナビ/終了・active_prompt は通常 null・競合小）。
+- [x] 型 256（新規0）／`npm run test` 726／prettier。eslint の未使用 error import は既存。
+
+### 残（Low/別件）
+L3 大会削除 owner化／profiles email 列保護／complete の changeEvent CAS（任意）／name キャッシュ400／realtime 自動再購読／Safari-dev。
