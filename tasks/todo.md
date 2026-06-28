@@ -725,3 +725,20 @@ org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SEL
 
 ### READ Med 残り（最後の1件）
 - profiles SELECT：`can_view_profile()` helper＋`scoreActions.ts:40` 是正＋per-row 性能・最も app-break リスク高（専用バッチ）。
+
+---
+
+## profiles SELECT を can_view_profile でスコープ（READ Med 最終）バッチ（2026-06-28）
+
+`Allow users to read all profiles`(authed=true) → 全ユーザー profiles 越境閲覧。cross-user read は shares-session（判定員名）と shares-org（メンバー名・archive）のみと判明 → `can_view_profile(uuid)`（own ∨ 同一session ∨ 同一org・SECURITY DEFINER・非再帰）で行スコープ化。scoreActions:40 の full_name 逆引きは新 RLS で自動スコープ＝コード変更不要＝**DBのみ**。
+
+### 成果物（DBのみ・アプリ無変更）
+- [x] `1017_profiles_select_scope.sql`＋rollback：`can_view_profile()` 作成、`Allow users to read all profiles` を DROP → `profiles_select_visible`(can_view_profile(id))。
+- [x] 静的：破壊的DDL無し（1 func/1 policy/1 drop）。`npm run test` 726（アプリ無変更）。
+
+### 運用（ユーザー実行・未実施／DEV 先行・E2E 厚め）
+- [ ] 適用前に profiles 全ポリシー snapshot（=true は当該1件のみか確認）。
+- [ ] DEV 適用 → **判定員名表示中心の E2E**（status/complete/details で他判定員名・参加者名／org メンバー名・archive 削除済メンバー名／採点書込み／越境不可／own 可／性能）→ profiles snapshot 再取得で =true 無し → prod 適用。問題時 1017_rollback。
+
+### 既知の残
+profiles の email 列レベル保護（行スコープのみ）、Low（L2/L3/orgs INSERT/020 removed_at/sessions 重複）。
