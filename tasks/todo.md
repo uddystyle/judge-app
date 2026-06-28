@@ -773,3 +773,16 @@ profiles の email 列レベル保護（行スコープのみ）、Low（L2/L3/o
 
 ### Out of scope
 scoreStatusManager:75 の name キャッシュ 400（実害小）、realtime CLOSED 自動再購読、profiles(1017) prod 適用、Low 群。
+
+---
+
+## 過剰ポリシーをゼロに（organizations 認証INSERT撤去）バッチ（2026-06-28）
+
+最終監査で残った唯一の =true（`Authenticated users can create organizations` authed INSERT）を撤去。org 作成は全て service-role（onboarding=supabaseAdmin/有料=RPC/webhook）でアプリ未使用＝安全。
+
+### 成果物（DBのみ・アプリなし）
+- [x] `1018_organizations_drop_authed_insert.sql`＋rollback：当該 INSERT(=true) を DROP（置換なし＝org INSERT は service-role のみ）。静的：破壊的DDLなし。`npm run test` 726。
+- [ ] DEV→prod 適用 → 最終監査クエリで機微テーブルの =true が **0件** になること（org 作成が通常どおり動くことも確認）。問題時 1018_rollback。
+
+### RLS ロックダウン総括（全完了見込み）
+results/session_participants/sessions(1008)/custom_events(1012/1014)/organizations(1013/1016/1018)/organization_members(1015)/profiles(1017) — 機微テーブルの越境 read/write/delete/insert の =true を一掃。
