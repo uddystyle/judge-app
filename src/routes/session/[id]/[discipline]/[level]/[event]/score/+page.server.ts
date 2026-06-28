@@ -5,7 +5,8 @@ import {
 	fetchSessionDetails,
 	fetchUserProfile,
 	isChiefJudge,
-	getJudgeName
+	getJudgeName,
+	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
 
@@ -111,6 +112,29 @@ export const actions: Actions = {
 			return fail(400, { error: scoreResult.error });
 		}
 		const score = scoreResult.value;
+
+		// M3: 多審制では、非主任・非ゲストの審判は主任が指定した active prompt の選手/種目のみ採点できる
+		// （新フロー input の #4 ゲートを検定 legacy フローへ移植）。
+		// participant 自動作成より前に判定し、指定外 bib への participant 量産（L4）も多審制で抑止する。
+		const gateSession = await fetchSessionDetails(supabase, sessionId);
+		if (gateSession.is_multi_judge && !isChiefJudge(user, gateSession) && !guestParticipant) {
+			const activePrompt = await fetchActivePrompt(supabase, sessionId);
+			if (
+				!activePrompt ||
+				activePrompt.bib_number !== bib ||
+				String(activePrompt.discipline) !== String(discipline) ||
+				String(activePrompt.level) !== String(level) ||
+				String(activePrompt.event_name) !== String(eventName)
+			) {
+				console.error('[submitScore/inspection] 主任指定外の bib/種目への採点を拒否:', {
+					bib,
+					discipline,
+					level,
+					eventName
+				});
+				return fail(403, { error: '主任検定員が指定した選手のみ採点できます。' });
+			}
+		}
 
 		// 3. ゼッケン番号の存在確認（なければ自動作成）
 		let participant: { id: string; bib_number: number } | null = null;

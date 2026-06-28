@@ -122,7 +122,7 @@ export const actions: Actions = {
 		if (promptError) {
 			console.error('Failed to create scoring prompt:', promptError);
 			console.error('Prompt error details:', JSON.stringify(promptError, null, 2));
-			return fail(500, { error: `採点指示の作成に失敗しました: ${promptError.message || JSON.stringify(promptError)}` });
+			return fail(500, { error: '採点指示の作成に失敗しました。再度お試しください。' });
 		}
 
 		// 2. sessionsテーブルのactive_prompt_idを、今作成した指示のIDに更新

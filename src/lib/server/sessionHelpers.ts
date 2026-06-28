@@ -185,6 +185,7 @@ export async function fetchActivePrompt(
 	bib_number: number;
 	level: string | null;
 	discipline: string | null;
+	event_name: string | null;
 } | null> {
 	const { data: session } = await supabase
 		.from('sessions')
@@ -198,7 +199,7 @@ export async function fetchActivePrompt(
 
 	const { data: prompt } = await supabase
 		.from('scoring_prompts')
-		.select('id, bib_number, level, discipline')
+		.select('id, bib_number, level, discipline, event_name')
 		.eq('id', session.active_prompt_id)
 		.maybeSingle();
 
