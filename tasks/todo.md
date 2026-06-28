@@ -669,3 +669,24 @@ Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner
 
 ### 残（別バッチ）
 READ Med 群（custom_events authed SELECT/organizations SELECT/organization_members select_all_memberships/profiles read-all=true）、organizations INSERT(true)、sessions 重複/旧ポリシー整理、Low（L2/L3）。
+
+---
+
+## custom_events authed SELECT scope（READ Med 第1弾）バッチ（2026-06-28）
+
+READ Med 4件のうち最も安全な custom_events authed SELECT を対応。`Authenticated users can view custom events`(=true) → 越境で全種目閲覧可。
+
+### 成果物（DBのみ・アプリ無変更）
+- [x] `1014_custom_events_select_lockdown.sql`＋rollback：authed SELECT を `is_session_member(session_id) OR (session の org メンバー)` に限定。判定員＋org管理者をカバー、越境閲覧不可。ヘルパー(1007/1012)既存。
+- [x] 静的：破壊的DDL無し（1 create/1 drop）。`npm run test` 726（アプリ無変更）。
+
+### 運用（ユーザー実行・未実施／DEV 先行）
+- [ ] DEV に 1014 適用 → 機能E2E（判定員/org管理者が種目読める・別orgは不可・ゲスト採点/公開scoreboard 不変）→ 監査query1で custom_events SELECT が =true で出ないこと → prod 適用。
+
+### READ Med 残り（前提が異なる・別バッチ）
+- organization_members SELECT：052 helper パターンで scope 可だが**RLS再帰の歴史** → 適用前に org_members 全SELECTポリシーの snapshot を取り旧再帰ポリシーを確実にDROP。
+- organizations SELECT：メンバースコープ化は `organization/join`（招待コードで非メンバーorg読取）を壊す → 当該参照の **service-role 化アプリ変更が必要**（batch7 型）。
+- profiles SELECT：判定員名表示が他者 profiles を読む → `can_view_profile()` helper＋`scoreActions.ts:40` 無スコープ検索是正＋性能確認。**最も app-break リスク高**・専用バッチ。
+
+### Low（既知）
+L2 active_prompt CAS／L3 大会 requestCorrection 削除 owner化／organizations INSERT(true)／020 admin の removed_at 未チェック。
