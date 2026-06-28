@@ -45,11 +45,19 @@ export interface ScoreStatusManagerHandle {
 	getAthleteId(): string | null;
 }
 
-export function createScoreStatusManager(config: ScoreStatusManagerConfig): ScoreStatusManagerHandle {
+export function createScoreStatusManager(
+	config: ScoreStatusManagerConfig
+): ScoreStatusManagerHandle {
 	const {
-		supabase, sessionId, eventId, bib, isTrainingMode,
-		totalJudges, eventInfo, excludeExtremes,
-		onStatusChange, onConnectionError
+		supabase,
+		sessionId,
+		eventId,
+		bib,
+		isTrainingMode,
+		totalJudges,
+		eventInfo,
+		onStatusChange,
+		onConnectionError
 	} = config;
 
 	let currentStatus: ScoreStatus = { ...config.initialStatus };
@@ -149,9 +157,7 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 			console.log('[scoreStatusManager] training_scores取得:', { trainingScores, scoresError });
 
 			if (trainingScores && trainingScores.length > 0) {
-				const judgeIds = trainingScores
-					.filter((s: any) => s.judge_id)
-					.map((s: any) => s.judge_id);
+				const judgeIds = trainingScores.filter((s: any) => s.judge_id).map((s: any) => s.judge_id);
 
 				const guestIdentifiers = trainingScores
 					.filter((s: any) => s.guest_identifier)
@@ -222,10 +228,10 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 
 			if (response.ok) {
 				const result = await response.json();
-				const requiredJudges = excludeExtremes ? 5 : 3;
+				// 必要採点数は API がモード別に算出済み（大会=exclude_extremes→3/5、検定=required_judges）。
+				// クライアントで上書きしない（検定でも正しい値になる）。
 				updateStatus({
-					...result,
-					requiredJudges
+					...result
 				});
 			} else {
 				const errorText = await response.text();
@@ -261,9 +267,10 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 			});
 
 			// Immutable update — never mutate currentStatus.scores in place
-			const newScores = existingIndex !== -1
-				? currentStatus.scores.map((s, i) => i === existingIndex ? newScore : s)
-				: [...currentStatus.scores, newScore];
+			const newScores =
+				existingIndex !== -1
+					? currentStatus.scores.map((s, i) => (i === existingIndex ? newScore : s))
+					: [...currentStatus.scores, newScore];
 
 			updateStatus({ ...currentStatus, scores: newScores });
 		} else if (payload.eventType === 'UPDATE') {
@@ -275,9 +282,7 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 							? { ...s, score: payload.new.score }
 							: s;
 					} else {
-						return s.judge_id === payload.new.judge_id
-							? { ...s, score: payload.new.score }
-							: s;
+						return s.judge_id === payload.new.judge_id ? { ...s, score: payload.new.score } : s;
 					}
 				})
 			});
@@ -351,7 +356,9 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 				table: 'training_scores',
 				filter: `event_id=eq.${eventId}`,
 				pollingFn: fetchStatus,
-				onConnectionError: (hasError) => { onConnectionError(hasError); },
+				onConnectionError: (hasError) => {
+					onConnectionError(hasError);
+				},
 				onPayload: handleTrainingScorePayload
 			});
 		} else {
@@ -360,7 +367,9 @@ export function createScoreStatusManager(config: ScoreStatusManagerConfig): Scor
 				table: 'results',
 				filter: `session_id=eq.${sessionId},bib=eq.${parseInt(bib || '0')}`,
 				pollingFn: fetchStatus,
-				onConnectionError: (hasError) => { onConnectionError(hasError); },
+				onConnectionError: (hasError) => {
+					onConnectionError(hasError);
+				},
 				onPayload: handleTournamentScorePayload
 			});
 		}

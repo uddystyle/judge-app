@@ -347,6 +347,13 @@ export const actions: Actions = {
 			return fail(400, { error: '採点結果がありません。' });
 		}
 
+		// M1: 多審制の必要採点数をサーバ側でも強制（クライアントの canSubmit だけに依存しない）。
+		// 大会は exclude_extremes で 3審3採 / 5審3採。
+		const requiredCount = sessionData.exclude_extremes ? 5 : 3;
+		if (scores.length < requiredCount) {
+			return fail(400, { error: `必要な採点数（${requiredCount}人）に達していません。` });
+		}
+
 		const scoreValues = scores.map((s) => parseFloat(s.score));
 
 		const calcResult = calculateFinalScore(scoreValues, {

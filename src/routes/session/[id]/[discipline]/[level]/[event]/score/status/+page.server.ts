@@ -1,11 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
-import {
-	fetchSessionDetails,
-	fetchUserProfile,
-	isChiefJudge
-} from '$lib/server/sessionHelpers';
+import { fetchSessionDetails, fetchUserProfile, isChiefJudge } from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
@@ -25,7 +21,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	const profile = await fetchUserProfile(supabase, user);
 
 	// 初期スコアデータを取得（SSR）
-	let initialScoreStatus: { scores: any[]; requiredJudges: number } = { scores: [], requiredJudges: 1 };
+	let initialScoreStatus: { scores: any[]; requiredJudges: number } = {
+		scores: [],
+		requiredJudges: 1
+	};
 
 	if (bib && discipline && level && event) {
 		const { data: scores } = await supabase
@@ -37,7 +36,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 			.eq('level', level)
 			.eq('event_name', event);
 
-		const requiredJudges = sessionDetails.exclude_extremes ? 5 : 3;
+		// 検定は required_judges（主任設定）を必要数に使う（大会の 3/5 慣習は適用しない）。
+		const requiredJudges = sessionDetails.required_judges || 1;
 		initialScoreStatus = {
 			scores: scores || [],
 			requiredJudges
@@ -101,7 +101,11 @@ export const actions: Actions = {
 			judge_name: judgeName
 		});
 
-		const { data: deletedData, error: deleteError, count } = await supabase
+		const {
+			data: deletedData,
+			error: deleteError,
+			count
+		} = await supabase
 			.from('results')
 			.delete({ count: 'exact' })
 			.eq('session_id', id)
@@ -125,7 +129,9 @@ export const actions: Actions = {
 		});
 
 		if (!count || count === 0) {
-			console.error('[requestCorrection] ⚠️ 削除された行が0件です。RLSポリシーの問題の可能性があります。');
+			console.error(
+				'[requestCorrection] ⚠️ 削除された行が0件です。RLSポリシーの問題の可能性があります。'
+			);
 			return fail(500, { error: '得点の削除に失敗しました（削除された行が0件）。' });
 		}
 
@@ -182,6 +188,12 @@ export const actions: Actions = {
 
 		if (!scores || scores.length === 0) {
 			return fail(400, { error: '採点結果がありません。' });
+		}
+
+		// M1/M2: 検定は required_judges（主任設定）をサーバ側で強制。single-judge は 1＝実質ゲート無し。
+		const requiredCount = isMultiJudge ? sessionData.required_judges || 1 : 1;
+		if (scores.length < requiredCount) {
+			return fail(400, { error: `必要な採点数（${requiredCount}人）に達していません。` });
 		}
 
 		const useSum = !!(sessionData.is_tournament_mode && sessionData.score_calculation === 'sum');
