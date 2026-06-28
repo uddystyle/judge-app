@@ -825,3 +825,19 @@ L3 大会削除 owner化／profiles email 列保護／complete の changeEvent C
 
 ### Out of scope
 旧検定(certification)の correction owner 化（フォーム未連携・別途）、profiles email 列保護、別件（name キャッシュ400／realtime 自動再購読／Safari-dev）。
+
+---
+
+## profiles.email 列を削除（PII 列保護・auth.users.email へ一本化）バッチ（2026-06-29）
+
+1017 で行スコープ化しても email 列が session/org 共有者に読めた。email は auth.users.email の冗長コピー。signup トリガー handle_new_user は email を入れていない（prod/dev 確認）ので列削除が安全。
+
+### 変更（アプリ先デプロイ → DB）
+- [x] profiles INSERT 3箇所から email 除去（account/onboarding/invite-complete の create-if-absent）。
+- [x] Stripe 2箇所: `select(full_name, email)`→`select(full_name)`、customer email を `user.email || undefined` に（profiles.email 不参照）。
+- [x] select(*) 16箇所は不変（列消滅で返らないだけ・無エラー）。
+- [x] `1020_profiles_drop_email.sql`＋rollback（add column＋auth から backfill）。型 256（新規0）／test 726／eslint 新規0／drop column のみ。
+
+### デプロイ順序（厳守・batch7型）
+- [ ] アプリ（email 参照全廃）を main push＝本番デプロイ → 反映確認 → 1020 を DEV→prod 適用。逆順だと旧アプリ insert(email)/select(email) が落ちる。
+- [ ] DEV E2E: 新規 signup/onboarding/招待受諾で profile 作成（email無し）、account の email 表示（user.email）、Stripe checkout/upgrade、直 PostgREST で profiles?select=email がエラー/無。

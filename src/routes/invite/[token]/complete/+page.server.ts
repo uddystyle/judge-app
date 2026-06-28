@@ -67,7 +67,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	// 招待メールが指定されている場合、ユーザーのメールアドレスと一致するかチェック
 	// 正規化して比較することで、大文字小文字の違いや空白による回避を防ぐ
-	if (invitation.email && user.email && normalizeEmail(invitation.email) !== normalizeEmail(user.email)) {
+	if (
+		invitation.email &&
+		user.email &&
+		normalizeEmail(invitation.email) !== normalizeEmail(user.email)
+	) {
 		console.error('[Invite Complete] Email mismatch:', {
 			invitationEmail: invitation.email,
 			userEmail: user.email,
@@ -104,7 +108,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 		const { error: profileError } = await supabaseAdmin.from('profiles').insert({
 			id: user.id,
-			email: user.email!,
 			full_name: fullName
 		});
 
@@ -112,7 +115,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			// PostgreSQLエラーコード '23505' は一意制約違反
 			// 同時アクセスでプロフィールが既に作成されている場合、成功として扱う
 			if (profileError.code === '23505') {
-				console.log('[Invite Complete] Profile already exists (race condition detected), continuing');
+				console.log(
+					'[Invite Complete] Profile already exists (race condition detected), continuing'
+				);
 			} else {
 				// その他のエラーはログに記録するが、招待フローは継続
 				console.error('[Invite Complete] Error creating profile:', {
@@ -144,7 +149,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		// 同時アクセスでexistingMembershipチェック後にinsertが競合した場合に発生
 		// この場合、既に参加済みとして成功扱いし、組織ページにリダイレクト
 		if (memberError.code === '23505') {
-			console.log('[Invite Complete] User is already a member (race condition detected), redirecting to organization');
+			console.log(
+				'[Invite Complete] User is already a member (race condition detected), redirecting to organization'
+			);
 			throw redirect(303, `/organization/${invitation.organization_id}`);
 		}
 

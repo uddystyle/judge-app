@@ -33,7 +33,6 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		console.log('[onboarding/load] プロフィールが存在しないため作成します:', user.id);
 		const { error: createProfileError } = await supabase.from('profiles').insert({
 			id: user.id,
-			email: user.email || '',
 			full_name: user.user_metadata?.full_name || ''
 		});
 

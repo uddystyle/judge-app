@@ -3,7 +3,11 @@ import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
 import { env } from '$env/dynamic/private';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
-import { validateRedirectUrl, validateOrganizationName, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
+import {
+	validateRedirectUrl,
+	validateOrganizationName,
+	ALLOWED_STRIPE_REDIRECT_PATHS
+} from '$lib/server/validation';
 
 // Stripe Price IDのマッピング
 // 注意: 実際のPrice IDはStripeダッシュボードで作成後、環境変数に設定してください
@@ -74,13 +78,23 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// Security: Validate redirect URLs to prevent Open Redirect attacks
 		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!returnValidation.valid) {
-			console.error('[Organization Checkout] Invalid returnUrl:', returnUrl, 'Error:', returnValidation.error);
+			console.error(
+				'[Organization Checkout] Invalid returnUrl:',
+				returnUrl,
+				'Error:',
+				returnValidation.error
+			);
 			throw error(400, `無効なreturnUrlです: ${returnValidation.error}`);
 		}
 
 		const cancelValidation = validateRedirectUrl(cancelUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!cancelValidation.valid) {
-			console.error('[Organization Checkout] Invalid cancelUrl:', cancelUrl, 'Error:', cancelValidation.error);
+			console.error(
+				'[Organization Checkout] Invalid cancelUrl:',
+				cancelUrl,
+				'Error:',
+				cancelValidation.error
+			);
 			throw error(400, `無効なcancelUrlです: ${cancelValidation.error}`);
 		}
 
@@ -97,7 +111,12 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		if (priceId.includes('placeholder')) {
 			// 詳細はログのみに出力（セキュリティ：内部実装の詳細を隠す）
 			console.error('[Organization Checkout API] CRITICAL: Stripe Price ID not configured!');
-			console.error('[Organization Checkout API] planType:', planType, 'billingInterval:', billingInterval);
+			console.error(
+				'[Organization Checkout API] planType:',
+				planType,
+				'billingInterval:',
+				billingInterval
+			);
 
 			// クライアントには汎用的なメッセージ
 			throw error(500, 'サービスの設定エラーが発生しました。管理者に連絡してください。');
@@ -106,13 +125,13 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// 4. ユーザー情報を取得
 		const { data: profile } = await supabase
 			.from('profiles')
-			.select('full_name, email')
+			.select('full_name')
 			.eq('id', user.id)
 			.single();
 
 		// 5. Stripe Customerを作成
 		const customer = await stripe.customers.create({
-			email: user.email || profile?.email || undefined,
+			email: user.email || undefined,
 			name: profile?.full_name || undefined,
 			metadata: {
 				user_id: user.id,
@@ -169,9 +188,8 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 			sessionParams.discounts = [{ coupon: couponCode }];
 			// ログには最初の10文字のみ出力（プライバシー保護）
-			const maskedCoupon = couponCode.length > 10
-				? couponCode.substring(0, 10) + '...'
-				: couponCode;
+			const maskedCoupon =
+				couponCode.length > 10 ? couponCode.substring(0, 10) + '...' : couponCode;
 			console.log('[Organization Checkout API] クーポンコード適用:', maskedCoupon);
 		}
 

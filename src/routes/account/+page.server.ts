@@ -24,7 +24,6 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 			.from('profiles')
 			.insert({
 				id: user.id,
-				email: user.email,
 				full_name: ''
 			})
 			.select('full_name')
