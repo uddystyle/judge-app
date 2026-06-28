@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { currentSession, currentBib, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
+	import {
+		currentSession,
+		currentBib,
+		currentDiscipline,
+		currentLevel,
+		currentEvent
+	} from '$lib/stores';
 	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import { goto } from '$app/navigation';
@@ -21,9 +27,10 @@
 
 	// URLパラメータで終了フラグをチェック（リアクティブに監視）
 	// ただし、restart=true パラメータがある場合は終了フラグを無視
-	$: isSessionEnded = $page.url.searchParams.get('restart') === 'true'
-		? false
-		: $page.url.searchParams.get('ended') === 'true';
+	$: isSessionEnded =
+		$page.url.searchParams.get('restart') === 'true'
+			? false
+			: $page.url.searchParams.get('ended') === 'true';
 
 	// URLパラメータから join フラグを取得（リアクティブに監視）
 	$: shouldShowJoinUI = $page.url.searchParams.get('join') === 'true';
@@ -36,7 +43,14 @@
 
 	// デバッグ: isSessionEndedの変更を監視
 	$: {
-		console.log('[DEBUG] isSessionEnded changed:', isSessionEnded, 'isChief:', data.isChief, 'URL:', $page.url.href);
+		console.log(
+			'[DEBUG] isSessionEnded changed:',
+			isSessionEnded,
+			'isChief:',
+			data.isChief,
+			'URL:',
+			$page.url.href
+		);
 		console.log('[DEBUG] URL params:', {
 			ended: $page.url.searchParams.get('ended'),
 			restart: $page.url.searchParams.get('restart'),
@@ -80,7 +94,8 @@
 		// 注意: 終了画面でも監視をセットアップすることで、主任検定員がセッションを再開した時に自動的に待機画面に遷移できる
 		// 監視不要なのは以下の場合のみ：
 		// - ゲストユーザーの参加完了画面（セッションに参加ボタンで待機画面へ）
-		const shouldSetupMonitoring = !data.isChief && (isSessionEnded || shouldShowJoinUI || !data.guestIdentifier);
+		const shouldSetupMonitoring =
+			!data.isChief && (isSessionEnded || shouldShowJoinUI || !data.guestIdentifier);
 		console.log('[DEBUG] Realtime監視チェック:', {
 			isChief: data.isChief,
 			isSessionEnded,
@@ -134,7 +149,9 @@
 						console.log('[一般検定員/realtime] ========== 終了検知チェック ==========');
 						console.log('[一般検定員/realtime] newStatus === "ended":', newStatus === 'ended');
 						if (newStatus === 'ended') {
-							console.log('[一般検定員/realtime] ✅✅✅ セッション終了を検知！終了画面に遷移します！');
+							console.log(
+								'[一般検定員/realtime] ✅✅✅ セッション終了を検知！終了画面に遷移します！'
+							);
 							if (!isPageActive) {
 								console.log('[一般検定員/realtime] ⚠️ ページが非アクティブのため、遷移をスキップ');
 								return;
@@ -186,15 +203,25 @@
 									if (participant) {
 										const eventId = promptData.level; // level カラムに eventId を保存している
 										if (mode === 'tournament') {
-											console.log('[一般検定員/大会] 採点画面に遷移:', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											console.log(
+												'[一般検定員/大会] 採点画面に遷移:',
+												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
 											previousPromptId = newPromptId;
-											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(
+												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 										} else {
-											console.log('[一般検定員/研修] 採点画面に遷移:', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											console.log(
+												'[一般検定員/研修] 採点画面に遷移:',
+												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
 											previousPromptId = newPromptId;
-											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(
+												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 										}
 									}
 								} else {
@@ -259,9 +286,7 @@
 
 										// 既に採点済みかチェック
 										const scoreTable = mode === 'training' ? 'training_scores' : 'results';
-										let scoreQuery = supabase
-											.from(scoreTable)
-											.select('id');
+										let scoreQuery = supabase.from(scoreTable).select('id');
 
 										if (mode === 'training') {
 											scoreQuery = scoreQuery
@@ -302,15 +327,25 @@
 										currentBib.set(promptData.bib_number);
 
 										if (mode === 'tournament') {
-											console.log('[一般検定員/大会] 採点画面に遷移(既存):', `/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											console.log(
+												'[一般検定員/大会] 採点画面に遷移(既存):',
+												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
 											previousPromptId = currentPromptId;
-											goto(`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(
+												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 										} else {
-											console.log('[一般検定員/研修] 採点画面に遷移(既存):', `/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											console.log(
+												'[一般検定員/研修] 採点画面に遷移(既存):',
+												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
 											previousPromptId = currentPromptId;
-											goto(`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+											goto(
+												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+											);
 										}
 									}
 								} else {
@@ -324,7 +359,9 @@
 							}
 						}
 					} else if (status === 'CHANNEL_ERROR') {
-						console.error('[一般検定員] ❌ チャンネルエラー - フォールバックポーリングに切り替えます');
+						console.error(
+							'[一般検定員] ❌ チャンネルエラー - フォールバックポーリングに切り替えます'
+						);
 						// フォールバックポーリング開始
 						startFallbackPolling();
 					} else if (status === 'TIMED_OUT') {
@@ -332,7 +369,9 @@
 						// フォールバックポーリング開始
 						startFallbackPolling();
 					} else if (status === 'CLOSED') {
-						console.log('[一般検定員] リアルタイム接続が閉じられました - フォールバックポーリング確認');
+						console.log(
+							'[一般検定員] リアルタイム接続が閉じられました - フォールバックポーリング確認'
+						);
 						// 念のためフォールバックポーリングを開始
 						startFallbackPolling();
 					}
@@ -419,12 +458,16 @@
 						const eventId = promptData.level;
 
 						// 既存採点チェック
-						let scoreQuery = supabase.from(mode === 'training' ? 'training_scores' : 'results').select('id');
+						let scoreQuery = supabase
+							.from(mode === 'training' ? 'training_scores' : 'results')
+							.select('id');
 
 						if (mode === 'training') {
 							scoreQuery = scoreQuery.eq('event_id', eventId).eq('athlete_id', participant.id);
 						} else {
-							scoreQuery = scoreQuery.eq('session_id', data.sessionDetails.id).eq('bib', promptData.bib_number);
+							scoreQuery = scoreQuery
+								.eq('session_id', data.sessionDetails.id)
+								.eq('bib', promptData.bib_number);
 						}
 
 						if (data.guestIdentifier) {
@@ -446,8 +489,8 @@
 						}
 
 						// 採点画面に遷移
-							// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-							previousPromptId = newPromptId;
+						// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+						previousPromptId = newPromptId;
 						if (mode === 'tournament') {
 							goto(
 								`/session/${data.sessionDetails.id}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
@@ -478,7 +521,7 @@
 			return;
 		}
 
-		console.log('[fallback] フォールバックポーリングを開始（30秒ごと）');
+		console.log('[fallback] フォールバックポーリングを開始（3秒ごと）');
 
 		// ✅ previousPromptId が null の場合のみ初期化（巻き戻し防止）
 		// Realtimeで既に処理済みの prompt を上書きしないようにする
@@ -489,8 +532,10 @@
 			console.log('[fallback] previousPromptId を保持:', previousPromptId);
 		}
 
-		// 30秒ごとにポーリング（Realtimeのバックアップなので低頻度）
-		fallbackPolling = setInterval(checkSessionStatus, 30000);
+		// Realtimeと並行する取りこぼし対策。realtime が瞬断すると主任の指示を取り逃すため、
+		// 会場WiFi前提で短間隔（3秒）にして遷移の最悪待ち時間を抑える。
+		// ポーリング自体は active_prompt_id 未変化なら sessions の単一行 SELECT で早期 return＝軽量。
+		fallbackPolling = setInterval(checkSessionStatus, 3000);
 	}
 
 	function selectDiscipline(discipline: string) {
@@ -507,7 +552,12 @@
 	}
 </script>
 
-<Header pageUser={data.user} pageProfile={data.profile} isGuest={!data.user && !!data.guestIdentifier} guestName={data.guestParticipant?.guest_name || null} />
+<Header
+	pageUser={data.user}
+	pageProfile={data.profile}
+	isGuest={!data.user && !!data.guestIdentifier}
+	guestName={data.guestParticipant?.guest_name || null}
+/>
 
 <div class="container">
 	{#if isSessionExpired}
@@ -521,15 +571,31 @@
 
 	{#if isSessionEnded}
 		<!-- 終了画面（主任・一般共通） -->
-		<div class="instruction">{data.isTournamentMode ? `${m.mode_tournament()}終了` : data.isTrainingMode ? `${m.mode_training()}終了` : `${m.mode_certification()}終了`}</div>
+		<div class="instruction">
+			{data.isTournamentMode
+				? `${m.mode_tournament()}終了`
+				: data.isTrainingMode
+					? `${m.mode_training()}終了`
+					: `${m.mode_certification()}終了`}
+		</div>
 		<div class="end-message">
-			<p>この{data.isTournamentMode ? m.mode_tournament() : data.isTrainingMode ? m.mode_training() : m.mode_certification()}は終了しました。</p>
+			<p>
+				この{data.isTournamentMode
+					? m.mode_tournament()
+					: data.isTrainingMode
+						? m.mode_training()
+						: m.mode_certification()}は終了しました。
+			</p>
 
 			{#if !data.isChief && data.isTrainingMode}
 				<!-- 研修モード: 主任検定員以外（一般検定員とゲストユーザー）に現在の設定を表示 -->
 				<div class="settings-info">
 					<p class="settings-label">現在の設定:</p>
-					<div class="settings-badge" class:multi-judge-on={data.isMultiJudge} class:multi-judge-off={!data.isMultiJudge}>
+					<div
+						class="settings-badge"
+						class:multi-judge-on={data.isMultiJudge}
+						class:multi-judge-off={!data.isMultiJudge}
+					>
 						{#if data.isMultiJudge}
 							複数検定員モード ON
 						{:else}
@@ -540,28 +606,33 @@
 
 				{#if data.isMultiJudge && data.guestIdentifier}
 					<p class="info-text" style="margin-top: 16px; color: var(--text-secondary);">
-						主任検定員がセッションを再開する場合は、<br>下のボタンから再参加できます。
+						主任検定員がセッションを再開する場合は、<br />下のボタンから再参加できます。
 					</p>
 				{/if}
 
 				<div class="nav-buttons" style="margin-top: 24px;">
 					<!-- 設定変更確認ボタン（主任検定員以外全員に表示） -->
-					<NavButton on:click={() => {
-						// ページをリロードして最新の設定を取得（ended=true を維持）
-						const url = data.guestIdentifier
-							? `/session/${data.sessionDetails.id}?ended=true`
-							: `/session/${data.sessionDetails.id}?ended=true`;
-						window.location.href = url;
-					}}>
+					<NavButton
+						on:click={() => {
+							// ページをリロードして最新の設定を取得（ended=true を維持）
+							const url = data.guestIdentifier
+								? `/session/${data.sessionDetails.id}?ended=true`
+								: `/session/${data.sessionDetails.id}?ended=true`;
+							window.location.href = url;
+						}}
+					>
 						設定の変更を確認
 					</NavButton>
 
 					{#if data.guestIdentifier}
 						<!-- ゲストユーザー向け：セッション再開ボタン -->
-						<NavButton variant="primary" on:click={() => {
-							// 完全にページをリロードして監視を再開
-							window.location.href = `/session/${data.sessionDetails.id}?join=true`;
-						}}>
+						<NavButton
+							variant="primary"
+							on:click={() => {
+								// 完全にページをリロードして監視を再開
+								window.location.href = `/session/${data.sessionDetails.id}?join=true`;
+							}}
+						>
 							セッションに参加
 						</NavButton>
 					{/if}
@@ -574,28 +645,33 @@
 
 				{#if data.guestIdentifier}
 					<p class="info-text" style="margin-top: 16px; color: var(--text-secondary);">
-						主任検定員がセッションを再開する場合は、<br>下のボタンから再参加できます。
+						主任検定員がセッションを再開する場合は、<br />下のボタンから再参加できます。
 					</p>
 				{/if}
 
 				<div class="nav-buttons" style="margin-top: 24px;">
 					<!-- 設定変更確認ボタン（主任検定員以外全員に表示） -->
-					<NavButton on:click={() => {
-						// ページをリロードして最新の設定を取得（ended=true を維持）
-						const url = data.guestIdentifier
-							? `/session/${data.sessionDetails.id}?ended=true`
-							: `/session/${data.sessionDetails.id}?ended=true`;
-						window.location.href = url;
-					}}>
+					<NavButton
+						on:click={() => {
+							// ページをリロードして最新の設定を取得（ended=true を維持）
+							const url = data.guestIdentifier
+								? `/session/${data.sessionDetails.id}?ended=true`
+								: `/session/${data.sessionDetails.id}?ended=true`;
+							window.location.href = url;
+						}}
+					>
 						設定の変更を確認
 					</NavButton>
 
 					{#if data.guestIdentifier}
 						<!-- ゲストユーザー向け：セッション再開ボタン -->
-						<NavButton variant="primary" on:click={() => {
-							// 完全にページをリロードして監視を再開
-							window.location.href = `/session/${data.sessionDetails.id}?join=true`;
-						}}>
+						<NavButton
+							variant="primary"
+							on:click={() => {
+								// 完全にページをリロードして監視を再開
+								window.location.href = `/session/${data.sessionDetails.id}?join=true`;
+							}}
+						>
 							セッションに参加
 						</NavButton>
 					{/if}
@@ -616,9 +692,12 @@
 				{/if}
 			</div>
 			<div class="list-keypad">
-				<NavButton variant="primary" on:click={() => {
-					goto(`/session/${data.sessionDetails.id}/training-events`);
-				}}>
+				<NavButton
+					variant="primary"
+					on:click={() => {
+						goto(`/session/${data.sessionDetails.id}/training-events`);
+					}}
+				>
 					種目選択へ進む
 				</NavButton>
 			</div>
@@ -629,7 +708,10 @@
 				<p>先に種目を設定してください。</p>
 			</div>
 			<div class="list-keypad">
-				<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/training-setup`)}>
+				<NavButton
+					variant="primary"
+					on:click={() => goto(`/session/${data.sessionDetails.id}/training-setup`)}
+				>
 					研修設定へ進む
 				</NavButton>
 			</div>
@@ -643,9 +725,7 @@
 					<p>種目選択画面に進んでください</p>
 				</div>
 				<div class="list-keypad">
-					<NavButton variant="primary" on:click={goToTournamentEvents}>
-						種目選択へ進む
-					</NavButton>
+					<NavButton variant="primary" on:click={goToTournamentEvents}>種目選択へ進む</NavButton>
 					<NavButton on:click={goToTournamentSetup}>大会設定を変更</NavButton>
 				</div>
 			{:else}
@@ -655,9 +735,7 @@
 					<p>先に種目を設定してください。</p>
 				</div>
 				<div class="list-keypad">
-					<NavButton variant="primary" on:click={goToTournamentSetup}>
-						大会設定へ進む
-					</NavButton>
+					<NavButton variant="primary" on:click={goToTournamentSetup}>大会設定へ進む</NavButton>
 				</div>
 			{/if}
 		{:else}
@@ -677,24 +755,46 @@
 			<!-- ゲストユーザー: わかりやすい待機画面 -->
 			<div class="guest-waiting-container">
 				<div class="guest-waiting-icon">
-					<svg class="checkmark-icon" width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" fill="none" opacity="0.2"/>
-						<path d="M25 40 L35 50 L55 30" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+					<svg
+						class="checkmark-icon"
+						width="80"
+						height="80"
+						viewBox="0 0 80 80"
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<circle
+							cx="40"
+							cy="40"
+							r="35"
+							stroke="currentColor"
+							stroke-width="3"
+							fill="none"
+							opacity="0.2"
+						/>
+						<path
+							d="M25 40 L35 50 L55 30"
+							stroke="currentColor"
+							stroke-width="4"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						/>
 					</svg>
 				</div>
 				<div class="instruction">参加完了</div>
 				<div class="guest-wait-message">
 					<p class="guest-wait-title">セッションへの参加が完了しました</p>
-					<p class="guest-wait-subtitle">
-						下のボタンからセッションに参加してください
-					</p>
+					<p class="guest-wait-subtitle">下のボタンからセッションに参加してください</p>
 				</div>
 				<!-- すべてのモード共通: セッションに参加ボタン -->
 				<div class="guest-action-buttons">
-					<NavButton variant="primary" on:click={() => {
-						// ゲストパラメータを保持したままメインセッションページに戻る（待機画面へ遷移）
-						window.location.href = `/session/${data.sessionDetails.id}?join=true`;
-					}}>
+					<NavButton
+						variant="primary"
+						on:click={() => {
+							// ゲストパラメータを保持したままメインセッションページに戻る（待機画面へ遷移）
+							window.location.href = `/session/${data.sessionDetails.id}?join=true`;
+						}}
+					>
 						セッションに参加
 					</NavButton>
 				</div>
@@ -705,9 +805,12 @@
 			<div class="wait-message">
 				<p>種目選択画面から採点を開始できます。</p>
 				<div class="nav-buttons">
-					<NavButton variant="primary" on:click={() => {
-						goto(`/session/${data.sessionDetails.id}/training-events`);
-					}}>
+					<NavButton
+						variant="primary"
+						on:click={() => {
+							goto(`/session/${data.sessionDetails.id}/training-events`);
+						}}
+					>
 						種目選択へ進む
 					</NavButton>
 				</div>
@@ -718,7 +821,10 @@
 			<div class="wait-message">
 				<p>種目選択画面から採点を開始できます。</p>
 				<div class="nav-buttons">
-					<NavButton variant="primary" on:click={() => goto(`/session/${data.sessionDetails.id}/tournament-events`)}>
+					<NavButton
+						variant="primary"
+						on:click={() => goto(`/session/${data.sessionDetails.id}/tournament-events`)}
+					>
 						種目選択へ進む
 					</NavButton>
 				</div>
@@ -737,12 +843,46 @@
 			<!-- 複数検定員モード: 準備中表示 -->
 			<div class="waiting-container">
 				<div class="waiting-icon">
-					<svg class="clock-icon" width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" opacity="0.2"/>
-						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" stroke-dasharray="220" stroke-dashoffset="0" class="clock-circle"/>
-						<line x1="40" y1="40" x2="40" y2="20" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="clock-hand-hour"/>
-						<line x1="40" y1="40" x2="55" y2="40" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="clock-hand-minute"/>
-						<circle cx="40" cy="40" r="3" fill="currentColor"/>
+					<svg
+						class="clock-icon"
+						width="80"
+						height="80"
+						viewBox="0 0 80 80"
+						fill="none"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" opacity="0.2" />
+						<circle
+							cx="40"
+							cy="40"
+							r="35"
+							stroke="currentColor"
+							stroke-width="3"
+							stroke-dasharray="220"
+							stroke-dashoffset="0"
+							class="clock-circle"
+						/>
+						<line
+							x1="40"
+							y1="40"
+							x2="40"
+							y2="20"
+							stroke="currentColor"
+							stroke-width="3"
+							stroke-linecap="round"
+							class="clock-hand-hour"
+						/>
+						<line
+							x1="40"
+							y1="40"
+							x2="55"
+							y2="40"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							class="clock-hand-minute"
+						/>
+						<circle cx="40" cy="40" r="3" fill="currentColor" />
 					</svg>
 				</div>
 				<div class="instruction">準備中…</div>
@@ -858,7 +998,8 @@
 	}
 
 	@keyframes dash {
-		0%, 100% {
+		0%,
+		100% {
 			stroke-dashoffset: 0;
 		}
 		50% {
@@ -928,7 +1069,8 @@
 	}
 
 	@keyframes pulse {
-		0%, 100% {
+		0%,
+		100% {
 			transform: scale(1);
 			opacity: 1;
 		}

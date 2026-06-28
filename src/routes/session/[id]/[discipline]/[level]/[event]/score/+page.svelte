@@ -7,7 +7,14 @@
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import type { PageData } from './$types';
 	import { goto } from '$app/navigation';
-	import { currentBib, userProfile, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
+	import {
+		currentBib,
+		userProfile,
+		currentSession,
+		currentDiscipline,
+		currentLevel,
+		currentEvent
+	} from '$lib/stores';
 	import { get } from 'svelte/store';
 	import { applyAction, deserialize } from '$app/forms';
 	import type { ActionResult } from '@sveltejs/kit';
@@ -49,7 +56,9 @@
 
 		// ゼッケン入力画面に遷移
 		const guestIdentifier = $page.url.searchParams.get('guest');
-		goto(`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}`);
+		goto(
+			`/session/${$page.params.id}/${$page.params.discipline}/${$page.params.level}/${$page.params.event}`
+		);
 	}
 
 	async function handleSubmit(event: CustomEvent<{ score: number }>) {
@@ -59,7 +68,9 @@
 		// URLからパラメータを取得
 		const { id, discipline, level, event: eventParam } = $page.params;
 
-		const bib = $currentBib;
+		// 複数検定員は active_prompt 由来の権威 bib を優先（揮発ストアの null/stale を避ける）。
+		// 単独検定員は従来どおりストア（主任が手動選択した bib）。
+		const bib = data.isMultiJudge ? (data.activeBib ?? $currentBib) : $currentBib;
 
 		if (!bib) {
 			loading = false;
@@ -114,7 +125,11 @@
 		currentDiscipline.set(discipline);
 		currentLevel.set(level);
 		currentEvent.set(event);
-		// currentBibは既にストアに設定されているはず
+		// 複数検定員: 表示と送信を確実に一致させるため、active_prompt 由来の権威 bib をストアへ同期。
+		// （ナビ時に currentBib が未設定でも、ここで現在の滑走者の bib に揃う）
+		if (data.isMultiJudge && data.activeBib != null) {
+			currentBib.set(data.activeBib);
+		}
 
 		console.log('[採点画面] リアルタイムリスナーをセットアップ中...', { sessionId });
 
@@ -172,7 +187,9 @@
 						pollingInterval = setInterval(async () => {
 							// ページがアンマウントされていたらポーリングを停止
 							if (!isPageMounted) {
-								console.log('[採点画面/polling] ⚠️ ページがアンマウントされているため、ポーリングを停止します');
+								console.log(
+									'[採点画面/polling] ⚠️ ページがアンマウントされているため、ポーリングを停止します'
+								);
 								if (pollingInterval) {
 									clearInterval(pollingInterval);
 								}
@@ -182,7 +199,10 @@
 							// 現在のパスをチェック - 採点画面から離れていたらポーリングを停止
 							const currentPath = window.location.pathname;
 							if (!currentPath.endsWith('/score')) {
-								console.log('[採点画面/polling] ⚠️ 採点画面から離れているため、ポーリングを停止します。パス:', currentPath);
+								console.log(
+									'[採点画面/polling] ⚠️ 採点画面から離れているため、ポーリングを停止します。パス:',
+									currentPath
+								);
 								if (pollingInterval) {
 									clearInterval(pollingInterval);
 								}
@@ -205,7 +225,11 @@
 								}
 
 								// セッション終了を先にチェック
-								if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
+								if (
+									previousIsActive !== isActive &&
+									isActive === false &&
+									previousIsActive === true
+								) {
 									console.log('[採点画面] ✅ 検定終了を検知（ポーリング）');
 									// 再度パスチェック - 採点画面にいる場合のみ遷移
 									if (window.location.pathname.endsWith('/score')) {
@@ -262,7 +286,7 @@
 	minScore={0}
 	maxScore={99}
 	maxDigits={2}
-	loading={loading}
+	{loading}
 	showBackButton={showBibEditButton}
 	on:submit={handleSubmit}
 	on:back={handleEditBib}

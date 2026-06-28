@@ -39,6 +39,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	const isChief = isChiefJudge(user, sessionDetails);
 	const profile = await fetchUserProfile(supabase, user);
 
+	// 複数検定員の得点入力 bib は揮発性ストア（currentBib）に頼らず、現在の active_prompt から
+	// 権威的に導出する。次の滑走者で currentBib が null/stale になり、M3 ゲートで弾かれる／
+	// 無音ドロップする問題（検定の遷移不具合）を根治するため。
+	const activePrompt = sessionDetails.is_multi_judge
+		? await fetchActivePrompt(supabase, sessionId)
+		: null;
+	const activeBib = activePrompt?.bib_number ?? null;
+
 	return {
 		isChief,
 		isMultiJudge: sessionDetails.is_multi_judge,
@@ -46,7 +54,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		user,
 		profile,
 		guestIdentifier,
-		guestParticipant
+		guestParticipant,
+		activeBib
 	};
 };
 

@@ -742,3 +742,34 @@ org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SEL
 
 ### 既知の残
 profiles の email 列レベル保護（行スコープのみ）、Low（L2/L3/orgs INSERT/020 removed_at/sessions 重複）。
+---
+
+## 検定/待機ページの遷移遅延を修正（realtime 瞬断時のフォールバック間隔短縮）バッチ（2026-06-28）
+
+症状: 検定(複数検定員)で主任がゼッケン入力 → 検定員の得点画面遷移が「とても時間がかかる」。調査（コンソール）で realtime は SUBSCRIBED するが瞬断（CLOSED→retry）あり、取りこぼし時に **30秒間隔のフォールバックポーリング**で拾う設計 → 最悪30秒待ち。publication/RLS は問題なし（sessions は publication 在・authed=048/guest=1008 で SELECT 可）。
+
+### 修正（アプリのみ）
+- [x] `session/[id]/+page.svelte` の `startFallbackPolling` 間隔を **30000ms → 3000ms**（realtime と並行・active_prompt_id 未変化なら単一行 SELECT で早期 return＝軽量）。realtime 正常時は従来どおり即時、瞬断時も最悪3秒で遷移。
+- [x] 型 256（新規0）／eslint 新規0（既存の goto/each-key 警告のみ）／`npm run test` 726。
+
+### 残（別件・低優先）
+- `scoreStatusManager.ts:75` の name キャッシュ埋め込みクエリ `session_participants?select=judge_id,profiles:judge_id(full_name)` が **400**（PostgREST の関係解決エラー・恐らく既存。session_participants.judge_id→profiles の FK 無し）。判定員名は fetchStatus 側の `.in(id, judgeIds)` フォールバックで表示されるため実害小。将来 profiles を別取得に整理。
+- realtime チャンネルが CLOSED 後に自動再購読しない（nav チャンネルは手動・retry 無し）。3秒ポーリングで実用上カバー。必要なら再購読を追加。
+
+---
+
+## 検定(複数検定員)「次の滑走者」で得点が保存されない不具合の修正バッチ（2026-06-28）
+
+症状: 主任が「次の滑走者」に進めた後、検定員が得点入力しても保存されず遷移しない。根因: 旧検定の得点入力が送信 bib を揮発性 `$currentBib` のみから取得（次の滑走者で null=無音ドロップ or stale=batch12 M3ゲート403）＋ status ページに realtime フォールバック無しで瞬断時に次の滑走者へ遷移できない。M3ゲートはもろさを露呈しただけ（ゲート自体は正しい）。
+
+### 修正（アプリのみ・DBなし）
+- [x] `[discipline]/[level]/[event]/score/+page.server.ts` load: 複数検定員時に active_prompt から `activeBib` を権威導出して返す。
+- [x] `.../score/+page.svelte`: handleSubmit の bib を `data.isMultiJudge ? (data.activeBib ?? $currentBib) : $currentBib` に。onMount で複数検定員時 `currentBib` を activeBib に同期。→ 常に現在の滑走者を採点＝M3ゲート必ず一致。
+- [x] `.../score/status/+page.svelte`: realtime のバックアップに 3秒ポーリング（active_prompt 変化→次の滑走者へ goto、null→待機）。onDestroy で clearInterval。瞬断でも確実に遷移。
+- [x] 型 256（新規0）／`npm run test` 726／prettier 整形。eslint の goto-resolve はコードベース既存の共通パターン（当該ルール未採用・全 goto が該当）。
+
+### 検証（DEV・Chrome・要 E2E）
+- [ ] 検定・複数検定員・滑走者2人以上で、次の滑走者を採点→反映＆遷移すること（再発しない）。単独検定員/大会/研修は不変。
+
+### Out of scope
+scoreStatusManager:75 の name キャッシュ 400（実害小）、realtime CLOSED 自動再購読、profiles(1017) prod 適用、Low 群。

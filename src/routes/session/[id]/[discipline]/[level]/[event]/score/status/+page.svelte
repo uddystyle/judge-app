@@ -8,7 +8,14 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
-	import { currentBib, userProfile, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
+	import {
+		currentBib,
+		userProfile,
+		currentSession,
+		currentDiscipline,
+		currentLevel,
+		currentEvent
+	} from '$lib/stores';
 	import { get } from 'svelte/store';
 	import { createScoreStatusManager, type ScoreStatusManagerHandle } from '$lib/scoreStatusManager';
 	import { createSessionMonitorChannel, type RealtimeChannelHandle } from '$lib/realtime';
@@ -27,6 +34,10 @@
 	let bib: string | null = null;
 	let guestIdentifier: string | null = null;
 
+	// realtime 瞬断時のフォールバック（次の滑走者への遷移を確実化）
+	let navPolling: any = null;
+	let lastActivePromptId: number | string | null = null;
+
 	let isChief = false;
 	$: isChief = data.user?.id === data.sessionDetails?.chief_judge_id;
 
@@ -44,6 +55,40 @@
 	// 手動更新
 	async function manualRefresh() {
 		await manager?.manualRefresh();
+	}
+
+	// realtime のバックアップ。瞬断で次の滑走者(active_prompt 変化)を取りこぼしても確実に遷移する
+	// （待機ページと同方針。createSessionMonitorChannel の onPayload と同じナビ規則）。
+	async function pollNextSkaterNav() {
+		if (isChief) return;
+		const { data: s } = await supabase
+			.from('sessions')
+			.select('active_prompt_id, is_active')
+			.eq('id', id)
+			.maybeSingle();
+		if (!s) return;
+		if (s.is_active === false) {
+			goto(`/session/${id}?ended=true`);
+			return;
+		}
+		const ap = s.active_prompt_id;
+		if (ap && ap !== lastActivePromptId) {
+			lastActivePromptId = ap;
+			const { data: prompt } = await supabase
+				.from('scoring_prompts')
+				.select('*')
+				.eq('id', ap)
+				.maybeSingle();
+			if (prompt) {
+				currentBib.set(prompt.bib_number);
+				goto(`/session/${id}/${prompt.discipline}/${prompt.level}/${prompt.event_name}/score`);
+			}
+			return;
+		}
+		if (ap === null && lastActivePromptId !== null) {
+			lastActivePromptId = null;
+			goto(`/session/${id}`);
+		}
 	}
 
 	onMount(async () => {
@@ -80,8 +125,12 @@
 				excludeExtremes: data.sessionDetails?.exclude_extremes || false,
 				initialStatus: scoreStatus,
 				initialAthleteId: null,
-				onStatusChange: (s) => { scoreStatus = s; },
-				onConnectionError: (e) => { realtimeConnectionError = e; },
+				onStatusChange: (s) => {
+					scoreStatus = s;
+				},
+				onConnectionError: (e) => {
+					realtimeConnectionError = e;
+				}
 			});
 			await manager.initializeNameCache();
 			manager.setupRealtime();
@@ -117,7 +166,9 @@
 
 						if (!promptError && promptData) {
 							currentBib.set(promptData.bib_number);
-							goto(`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
+							goto(
+								`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+							);
 							return;
 						}
 					}
@@ -128,12 +179,20 @@
 					}
 				}
 			});
+
+			// realtime のバックアップ・ポーリング（3秒）。瞬断しても次の滑走者へ確実に遷移。
+			lastActivePromptId = data.sessionDetails?.active_prompt_id ?? null;
+			navPolling = setInterval(pollNextSkaterNav, 3000);
 		}
 	});
 
 	onDestroy(() => {
 		manager?.cleanup();
 		sessionMonitorHandle?.cleanup();
+		if (navPolling) {
+			clearInterval(navPolling);
+			navPolling = null;
+		}
 	});
 
 	let canSubmit = false;
@@ -145,15 +204,19 @@
 	$: {
 		if (!isChief && scoreStatus?.scores) {
 			const profile = get(userProfile);
-			const currentUserName = data.guestParticipant?.guest_name || profile?.full_name || data.user?.email || '';
+			const currentUserName =
+				data.guestParticipant?.guest_name || profile?.full_name || data.user?.email || '';
 			const myScore = scoreStatus.scores.find((s: any) => s.judge_name === currentUserName);
 
 			if (!hasInitialized) {
 				previousMyScore = myScore;
 				hasInitialized = true;
-				console.log('[一般検定員/status] 初期化:', { currentUserName, myScore, isGuest: !!data.guestIdentifier });
-			}
-			else if (previousMyScore && !myScore) {
+				console.log('[一般検定員/status] 初期化:', {
+					currentUserName,
+					myScore,
+					isGuest: !!data.guestIdentifier
+				});
+			} else if (previousMyScore && !myScore) {
 				console.log('[一般検定員/status] 修正要求を検知。採点画面に遷移します。');
 				currentBib.set(parseInt(bib || '0'));
 				goto(`/session/${id}/${discipline}/${level}/${event}/score`);
@@ -176,12 +239,8 @@
 
 	{#if realtimeConnectionError}
 		<div class="realtime-error-banner">
-			<div class="error-message">
-				⚠️ リアルタイム接続エラー - フォールバック更新中（10秒ごと）
-			</div>
-			<button class="manual-refresh-btn" on:click={manualRefresh}>
-				🔄 手動更新・再接続
-			</button>
+			<div class="error-message">⚠️ リアルタイム接続エラー - フォールバック更新中（10秒ごと）</div>
+			<button class="manual-refresh-btn" on:click={manualRefresh}> 🔄 手動更新・再接続 </button>
 		</div>
 	{/if}
 
@@ -200,18 +259,10 @@
 
 	<div class="status-message">
 		{#if isChief}
-			<form
-				method="POST"
-				action="{guestIdentifier ? `` : '?'}/finalizeScore"
-				use:enhance
-			>
+			<form method="POST" action="{guestIdentifier ? `` : '?'}/finalizeScore" use:enhance>
 				<input type="hidden" name="bib" value={bib} />
 				<div class="nav-buttons">
-					<NavButton
-						variant="primary"
-						type="submit"
-						disabled={!canSubmit}
-					>
+					<NavButton variant="primary" type="submit" disabled={!canSubmit}>
 						{canSubmit
 							? 'この内容で送信する'
 							: `(${scoreStatus.requiredJudges || 1}人の採点が必要です)`}
