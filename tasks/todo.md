@@ -690,3 +690,20 @@ READ Med 4件のうち最も安全な custom_events authed SELECT を対応。`A
 
 ### Low（既知）
 L2 active_prompt CAS／L3 大会 requestCorrection 削除 owner化／organizations INSERT(true)／020 admin の removed_at 未チェック。
+
+---
+
+## organization_members 過剰SELECT撤去（READ Med 第2弾）バッチ（2026-06-28）
+
+org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SELECT（own/member/admin・SECURITY DEFINER ヘルパー）は**既に prod/dev に適用済み**で**自己参照の再帰ポリシーは無い**。残る過剰は `select_all_memberships`(=true, 016) のみ。
+
+### 成果物（DBのみ・アプリ無変更）
+- [x] `1015_org_members_drop_overbroad_select.sql`＋rollback：`select_all_memberships`(=true) を DROP するだけ（scoped 群が既存＝coverage 維持・再帰なし）。
+- [x] 静的：破壊的DDL無し（1 drop / 0 create）。`npm run test` 726（アプリ無変更）。
+
+### 運用（ユーザー実行・未実施／DEV 先行）
+- [ ] DEV に 1015 適用 → org メンバー一覧/上限カウント/ダッシュボードが正常 → 監査query1 で organization_members が =true で出ないこと → prod 適用。
+
+### READ Med 残り
+- organizations SELECT：service-role アプリ変更が必要（batch7型）。
+- profiles SELECT：can_view_profile helper＋scoreActions.ts:40 是正＋性能・最も app-break リスク高。
