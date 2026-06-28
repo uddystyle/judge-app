@@ -622,3 +622,21 @@ M4 training 必要数（全参加者カウント・凍結）、M3 旧フロー a
 
 ### 残（Out of scope）
 M4 training 必要数、Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner 化／L4 単独・chief 経路は仕様）、prod RLS 最終監査。
+
+---
+
+## 研修(training)多審制 finalize ソフトゲート化（M4）バッチ（2026-06-28）
+
+研修多審の必要数が `count(session_participants)`（主任・ゲスト・未採点者含む／凍結）で、クライアント canSubmit が「全員採点」を要求 → 未採点者が残ると永久確定不可/後着審判で早期確定。`max_judges` は未使用。
+
+ユーザー判断＝**ソフトゲート**（人数ハードゲート撤去・主任がいつでも確定可・「X/N 名 採点済」をライブ表示）。
+
+### 変更（アプリのみ・DB操作なし）
+- [x] status `+page.svelte` canSubmit：研修は `scores>=1`、大会/検定は従来 `>=requiredJudges`（`data.isTrainingMode` 分岐）。
+- [x] status `+page.svelte` ボタン：研修は進捗「X / N 名 採点済」表示＋「この内容で送信する」（1件以上で有効。「N人必要」メッセージは出さない）。大会/検定は不変。
+- [x] `scoreStatusManager.ts` 研修ブランチ：`session_participants` 件数を `count:exact, head:true` で再取得し N をライブ化（凍結 config 値の代替）。
+- [x] complete ページは既に `if (scores.length > 0)` ガード済 → 0件 NaN なし（追加対応不要）。
+- [x] テスト `status/canSubmit.test.ts`（7件）。`npm run test` 726（+7）、型 256（新規0）、lint/prettier 新規0（既存の svelte goto/reactive-loop 警告は別件）。
+
+### 残（Out of scope）
+Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner 化）、prod RLS 最終監査、`max_judges` 未使用フィールドの整理。

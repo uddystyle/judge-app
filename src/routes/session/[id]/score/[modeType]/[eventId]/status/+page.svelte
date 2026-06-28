@@ -8,7 +8,13 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
-	import { currentBib, userProfile, currentSession, currentDiscipline, currentEvent } from '$lib/stores';
+	import {
+		currentBib,
+		userProfile,
+		currentSession,
+		currentDiscipline,
+		currentEvent
+	} from '$lib/stores';
 	import { get } from 'svelte/store';
 	import { createScoreStatusManager, type ScoreStatusManagerHandle } from '$lib/scoreStatusManager';
 	import { createSessionNavigationMonitor } from '$lib/sessionNavigationMonitor';
@@ -44,7 +50,14 @@
 
 		console.log('[status/onMount] data:', data);
 		console.log('[status/onMount] params:', { sessionId, modeType, eventId, bib });
-		console.log('[status/onMount] totalJudges:', data.totalJudges, 'isTrainingMode:', data.isTrainingMode, 'isMultiJudge:', data.isMultiJudge);
+		console.log(
+			'[status/onMount] totalJudges:',
+			data.totalJudges,
+			'isTrainingMode:',
+			data.isTrainingMode,
+			'isMultiJudge:',
+			data.isMultiJudge
+		);
 
 		// ヘッダー情報を設定
 		currentSession.set({ name: data.sessionDetails?.name || '' });
@@ -63,8 +76,12 @@
 			excludeExtremes: data.sessionDetails?.exclude_extremes || false,
 			initialStatus: scoreStatus,
 			initialAthleteId: data.athleteId || null,
-			onStatusChange: (s) => { scoreStatus = s; },
-			onConnectionError: (e) => { realtimeConnectionError = e; },
+			onStatusChange: (s) => {
+				scoreStatus = s;
+			},
+			onConnectionError: (e) => {
+				realtimeConnectionError = e;
+			}
 		});
 		await manager.initializeNameCache();
 		manager.setupRealtime();
@@ -79,7 +96,7 @@
 				modeType,
 				eventId,
 				onNavigate: (url) => goto(url),
-				onBibChange: (b) => currentBib.set(b),
+				onBibChange: (b) => currentBib.set(b)
 			});
 		}
 	});
@@ -131,7 +148,12 @@
 	let scoreDiff: number | null = null;
 	let scoreDiffExceeded: boolean = false;
 
-	$: isTournamentMode = !data.isTrainingMode && (data.isTournamentMode || modeType === 'tournament' || data.sessionDetails?.is_tournament_mode || data.sessionDetails?.mode === 'tournament');
+	$: isTournamentMode =
+		!data.isTrainingMode &&
+		(data.isTournamentMode ||
+			modeType === 'tournament' ||
+			data.sessionDetails?.is_tournament_mode ||
+			data.sessionDetails?.mode === 'tournament');
 
 	$: {
 		if (isTournamentMode && scoreStatus?.scores && scoreStatus.scores.length > 0) {
@@ -151,7 +173,12 @@
 
 	let canSubmit = false;
 	$: {
-		const hasRequiredScores = (scoreStatus?.scores?.length || 0) >= (scoreStatus?.requiredJudges || 1);
+		const scoreCount = scoreStatus?.scores?.length || 0;
+		// 研修(training)はソフトゲート：全員採点を要求せず、1件以上あれば主任がいつでも確定可。
+		// 大会/検定は従来どおり必要審判数（requiredJudges）を満たす必要がある。
+		const hasRequiredScores = data.isTrainingMode
+			? scoreCount >= 1
+			: scoreCount >= (scoreStatus?.requiredJudges || 1);
 		const scoreDiffOk = !scoreDiffExceeded;
 
 		canSubmit = hasRequiredScores && scoreDiffOk;
@@ -175,8 +202,7 @@
 				previousMyScore = myScore;
 				hasInitialized = true;
 				console.log('[一般検定員/status] 初期化:', { currentUserName, myScore });
-			}
-			else if (previousMyScore && !myScore) {
+			} else if (previousMyScore && !myScore) {
 				console.log('[一般検定員/status] 修正要求を検知。採点画面に遷移します。');
 				currentBib.set(parseInt(bib || '0'));
 				(async () => {
@@ -212,12 +238,8 @@
 
 	{#if realtimeConnectionError}
 		<div class="realtime-error-banner">
-			<div class="error-message">
-				⚠️ リアルタイム接続エラー - フォールバック更新中（10秒ごと）
-			</div>
-			<button class="manual-refresh-btn" on:click={manualRefresh}>
-				🔄 手動更新・再接続
-			</button>
+			<div class="error-message">⚠️ リアルタイム接続エラー - フォールバック更新中（10秒ごと）</div>
+			<button class="manual-refresh-btn" on:click={manualRefresh}> 🔄 手動更新・再接続 </button>
 		</div>
 	{/if}
 
@@ -257,11 +279,23 @@
 
 	<div class="status-message">
 		{#if isChief}
+			{#if data.isTrainingMode}
+				<!-- 研修：進捗インジケータ（ソフトゲート＝主任がいつでも確定可） -->
+				<p class="training-progress">
+					{scoreStatus?.scores?.length || 0} / {scoreStatus?.requiredJudges || 1} 名 採点済
+				</p>
+			{/if}
 			<form method="POST" action="{guestIdentifier ? `` : '?'}/finalizeScore" use:enhance>
 				<input type="hidden" name="bib" value={bib} />
 				<div class="nav-buttons">
 					<NavButton variant="primary" type="submit" disabled={!canSubmit}>
-						{#if (scoreStatus?.scores?.length || 0) < (scoreStatus?.requiredJudges || 1)}
+						{#if data.isTrainingMode}
+							{#if (scoreStatus?.scores?.length || 0) < 1}
+								(採点を待っています)
+							{:else}
+								この内容で送信する
+							{/if}
+						{:else if (scoreStatus?.scores?.length || 0) < (scoreStatus?.requiredJudges || 1)}
 							({scoreStatus.requiredJudges || 1}人の採点が必要です)
 						{:else}
 							この内容で送信する

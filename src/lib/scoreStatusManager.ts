@@ -148,6 +148,14 @@ export function createScoreStatusManager(
 			athleteId = participant.id;
 			console.log('[scoreStatusManager] athlete_id保存:', athleteId);
 
+			// 研修の N（参加者数）をライブ取得して進捗表示に使う（凍結 config 値の代わり）。
+			// ソフトゲート＝表示専用なので、status 更新ごとに最新の参加者数へ追従させる。
+			const { count: participantCount } = await supabase
+				.from('session_participants')
+				.select('*', { count: 'exact', head: true })
+				.eq('session_id', sessionId);
+			const liveRequired = participantCount || totalJudges || 1;
+
 			const { data: trainingScores, error: scoresError } = await supabase
 				.from('training_scores')
 				.select('id, score, judge_id, guest_identifier')
@@ -213,12 +221,12 @@ export function createScoreStatusManager(
 
 				updateStatus({
 					scores: scoresWithNames,
-					requiredJudges: totalJudges || 1
+					requiredJudges: liveRequired
 				});
 			} else {
 				updateStatus({
 					scores: [],
-					requiredJudges: totalJudges || 1
+					requiredJudges: liveRequired
 				});
 			}
 		} else {
