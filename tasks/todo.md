@@ -707,3 +707,21 @@ org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SEL
 ### READ Med 残り
 - organizations SELECT：service-role アプリ変更が必要（batch7型）。
 - profiles SELECT：can_view_profile helper＋scoreActions.ts:40 是正＋性能・最も app-break リスク高。
+
+---
+
+## organizations SELECT を member スコープへ（READ Med 第3弾・アプリ＋DB batch7型）バッチ（2026-06-28）
+
+`organizations` の `Anyone can view organizations for sessions`(public=true)＋`select_organization`(authed=true) → 全組織越境閲覧。member スコープ化に伴い、非メンバーが org を読む2経路を service-role 化。
+
+### 成果物
+- [x] アプリ（先デプロイ）: `organization/join`（invite_code org 検索→supabaseAdmin＋guard）、`onboarding/create-organization`（org の insert().select() を supabaseAdmin＋guard。membership挿入は authed のまま）。
+- [x] `1016_organizations_select_lockdown.sql`＋rollback：broad 2件を DROP → `authed_organizations_select_by_member`（is_organization_member(id,auth.uid())）。helper create-if-absent。
+- [x] 静的：破壊的DDL無し（1 create/2 drop）。`npm run test` 726／型 256（新規0）／eslint 新規0（join:29 の any は既存）／prettier 整形。
+
+### デプロイ順序（厳守・batch7型）＋運用（未実施）
+- [ ] アプリ（join/onboarding の service-role 化）を **main へ push＝本番デプロイ → 反映確認** → **その後** `1016` を DEV→prod 適用。
+- [ ] DEV E2E：org メンバー閲覧／招待コード参加／新規org作成／別org越境不可／監査query1 で organizations SELECT が =true で出ない。問題時 1016_rollback。
+
+### READ Med 残り（最後の1件）
+- profiles SELECT：`can_view_profile()` helper＋`scoreActions.ts:40` 是正＋per-row 性能・最も app-break リスク高（専用バッチ）。

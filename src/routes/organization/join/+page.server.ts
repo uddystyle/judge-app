@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		? memberships.map((m: any) => ({
 				...m.organizations,
 				userRole: m.role
-		  }))
+			}))
 		: [];
 
 	// 組織所属チェック（軽量 - カウントのみ）
@@ -66,8 +66,18 @@ export const actions: Actions = {
 			return fail(400, { joinCode, error: '招待コードは英数字6桁で入力してください。' });
 		}
 
-		// 招待コードに一致する組織をデータベースから検索
-		const { data: organizationData, error: organizationError } = await supabase
+		// 招待コードに一致する組織を検索。参加前で呼び出し元はまだ非メンバーのため、
+		// organizations の member スコープ RLS（1016）では anon/authed で読めない。service role で照合する。
+		if (!supabaseAdmin) {
+			console.error(
+				'[Org Join] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+			);
+			return fail(500, {
+				joinCode,
+				error: 'サーバー設定エラーにより参加できませんでした。管理者に連絡してください。'
+			});
+		}
+		const { data: organizationData, error: organizationError } = await supabaseAdmin
 			.from('organizations')
 			.select('id, name')
 			.eq('invite_code', joinCode)
@@ -91,7 +101,10 @@ export const actions: Actions = {
 
 		// メンバー上限チェック（受諾時に強制）。参加者本人はまだ非メンバーで RLS により
 		// 正確なメンバー数を取得できないため、service role で集計する
-		const memberLimitCheck = await checkCanAddMember(supabaseAdmin ?? supabase, organizationData.id);
+		const memberLimitCheck = await checkCanAddMember(
+			supabaseAdmin ?? supabase,
+			organizationData.id
+		);
 		if (!memberLimitCheck.allowed) {
 			return fail(403, {
 				joinCode,

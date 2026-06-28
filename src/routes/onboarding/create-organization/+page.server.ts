@@ -62,7 +62,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 export const actions: Actions = {
 	create: async ({ request, locals }) => {
-		const { supabase } = locals;
+		const { supabase, supabaseAdmin } = locals;
 		const {
 			data: { user },
 			error: userError
@@ -115,7 +115,18 @@ export const actions: Actions = {
 		// 組織を作成
 		// NOTE: 有料プランの場合、upgrade画面でプランを変更する可能性があるため、
 		// 一旦freeプランとして作成し、Stripe決済完了後のwebhookで正しいプランに更新される
-		const { data: organization, error: orgError } = await supabase
+		// 作成直後は呼び出し元がまだ membership を持たないため、organizations の member スコープ
+		// RLS（1016）では INSERT...RETURNING(.select()) を読み戻せない。service role で作成する。
+		if (!supabaseAdmin) {
+			console.error(
+				'[Create Org] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
+			);
+			return fail(500, {
+				organizationName,
+				error: 'サーバー設定エラーにより組織を作成できませんでした。管理者に連絡してください。'
+			});
+		}
+		const { data: organization, error: orgError } = await supabaseAdmin
 			.from('organizations')
 			.insert({
 				name: organizationName,
