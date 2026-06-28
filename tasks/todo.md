@@ -640,3 +640,32 @@ M4 training 必要数、Low 群（L2 旧 active_prompt CAS／L3 大会 requestCo
 
 ### 残（Out of scope）
 Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner 化）、prod RLS 最終監査、`max_judges` 未使用フィールドの整理。
+
+---
+
+## prod RLS 最終監査（2026-06-28）
+
+`database/diagnostics/audit_rls_overbroad.sql` を prod+dev 実行。
+- ✅ results / session_participants クリーン（owner/membership 基準・=true 無し）。RLS 全テーブル有効。
+- ✅ **1008（sessions ロックダウン）を本日 dev+prod 適用**：broad anon SELECT＋`Temporary realtime test` 撤去 → `anon_sessions_select_by_jwt` のみ。join_code/invite_token 漏洩クローズ。
+- 🔴 新規発見（既存ドリフト）: custom_events authed write/delete=true・anon SELECT=true、organizations authed update/delete=true・SELECT=true、organization_members `select_all_memberships`=true、profiles read-all=true。→ HIGH（write/delete）を次バッチで対応。
+
+---
+
+## custom_events / organizations 越境 write/delete ロックダウン（RLS）バッチ（2026-06-28）
+
+監査で判明した HIGH（越境 write/delete）を org ロールへスコープ。ドリフト（repo は 020/052 で修正済だが prod/dev は 010/017/029 の over-broad のまま）。
+
+### 成果物（DBのみ・アプリ無変更）
+- [x] `1012_custom_events_rls_lockdown.sql`＋rollback：authed INSERT/UPDATE/DELETE を `session の creator/chief/org-member`（`is_organization_member` SECURITY DEFINER 経由）にスコープ。anon SELECT を JWT session_id に。authed SELECT(true) は別バッチ。
+- [x] `1013_organizations_write_lockdown.sql`＋rollback：authed UPDATE/DELETE を `is_organization_admin(id)`（admin かつ removed_at IS NULL）にスコープ。SELECT(true)/INSERT(true) は別バッチ。
+- [x] ヘルパーは **create-if-absent（DO ブロック・名前判定）＋ 位置引数呼び出し**で 1007 の param-drift(42P13) を回避。
+- [x] 診断ファイル `database/diagnostics/audit_rls_overbroad.sql` を収録。
+- [x] 静的：破壊的 DDL 無し（1012=4create/4drop、1013=2create/2drop）。`npm run test` 726（アプリ無変更）。
+
+### 運用（ユーザー実行・未実施／DEV 先行厳守）
+- [ ] **DEV に 1012/1013 適用 → 機能E2E**（chief/org-admin が種目管理可・別org は不可／ゲスト採点で種目読める／org admin が org 更新削除可・別org/非admin 不可）→ 監査 query1 で当該が =true で出ないこと。
+- [ ] DEV 通過後に **prod 適用**。問題時は 1012_rollback/1013_rollback。
+
+### 残（別バッチ）
+READ Med 群（custom_events authed SELECT/organizations SELECT/organization_members select_all_memberships/profiles read-all=true）、organizations INSERT(true)、sessions 重複/旧ポリシー整理、Low（L2/L3）。
