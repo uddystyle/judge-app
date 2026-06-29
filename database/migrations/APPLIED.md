@@ -27,7 +27,6 @@
 |---|---|---|---|
 | `999_fix_rls_realtime_security.sql` | deprecated | ❌実行禁止 | ヘッダに "DO NOT RUN"。`1000` で置換済み。参照7箇所(realtime/security docs等)のため**物理移動は見送り**・本台帳で隔離扱い |
 | `planned/1001_add_judge_id_to_results.sql` | planned | ❌未実装 | "Status: PLANNED / NOT READY"・BREAKING。本番未適用。→ `database/migrations/planned/` へ隔離済み |
-| `001_add_session_security.sql` | forward | 🔴 prod未適用疑い | `failed_join_attempts`/`is_locked` が prod に無い疑い＝参加コード join で500の可能性。§6で要実測 |
 | `archive/one-time/008_phase0_cleanup_existing_data.sql` | cleanup | 💥破壊的・一回限り | 全テーブル TRUNCATE。本番未稼働時の再構築用。**再実行厳禁**。→ `archive/one-time/` へ隔離済み |
 | `archive/one-time/010_cleanup_existing_user_data.sql` | cleanup | 💥破壊的・一回限り | 組織/セッションを TRUNCATE。**再実行厳禁**。→ `archive/one-time/` へ隔離済み |
 
@@ -40,7 +39,7 @@
 | # | ファイル | 概要 | 日付 | 冪等 | 関連/supersedes | dev | prod | 備考 |
 |---|---|---|---|:--:|---|:--:|:--:|---|
 | 0 | `0000_base_sessions_schema.sql` | sessionsテーブルの参照ベーススキーマ復元 | 2026-06-27 | ✓ |  | ⚠️要確認 | ⚠️要確認 | 新規DB再構築のベースライン(001適用前)。FKは scoring_prompts/organizations/auth.users 先行必須。既存DBはno-op |
-| 1 | `001_add_session_security.sql` | sessionsに参加ロック用2列を追加 |  | ✓ |  | ⚠️要確認 | 🔴未適用疑い | ADD COLUMN IF NOT EXISTSで追加のみ・アプリ変更不要。prod未適用の疑い(参加コードjoinが500になる原因) |
+| 1 | `001_add_session_security.sql` | sessionsに参加ロック用2列を追加 |  | ✓ |  | ✅ | ✅ | ADD COLUMN IF NOT EXISTSで追加のみ・アプリ変更不要。**2026-06-29 実測で dev+prod とも `failed_join_attempts`/`is_locked` の存在を確認**(未適用疑いは否定) |
 | 1 | `001_add_subscription_tables.sql` | サブスク/プラン制限/使用量テーブル追加 |  | ⚠️注意 |  | ⚠️要確認 | ⚠️要確認 | subscriptions/plan_limits/usage_limits。テーブルはIF NOT EXISTSだがCREATE POLICY無ガードで再実行エラー。Stripe前提 |
 | 1 | `001_add_tournament_mode.sql` | 大会モード(種目/参加者)機能を追加 | 2025-10-25 | ⚠️注意 |  | ⚠️要確認 | ⚠️要確認 | sessionsに3列+custom_events/participants+RLS。ADD CONSTRAINT valid_score_calculation無ガードで再実行エラー |
 | 2 | `002_add_session_notifications.sql` | セッション通知テーブルを追加 | 2025-10-26 | ⚠️注意 |  | ⚠️要確認 | ⚠️要確認 | session_notifications+RLS。ADD CONSTRAINT/CREATE POLICY無ガードで再実行エラー。session_participants前提 |
@@ -194,7 +193,7 @@ ORDER BY table_name, ordinal_position;
 ## 付録: 集計
 
 - 総ファイル: **106**（forward 81 ／ rollback 17 ／ verify·診断 4 ／ cleanup 2 ／ deprecated 1 ／ planned 1）
-- dev+prod 適用確認済み: **16**（1007–1021 ＋ 052）
-- 適用状況 要確認: forward のうち上記・実行禁止・prod未適用疑いを除く残り
+- dev+prod 適用確認済み: **17**（1007–1021 ＋ 052 ＋ `001_add_session_security`〔2026-06-29 実測〕）
+- 適用状況 要確認: forward のうち上記・実行禁止を除く残り
 
 > 本台帳の値は「ヘッダ抽出＋運用ログ(`tasks/todo.md`)＋監査メモ(`memory/prod-schema-rls-drift.md`)」由来。確証の無い適用状況は誇張せず `⚠️要確認` とした。§6 で実測して更新すること。

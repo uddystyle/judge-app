@@ -11,11 +11,9 @@
 
 ## 🔴 要対応
 
-### 1. `001_add_session_security` が prod 未適用の疑い
-- `sessions.failed_join_attempts` / `is_locked` 列が **prod に存在しない疑い**（dev も要確認）。
-- 影響: 参加コード join のロック機構が動かず、当該パスで **500 になり得る現役バグ候補**。
-- 確認: [`APPLIED.md` §6 クエリ(A)](../../database/migrations/APPLIED.md) を prod で実行。0 行なら未適用。
-- 対応: dev で `001_add_session_security.sql` 適用 → 参加コード join を E2E → prod 適用（列追加のみ・冪等・アプリ変更不要）。
+> 現在オープンな 🔴 課題はありません。
+
+> ~~`001_add_session_security` prod 未適用の疑い~~ → **2026-06-29 実測で否定済み**。dev・prod とも `sessions.failed_join_attempts` / `is_locked` の存在を確認（`001_add_session_security.sql` は両環境適用済み・参加コード join の500懸念は無し）。
 
 ## 🟡 ドリフト（環境差・慎重対応）
 
