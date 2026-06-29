@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
+	createRealtimeChannel,
 	createRealtimeChannelWithRetry,
 	createSessionMonitorChannel,
 	createSessionMonitorWithPolling,
@@ -283,7 +284,9 @@ function createSessionMonitorSupabase() {
 		from: vi.fn(() => ({
 			select: vi.fn().mockReturnThis(),
 			eq: vi.fn().mockReturnThis(),
-			single: vi.fn().mockResolvedValue({ data: { is_active: true, active_prompt_id: null }, error: null })
+			single: vi
+				.fn()
+				.mockResolvedValue({ data: { is_active: true, active_prompt_id: null }, error: null })
 		})),
 		get _channels() {
 			return channels;
@@ -334,36 +337,70 @@ describe('createSessionMonitorChannel - errorReloadTimer cleanup', () => {
 		expect(reloadMock).not.toHaveBeenCalled();
 	});
 
-	it('cleanup無しではreloadが発火する', async () => {
+	it('エラー時は即reloadせず再購読する（backoffで新チャンネル）', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const handle = createSessionMonitorChannel(supabase as any, {
 			sessionId: 'sess-1',
-			onPayload: vi.fn()
+			onPayload: vi.fn(),
+			maxRetryCount: 5
+		});
+		expect(supabase._channels.length).toBe(1);
+
+		// エラー → 即 reload せず、1s backoff で再購読
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(2);
+		expect(reloadMock).not.toHaveBeenCalled();
+
+		handle.cleanup();
+	});
+
+	it('再購読を使い切ると最終手段のreloadが発火する', async () => {
+		const supabase = createSessionMonitorSupabase();
+		const handle = createSessionMonitorChannel(supabase as any, {
+			sessionId: 'sess-1',
+			onPayload: vi.fn(),
+			maxRetryCount: 2
 		});
 
+		// error1 → backoff 1s で再購読
 		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(2);
+		expect(reloadMock).not.toHaveBeenCalled();
 
-		// Do NOT cleanup — let the timer fire
+		// error2 → backoff 2s で再購読
+		supabase._fireStatus('CHANNEL_ERROR');
 		await vi.advanceTimersByTimeAsync(2000);
+		expect(supabase._channels.length).toBe(3);
+		expect(reloadMock).not.toHaveBeenCalled();
 
+		// error3 → 再購読を使い切った → 2s 後に reload
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(2000);
 		expect(reloadMock).toHaveBeenCalledOnce();
 
 		handle.cleanup();
 	});
 
-	it('onError指定時はreloadタイマーが登録されない', async () => {
+	it('onError指定時は最終手段でonErrorが呼ばれreloadしない', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const onError = vi.fn();
 		const handle = createSessionMonitorChannel(supabase as any, {
 			sessionId: 'sess-1',
 			onPayload: vi.fn(),
-			onError
+			onError,
+			maxRetryCount: 1
 		});
 
+		// error1 → backoff 1s で再購読（onError はまだ呼ばれない）
 		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(onError).not.toHaveBeenCalled();
 
+		// error2 → 再購読を使い切り → onError（reload しない）
+		supabase._fireStatus('CHANNEL_ERROR');
 		await vi.advanceTimersByTimeAsync(3000);
-
 		expect(onError).toHaveBeenCalledOnce();
 		expect(reloadMock).not.toHaveBeenCalled();
 
@@ -392,21 +429,27 @@ describe('createSessionMonitorChannel - errorReloadTimer cleanup', () => {
 		handle.cleanup();
 	});
 
-	it('連続エラーでreload timerが多重登録されない', async () => {
+	it('SUBSCRIBED復帰でretryCountがリセットされ、reloadが先送りされない', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const handle = createSessionMonitorChannel(supabase as any, {
 			sessionId: 'sess-1',
-			onPayload: vi.fn()
+			onPayload: vi.fn(),
+			maxRetryCount: 5
 		});
 
-		// 3回連続でエラー → 古いtimerがclearされ、最後の1本だけ残る
+		// error → 1s backoff で再購読
 		supabase._fireStatus('CHANNEL_ERROR');
-		supabase._fireStatus('CHANNEL_ERROR');
-		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(2);
 
-		// 2s後にreloadが1回だけ発火する
-		await vi.advanceTimersByTimeAsync(2000);
-		expect(reloadMock).toHaveBeenCalledTimes(1);
+		// 再接続成功 → retryCount リセット
+		supabase._fireStatus('SUBSCRIBED');
+
+		// 次のエラーも先頭の backoff(1s) から再購読（リセットされている）
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(3);
+		expect(reloadMock).not.toHaveBeenCalled();
 
 		handle.cleanup();
 	});
@@ -486,22 +529,22 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		handle.cleanup();
 	});
 
-	it('連続エラーでreload timerが多重登録されない', async () => {
+	it('連続エラーでも即reloadせず再購読する', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const handle = createSessionMonitorWithPolling(supabase as any, {
 			sessionId: 'sess-1',
 			onRealtimePayload: vi.fn(),
-			onPollingData: vi.fn()
+			onPollingData: vi.fn(),
+			maxRetryCount: 5
 		});
 
-		// 3回連続でエラー → 古いtimerがclearされ、最後の1本だけ残る
+		// 3回連続でエラー → 各回 retryTimer が上書き、即 reload はしない（再購読中）
 		supabase._fireStatus('CHANNEL_ERROR');
 		supabase._fireStatus('TIMED_OUT');
 		supabase._fireStatus('CHANNEL_ERROR');
 
-		// 2s後にreloadが1回だけ発火する
 		await vi.advanceTimersByTimeAsync(2000);
-		expect(reloadMock).toHaveBeenCalledTimes(1);
+		expect(reloadMock).not.toHaveBeenCalled();
 
 		handle.cleanup();
 	});
@@ -536,7 +579,7 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		handle.cleanup();
 	});
 
-	it('CHANNEL_ERROR → SUBSCRIBED復帰後もpollingが1本だけ', async () => {
+	it('CHANNEL_ERROR中もpollingは継続し、SUBSCRIBED復帰後も1本だけ', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const onPollingData = vi.fn();
 		const handle = createSessionMonitorWithPolling(supabase as any, {
@@ -552,14 +595,15 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		await vi.advanceTimersByTimeAsync(500);
 		expect(onPollingData).toHaveBeenCalledTimes(1);
 
-		// エラー発生 → pollingが停止されること
+		// エラー発生 → pollingは止めず継続（再購読中の取りこぼし保険）
 		onPollingData.mockClear();
 		supabase._fireStatus('CHANNEL_ERROR');
 		await vi.advanceTimersByTimeAsync(500);
-		expect(onPollingData).toHaveBeenCalledTimes(0);
+		expect(onPollingData).toHaveBeenCalledTimes(1);
 
-		// 復帰 → polling再開、1本だけ
+		// 復帰 → polling再開、多重化しない（1本）
 		supabase._fireStatus('SUBSCRIBED');
+		onPollingData.mockClear();
 		await vi.advanceTimersByTimeAsync(500);
 		expect(onPollingData).toHaveBeenCalledTimes(1);
 
@@ -569,7 +613,7 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		handle.cleanup();
 	});
 
-	it('エラー/復帰を複数サイクル繰り返してもpollingは常に1本', async () => {
+	it('エラー/復帰を複数サイクル繰り返してもpollingは常に1本（停止しない）', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const onPollingData = vi.fn();
 		const handle = createSessionMonitorWithPolling(supabase as any, {
@@ -581,18 +625,17 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		});
 
 		for (let cycle = 0; cycle < 3; cycle++) {
-			onPollingData.mockClear();
-
-			// 接続 → polling開始
+			// 接続 → polling（1本）
 			supabase._fireStatus('SUBSCRIBED');
+			onPollingData.mockClear();
 			await vi.advanceTimersByTimeAsync(500);
 			expect(onPollingData).toHaveBeenCalledTimes(1);
 
-			// エラー → polling停止
+			// エラー → polling は継続（停止しない）
 			supabase._fireStatus('CHANNEL_ERROR');
 			onPollingData.mockClear();
 			await vi.advanceTimersByTimeAsync(500);
-			expect(onPollingData).toHaveBeenCalledTimes(0);
+			expect(onPollingData).toHaveBeenCalledTimes(1);
 		}
 
 		handle.cleanup();
@@ -640,12 +683,12 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		await vi.advanceTimersByTimeAsync(500);
 		expect(onPollingData).toHaveBeenCalledTimes(1);
 
-		// Phase 2: CHANNEL_ERROR → polling 停止、error timer は onError に委譲
+		// Phase 2: CHANNEL_ERROR → polling 継続、onError は最終手段なので即時には呼ばれない
 		supabase._fireStatus('CHANNEL_ERROR');
-		expect(onError).toHaveBeenCalledTimes(1);
+		expect(onError).not.toHaveBeenCalled();
 		onPollingData.mockClear();
-		await vi.advanceTimersByTimeAsync(1000);
-		expect(onPollingData).toHaveBeenCalledTimes(0);
+		await vi.advanceTimersByTimeAsync(500);
+		expect(onPollingData).toHaveBeenCalledTimes(1);
 
 		// Phase 3: 復帰 SUBSCRIBED → polling 再開（1本）
 		supabase._fireStatus('SUBSCRIBED');
@@ -695,13 +738,13 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		await vi.advanceTimersByTimeAsync(500);
 		expect(onPollingData).toHaveBeenCalledTimes(1);
 
-		// CHANNEL_ERROR → polling停止 + 2s reload timer 開始
+		// CHANNEL_ERROR → 即 reload せず再購読、polling は継続
 		supabase._fireStatus('CHANNEL_ERROR');
 		onPollingData.mockClear();
 
-		// 1s 後（reload前）に復帰
-		await vi.advanceTimersByTimeAsync(1000);
-		expect(onPollingData).toHaveBeenCalledTimes(0);
+		// 1s 経過しても polling は継続、reload しない
+		await vi.advanceTimersByTimeAsync(500);
+		expect(onPollingData).toHaveBeenCalledTimes(1);
 		expect(reloadMock).not.toHaveBeenCalled();
 
 		supabase._fireStatus('SUBSCRIBED');
@@ -743,15 +786,15 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		supabase._fireStatus('TIMED_OUT');
 		supabase._fireStatus('CHANNEL_ERROR');
 
-		// polling はエラー中停止
+		// polling はエラー中も継続
 		onPollingData.mockClear();
 		await vi.advanceTimersByTimeAsync(500);
-		expect(onPollingData).toHaveBeenCalledTimes(0);
+		expect(onPollingData).toHaveBeenCalledTimes(1);
 
-		// 復帰 → error timer キャンセル + polling 再開
+		// 復帰 → polling 再開
 		supabase._fireStatus('SUBSCRIBED');
 
-		// reload timer(2s) を超えても reload しない
+		// 3s を超えても reload しない（再購読を使い切っていない）
 		await vi.advanceTimersByTimeAsync(3000);
 		expect(reloadMock).not.toHaveBeenCalled();
 
@@ -766,5 +809,92 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		onPollingData.mockClear();
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(onPollingData).not.toHaveBeenCalled();
+	});
+});
+
+// --- createRealtimeChannel 自動再購読（scoreboard 等） ---
+
+describe('createRealtimeChannel - 自動再購読', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	function makeSimpleConfig(overrides: Record<string, any> = {}) {
+		return {
+			channelName: 'sb-channel',
+			table: 'results',
+			filter: 'session_id=eq.1',
+			onPayload: vi.fn(),
+			...overrides
+		};
+	}
+
+	it('エラー時にバックオフで再購読する（従来は no-op）', async () => {
+		const supabase = createRetryTestSupabase();
+		const handle = createRealtimeChannel(supabase as any, makeSimpleConfig({ maxRetryCount: 3 }));
+		expect(supabase._channels.length).toBe(1);
+
+		supabase._fireStatus('CHANNEL_ERROR');
+		// backoff 前は新チャンネル無し
+		await vi.advanceTimersByTimeAsync(999);
+		expect(supabase._channels.length).toBe(1);
+		// backoff 後に再購読
+		await vi.advanceTimersByTimeAsync(1);
+		expect(supabase._channels.length).toBe(2);
+
+		handle.cleanup();
+	});
+
+	it('SUBSCRIBEDでretryCountがリセットされる', async () => {
+		const supabase = createRetryTestSupabase();
+		const handle = createRealtimeChannel(supabase as any, makeSimpleConfig({ maxRetryCount: 3 }));
+
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(2);
+
+		// 再接続成功
+		supabase._fireStatus('SUBSCRIBED');
+
+		// 次のエラーも先頭の backoff(1s) から（リセット済み）
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(3);
+
+		handle.cleanup();
+	});
+
+	it('最大リトライ到達後は再購読を諦める', async () => {
+		const supabase = createRetryTestSupabase();
+		const handle = createRealtimeChannel(supabase as any, makeSimpleConfig({ maxRetryCount: 2 }));
+
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels.length).toBe(2);
+
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(supabase._channels.length).toBe(3);
+
+		// max 到達 → これ以上再購読しない
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(10000);
+		expect(supabase._channels.length).toBe(3);
+
+		handle.cleanup();
+	});
+
+	it('cleanup()後は再購読しない', async () => {
+		const supabase = createRetryTestSupabase();
+		const handle = createRealtimeChannel(supabase as any, makeSimpleConfig({ maxRetryCount: 5 }));
+
+		supabase._fireStatus('CHANNEL_ERROR');
+		handle.cleanup();
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(supabase._channels.length).toBe(1);
 	});
 });

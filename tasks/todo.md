@@ -841,3 +841,28 @@ L3 大会削除 owner化／profiles email 列保護／complete の changeEvent C
 ### デプロイ順序（厳守・batch7型）
 - [ ] アプリ（email 参照全廃）を main push＝本番デプロイ → 反映確認 → 1020 を DEV→prod 適用。逆順だと旧アプリ insert(email)/select(email) が落ちる。
 - [ ] DEV E2E: 新規 signup/onboarding/招待受諾で profile 作成（email無し）、account の email 表示（user.email）、Stripe checkout/upgrade、直 PostgREST で profiles?select=email がエラー/無。
+
+---
+
+## scoreStatusManager の name キャッシュ 400 を解消バッチ（2026-06-29）
+
+initializeNameCache が PostgREST 埋め込み `profiles:judge_id(full_name)` を使用 → session_participants→profiles の FK が無く 400。名前はフォールバックで出るが毎回エラーログ＋realtime 到着スコアが一時 不明 になる。
+
+### 修正（アプリのみ・DBなし）
+- [x] `src/lib/scoreStatusManager.ts` initializeNameCache: 埋め込みを廃し、judge_id を取得→profiles を IN 句で引く方式に統一（研修パスと同じ）。400 解消・judgeNameCache が正しく埋まる。
+- [x] 型 256（新規0）／test 726／prettier。eslint は file 既存の any のみ（追加分も同 file の同一パターンに一致・新規 non-any 0）。テスト(N+1 検証)は手書きシミュレーションで本関数を呼ばないため不変。
+
+---
+
+## realtime 自動再購読（CLOSED/エラー時）＋ name キャッシュ400 修正バッチ（2026-06-29）
+
+realtime ヘルパーの CLOSED/エラー挙動がバラバラ（withRetry のみ堅牢、SessionMonitor は即 reload、RealtimeChannel は no-op）。上限つきバックオフ再購読に統一し、reload/give-up を最終手段に。新フロー nav に取りこぼし回帰が出ないようポーリング予備を付与。
+
+### 変更（アプリのみ・DBなし）
+- [x] `src/lib/realtime.ts`: createRealtimeChannel / createSessionMonitorChannel / createSessionMonitorWithPolling に上限つき(既定5・1/2/4/8/16s)バックオフ再購読を追加。SUBSCRIBED で retry リセット。createSessionMonitorChannel/WithPolling は再購読を使い切った後のみ onError/2秒 reload。WithPolling はエラー中もポーリング継続（取りこぼし保険）。config に maxRetryCount?。
+- [x] `src/lib/sessionNavigationMonitor.ts`: createSessionMonitorChannel → createSessionMonitorWithPolling に変更し、onPollingData で active_prompt 変化を検知して遷移（lastActivePromptId 追跡・初回はシードのみ）。realtime 瞬断でも次の滑走者へ確実遷移＝reload 不要に。
+- [x] `src/lib/scoreStatusManager.ts`: initializeNameCache の壊れた埋め込み(profiles:judge_id)を judge_id→profiles IN 句に修正（400 解消）。
+- [x] `realtime-channel-with-retry.test.ts`: SessionMonitor 系を新セマンティクス（再購読→最終手段）に更新、createRealtimeChannel 再購読テスト4件追加。型 256（新規0）／test 731（+5）／prettier。
+
+### Verification（要 DEV 手動・任意）
+- [ ] 検定 status / scoreboard で realtime を一時切断 → 数秒で自動復帰・ページ reload されない。新フロー大会の次の滑走者遷移も瞬断耐性。

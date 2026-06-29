@@ -74,18 +74,29 @@ export function createScoreStatusManager(
 	async function initializeNameCache(): Promise<void> {
 		console.log('[scoreStatusManager/cache] Judge名キャッシュを初期化中...');
 
+		// session_participants → profiles は FK 関係が無く、PostgREST の埋め込み
+		// (profiles:judge_id(full_name)) が 400 になる。judge_id を取得してから profiles を
+		// IN 句で引く方式に統一する（fetchStatusImpl の研修パスと同じ・埋め込み不要）。
 		const { data: judges } = await supabase
 			.from('session_participants')
-			.select('judge_id, profiles:judge_id(full_name)')
+			.select('judge_id')
 			.eq('session_id', sessionId)
 			.not('judge_id', 'is', null);
 
-		if (judges) {
-			judges.forEach((j: any) => {
-				if (j.judge_id && j.profiles?.full_name) {
-					judgeNameCache.set(j.judge_id, j.profiles.full_name);
-				}
-			});
+		const judgeIds = (judges || []).map((j: any) => j.judge_id).filter(Boolean);
+		if (judgeIds.length > 0) {
+			const { data: profiles } = await supabase
+				.from('profiles')
+				.select('id, full_name')
+				.in('id', judgeIds);
+
+			if (profiles) {
+				profiles.forEach((p: any) => {
+					if (p.id && p.full_name) {
+						judgeNameCache.set(p.id, p.full_name);
+					}
+				});
+			}
 		}
 
 		const { data: guests } = await supabase
