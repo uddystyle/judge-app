@@ -32,9 +32,11 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	};
 
 	if (bib && discipline && level && event) {
+		// owner 列(judge_id/guest_identifier)も載せ、修正要求の削除を owner 基準にできるようにする
+		// （ScoresTable が hidden で送る。同名検定員でも本人の行だけ削除する）。
 		const { data: scores } = await supabase
 			.from('results')
-			.select('judge_name, score')
+			.select('judge_name, score, judge_id, guest_identifier')
 			.eq('session_id', sessionId)
 			.eq('bib', parseInt(bib))
 			.eq('discipline', discipline)
@@ -76,6 +78,8 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const bib = formData.get('bib') as string;
 		const judgeName = formData.get('judgeName') as string;
+		const judgeId = formData.get('judgeId') as string;
+		const formGuestIdentifier = formData.get('guestIdentifier') as string;
 
 		console.log('[requestCorrection] 修正要求を受信:', { bib, judgeName, sessionId: id });
 
@@ -106,20 +110,24 @@ export const actions: Actions = {
 			judge_name: judgeName
 		});
 
-		const {
-			data: deletedData,
-			error: deleteError,
-			count
-		} = await supabase
+		// owner(judge_id/guest_identifier)で対象検定員の行だけを削除する。フォームが owner を
+		// 渡すので、同名検定員が居ても誤って別の行/両方を消さない。owner 未提供時のみ judge_name 後方互換。
+		let deleteQuery = supabase
 			.from('results')
 			.delete({ count: 'exact' })
 			.eq('session_id', id)
 			.eq('bib', bib)
 			.eq('discipline', discipline)
 			.eq('level', level)
-			.eq('event_name', event)
-			.eq('judge_name', judgeName)
-			.select();
+			.eq('event_name', event);
+		if (formGuestIdentifier) {
+			deleteQuery = deleteQuery.eq('guest_identifier', formGuestIdentifier);
+		} else if (judgeId) {
+			deleteQuery = deleteQuery.eq('judge_id', judgeId);
+		} else {
+			deleteQuery = deleteQuery.eq('judge_name', judgeName);
+		}
+		const { data: deletedData, error: deleteError, count } = await deleteQuery.select();
 
 		if (deleteError) {
 			console.error('[requestCorrection] ❌ 削除失敗:', deleteError);
