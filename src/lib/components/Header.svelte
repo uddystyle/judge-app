@@ -149,24 +149,28 @@
 					<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
 						{profile?.full_name || m.nav_account()}
 						<span class="menu-icon" class:rotated={showMenu}>
-							<Icon name="chevron-down" size={12} stroke={1.5} />
+							<Icon name="chevron-down" size={12} stroke={3} />
 						</span>
 					</button>
 
 					{#if showMenu}
 						<div class="dropdown-menu">
 							<button class="menu-item" on:click={() => handleMenuClick('/account')}>
+								<Icon name="judge" size={16} />
 								<span class="menu-label">{m.nav_profile()}</span>
 							</button>
 							<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
+								<Icon name="organization" size={16} />
 								<span class="menu-label">{m.nav_organizations()}</span>
 							</button>
 							<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
+								<Icon name="home" size={16} />
 								<span class="menu-label">{m.nav_sessions()}</span>
 							</button>
 							{#if user}
 								<div class="menu-divider"></div>
 								<button class="menu-item logout" on:click={handleLogout}>
+									<Icon name="logout" size={16} />
 									<span class="menu-label">{m.common_logout()}</span>
 								</button>
 							{/if}

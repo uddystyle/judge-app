@@ -4,6 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	export let data: PageData;
 
@@ -158,6 +159,7 @@
 					selectedRole = 'all';
 				}}
 			>
+				<Icon name="refresh" size={16} />
 				フィルターをリセット
 			</button>
 		</div>
@@ -291,6 +293,10 @@
 	}
 
 	.reset-filter-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		margin-top: 16px;
 		padding: 10px 20px;
 		font-size: 14px;

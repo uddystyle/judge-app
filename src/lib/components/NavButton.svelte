@@ -34,6 +34,10 @@
 
 <style>
 	.nav-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
 		background-color: var(--bg-primary);
 		color: var(--text-primary);
 		border: 1.5px solid var(--border-medium);

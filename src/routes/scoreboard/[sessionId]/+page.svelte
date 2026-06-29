@@ -4,6 +4,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { createRealtimeChannel, type RealtimeChannelHandle } from '$lib/realtime';
+	import Icon from '$lib/components/Icon.svelte';
 
 	export let data: PageData;
 
@@ -134,7 +135,7 @@
 	{/each}
 
 	<div class="refresh-section">
-		<button class="refresh-btn" on:click={refreshData}>🔄 最新データを取得</button>
+		<button class="refresh-btn" on:click={refreshData}><Icon name="refresh" size={18} /> 最新データを取得</button>
 	</div>
 </div>
 
@@ -351,6 +352,10 @@
 		margin-top: 28px;
 	}
 	.refresh-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		background: white;
 		border: 1px solid #d2d2d7;
 		border-radius: 8px;

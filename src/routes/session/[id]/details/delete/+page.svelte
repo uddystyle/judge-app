@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { page } from '$app/stores';
 
 	let deleting = false;
@@ -34,7 +35,7 @@
 </script>
 
 <div class="container">
-	<div class="instruction">本当にこのセッションを削除しますか？</div>
+	<div class="instruction"><Icon name="warning" size={24} />本当にこのセッションを削除しますか？</div>
 	<p class="warning-text">
 		セッションはアーカイブに移動され、ダッシュボードからは非表示になります。
 	</p>
@@ -48,7 +49,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="danger" on:click={handleDelete} disabled={deleting}>
-			{deleting ? '削除中...' : 'はい、削除します'}
+			<Icon name="trash" size={18} />{deleting ? '削除中...' : 'はい、削除します'}
 		</NavButton>
 
 		<NavButton on:click={() => goto(`/session/${$page.params.id}/details`)} type="button" disabled={deleting}>
@@ -65,6 +66,10 @@
 		margin: 40px auto;
 	}
 	.instruction {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		margin-bottom: 16px;

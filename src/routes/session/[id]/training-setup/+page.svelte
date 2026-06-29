@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
@@ -19,7 +20,7 @@
 />
 
 <div class="container">
-	<div class="instruction">研修設定</div>
+	<div class="instruction"><Icon name="kenshu" size={24} />研修設定</div>
 
 	<p class="setup-info">この研修を始める前に設定してください。<br />後からでも変更できます。</p>
 
@@ -73,6 +74,10 @@
 		font-weight: 700;
 		margin-bottom: 12px;
 		color: var(--primary-text);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 	}
 	.setup-info {
 		font-size: 15px;

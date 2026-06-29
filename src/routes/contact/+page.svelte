@@ -2,6 +2,7 @@
 	import type { PageData, ActionData } from './$types';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import * as m from '$lib/paraglide/messages.js';
@@ -29,7 +30,7 @@
 
 	{#if form?.success}
 		<div class="success-message">
-			<div class="success-icon">✓</div>
+			<div class="success-icon"><Icon name="ready" size={40} /></div>
 			<h2>お問い合わせを受け付けました</h2>
 			<p>ご連絡ありがとうございます。担当者より折り返しご連絡いたします。</p>
 			<button class="back-btn" on:click={() => goto('/')}>{m.nav_topPage()}</button>

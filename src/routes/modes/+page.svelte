@@ -2,6 +2,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
+	import Icon from '$lib/components/Icon.svelte';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -27,7 +28,7 @@
 		<!-- 検定モード -->
 		<div class="mode-card">
 			<div class="mode-header">
-				<h2 class="mode-title">検定モード</h2>
+				<h2 class="mode-title"><Icon name="kentei" size={24} />検定モード</h2>
 			</div>
 			<p class="mode-description">既定の種目・レベルで検定を実施するモードです。</p>
 			<div class="mode-features">
@@ -48,7 +49,7 @@
 		<!-- 大会モード -->
 		<div class="mode-card">
 			<div class="mode-header">
-				<h2 class="mode-title">大会モード</h2>
+				<h2 class="mode-title"><Icon name="taikai" size={24} />大会モード</h2>
 			</div>
 			<p class="mode-description">
 				複数の検定員で公式な採点を行い、正確な順位を決定するモードです。
@@ -72,7 +73,7 @@
 		<!-- 研修モード -->
 		<div class="mode-card">
 			<div class="mode-header">
-				<h2 class="mode-title">研修モード</h2>
+				<h2 class="mode-title"><Icon name="kenshu" size={24} />研修モード</h2>
 			</div>
 			<p class="mode-description">
 				検定員同士で採点を比較し、採点基準のすり合わせを行うモードです。
@@ -201,6 +202,9 @@
 	}
 
 	.mode-title {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		font-size: 22px;
 		font-weight: 700;
 		color: var(--text-primary);

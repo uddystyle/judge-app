@@ -3,6 +3,7 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import * as m from '$lib/paraglide/messages.js';
@@ -83,7 +84,7 @@
 					{m.common_login()}
 				{/if}
 			</NavButton>
-			<NavButton type="button" on:click={() => goto('/signup')}>{m.auth_newRegistration()}</NavButton>
+			<NavButton type="button" on:click={() => goto('/signup')}><Icon name="plus" size={18} />{m.auth_newRegistration()}</NavButton>
 		</div>
 	</form>
 

@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	export let data: PageData;
@@ -25,7 +26,7 @@
 
 <div class="container">
 	<div class="invitation-header">
-		<h1 class="page-title">組織への招待</h1>
+		<h1 class="page-title"><Icon name="invite" size={24} />組織への招待</h1>
 		<p class="subtitle">あなたは組織に招待されています</p>
 	</div>
 
@@ -63,7 +64,7 @@
 	{:else}
 		<!-- 未ログインの場合：新規登録フォーム -->
 		<div class="section">
-			<h3 class="section-title">アカウントを作成して参加</h3>
+			<h3 class="section-title"><Icon name="plus" size={22} />アカウントを作成して参加</h3>
 			<form method="POST" action="?/signup" use:enhance={() => {
 				loading = true;
 				return async ({ update }) => {
@@ -113,7 +114,7 @@
 
 				<div class="nav-buttons">
 					<NavButton variant="primary" type="submit" disabled={loading}>
-						{loading ? '処理中...' : '登録して参加'}
+						<Icon name="plus" size={18} />{loading ? '処理中...' : '登録して参加'}
 					</NavButton>
 				</div>
 			</form>
@@ -148,6 +149,10 @@
 		font-weight: 700;
 		color: var(--text-primary);
 		margin-bottom: 12px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 	}
 	.subtitle {
 		font-size: 16px;
@@ -195,6 +200,10 @@
 		color: var(--text-primary);
 		margin-bottom: 20px;
 		text-align: center;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 	}
 	.form-group {
 		margin-bottom: 20px;

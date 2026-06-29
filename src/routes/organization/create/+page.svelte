@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
@@ -143,7 +144,7 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
 
 <div class="container">
-	<div class="instruction">組織を作成</div>
+	<div class="instruction"><Icon name="plus" size={24} />組織を作成</div>
 
 	<!-- クーポン適用バッジ -->
 	{#if data.coupon}
@@ -254,6 +255,7 @@
 
 		<div class="nav-buttons">
 			<NavButton variant="primary" on:click={handleCreateOrganization} disabled={loading}>
+				<Icon name="plus" size={18} />
 				{#if loading}
 					<span style="display: inline-flex; align-items: center; gap: 8px;">
 						処理中
@@ -287,6 +289,10 @@
 		font-weight: 700;
 		color: var(--text-primary);
 		margin-bottom: 40px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.coupon-badge {

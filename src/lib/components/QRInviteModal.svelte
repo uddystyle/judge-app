@@ -2,6 +2,7 @@
 	import QRCode from 'qrcode';
 	import { createEventDispatcher } from 'svelte';
 	import * as m from '$lib/paraglide/messages.js';
+	import Icon from './Icon.svelte';
 
 	export let inviteUrl: string;
 	export let sessionName: string;
@@ -62,7 +63,7 @@
 		<div class="modal-content" on:click|stopPropagation role="button" tabindex="0" on:keydown={() => {}}>
 			<div class="modal-header">
 				<h2 class="modal-title">{sessionName}</h2>
-				<button class="modal-close" on:click={close} aria-label={m.common_close()}>×</button>
+				<button class="modal-close" on:click={close} aria-label={m.common_close()}><Icon name="close" size={20} /></button>
 			</div>
 
 			<div class="modal-body">
@@ -74,12 +75,14 @@
 
 			<div class="modal-actions">
 				<button class="modal-btn secondary" on:click={downloadQR}>
+					<Icon name="export" size={18} />
 					ダウンロード
 				</button>
 				<button class="modal-btn secondary" on:click={printQR}>
 					印刷
 				</button>
 				<button class="modal-btn primary" on:click={close}>
+					<Icon name="close" size={18} />
 					{m.common_close()}
 				</button>
 			</div>
@@ -196,6 +199,10 @@
 		cursor: pointer;
 		transition: all 0.2s;
 		font-family: inherit;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 	}
 
 	.modal-btn.primary {

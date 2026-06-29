@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	export let data: PageData;
@@ -15,7 +16,7 @@
 
 <div class="container">
 	<div class="page-header">
-		<h1 class="page-title">組織の削除</h1>
+		<h1 class="page-title"><Icon name="trash" size={24} />組織の削除</h1>
 	</div>
 
 	{#if data.hasActiveSubscription}
@@ -36,7 +37,7 @@
 	{/if}
 
 	<div class="warning-section">
-		<h2 class="warning-title">この操作は取り消せません</h2>
+		<h2 class="warning-title"><Icon name="warning" size={24} />この操作は取り消せません</h2>
 		<p class="warning-text">
 			組織「<strong>{data.organization.name}</strong
 			>」を削除すると、以下のデータがすべて失われます：
@@ -83,6 +84,7 @@
 
 			<div class="nav-buttons">
 				<button type="submit" class="delete-btn" disabled={!canDelete || isDeleting}>
+					<Icon name="trash" size={18} />
 					{isDeleting ? '削除中...' : '組織を削除'}
 				</button>
 			</div>
@@ -105,6 +107,10 @@
 		margin-bottom: 32px;
 	}
 	.page-title {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 28px;
 		font-weight: 700;
 		color: #dc3545;
@@ -119,6 +125,10 @@
 		text-align: left;
 	}
 	.warning-title {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 20px;
 		font-weight: 700;
 		color: #dc3545;
@@ -241,6 +251,10 @@
 		gap: 12px;
 	}
 	.delete-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		width: 100%;
 		background: #dc3545;
 		color: white;

@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
@@ -18,7 +19,7 @@
 />
 
 <div class="container">
-	<div class="instruction">大会設定</div>
+	<div class="instruction"><Icon name="taikai" size={24} />大会設定</div>
 
 	<p class="setup-info">この大会を始める前に設定してください。<br />後からでも変更できます。</p>
 
@@ -68,7 +69,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="primary" on:click={() => goto('/dashboard')}>
-			設定完了
+			<Icon name="ready" size={18} />設定完了
 		</NavButton>
 		<NavButton on:click={() => goto('/dashboard')}>
 			後で設定する
@@ -88,6 +89,10 @@
 		font-weight: 700;
 		margin-bottom: 12px;
 		color: var(--primary-text);
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 	}
 	.setup-info {
 		font-size: 15px;

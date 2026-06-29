@@ -1,10 +1,11 @@
 <script lang="ts">
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 </script>
 
 <div class="container">
-	<div class="instruction">ご登録ありがとうございます</div>
+	<div class="instruction"><Icon name="ready" size={24} />ご登録ありがとうございます</div>
 	<p class="message">
 		確認メールを送信しました。<br
 		/>メールに記載されているリンクをクリックして、アカウントの登録を完了してください。
@@ -25,6 +26,10 @@
 		margin: 40px auto;
 	}
 	.instruction {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		margin-bottom: 16px;

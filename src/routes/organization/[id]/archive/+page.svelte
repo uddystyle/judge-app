@@ -4,6 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	export let data: PageData;
 
@@ -280,6 +281,7 @@
 							on:click={() => restoreSession(session.id)}
 							disabled={restoringSessionId === session.id}
 						>
+							<Icon name="refresh" size={16} />
 							{restoringSessionId === session.id ? '復元中...' : '復元'}
 						</button>
 						{#if isPremium}
@@ -288,6 +290,7 @@
 								on:click={() => confirmPermanentDelete(session)}
 								disabled={deletingSessionId === session.id}
 							>
+								<Icon name="trash" size={16} />
 								{deletingSessionId === session.id ? '削除中...' : '完全削除'}
 							</button>
 						{/if}
@@ -306,6 +309,7 @@
 					selectedMode = 'all';
 				}}
 			>
+				<Icon name="refresh" size={16} />
 				フィルターをリセット
 			</button>
 		</div>
@@ -524,6 +528,10 @@
 	}
 
 	.reset-filter-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		margin-top: 16px;
 		padding: 10px 20px;
 		font-size: 14px;
@@ -664,6 +672,10 @@
 	}
 
 	.action-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		padding: 10px 20px;
 		font-size: 14px;
 		font-weight: 600;

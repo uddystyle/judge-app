@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
@@ -153,7 +154,7 @@
 	{#if planChanged}
 		<div class="success-message-container">
 			<div class="success-message">
-				<div class="message-icon">✅</div>
+				<div class="message-icon"><Icon name="ready" size={40} /></div>
 				<div class="message-content">
 					<h3 class="message-title">プラン変更が完了しました</h3>
 					<p class="message-text">新しいプランが即座に適用されました。</p>
@@ -446,6 +447,9 @@
 	.message-icon {
 		font-size: 24px;
 		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.message-content {

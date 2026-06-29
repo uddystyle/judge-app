@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import Header from '$lib/components/Header.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { currentSession, currentDiscipline, currentEvent } from '$lib/stores';
@@ -63,7 +64,7 @@
 	{/if}
 
 	<div class="form-container">
-		<h3 class="settings-title">採点一覧</h3>
+		<h3 class="settings-title"><Icon name="score" size={20} />採点一覧</h3>
 		{#if filteredScores && filteredScores.length > 0}
 			<div class="scores-list">
 				{#each filteredScores as score}
@@ -181,6 +182,9 @@
 	}
 
 	.settings-title {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		font-size: 17px;
 		font-weight: 600;
 		margin-bottom: 0.5rem;

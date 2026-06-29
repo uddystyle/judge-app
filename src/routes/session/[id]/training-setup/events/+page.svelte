@@ -2,6 +2,7 @@
 	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
@@ -83,7 +84,7 @@
 								<span class="event-text">{event.name}</span>
 							</div>
 							<div class="event-actions">
-								<button class="edit-btn" on:click={() => startEdit(event)}>編集</button>
+								<button class="edit-btn" on:click={() => startEdit(event)}><Icon name="edit" size={14} />編集</button>
 								<form method="POST" action="?/deleteEvent" use:enhance style="display: inline;">
 									<input type="hidden" name="eventId" value={event.id} />
 									<button
@@ -95,7 +96,7 @@
 											}
 										}}
 									>
-										削除
+										<Icon name="trash" size={14} />削除
 									</button>
 								</form>
 							</div>
@@ -118,7 +119,7 @@
 					bind:value={eventName}
 					required
 				/>
-				<button type="submit" class="add-btn">追加</button>
+				<button type="submit" class="add-btn"><Icon name="plus" size={16} />追加</button>
 			</div>
 		</form>
 	</div>
@@ -207,6 +208,10 @@
 	}
 	.edit-btn,
 	.delete-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		padding: 6px 12px;
 		border-radius: 8px;
 		border: none;
@@ -299,6 +304,10 @@
 		background: white;
 	}
 	.add-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		background: var(--ios-blue);
 		color: white;
 		padding: 12px;

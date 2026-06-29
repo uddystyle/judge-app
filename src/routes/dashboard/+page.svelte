@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
@@ -172,6 +173,7 @@
 									class:disabled={!canStart}
 									on:click={() => handleSessionClick(session)}
 								>
+									<Icon name="play" size={18} />
 									{m.dashboard_startSession()}
 								</button>
 							</div>
@@ -189,6 +191,7 @@
 	<div class="nav-buttons">
 		{#if data.organizations && data.organizations.length > 0}
 			<NavButton variant="primary" on:click={() => goto('/session/create')}>
+				<Icon name="plus" size={18} />
 				{m.dashboard_createNewSession()}
 			</NavButton>
 		{/if}
@@ -269,6 +272,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		gap: 6px;
 		background: linear-gradient(135deg, #404040 0%, #262626 100%);
 		color: white;
 		border: none;

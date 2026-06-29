@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 
 	export let data: PageData;
 
@@ -56,7 +57,7 @@
 			{#each data.events as event}
 				<button class="event-card" on:click={() => selectEvent(event.id)}>
 					<div class="event-name">{event.name}</div>
-					<div class="arrow">→</div>
+					<div class="arrow"><Icon name="forward" size={18} /></div>
 				</button>
 			{/each}
 		</div>
@@ -169,6 +170,9 @@
 	}
 
 	.arrow {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		font-size: 1.5rem;
 		color: #ff9800;
 		opacity: 0.5;

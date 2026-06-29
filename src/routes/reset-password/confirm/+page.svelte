@@ -32,6 +32,7 @@
 			<p class="error-text">{data.error}</p>
 			<div class="nav-buttons">
 				<NavButton variant="primary" on:click={() => goto('/reset-password')}>
+					<Icon name="refresh" size={18} />
 					再度リセットを試す
 				</NavButton>
 				<NavButton on:click={() => goto('/login')}>

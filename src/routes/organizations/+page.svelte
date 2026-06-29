@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import { goto } from '$app/navigation';
@@ -23,19 +24,19 @@
 <Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} pageOrganizations={data.organizations || []} />
 
 <div class="container">
-	<div class="instruction">{m.org_title()}</div>
+	<div class="instruction"><Icon name="organization" size={24} />{m.org_title()}</div>
 
 	{#if !data.organizations || data.organizations.length === 0}
 		<!-- 組織未作成の場合 -->
 		<div class="no-organization-card">
-			<div class="warning-icon">⚠️</div>
+			<div class="warning-icon"><Icon name="warning" size={40} /></div>
 			<h3 class="warning-title">{m.org_noOrganization()}</h3>
 			<p class="warning-message">
 				{@html m.org_noOrgMessage()}
 			</p>
 			<div class="actions">
 				<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
-					{m.org_createOrganization()}
+					<Icon name="plus" size={18} />{m.org_createOrganization()}
 				</NavButton>
 			</div>
 		</div>
@@ -65,7 +66,7 @@
 		<div class="create-org-card">
 			<p class="create-org-text">{m.org_multipleOrgs()}</p>
 			<NavButton variant="primary" on:click={() => goto('/onboarding/create-organization')}>
-				{m.org_createNew()}
+				<Icon name="plus" size={18} />{m.org_createNew()}
 			</NavButton>
 		</div>
 	{/if}
@@ -81,6 +82,10 @@
 		margin: 0 auto;
 	}
 	.instruction {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -95,6 +100,9 @@
 		text-align: center;
 	}
 	.warning-icon {
+		display: flex;
+		justify-content: center;
+		align-items: center;
 		font-size: 48px;
 		margin-bottom: 16px;
 	}

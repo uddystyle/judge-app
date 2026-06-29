@@ -326,7 +326,7 @@
 
 	<!-- ユーザーを招待セクション -->
 	<div class="settings-section">
-		<h3 class="settings-title">{m.details_inviteUsers()}</h3>
+		<h3 class="settings-title"><Icon name="invite" size={20} />{m.details_inviteUsers()}</h3>
 		<div class="invite-container">
 			<div class="invite-item">
 				<span class="invite-label">{m.details_joinCode()}</span>
@@ -343,7 +343,7 @@
 
 	<!-- ゲスト招待セクション -->
 	<div class="settings-section">
-		<h3 class="settings-title">{m.details_inviteGuests()}</h3>
+		<h3 class="settings-title"><Icon name="invite" size={20} />{m.details_inviteGuests()}</h3>
 		<div class="invite-container">
 			<div class="invite-item">
 				<span class="invite-label">{m.details_inviteUrl()}</span>
@@ -358,6 +358,7 @@
 			<div class="invite-item">
 				<span class="invite-label">{m.details_qrCode()}</span>
 				<button class="qr-btn" on:click={openQRModal}>
+					<Icon name="scan" size={18} />
 					{m.details_showQR()}
 				</button>
 			</div>
@@ -370,7 +371,7 @@
 
 	<div class="settings-section">
 		<div class="section-header-with-action">
-			<h3 class="settings-title">{m.details_activeJudges()}</h3>
+			<h3 class="settings-title"><Icon name="judges" size={20} />{m.details_activeJudges()}</h3>
 			<button class="refresh-btn-with-label" class:refreshing={isRefreshing} on:click={handleRefresh} title={m.details_refreshList()}>
 				<Icon name="refresh" size={18} />
 				<span class="refresh-label">{m.details_refreshList()}</span>
@@ -424,6 +425,7 @@
 											class="appoint-btn danger"
 											on:click={() => openRemoveParticipantDialog(p.user_id, p.profiles?.full_name || m.details_profileNotSet())}
 										>
+											<Icon name="trash" size={16} />
 											{m.common_delete()}
 										</button>
 									</form>
@@ -443,6 +445,7 @@
 										class="appoint-btn danger"
 										on:click={() => openRemoveGuestDialog(p.guest_identifier, p.guest_name)}
 									>
+										<Icon name="trash" size={16} />
 										{m.common_delete()}
 									</button>
 								</form>
@@ -542,11 +545,13 @@
 						variant="primary"
 						on:click={() => goto(`/session/${data.sessionDetails.id}/scoreboard`)}
 					>
+						<Icon name="scoreboard" size={18} />
 						{m.details_showScoreboard()}
 					</NavButton>
 				{/if}
 				{#if data.currentUserId === data.sessionDetails.created_by}
 					<NavButton on:click={handleExport} disabled={exportLoading}>
+						<Icon name="export" size={18} />
 						{exportLoading ? m.details_preparing() : m.details_exportResults()}
 					</NavButton>
 					{#if data.isTrainingMode}
@@ -554,6 +559,7 @@
 							variant="danger"
 							on:click={() => openDeleteDataDialog('training')}
 						>
+							<Icon name="trash" size={18} />
 							{m.details_deleteScoreData()}
 						</NavButton>
 					{:else if data.sessionDetails.is_tournament_mode}
@@ -561,6 +567,7 @@
 							variant="danger"
 							on:click={() => openDeleteDataDialog('tournament')}
 						>
+							<Icon name="trash" size={18} />
 							{m.details_deleteScoreData()}
 						</NavButton>
 					{:else}
@@ -568,6 +575,7 @@
 							variant="danger"
 							on:click={() => openDeleteDataDialog('certification')}
 						>
+							<Icon name="trash" size={18} />
 							{m.details_deleteScoreData()}
 						</NavButton>
 					{/if}
@@ -590,6 +598,7 @@
 				variant="danger"
 				on:click={() => { showDeleteSessionDialog = true; }}
 			>
+				<Icon name="trash" size={18} />
 				{m.details_deleteSession({ mode: data.isTrainingMode ? m.mode_training() : data.sessionDetails.is_tournament_mode ? m.mode_tournament() : m.mode_certification() })}
 			</NavButton>
 		</div>
@@ -773,7 +782,9 @@
 		font-size: 17px;
 		font-weight: 600;
 		margin-bottom: 0.5rem;
-		display: block;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		text-align: left;
 	}
 	.section-header-with-action {
@@ -919,6 +930,10 @@
 		background-color: transparent;
 		color: #dc3545;
 		border: 1.5px solid #dc3545;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 	}
 	.appoint-btn.danger:hover {
 		background-color: #ffe6e6;
@@ -1255,6 +1270,10 @@
 
 	.qr-btn {
 		width: 100%;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		padding: 14px;
 		background: white;
 		color: var(--text-primary);

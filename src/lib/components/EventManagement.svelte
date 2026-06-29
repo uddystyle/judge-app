@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import * as m from '$lib/paraglide/messages.js';
+	import Icon from './Icon.svelte';
 
 	export let events: any[];
 	export let isTrainingMode: boolean;
@@ -72,6 +73,7 @@
 							</div>
 							<div class="event-actions">
 								<button class="edit-btn-small" on:click={() => startEditEvent(event)}>
+									<Icon name="edit" size={16} />
 									{m.common_edit()}
 								</button>
 								<form method="POST" action="?/deleteEvent" use:enhance style="display: inline;">
@@ -86,6 +88,7 @@
 											}
 										}}
 									>
+										<Icon name="trash" size={16} />
 										{m.common_delete()}
 									</button>
 								</form>
@@ -107,7 +110,7 @@
 					placeholder={m.event_namePlaceholder()}
 					required
 				/>
-				<button type="submit" class="add-event-btn">{m.event_add()}</button>
+				<button type="submit" class="add-event-btn"><Icon name="plus" size={16} />{m.event_add()}</button>
 			</div>
 		</form>
 	{:else}
@@ -215,6 +218,10 @@
 		transition: opacity 0.2s;
 		font-weight: 500;
 		min-height: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 	}
 	.edit-btn-small {
 		background: var(--ios-blue);
@@ -287,6 +294,10 @@
 		cursor: pointer;
 		transition: opacity 0.2s;
 		white-space: nowrap;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 	}
 	.add-event-btn:active {
 		opacity: 0.7;

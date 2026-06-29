@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -321,9 +322,9 @@
 		<hr class="divider" />
 
 		<NavButton on:click={() => goto('/dashboard')}>{m.account_backToDashboard()}</NavButton>
-		<NavButton variant="danger" on:click={handleLogout}>{m.common_logout()}</NavButton>
+		<NavButton variant="danger" on:click={handleLogout}><Icon name="logout" size={18} />{m.common_logout()}</NavButton>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
-			{m.account_deleteAccount()}
+			<Icon name="trash" size={18} />{m.account_deleteAccount()}
 		</NavButton>
 	</div>
 </div>

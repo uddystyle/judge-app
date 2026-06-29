@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -59,7 +60,7 @@
 </script>
 
 <div class="container">
-	<div class="instruction">本当にアカウントを削除しますか？</div>
+	<div class="instruction"><Icon name="warning" size={24} />本当にアカウントを削除しますか？</div>
 	<p class="warning-text">
 		この操作は取り消せません。あなたの個人アカウント情報・作成した検定・採点データが削除され、個人の有料プランは自動的に解約されます。<br />
 		なお、有料プランの組織で唯一の管理者になっている場合は削除できません。先に組織のプランを解約するか、別のメンバーを管理者に設定してください。
@@ -71,7 +72,7 @@
 
 	<div class="nav-buttons">
 		<NavButton variant="danger" on:click={handleDeleteAccount} disabled={loading}>
-			{loading ? '削除中...' : 'はい、削除します'}
+			<Icon name="trash" size={18} />{loading ? '削除中...' : 'はい、削除します'}
 		</NavButton>
 		<NavButton on:click={() => goto('/account')}>いいえ、キャンセルします</NavButton>
 	</div>
@@ -85,6 +86,10 @@
 		margin: 40px auto;
 	}
 	.instruction {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		margin-bottom: 16px;

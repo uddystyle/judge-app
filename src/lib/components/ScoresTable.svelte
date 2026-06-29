@@ -2,6 +2,7 @@
 	import { enhance, applyAction } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import * as m from '$lib/paraglide/messages.js';
+	import Icon from './Icon.svelte';
 
 	export let scores: Array<{
 		judge_name: string;
@@ -53,7 +54,7 @@
 	};
 </script>
 
-<h3 class="settings-title">{m.score_judgeScores()}</h3>
+<h3 class="settings-title"><Icon name="score" size={20} />{m.score_judgeScores()}</h3>
 <div class="participants-container">
 	{#if scores && scores.length > 0}
 		{#each scores as s}
@@ -75,6 +76,7 @@
 						<input type="hidden" name="judgeId" value={s.judge_id || ''} />
 						<input type="hidden" name="guestIdentifier" value={s.guest_identifier || ''} />
 						<button type="submit" class="correction-btn">
+							<Icon name="edit" size={16} />
 							{m.score_correction()}
 						</button>
 					</form>
@@ -100,6 +102,9 @@
 		font-weight: 600;
 		margin-bottom: 0.5rem;
 		text-align: left;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 	}
 	.participants-container {
 		background: white;
@@ -141,6 +146,10 @@
 		font-weight: 700;
 	}
 	.correction-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		background: var(--ios-orange);
 		color: white;
 		border: none;

@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import Header from '$lib/components/Header.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -167,7 +168,7 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton on:click={refreshData}>最新データを取得</NavButton>
+		<NavButton on:click={refreshData}><Icon name="refresh" size={18} />最新データを取得</NavButton>
 		<NavButton on:click={() => goto(`/session/${sessionId}/details`)}>セッション詳細ページに戻る</NavButton>
 	</div>
 </div>

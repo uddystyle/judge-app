@@ -8,6 +8,7 @@
 	} from '$lib/stores';
 	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
@@ -563,7 +564,7 @@
 	{#if isSessionExpired}
 		<!-- セッション期限切れメッセージ -->
 		<div class="alert warning" style="margin-bottom: 24px;">
-			<p><strong>⚠️ セッションの有効期限が切れました</strong></p>
+			<p><strong style="display: inline-flex; align-items: center; gap: 6px;"><Icon name="warning" size={18} />セッションの有効期限が切れました</strong></p>
 			<p>長時間操作がなかったため、セキュリティ上の理由でセッションが終了しました。</p>
 			<p>再度参加する場合は、招待リンクまたは参加コードを使用してください。</p>
 		</div>
@@ -755,31 +756,7 @@
 			<!-- ゲストユーザー: わかりやすい待機画面 -->
 			<div class="guest-waiting-container">
 				<div class="guest-waiting-icon">
-					<svg
-						class="checkmark-icon"
-						width="80"
-						height="80"
-						viewBox="0 0 80 80"
-						fill="none"
-						xmlns="http://www.w3.org/2000/svg"
-					>
-						<circle
-							cx="40"
-							cy="40"
-							r="35"
-							stroke="currentColor"
-							stroke-width="3"
-							fill="none"
-							opacity="0.2"
-						/>
-						<path
-							d="M25 40 L35 50 L55 30"
-							stroke="currentColor"
-							stroke-width="4"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						/>
-					</svg>
+					<Icon name="ready" size={80} />
 				</div>
 				<div class="instruction">参加完了</div>
 				<div class="guest-wait-message">
@@ -843,47 +820,7 @@
 			<!-- 複数検定員モード: 準備中表示 -->
 			<div class="waiting-container">
 				<div class="waiting-icon">
-					<svg
-						class="clock-icon"
-						width="80"
-						height="80"
-						viewBox="0 0 80 80"
-						fill="none"
-						xmlns="http://www.w3.org/2000/svg"
-					>
-						<circle cx="40" cy="40" r="35" stroke="currentColor" stroke-width="3" opacity="0.2" />
-						<circle
-							cx="40"
-							cy="40"
-							r="35"
-							stroke="currentColor"
-							stroke-width="3"
-							stroke-dasharray="220"
-							stroke-dashoffset="0"
-							class="clock-circle"
-						/>
-						<line
-							x1="40"
-							y1="40"
-							x2="40"
-							y2="20"
-							stroke="currentColor"
-							stroke-width="3"
-							stroke-linecap="round"
-							class="clock-hand-hour"
-						/>
-						<line
-							x1="40"
-							y1="40"
-							x2="55"
-							y2="40"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							class="clock-hand-minute"
-						/>
-						<circle cx="40" cy="40" r="3" fill="currentColor" />
-					</svg>
+					<Icon name="waiting" size={80} />
 				</div>
 				<div class="instruction">準備中…</div>
 				<div class="wait-message">
@@ -977,49 +914,14 @@
 		display: flex;
 		justify-content: center;
 		margin-bottom: 24px;
-	}
-
-	.clock-icon {
 		color: var(--ios-blue);
 	}
 
-	.clock-circle {
-		animation: dash 2s ease-in-out infinite;
+	.waiting-icon :global(svg) {
+		animation: spin 2s linear infinite;
 	}
 
-	.clock-hand-hour {
-		transform-origin: 40px 40px;
-		animation: rotate-hour 4s linear infinite;
-	}
-
-	.clock-hand-minute {
-		transform-origin: 40px 40px;
-		animation: rotate-minute 2s linear infinite;
-	}
-
-	@keyframes dash {
-		0%,
-		100% {
-			stroke-dashoffset: 0;
-		}
-		50% {
-			stroke-dashoffset: 110;
-		}
-	}
-
-	@keyframes rotate-hour {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	@keyframes rotate-minute {
-		from {
-			transform: rotate(0deg);
-		}
+	@keyframes spin {
 		to {
 			transform: rotate(360deg);
 		}
@@ -1148,21 +1050,6 @@
 
 	.guest-waiting-icon {
 		color: var(--accent-primary);
-	}
-
-	.checkmark-icon {
-		animation: checkmark-appear 0.5s ease-out;
-	}
-
-	@keyframes checkmark-appear {
-		0% {
-			opacity: 0;
-			transform: scale(0.5);
-		}
-		100% {
-			opacity: 1;
-			transform: scale(1);
-		}
 	}
 
 	.guest-wait-message {

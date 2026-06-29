@@ -4,6 +4,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
@@ -40,7 +41,7 @@
 	{#if data.error}
 		<!-- エラー表示 -->
 		<div class="error-container">
-			<h1 class="error-title">招待リンクが無効です</h1>
+			<h1 class="error-title"><Icon name="error" size={24} />招待リンクが無効です</h1>
 			<p class="error-message">{data.error}</p>
 			<div class="nav-buttons">
 				<NavButton variant="primary" on:click={() => window.location.href = '/'}>
@@ -168,6 +169,10 @@
 	}
 
 	.error-title {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		color: var(--text-primary);

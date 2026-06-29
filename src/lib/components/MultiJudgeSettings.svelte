@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import * as m from '$lib/paraglide/messages.js';
+	import Icon from './Icon.svelte';
 
 	export let isChief: boolean;
 	export let mode: 'training' | 'certification';
@@ -21,14 +22,21 @@
 </script>
 
 <div class="settings-section">
-	<h3 class="settings-title">{title}</h3>
+	<h3 class="settings-title">
+		{#if mode === 'training'}
+			<Icon name="kenshu" size={20} />
+		{:else}
+			<Icon name="kentei" size={20} />
+		{/if}
+		{title}
+	</h3>
 
 	{#if settingsSuccess}
-		<div class="success-message">{settingsSuccess}</div>
+		<div class="success-message"><Icon name="ready" size={18} />{settingsSuccess}</div>
 	{/if}
 
 	{#if settingsError}
-		<div class="error-message">{settingsError}</div>
+		<div class="error-message"><Icon name="error" size={18} />{settingsError}</div>
 	{/if}
 
 	{#if isChief}
@@ -130,7 +138,9 @@
 		font-size: 17px;
 		font-weight: 600;
 		margin-bottom: 0.5rem;
-		display: block;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		text-align: left;
 	}
 	.form-label {
@@ -145,6 +155,10 @@
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		text-align: center;
 	}
 	.error-message {
@@ -154,6 +168,10 @@
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		text-align: center;
 	}
 	.setting-item {

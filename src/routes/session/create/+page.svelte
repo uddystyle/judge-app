@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import type { ActionData, PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 	import { goto } from '$app/navigation';
@@ -75,7 +76,7 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title">{m.session_certMode()}</div>
+						<div class="mode-title"><Icon name="kentei" size={24} />{m.session_certMode()}</div>
 						<div class="mode-description">{m.session_certModeDesc()}</div>
 					</div>
 				</label>
@@ -89,7 +90,7 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title">{m.session_tournamentMode()}</div>
+						<div class="mode-title"><Icon name="taikai" size={24} />{m.session_tournamentMode()}</div>
 						<div class="mode-description">{m.session_tournamentModeDesc()}</div>
 					</div>
 				</label>
@@ -103,7 +104,7 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title">{m.session_trainingMode()}</div>
+						<div class="mode-title"><Icon name="kenshu" size={24} />{m.session_trainingMode()}</div>
 						<div class="mode-description">{m.session_trainingModeDesc()}</div>
 					</div>
 				</label>
@@ -162,7 +163,7 @@
 
 			{#if form?.error}
 				<div class="error-container">
-					<p class="error-message">{form.error}</p>
+					<p class="error-message"><Icon name="error" size={18} />{form.error}</p>
 					{#if form?.upgradeUrl}
 						<button type="button" class="upgrade-btn" on:click={() => goto(form.upgradeUrl)}>
 							{m.session_upgradePlan()}
@@ -173,6 +174,7 @@
 
 			<div class="nav-buttons">
 				<NavButton variant="primary" type="submit" disabled={isSubmitting}>
+					<Icon name="plus" size={18} />
 					{#if isSubmitting}
 						<span style="display: inline-flex; align-items: center; gap: 8px;">
 							{m.session_creating()}
@@ -229,6 +231,10 @@
 		text-align: center;
 	}
 	.error-message {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		color: #dc3545;
 		font-size: 14px;
 		margin-bottom: 12px;
@@ -288,6 +294,9 @@
 		text-align: left;
 	}
 	.mode-title {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		font-size: 17px;
 		font-weight: 600;
 		color: var(--primary-text);

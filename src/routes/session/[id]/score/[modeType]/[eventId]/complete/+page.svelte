@@ -1,6 +1,7 @@
 <script lang="ts">
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { currentBib as bibStore } from '$lib/stores';
@@ -106,7 +107,7 @@
 />
 
 <div class="container">
-	<div class="instruction">送信完了</div>
+	<div class="instruction"><Icon name="ready" size={24} />送信完了</div>
 	<div class="status">
 		データが正常に送信されました<br />
 		<strong>ゼッケン{data.bib}番</strong>
@@ -114,7 +115,7 @@
 
 	{#if data.isMultiJudge && data.scores.length > 1}
 		<div class="scores-container">
-			<h3 class="scores-title">{m.score_judgeScores()}</h3>
+			<h3 class="scores-title"><Icon name="score" size={20} />{m.score_judgeScores()}</h3>
 			<div class="scores-list">
 				{#each data.scores as score}
 					<div class="score-item">
@@ -163,6 +164,10 @@
 		margin: 0 auto;
 	}
 	.instruction {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -192,6 +197,10 @@
 		text-align: left;
 	}
 	.scores-title {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 18px;
 		font-weight: 600;
 		margin-bottom: 12px;

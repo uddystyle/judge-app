@@ -1,6 +1,7 @@
 <script lang="ts">
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -144,7 +145,7 @@
 />
 
 <div class="container">
-	<div class="instruction">送信完了</div>
+	<div class="instruction"><Icon name="ready" size={24} />送信完了</div>
 	<div class="status">
 		データが正常に送信されました<br />
 		<strong>ゼッケン{data.bib}番</strong>
@@ -212,6 +213,10 @@
 		margin: 0 auto;
 	}
 	.instruction {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		font-size: 24px;
 		font-weight: 700;
 		color: var(--text-primary);

@@ -321,6 +321,7 @@
 								on:click={() => confirmDeleteMember(member)}
 								title={m.common_delete()}
 							>
+								<Icon name="trash" size={16} />
 								{m.common_delete()}
 							</button>
 						{/if}
@@ -338,6 +339,7 @@
 			<h2 class="section-title">メンバーの招待</h2>
 			<div class="nav-buttons">
 				<NavButton variant="primary" on:click={toggleInviteSection}>
+					<Icon name="invite" size={18} />
 					{showInviteSection ? '招待セクションを閉じる' : 'メンバーを招待'}
 				</NavButton>
 			</div>
@@ -381,6 +383,7 @@
 				</p>
 				<div class="nav-buttons" style="margin-top: 16px;">
 					<button class="danger-btn" on:click={() => goto(`/organization/${data.organization.id}/delete`)}>
+						<Icon name="trash" size={16} />
 						組織を削除
 					</button>
 				</div>
@@ -604,6 +607,10 @@
 		align-items: center;
 	}
 	.delete-member-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		padding: 6px 12px;
 		font-size: 13px;
 		font-weight: 600;
@@ -781,6 +788,10 @@
 		line-height: 1.6;
 	}
 	.danger-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		width: 100%;
 		background: #dc3545;
 		color: white;

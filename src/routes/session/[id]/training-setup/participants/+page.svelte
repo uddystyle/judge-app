@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -88,7 +89,7 @@
 		</p>
 
 		<button type="button" class="template-btn" on:click={downloadTemplate}>
-			サンプルCSVをダウンロード
+			<Icon name="export" size={16} />サンプルCSVをダウンロード
 		</button>
 
 		<form method="POST" action="?/importCSV" enctype="multipart/form-data" use:enhance>
@@ -107,7 +108,7 @@
 			</div>
 			<button type="submit" class="import-btn" disabled={!csvFile}>CSVをインポート</button>
 			<p class="import-warning">
-				⚠️ インポートすると既存の参加者データは削除されます
+				<Icon name="warning" size={16} /> インポートすると既存の参加者データは削除されます
 			</p>
 		</form>
 	</div>
@@ -165,7 +166,7 @@
 								</div>
 							</div>
 							<div class="participant-actions">
-								<button class="edit-btn" on:click={() => startEdit(participant)}>編集</button>
+								<button class="edit-btn" on:click={() => startEdit(participant)}><Icon name="edit" size={14} />編集</button>
 								<form method="POST" action="?/deleteParticipant" use:enhance style="display: inline;">
 									<input type="hidden" name="participantId" value={participant.id} />
 									<button
@@ -177,7 +178,7 @@
 											}
 										}}
 									>
-										{m.common_delete()}
+										<Icon name="trash" size={14} />{m.common_delete()}
 									</button>
 								</form>
 							</div>
@@ -220,7 +221,7 @@
 						bind:value={teamName}
 					/>
 				</div>
-				<button type="submit" class="add-btn">追加</button>
+				<button type="submit" class="add-btn"><Icon name="plus" size={16} />追加</button>
 			</div>
 		</form>
 	</div>
@@ -291,6 +292,10 @@
 		font-size: 13px;
 	}
 	.template-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		background: white;
 		color: var(--ios-blue);
 		border: 1px solid var(--ios-blue);
@@ -351,6 +356,10 @@
 		opacity: 0.7;
 	}
 	.import-warning {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 6px;
 		font-size: 13px;
 		color: #dc3545;
 		text-align: center;
@@ -417,6 +426,10 @@
 	}
 	.edit-btn,
 	.delete-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		padding: 6px 12px;
 		border-radius: 8px;
 		border: none;
@@ -510,6 +523,10 @@
 		background: white;
 	}
 	.add-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 		background: var(--ios-blue);
 		color: white;
 		padding: 12px;

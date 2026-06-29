@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import ScoresTable from '$lib/components/ScoresTable.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { goto } from '$app/navigation';
@@ -239,8 +240,8 @@
 
 	{#if realtimeConnectionError}
 		<div class="realtime-error-banner">
-			<div class="error-message">⚠️ リアルタイム接続エラー - フォールバック更新中（10秒ごと）</div>
-			<button class="manual-refresh-btn" on:click={manualRefresh}> 🔄 手動更新・再接続 </button>
+			<div class="error-message"><Icon name="warning" size={18} />リアルタイム接続エラー - フォールバック更新中（10秒ごと）</div>
+			<button class="manual-refresh-btn" on:click={manualRefresh}><Icon name="refresh" size={18} />手動更新・再接続</button>
 		</div>
 	{/if}
 
@@ -318,6 +319,10 @@
 		font-size: 14px;
 		font-weight: 500;
 		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
 	}
 	.manual-refresh-btn {
 		background: var(--ios-blue);
@@ -330,6 +335,10 @@
 		cursor: pointer;
 		white-space: nowrap;
 		transition: opacity 0.2s;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
 	}
 	.manual-refresh-btn:active {
 		opacity: 0.7;
