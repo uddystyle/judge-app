@@ -1,5 +1,34 @@
 # Current Tasks
 
+## アイコン適用拡大バッチ（2026-06-30）— ✅ 完了
+
+新規 TENTO `Icon.svelte`（dd4e708 で導入、5ファイルのみ利用）を、適用可能な箇所へ展開した。
+- [x] 1. アイコンデータ把握（catalog 41種・利用5ファイル→13箇所のみ）
+- [x] 2. 全 .svelte（73ファイル）を並列監査（workflow 73 agents）→ 候補171件（過剰生成）
+- [x] 3. ユーザー判断「高価値セット」で厳選 → 約99件に絞る（back×34・キーパッド・cancel→close 等を除外）
+- [x] 4. 厳選候補を適用（workflow 40 agents・1ファイル1エージェント・並列）→ **101箇所適用 / 40ファイル**
+- [x] 5. 検証完了
+
+### 実施した変更
+- `NavButton.svelte`：`.nav-btn` に `display:inline-flex; align-items:center; justify-content:center; gap:8px` を追加（中核の有効化。テキストのみのボタンは見た目不変、アイコン+ラベルが正しく整列）。
+- インラインSVG置換（`session/[id]/+page.svelte`）：自作チェック→`ready`、アニメ時計→`waiting`（色 var(--ios-blue) をラッパへ移し、`spin` で回転を維持）。死んだCSS/keyframes を除去。
+- 絵文字→アイコン（マークアップのみ）：⚠️→warning、🔄→refresh、✓/✅→ready、→→forward。**console.log/文字列内の絵文字・🥇🥈🥉/🎉/🎟 は一切触らず**。
+- 操作ボタン：削除→trash（18）、追加/作成→plus（12）、編集→edit、共有/招待→invite、QR→scan、エクスポート/DL→export、更新/復元/リセット→refresh、ログアウト→logout、開始→play。
+- 状態メッセージ：success→ready、error→error。見出し：モードカード（検定/大会/研修→kentei/taikai/kenshu）、完了→ready、削除系→warning/trash、招待→invite、検定員→judges 等。
+- Header ドロップダウン4項目に統一アイコン（profile=judge / organizations=organization / sessions=home / logout=logout）。
+- MultiJudgeSettings 見出しは `mode` prop で kenshu/kentei を出し分け。
+- 配置規約：アイコンはラベル前・装飾扱い（aria-hidden 自動）・色は currentColor 継承（danger は白/赤を継承）。各ボタン/見出しに flex 整列（gap 6〜8px）を付与、中央寄せは justify-content:center で保持。
+
+### 検証
+- [x] `npm run check`：**256 errors / 25 warnings = 既存ベースラインと同一（新規エラー0・新規警告0）**。変更ファイルの指摘行は全て既存（多くは追加行で行ズレ）でアイコン挿入箇所ではない。
+- [x] `npx vitest run src/`：**731 passed / 0 failed**（45 files）。
+- [x] `npm run build`：成功（`✓ built`）。警告は既存の resend/@react-email のみ（無関係）。
+- [x] 目視：全カテゴリの diff をレビュー（svg/絵文字/ボタン/見出し/メニュー）。除外ファイル（NumericKeypad）は無変更。
+- [ ] 実機の目視確認（任意・推奨）：`npm run dev` でアイコンの見た目・整列・色を確認。
+
+### 意図的に除外（高価値セット方針）
+back×34・home・forward の大量ナビ付与、キーパッドの C/確定、cancel→close、view→eye、pricing 比較表の ✓/✗、faq の details マーカー、TournamentSettings の小見出し。再度広げたい場合は監査結果（workflow icon-audit）に候補あり。
+
 ## Active
 
 ### 堅牢性監査 — High重大度の修正（feature ブランチ）— ✅ 完了
