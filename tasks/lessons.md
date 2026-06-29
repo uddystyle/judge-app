@@ -2,6 +2,19 @@
 
 このファイルには、judge-appプロジェクトで学んだ重要なパターン、よくあるミス、プロジェクト固有のルールを記録します。
 
+## Git / Tooling Workflow
+
+### ✅ `git add -A` を使わない（ユーザーの並行編集を巻き込む）
+**Rule**: コミット時は変更したファイルを**明示パスでステージ**する（`git add <path>...`）。`git add -A` / `git add .` は避ける。
+
+**Why**: ユーザーは作業中も IDE でコードを編集している。`git add -A` は自分の変更だけでなく、**ユーザーの未コミットの並行編集まで巻き込んで**しまう。実際に整理タスク中、`git add -A` がユーザーの `src/routes/organization/[id]/+page.svelte`（インライン SVG → `<Icon>` リファクタ）を無関係な docs コミットに混入させた。
+
+**How to apply**:
+- コミット前に必ず `git status` で意図しない変更が混ざっていないか確認する。
+- ファイル移動は `git mv <src> <dst>`、削除は `git rm <path>`、追加・修正は `git add <明示パス>` で個別にステージ。
+- zsh では未クォート変数は単語分割されない。複数ファイルをループで回すときは `for f in ${=VAR}` を使う（bash の挙動と違う）。
+- 混入に気付いたら push 前なら `git reset --soft <base>` → `git restore --staged <stray>` で当該変更を作業ツリーへ戻し、自分の変更だけ再コミットする。
+
 ## SvelteKit Patterns
 
 ### ✅ Auth Error Code-Based Handling
