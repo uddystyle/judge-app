@@ -395,7 +395,7 @@ psql $DATABASE_URL -f scripts/verify-guest-session-isolation.sql
 
 ### 📋 Migration 1001（計画中・未実装）
 
-**ファイル**: `1001_add_judge_id_to_results.sql`
+**ファイル**: `planned/1001_add_judge_id_to_results.sql`
 
 **状態**: **PLANNED**（未実装）
 

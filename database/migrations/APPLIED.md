@@ -8,7 +8,7 @@
 - **ファイル名の番号は適用順を保証しない**（`001` は4ファイルが別概念で衝突するなど）。順序・依存は各行の「備考」と本台帳を参照すること。
 - **prod / dev の2DBは手動運用で既にドリフト**している。適用状況は DB ごとに別管理する。
 - このファイルは**記述専用**。SQL は実行しない。新規適用・改名・移動の判断材料として使う。
-- **ディレクトリ構成**（整理プラン Phase 1 適用後）: 前進マイグレーションは `database/migrations/` 直下、ロールバックは `database/migrations/rollbacks/`、マイグレーション検証は `database/migrations/verify/`、汎用診断は `database/diagnostics/`。
+- **ディレクトリ構成**（整理 Phase 1–2 適用後）: 前進マイグレーションは `database/migrations/` 直下、ロールバックは `rollbacks/`、マイグレーション検証は `verify/`、未実装は `planned/`、破壊的な一回限りスクリプトは `archive/one-time/`、汎用診断は `database/diagnostics/`。放棄された旧 RLS 最適化トラックは `database/archive/2025-12-rls-perf-optimization/`。
 
 **記号**
 
@@ -25,11 +25,11 @@
 
 | ファイル | 種別 | 状況 | 内容 |
 |---|---|---|---|
-| `999_fix_rls_realtime_security.sql` | deprecated | ❌実行禁止 | ヘッダに "DO NOT RUN"。`1000` で置換済み。履歴隔離(archive)推奨 |
-| `1001_add_judge_id_to_results.sql` | planned | ❌未実装 | "Status: PLANNED / NOT READY"・BREAKING。本番未適用。`planned/` 隔離推奨 |
+| `999_fix_rls_realtime_security.sql` | deprecated | ❌実行禁止 | ヘッダに "DO NOT RUN"。`1000` で置換済み。参照7箇所(realtime/security docs等)のため**物理移動は見送り**・本台帳で隔離扱い |
+| `planned/1001_add_judge_id_to_results.sql` | planned | ❌未実装 | "Status: PLANNED / NOT READY"・BREAKING。本番未適用。→ `database/migrations/planned/` へ隔離済み |
 | `001_add_session_security.sql` | forward | 🔴 prod未適用疑い | `failed_join_attempts`/`is_locked` が prod に無い疑い＝参加コード join で500の可能性。§6で要実測 |
-| `008_phase0_cleanup_existing_data.sql` | cleanup | 💥破壊的・一回限り | 全テーブル TRUNCATE。本番未稼働時の再構築用。**再実行厳禁** |
-| `010_cleanup_existing_user_data.sql` | cleanup | 💥破壊的・一回限り | 組織/セッションを TRUNCATE。**再実行厳禁** |
+| `archive/one-time/008_phase0_cleanup_existing_data.sql` | cleanup | 💥破壊的・一回限り | 全テーブル TRUNCATE。本番未稼働時の再構築用。**再実行厳禁**。→ `archive/one-time/` へ隔離済み |
+| `archive/one-time/010_cleanup_existing_user_data.sql` | cleanup | 💥破壊的・一回限り | 組織/セッションを TRUNCATE。**再実行厳禁**。→ `archive/one-time/` へ隔離済み |
 
 ## 3. 前進マイグレーション台帳
 
@@ -154,7 +154,7 @@
 
 ## 5. 非マイグレーション（検証/診断 4本・破壊的データ削除 2本）
 
-> これらは前進スキーマ変更ではない。検証系4本は `database/migrations/verify/` に移設済み。破壊的データ削除2本（`008`/`010`）は前進 namespace に残置中で、Phase 2 で `archive/one-time/` へ隔離予定。
+> これらは前進スキーマ変更ではない。検証系4本は `database/migrations/verify/`、破壊的データ削除2本（`008`/`010`）は `database/migrations/archive/one-time/` へ隔離済み。
 
 | ファイル | 種別 | 内容 |
 |---|---|---|
@@ -162,8 +162,8 @@
 | `999_check_user_data.sql` | 検証SELECT | ログインユーザーの既存データ確認クエリ。SELECT のみ。クリーンアップ用 DELETE/TRUNCATE は全てコメントアウト。スキーマ変更なし |
 | `check_production_schema.sql` | 検証SELECT | 本番スキーマ(列/FK)確認用 SELECT。information_schema 等を SELECT するのみ。本番 SQL Editor で実行。スキーマ変更なし |
 | `verify_migration.sql` | 検証SELECT | Tournament Mode 移行の検証 SELECT。列/テーブル/RLS/index/trigger/制約の存在を SELECT 確認。スキーマ変更なし |
-| `008_phase0_cleanup_existing_data.sql` | 💥破壊的データ削除 | 既存データを全TRUNCATEしクリーンアップ。ヘッダ「本番未稼働のため削除して再構築」。Phase0、009(Phase1)の前に実行。全テーブルTRUNCATE |
-| `010_cleanup_existing_user_data.sql` | 💥破壊的データ削除 | 既存組織・セッションデータをTRUNCATE。日付なし。既存ユーザーが組織を新規作成できるよう削除。profiles/auth.usersは保持。末尾に確認SELECT |
+| `archive/one-time/008_phase0_cleanup_existing_data.sql` | 💥破壊的データ削除 | 既存データを全TRUNCATEしクリーンアップ。ヘッダ「本番未稼働のため削除して再構築」。Phase0、009(Phase1)の前に実行。全テーブルTRUNCATE。**隔離済み** |
+| `archive/one-time/010_cleanup_existing_user_data.sql` | 💥破壊的データ削除 | 既存組織・セッションデータをTRUNCATE。日付なし。profiles/auth.usersは保持。末尾に確認SELECT。**隔離済み** |
 
 ## 6. 適用状況の確認クエリ（prod / dev 双方の SQL Editor で実行 → 本台帳を実測値に更新）
 
