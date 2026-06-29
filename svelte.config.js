@@ -32,12 +32,17 @@ const config = {
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
 				'font-src': ['self', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'https:', 'blob:'],
-				'connect-src': ['self', 'https://*.supabase.co', 'https://api.stripe.com', 'wss://*.supabase.co'],
+				'connect-src': [
+					'self',
+					'https://*.supabase.co',
+					'https://api.stripe.com',
+					'wss://*.supabase.co'
+				],
 				'frame-src': ['https://js.stripe.com'],
 				'frame-ancestors': ['none'],
 				'base-uri': ['self'],
 				'form-action': ['self'],
-				'upgrade-insecure-requests': true
+				...(process.env.NODE_ENV === 'production' ? { 'upgrade-insecure-requests': true } : {})
 			}
 		}
 	}
