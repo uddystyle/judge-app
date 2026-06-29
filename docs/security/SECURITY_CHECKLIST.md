@@ -199,9 +199,9 @@ psql $DATABASE_URL -f scripts/verify-rls-security.sql
 
 ## 参考ドキュメント
 
-- [REALTIME_SECURITY.md](./REALTIME_SECURITY.md) - 詳細なセキュリティガイド
-- [database/migrations/999_fix_rls_realtime_security.sql](./database/migrations/999_fix_rls_realtime_security.sql) - RLS修正マイグレーション
-- [scripts/verify-rls-security.sql](./scripts/verify-rls-security.sql) - 自動検証スクリプト
+- [REALTIME_SECURITY.md](../realtime/REALTIME_SECURITY.md) - 詳細なセキュリティガイド
+- [database/migrations/999_fix_rls_realtime_security.sql](../../database/migrations/999_fix_rls_realtime_security.sql) - RLS修正マイグレーション
+- [scripts/verify-rls-security.sql](../../scripts/verify-rls-security.sql) - 自動検証スクリプト
 
 ---
 

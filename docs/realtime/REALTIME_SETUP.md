@@ -12,7 +12,7 @@
    ```
 
 2. **推奨**: セキュリティチェックリストの実施
-   - [SECURITY_CHECKLIST.md](./SECURITY_CHECKLIST.md) を参照
+   - [SECURITY_CHECKLIST.md](../security/SECURITY_CHECKLIST.md) を参照
    - [REALTIME_SECURITY.md](./REALTIME_SECURITY.md) を熟読
 
 3. **緊急時**: セキュリティ問題が見つかった場合

@@ -123,7 +123,7 @@ await page.waitForTimeout(3000); // 追加遷移がないことを確認
 実際のStripe CLIと開発環境を使用した完全な統合テスト。
 
 **手順:**
-詳細は[`/docs/stripe-cli-setup.md`](/docs/stripe-cli-setup.md)の「E2E統合テスト手順（T8）」セクションを参照してください。
+詳細は[`/docs/stripe/stripe-cli-setup.md`](/docs/stripe/stripe-cli-setup.md)の「E2E統合テスト手順（T8）」セクションを参照してください。
 
 **実施タイミング:**
 - Stripe統合機能の大幅な変更後
@@ -202,7 +202,7 @@ npm run dev
 
 3. **テストシナリオを実行**
 
-[`/docs/stripe-cli-setup.md`](/docs/stripe-cli-setup.md)の手順に従って、以下のシナリオを確認：
+[`/docs/stripe/stripe-cli-setup.md`](/docs/stripe/stripe-cli-setup.md)の手順に従って、以下のシナリオを確認：
 
 - シナリオ1: 個人課金の新規サブスクリプション
 - シナリオ2: 組織課金の新規サブスクリプション
@@ -225,7 +225,7 @@ npm run dev
 
 ## トラブルシューティング
 
-問題が発生した場合は、[`/docs/stripe-cli-setup.md`](/docs/stripe-cli-setup.md)の「トラブルシューティング」セクションを参照してください。
+問題が発生した場合は、[`/docs/stripe/stripe-cli-setup.md`](/docs/stripe/stripe-cli-setup.md)の「トラブルシューティング」セクションを参照してください。
 
 ## 今後の改善
 

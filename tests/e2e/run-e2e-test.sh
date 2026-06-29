@@ -67,7 +67,7 @@ echo "このスクリプトは前提条件の確認のみを行います。"
 echo "実際のE2Eテストは手動で実行してください。"
 echo ""
 echo "詳細な手順は以下を参照:"
-echo "  - docs/stripe-cli-setup.md の「E2E統合テスト手順（T8）」セクション"
+echo "  - docs/stripe/stripe-cli-setup.md の「E2E統合テスト手順（T8）」セクション"
 echo "  - tests/e2e/README.md"
 echo ""
 
