@@ -5,6 +5,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
@@ -25,10 +26,7 @@
 	{#if data.error}
 		<div class="error-container">
 			<div class="error-icon">
-				<svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<circle cx="12" cy="12" r="10" stroke="#dc3545" stroke-width="2" fill="none"/>
-					<path d="M12 8V12M12 16H12.01" stroke="#dc3545" stroke-width="2" stroke-linecap="round"/>
-				</svg>
+				<Icon name="alert" size={64} color="#dc3545" />
 			</div>
 			<h2 class="error-title">リンクが無効です</h2>
 			<p class="error-text">{data.error}</p>
@@ -72,14 +70,9 @@
 						aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
 					>
 						{#if showPassword}
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M3 3L21 21M10.5 10.677A2 2 0 1013.323 13.5M7.362 7.561C5.68 8.74 4.279 10.42 3 12c1.889 2.991 5.282 6 9 6 1.55 0 3.043-.408 4.452-1.088M16.638 16.439C18.32 15.26 19.721 13.58 21 12c-1.889-2.991-5.282-6-9-6-1.55 0-3.043.408-4.452 1.088" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-							</svg>
+							<Icon name="eye-off" size={20} />
 						{:else}
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M12 5C7.588 5 3.988 7.648 2 12c1.988 4.352 5.588 7 10 7s8.012-2.648 10-7c-1.988-4.352-5.588-7-10-7z" stroke="currentColor" stroke-width="2"/>
-								<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-							</svg>
+							<Icon name="eye" size={20} />
 						{/if}
 					</button>
 				</div>
@@ -101,14 +94,9 @@
 						aria-label={showConfirmPassword ? 'パスワードを隠す' : 'パスワードを表示'}
 					>
 						{#if showConfirmPassword}
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M3 3L21 21M10.5 10.677A2 2 0 1013.323 13.5M7.362 7.561C5.68 8.74 4.279 10.42 3 12c1.889 2.991 5.282 6 9 6 1.55 0 3.043-.408 4.452-1.088M16.638 16.439C18.32 15.26 19.721 13.58 21 12c-1.889-2.991-5.282-6-9-6-1.55 0-3.043.408-4.452 1.088" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-							</svg>
+							<Icon name="eye-off" size={20} />
 						{:else}
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M12 5C7.588 5 3.988 7.648 2 12c1.988 4.352 5.588 7 10 7s8.012-2.648 10-7c-1.988-4.352-5.588-7-10-7z" stroke="currentColor" stroke-width="2"/>
-								<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-							</svg>
+							<Icon name="eye" size={20} />
 						{/if}
 					</button>
 				</div>

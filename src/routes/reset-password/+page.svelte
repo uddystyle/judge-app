@@ -5,6 +5,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
 	export let form: ActionData;
@@ -21,10 +22,7 @@
 	{#if form?.success}
 		<div class="success-container">
 			<div class="success-icon">
-				<svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<circle cx="12" cy="12" r="10" stroke="#10b981" stroke-width="2" fill="none"/>
-					<path d="M8 12L11 15L16 9" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-				</svg>
+				<Icon name="ready" size={64} color="#10b981" />
 			</div>
 			<h2 class="success-title">メールを送信しました</h2>
 			<p class="success-message">

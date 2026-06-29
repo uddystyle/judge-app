@@ -5,6 +5,7 @@
 	import type { SupabaseClient } from '@supabase/supabase-js';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import LanguageSwitcher from './LanguageSwitcher.svelte';
+	import Icon from './Icon.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 
 	// Props
@@ -148,9 +149,7 @@
 					<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
 						{profile?.full_name || m.nav_account()}
 						<span class="menu-icon" class:rotated={showMenu}>
-							<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
+							<Icon name="chevron-down" size={12} stroke={1.5} />
 						</span>
 					</button>
 
@@ -290,9 +289,6 @@
 	}
 	.menu-icon.rotated {
 		transform: rotate(180deg);
-	}
-	.menu-icon svg {
-		display: block;
 	}
 	.header-actions {
 		display: flex;

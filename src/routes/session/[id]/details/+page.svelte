@@ -3,6 +3,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
+	import Icon from '$lib/components/Icon.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { goto } from '$app/navigation';
@@ -316,10 +317,7 @@
 				<h1 class="session-title">{data.sessionDetails.name}</h1>
 				{#if isCreator}
 					<button class="edit-name-btn" on:click={startEditingName} title={m.details_editSessionName()}>
-						<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-							<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-						</svg>
+						<Icon name="edit" size={16} />
 					</button>
 				{/if}
 			</div>
@@ -374,9 +372,7 @@
 		<div class="section-header-with-action">
 			<h3 class="settings-title">{m.details_activeJudges()}</h3>
 			<button class="refresh-btn-with-label" class:refreshing={isRefreshing} on:click={handleRefresh} title={m.details_refreshList()}>
-				<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-				</svg>
+				<Icon name="refresh" size={18} />
 				<span class="refresh-label">{m.details_refreshList()}</span>
 			</button>
 		</div>
@@ -816,7 +812,7 @@
 		pointer-events: none;
 		opacity: 0.7;
 	}
-	.refresh-btn-with-label.refreshing svg {
+	.refresh-btn-with-label.refreshing :global(svg) {
 		animation: spin 1s linear infinite;
 	}
 	.refresh-label {
