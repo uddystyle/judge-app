@@ -416,9 +416,9 @@ export async function POST({ request }) {
 ## 関連ドキュメント
 
 ### 本プロジェクト
-- `CSP_HARDENING_FIX.md`: 初期CSP強化の試み（バグあり）
-- `CSP_NAVIGATION_FIX.md`: ナビゲーション問題の修正
-- `SECURITY_FIXES_SUMMARY.md`: セキュリティ修正全体のサマリー
+- `../archive/CSP_HARDENING_FIX.md`: 初期CSP強化の試み（バグあり・本ドキュメントで置換済み）
+- `../archive/CSP_NAVIGATION_FIX.md`: ナビゲーション問題の修正（同上）
+- `../archive/SECURITY_FIXES_SUMMARY.md`: セキュリティ修正全体のサマリー（アーカイブ）
 
 ### SvelteKit公式ドキュメント
 - [Configuration • CSP](https://svelte.dev/docs/kit/configuration#csp)
