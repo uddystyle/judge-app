@@ -8,7 +8,6 @@
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
-	import * as XLSX from 'xlsx';
 	import QRInviteModal from '$lib/components/QRInviteModal.svelte';
 	import EventManagement from '$lib/components/EventManagement.svelte';
 	import TournamentSettings from '$lib/components/TournamentSettings.svelte';
@@ -222,6 +221,8 @@
 			}));
 
 			// 3. Create the Excel file in the browser
+			// xlsx は重い（~1MB）ため、エクスポート実行時にだけ遅延ロードする
+			const XLSX = await import('xlsx');
 			const worksheet = XLSX.utils.json_to_sheet(exportData);
 			const workbook = XLSX.utils.book_new();
 			XLSX.utils.book_append_sheet(workbook, worksheet, m.details_exportSheetName());
