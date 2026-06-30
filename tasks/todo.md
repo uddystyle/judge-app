@@ -29,6 +29,29 @@
 ### 意図的に除外（高価値セット方針）
 back×34・home・forward の大量ナビ付与、キーパッドの C/確定、cancel→close、view→eye、pricing 比較表の ✓/✗、faq の details マーカー、TournamentSettings の小見出し。再度広げたい場合は監査結果（workflow icon-audit）に候補あり。
 
+## dev でボタン/リンクが効かない（Chrome）修正（2026-06-30・ユーザー報告）— ✅ 完了
+
+症状: セッション詳細ページ等で「戻る」「エクスポート」等の遷移が効かない。**dev のみ・Chrome のみ・Safari/本番はOK**。アイコン展開とは無関係。
+
+### 真因（Chrome コンソールで確定）
+Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically imported module: .../client/app.js` → **ハイドレーション不成立 → 全 `on:click`/`goto` が死亡**。
+- `src/routes/session/[id]/details/+page.svelte:11` が `import * as XLSX from 'xlsx'`（重いCJS）を**トップレベル static import**。`xlsx`/`qrcode`(QRInviteModal) は起動時に事前バンドルされていないため、**details を初回表示した時に Vite がオンデマンド再最適化**→最適化チャンクの `?v=` ハッシュが変わり、既読み込みの古いチャンクが 504。`app.js` の動的 import が失敗してページが hydrate しない。
+- **ブラウザ依存の理由**: Chrome が古いハッシュのチャンク URL をキャッシュ→504 を引き続き要求。Safari は新しく取得できて動作（コンソールに 504 なし）。
+- **本番OKの理由**: 本番は Rollup ビルド済みで dev の optimize 機構を使わない。
+
+### 修正（恒久）
+- `vite.config.ts` に `optimizeDeps.include: ['xlsx', 'qrcode']` を追加 → dev 起動時に事前バンドルし、セッション途中の再最適化＝504 を根絶。
+- 検証: `rm -rf node_modules/.vite` → 起動で `node_modules/.vite/deps/` に `xlsx.js`/`qrcode.js` が生成されることを確認。headless Chrome で `/` を読み込み 504/`Failed to fetch`/pageerror = 0。
+
+### ⚠️ ユーザー側の手当て（古いキャッシュを一掃）
+1. dev サーバ停止 → `rm -rf node_modules/.vite .svelte-kit` → `npm run dev`（**config 変更は再起動必須**）
+2. Chrome DevTools を開いた状態でリロードボタン右クリック →「**キャッシュの消去とハード再読み込み**」（または Network タブの Disable cache を ON）
+
+### 関連（別件・この不具合の原因ではない）
+- CSP `block-all-mixed-content` を hooks.server.ts で https 限定に gate 済（以前 Safari を固めた `upgrade-insecure-requests` と同系統の潜在バグ。有効な改善として残置）。lessons「CSP / Dev environment」参照。
+- Vercel Speed Insights (`va.vercel-scripts.com`) が script-src 未許可で全環境ブロック＝計測未送信（任意で script-src 追加）。
+- ✅ 追加実施: `xlsx` を `handleExport` 内 `await import('xlsx')` の**遅延ロード**化（トップレベル static import を削除）。details 初期ロードから xlsx(~417KB) を除外し、エクスポート押下時のみ取得。ビルドで dynamic chunk 化を確認（details node は `import("../chunks/…")` のみ・eager 参照なし）、svelte-check 256（新規0）。`optimizeDeps.include` と併用で dev の再最適化も防止。
+
 ## Active
 
 ### 堅牢性監査 — High重大度の修正（feature ブランチ）— ✅ 完了

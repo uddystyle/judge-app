@@ -2,6 +2,34 @@
 
 このファイルには、judge-appプロジェクトで学んだ重要なパターン、よくあるミス、プロジェクト固有のルールを記録します。
 
+## CSP / Dev environment
+
+### ✅ mixed-content 系 CSP ディレクティブは「HTTPS のときだけ」付与する
+**Rule**: `upgrade-insecure-requests` と `block-all-mixed-content` は **HTTPS（本番）でのみ**出力する。dev の `http://localhost` には絶対に付けない。
+
+**Why**: これらのディレクティブはブラウザに HTTP→HTTPS 昇格／mixed content ブロックを強制する。`http://localhost`（dev）に付くと、ブラウザがローカルのナビゲーション/リクエストを https へ昇格しようとして失敗し、**ボタン/リンクの遷移が一切効かなくなる**（ページは SSR 表示されるが遷移不能）。しかも**ブラウザごとに挙動が違う**ので発見が遅れる:
+- 第1波（796675e）: `upgrade-insecure-requests`（svelte.config.js）が **Safari** dev を固めた → `NODE_ENV==='production'` で gate して解決。
+- 第2波（本対応）: `block-all-mixed-content`（hooks.server.ts が無条件 append）が **Chrome** dev で同症状（新しめの Chrome が localhost で昇格/ブロックを強めたため）。`event.url.protocol === 'https:'` で gate して解決。**本番では https なので無影響、prod でこの症状は出ない**のが見分け方。
+
+**How to apply**:
+- 切り分け: 「dev だけ / ブラウザ依存 / 本番OK / on:click が全部死ぬ」→ まず CSP の mixed-content 系を疑う。`curl -sD - localhost:PORT/ | grep -i content-security-policy` で dev ヘッダを確認。
+- secure-content を強制する CSP は **2箇所**にある（`svelte.config.js` の kit.csp と `hooks.server.ts` の append）。片方だけ gate しても抜ける。両方 https/prod 限定にする。
+- `vite preview`（http の本番ビルド）も考慮し、`NODE_ENV` ではなく **`event.url.protocol === 'https:'`** で gate すると preview over http も壊さない（hooks の HSTS と同じ判定）。
+- 再現は Playwright 同梱 Chromium では出ないことがある（バージョン差）。ユーザー側は dev サーバ再起動＋Chrome のハードリロード（localhost の HTTPS 昇格がキャッシュされることがある）。
+
+## Vite dev / hydration
+
+### ✅ 「dev でボタン/リンクが全部効かない」= まず Vite の `504 Outdated Optimize Dep` を疑う
+**Rule**: dev で `on:click`/`goto` が全部死ぬ症状は、**CSP より先に Chrome DevTools の Console/Network を見る**。`504 (Outdated Optimize Dep)` と `Failed to fetch dynamically imported module: .../client/app.js` が出ていれば、それが真因。
+
+**Why**: `app.js`（SvelteKit クライアント entry）の動的 import が、Vite の最適化チャンク 504 で失敗 → **ハイドレーション不成立 → 全ハンドラ未装着 → ボタン無反応**。重い CJS 依存（`xlsx`/`qrcode` 等）を**ルートでトップレベル static import** していると、そのページを初回表示した時に Vite がオンデマンド再最適化し、最適化チャンクの `?v=` ハッシュが変わって既読み込みチャンクが 504 になる。**ブラウザ依存**（古いハッシュを掴んだブラウザだけ＝Chrome だけ等で出て、別ブラウザは新規取得で動く）かつ**dev のみ**（本番は Rollup ビルドで optimize 機構を使わない）になるため、CSP/ブラウザ挙動差と誤診しやすい（実際この件は最初 CSP と誤診した）。
+
+**How to apply**:
+- 切り分け順序: **Console/Network を最優先**。`504 Outdated Optimize Dep` / `Failed to fetch dynamically imported module` を探す。これが無く `Refused to…`/mixed content なら CSP 系（別lesson）。
+- 恒久対策: `vite.config.ts` の `optimizeDeps.include` に該当依存を列挙（例 `['xlsx','qrcode']`）→ 起動時に事前バンドルしてセッション途中の再最適化を防ぐ。`node_modules/.vite/deps/` に `xlsx.js` 等が出れば OK。
+- 応急: dev 停止 → `rm -rf node_modules/.vite .svelte-kit` → 再起動 → ブラウザは「キャッシュ消去とハード再読み込み」。**vite.config.ts 変更は再起動必須**（HMR されない）。
+- 予防: ルートで重いライブラリを static import しない。使う関数内で `await import('xlsx')` の遅延ロードにすると初期ロードも軽い（include と併用）。
+
 ## Git / Tooling Workflow
 
 ### ✅ `git add -A` を使わない（ユーザーの並行編集を巻き込む）
