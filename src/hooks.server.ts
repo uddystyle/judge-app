@@ -152,11 +152,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// NOTE: CSPは svelte.config.js の kit.csp で設定しています
 	// SvelteKitが自動的にnonceを生成し、生成したスクリプトに適用します
 
-	// block-all-mixed-content を追加
-	// kit.csp では upgrade-insecure-requests を設定済みだが、
-	// より厳格にするため block-all-mixed-content も追加
+	// block-all-mixed-content は HTTPS のときだけ付与する。
+	// HTTP（dev の http://localhost）に付けると、ブラウザがローカルのリクエスト/
+	// ナビゲーションを HTTPS へ昇格・ブロックしようとして遷移できなくなる
+	// （= ボタン/リンクが効かない）。これは svelte.config.js で
+	// upgrade-insecure-requests を本番限定にしたのと同じ理由（796675e）。
+	// http ページに mixed content は存在しないため dev で外しても無害。
 	const existingCSP = response.headers.get('Content-Security-Policy');
-	if (existingCSP) {
+	if (existingCSP && event.url.protocol === 'https:') {
 		response.headers.set(
 			'Content-Security-Policy',
 			`${existingCSP}; block-all-mixed-content`
