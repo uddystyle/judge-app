@@ -56,6 +56,16 @@ export default defineConfig({
 	ssr: {
 		noExternal: ['@supabase/ssr', '@supabase/supabase-js']
 	},
+	// 重いCJS依存を dev 起動時に事前バンドルする。
+	// xlsx は details ページ、qrcode は QRInviteModal でのみ import されるため、
+	// 該当ページを初めて開いた時に Vite がオンデマンドで依存を再最適化し、
+	// 既に読み込み済みの最適化チャンク(?v=ハッシュ)が 504 "Outdated Optimize Dep" になって
+	// client/app.js の動的 import が失敗 → ハイドレーションされず全ボタン/リンクが効かなくなる
+	// （ブラウザが古いハッシュをキャッシュしているため Chrome だけ等のブラウザ依存で出る）。
+	// 起動時にまとめて事前最適化し、セッション途中の再最適化を防ぐ。
+	optimizeDeps: {
+		include: ['xlsx', 'qrcode']
+	},
 	// 開発サーバーの最適化
 	server: {
 		fs: {
