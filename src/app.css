@@ -1,61 +1,97 @@
-/* src/app.css - Minimal Monochrome Design System */
+/* src/app.css — TENTO Web カラーパレット（SvelteKit / Web 版）
+ *
+ * iOS 前提（マテリアル / system color / モノクロ）ではなく、Web アプリとして
+ * 再定義したトークン群。色覚多様性に配慮した意味色は維持しつつ、Web に必須の
+ * 操作状態・フォーカスリング・リンク色・elevation をトークン化。
+ * 既存トークン名は互換維持。:root の値差し替えで全画面に反映されます。
+ */
 :root {
-    /* Monochrome grayscale palette */
+    /* ============ ニュートラル（グレースケール） ============ */
     --gray-50: #fafafa;
-    --gray-100: #f5f5f5;
-    --gray-200: #e5e5e5;
-    --gray-300: #d4d4d4;
-    --gray-400: #a3a3a3;
-    --gray-500: #737373;
-    --gray-600: #525252;
-    --gray-700: #404040;
-    --gray-800: #262626;
-    --gray-900: #171717;
+    --gray-100: #f4f4f6;
+    --gray-200: #e6e6ea;
+    --gray-300: #d4d4da;
+    --gray-400: #a0a0aa;
+    --gray-500: #737380;
+    --gray-600: #525260;
+    --gray-700: #3f3f4a;
+    --gray-800: #26262e;
+    --gray-900: #16161c;
 
-    /* Background colors - Clean white/gray base */
-    --bg-primary: #ffffff;
-    --bg-secondary: var(--gray-50);
-    --bg-tertiary: var(--gray-100);
-    --bg-hover: var(--gray-100);
+    /* ============ サーフェス / 背景 ============ */
+    --bg-page: #f4f4f6;        /* ページ地 */
+    --bg-primary: #ffffff;     /* カード・パネル面 */
+    --bg-secondary: #f4f4f6;
+    --bg-tertiary: #ececef;
+    --bg-hover: #f4f4f6;       /* 行・項目の hover */
+    --bg-active: #e6e6ea;      /* 押下時 */
 
-    /* Border colors - Subtle */
-    --border-light: var(--gray-200);
-    --border-medium: var(--gray-300);
-    --border-dark: var(--gray-400);
+    /* ============ ボーダー ============ */
+    --border-light: #e6e6ea;   /* 既定のヘアライン（1px） */
+    --border-medium: #d4d4da;
+    --border-strong: #a0a0aa;
+    --border-dark: #a0a0aa;    /* 既存コンポーネント互換 */
 
-    /* Text colors - High contrast */
-    --text-primary: var(--gray-900);
-    --text-secondary: var(--gray-600);
-    --text-muted: var(--gray-500);
-    --text-disabled: var(--gray-400);
+    /* ============ テキスト ============ */
+    --text-primary: #16161c;
+    --text-secondary: #525260;
+    --text-muted: #737380;
+    --text-tertiary: var(--text-muted);   /* 既存コンポーネント互換 */
+    --text-disabled: #a0a0aa;
+    --text-on-accent: #ffffff; /* 濃色地の上の文字 */
 
-    /* Accent color - Solid colors for borders and text */
-    --accent-primary: var(--gray-900);
-    --accent-hover: var(--gray-800);
-    --accent-active: var(--gray-700);
+    /* ============ リンク（Web 必須） ============ */
+    --link: #005AB5;
+    --link-hover: #00468C;
+    --link-visited: #5A3DA8;
 
-    /* Gradient variants for backgrounds */
-    --gradient-primary: linear-gradient(135deg, #404040 0%, #262626 100%);
-    --gradient-primary-hover: linear-gradient(135deg, #525252 0%, #404040 100%);
+    /* ============ モードカラー（検定 / 大会 / 研修） ============ */
+    /* 色のみ依存禁止：色 + アイコン + 文字 で必ず併用 */
+    --mode-kentei: #005AB5;  --mode-kentei-tint: #e8f0fb;
+    --mode-taikai: #c2540a;  --mode-taikai-tint: #fbeede;
+    --mode-kenshu: #0f7a34;  --mode-kenshu-tint: #e3f1e8;
 
-    /* Semantic colors - Monochrome with subtle contrast */
-    --color-success: var(--gray-700);
-    --color-error: var(--gray-800);
-    --color-warning: var(--gray-600);
-    --color-info: var(--gray-600);
+    /* ============ アクセント（プライマリ操作 = ブランドブルー） ============ */
+    --accent: #005AB5;
+    --accent-hover: #00468C;   /* hover はワンステップ濃く */
+    --accent-active: #003a73;  /* 押下時はさらに濃く */
+    --accent-tint: #e8f0fb;    /* 淡色背景（選択・バッジ） */
 
-    /* Legacy compatibility (mapped to monochrome) */
-    --primary-orange: var(--accent-primary);
-    --primary-orange-light: var(--accent-hover);
-    --primary-orange-hover: var(--bg-hover);
-    --bg-cream: var(--bg-secondary);
-    --bg-beige: var(--bg-tertiary);
-    --bg-white: var(--bg-primary);
-    --border-gray: var(--border-medium);
-    --ios-blue: var(--accent-primary);
+    /* ============ セマンティック（状態色） ============ */
+    --color-success: #0f7a34;  --color-success-tint: #e3f1e8;
+    --color-warning: #9a4a00;  --color-warning-tint: #fbeede;
+    --color-error:   #c7300f;  --color-error-tint:   #fbeae6;
+    --color-info:    #005AB5;  --color-info-tint:    #e8f0fb;
+
+    /* ============ フォーカスリング（キーボード操作 / a11y） ============ */
+    --focus-ring: 0 0 0 3px rgba(0, 90, 181, 0.35);
+    --focus-ring-color: #005AB5;
+    --focus-ring-offset: 2px;
+
+    /* ============ Elevation（box-shadow 段階） ============ */
+    --elev-1: 0 1px 2px rgba(16, 16, 28, 0.06);
+    --elev-2: 0 1px 3px rgba(16, 16, 28, 0.08), 0 1px 2px rgba(16, 16, 28, 0.04);
+    --elev-3: 0 4px 12px rgba(16, 16, 28, 0.10);
+    --elev-4: 0 12px 32px rgba(16, 16, 28, 0.14);
+
+    /* ============ 半径 ============ */
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --radius-pill: 999px;
+
+    /* ============ 間隔（4px グリッド） ============ */
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+    --space-4: 16px; --space-6: 24px; --space-8: 32px;
+
+    /* ============ レガシー互換エイリアス ============ */
+    --accent-primary: var(--accent);
+    --ios-blue: var(--accent);
     --ios-red: var(--color-error);
     --ios-green: var(--color-success);
-    --ios-orange: var(--accent-primary);
+    --ios-orange: var(--mode-taikai);
+    --bg-white: var(--bg-primary);
+    --border-gray: var(--border-medium);
     --light-gray: var(--bg-tertiary);
     --separator-gray: var(--border-medium);
     --primary-text: var(--text-primary);
@@ -80,29 +116,50 @@ body {
     letter-spacing: -0.01em;
 }
 
-/* Global button styles with gradient */
+/* リンク（色を設定していない <a> にのみ適用。ボタン化されたリンクは各自の色が優先） */
+a {
+    color: var(--link);
+    text-decoration: none;
+}
+a:hover {
+    color: var(--link-hover);
+}
+
+/* Web 必須：キーボードフォーカスリング（マウス操作では出さず Tab 移動時のみ） */
+:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: var(--focus-ring-offset);
+}
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* グローバル primary ボタン（墨グラデーション → ブランドブルーのフラット）。
+   submit の総称セレクタは :where() でゼロ詳細度にし、「未装飾の submit だけ」を
+   青の既定にする。コンポーネント側で背景を持つボタン（.delete-btn 赤・独自色など）は
+   常に優先されるため、danger を個別に :not() 除外する必要はない。 */
 button.primary,
 .btn-primary,
-button[type="submit"]:not(.secondary) {
-    background: linear-gradient(135deg, #404040 0%, #262626 100%);
-    color: white;
+:where(button[type="submit"]:not(.secondary)) {
+    background: var(--accent);
+    color: var(--text-on-accent);
     border: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--elev-2);
     transition: all 0.15s ease;
 }
 
 button.primary:hover,
 .btn-primary:hover,
-button[type="submit"]:not(.secondary):hover {
-    background: linear-gradient(135deg, #525252 0%, #404040 100%);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+:where(button[type="submit"]:not(.secondary):hover) {
+    background: var(--accent-hover);
+    box-shadow: var(--elev-3);
     transform: translateY(-1px);
 }
 
 button.primary:active,
 .btn-primary:active,
-button[type="submit"]:not(.secondary):active {
-    background: linear-gradient(135deg, #404040 0%, #262626 100%);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+:where(button[type="submit"]:not(.secondary):active) {
+    background: var(--accent-active);
+    box-shadow: var(--elev-1);
     transform: translateY(0);
 }
