@@ -65,19 +65,19 @@
 		background: var(--gray-200);
 	}
 	.numeric-key.confirm {
-		background: linear-gradient(135deg, #404040 0%, #262626 100%);
+		background: var(--accent);
 		color: white;
 		grid-column: span 3;
 		border: none;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 	}
 	.numeric-key.confirm:hover {
-		background: linear-gradient(135deg, #525252 0%, #404040 100%);
+		background: var(--accent-hover);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		transform: translateY(-2px);
 	}
 	.numeric-key.confirm:active {
-		background: linear-gradient(135deg, #404040 0%, #262626 100%);
+		background: var(--accent-active);
 		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 		transform: translateY(0);
 	}
