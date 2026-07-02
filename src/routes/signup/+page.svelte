@@ -139,13 +139,13 @@
 		margin-top: 8px;
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
-		background: #fff5f5;
+		background: var(--color-error-tint);
 		border-radius: 8px;
-		border: 1px solid #ffdddd;
+		border: 1px solid var(--color-error-tint);
 	}
 	.success-container {
 		background: var(--bg-primary);

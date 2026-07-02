@@ -305,7 +305,7 @@
 	}
 
 	.faq-item:hover {
-		border-color: #d0d0d5;
+		border-color: var(--border-light);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 	}
 
@@ -373,7 +373,7 @@
 	}
 
 	.contact-cta {
-		background: linear-gradient(135deg, var(--ios-blue) 0%, #0051d5 100%);
+		background: linear-gradient(135deg, var(--ios-blue) 0%, var(--accent) 100%);
 		color: white;
 		border-radius: 16px;
 		padding: 48px 32px;

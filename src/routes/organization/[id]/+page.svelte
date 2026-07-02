@@ -615,15 +615,15 @@
 		font-size: 13px;
 		font-weight: 600;
 		background: transparent;
-		color: #dc3545;
-		border: 1px solid #dc3545;
+		color: var(--color-error);
+		border: 1px solid var(--color-error);
 		border-radius: 6px;
 		cursor: pointer;
 		transition: all 0.2s;
 		white-space: nowrap;
 	}
 	.delete-member-btn:hover {
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 		box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
 	}
@@ -772,11 +772,11 @@
 		margin: 0 auto;
 	}
 	.danger-title {
-		color: #dc3545;
+		color: var(--color-error);
 	}
 	.danger-section {
-		background: #fff5f5;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 12px;
 		padding: 24px;
 		text-align: center;
@@ -793,7 +793,7 @@
 		justify-content: center;
 		gap: 6px;
 		width: 100%;
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 		border: none;
 		border-radius: 12px;
@@ -804,7 +804,7 @@
 		transition: all 0.2s;
 	}
 	.danger-btn:hover {
-		background: #d32f2f;
+		background: var(--color-error);
 		box-shadow: 0 4px 16px rgba(255, 59, 48, 0.3);
 	}
 	.danger-btn:active {
@@ -916,8 +916,8 @@
 	}
 
 	.success-notification {
-		background: #e8f5e9;
-		color: #2d7a3e;
+		background: var(--color-success-tint);
+		color: var(--color-success);
 		padding: 12px 16px;
 		border-radius: 8px;
 		margin-bottom: 16px;
@@ -926,8 +926,8 @@
 	}
 
 	.error-notification {
-		background: #fee;
-		color: #c33;
+		background: var(--color-error-tint);
+		color: var(--color-error);
 		padding: 12px 16px;
 		border-radius: 8px;
 		margin-bottom: 16px;
@@ -1005,11 +1005,11 @@
 		background: var(--bg-tertiary);
 	}
 	.delete-btn {
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 	}
 	.delete-btn:hover:not(:disabled) {
-		background: #c82333;
+		background: var(--color-error);
 		box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
 	}
 	.delete-btn:active:not(:disabled) {

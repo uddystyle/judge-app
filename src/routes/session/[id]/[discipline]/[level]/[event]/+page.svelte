@@ -142,10 +142,10 @@
 	.scoring-badge {
 		display: inline-block;
 		background: transparent;
-		color: #6b7280;
+		color: var(--text-secondary);
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-medium);
 		font-size: 12px;
 		font-weight: 500;
 		margin-bottom: 8px;
@@ -177,7 +177,7 @@
 		margin-top: 28px;
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		margin-top: 1rem;
 		font-size: 14px;
 	}

@@ -437,9 +437,9 @@
 	}
 
 	.retention-info.warning {
-		background: #fff3cd;
-		color: #856404;
-		border: 2px solid #ffc107;
+		background: var(--color-warning-tint);
+		color: var(--color-warning);
+		border: 2px solid var(--color-warning);
 	}
 
 	/* フィルター/検索セクション */
@@ -575,13 +575,13 @@
 	}
 
 	.archive-card.expiring-soon {
-		border-color: #ff9800;
-		background: #fff8e1;
+		border-color: var(--color-warning);
+		background: var(--color-warning-tint);
 	}
 
 	.archive-card.expired {
-		border-color: #f44336;
-		background: #ffebee;
+		border-color: var(--color-error);
+		background: var(--color-error-tint);
 	}
 
 	.session-info {
@@ -640,7 +640,7 @@
 	}
 
 	.expiry-warning {
-		color: #ff6f00;
+		color: var(--color-warning);
 		font-weight: 600;
 		font-size: 14px;
 		padding: 8px 12px;
@@ -650,7 +650,7 @@
 	}
 
 	.expiry-warning.urgent {
-		color: #d32f2f;
+		color: var(--color-error);
 		animation: pulse 1.5s ease-in-out infinite;
 	}
 
@@ -707,7 +707,7 @@
 	}
 
 	.restore-btn:hover:not(:disabled) {
-		background: #0051d5;
+		background: var(--accent-hover);
 		box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
 	}
 
@@ -716,12 +716,12 @@
 	}
 
 	.delete-btn {
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 	}
 
 	.delete-btn:hover:not(:disabled) {
-		background: #c82333;
+		background: var(--color-error);
 		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
 	}
 
@@ -788,8 +788,8 @@
 	}
 
 	.warning-box {
-		background: #fff3cd;
-		border: 2px solid #ffc107;
+		background: var(--color-warning-tint);
+		border: 2px solid var(--color-warning);
 		border-radius: 8px;
 		padding: 16px;
 		margin: 16px 0;
@@ -798,14 +798,14 @@
 	.warning-title {
 		font-size: 14px;
 		font-weight: 700;
-		color: #856404;
+		color: var(--color-warning);
 		margin: 0 0 12px 0;
 	}
 
 	.warning-list {
 		margin: 0;
 		padding-left: 20px;
-		color: #856404;
+		color: var(--color-warning);
 		font-size: 14px;
 		line-height: 1.6;
 	}
@@ -815,8 +815,8 @@
 	}
 
 	.danger-box {
-		background: #ffebee;
-		border: 2px solid #f44336;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 8px;
 		padding: 16px;
 		margin: 16px 0;
@@ -826,7 +826,7 @@
 	.danger-text {
 		font-size: 15px;
 		font-weight: 700;
-		color: #c62828;
+		color: var(--color-error);
 		margin: 0;
 	}
 
@@ -863,22 +863,22 @@
 	}
 
 	.danger-btn {
-		background: #ff9800;
+		background: var(--color-warning);
 		color: white;
 	}
 
 	.danger-btn:hover:not(:disabled) {
-		background: #f57c00;
+		background: var(--color-warning);
 		box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
 	}
 
 	.final-delete-btn {
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 	}
 
 	.final-delete-btn:hover:not(:disabled) {
-		background: #c82333;
+		background: var(--color-error);
 		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.4);
 	}
 

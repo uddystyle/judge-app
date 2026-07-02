@@ -364,8 +364,8 @@
 	}
 
 	.section a:hover {
-		color: #0051d5;
-		border-bottom-color: #0051d5;
+		color: var(--link);
+		border-bottom-color: var(--link);
 	}
 
 	.price-table {
@@ -404,7 +404,7 @@
 	}
 
 	.important-box {
-		background: #fff4e6;
+		background: var(--color-warning-tint);
 		border: 2px solid var(--accent-primary);
 		border-radius: 12px;
 		padding: 20px;

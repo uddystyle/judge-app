@@ -88,7 +88,7 @@
 		font-size: 1.75rem;
 		font-weight: 600;
 		margin-bottom: 1rem;
-		color: #1a1a1a;
+		color: var(--text-primary);
 	}
 
 	.session-info {
@@ -100,12 +100,12 @@
 	.session-name {
 		font-size: 1.1rem;
 		font-weight: 500;
-		color: #333;
+		color: var(--text-primary);
 	}
 
 	.mode-info {
 		font-size: 0.9rem;
-		color: #666;
+		color: var(--text-secondary);
 		background: #fff3e0;
 		padding: 0.5rem 1rem;
 		border-radius: 20px;
@@ -117,15 +117,15 @@
 		text-align: center;
 		margin-bottom: 2rem;
 		padding: 1rem;
-		background: #f5f5f5;
+		background: var(--bg-secondary);
 		border-radius: 8px;
-		color: #666;
+		color: var(--text-secondary);
 	}
 
 	.empty-state {
 		text-align: center;
 		padding: 3rem 1rem;
-		color: #666;
+		color: var(--text-secondary);
 	}
 
 	.empty-state p {
@@ -144,7 +144,7 @@
 
 	.event-card {
 		background: white;
-		border: 2px solid #e0e0e0;
+		border: 2px solid var(--border-medium);
 		border-radius: 12px;
 		padding: 1.5rem;
 		cursor: pointer;
@@ -157,7 +157,7 @@
 	}
 
 	.event-card:hover {
-		border-color: #ff9800;
+		border-color: var(--color-warning);
 		transform: translateY(-2px);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 	}
@@ -165,7 +165,7 @@
 	.event-name {
 		font-size: 1.1rem;
 		font-weight: 600;
-		color: #1a1a1a;
+		color: var(--text-primary);
 		flex: 1;
 	}
 
@@ -174,7 +174,7 @@
 		align-items: center;
 		justify-content: center;
 		font-size: 1.5rem;
-		color: #ff9800;
+		color: var(--color-warning);
 		opacity: 0.5;
 		transition: opacity 0.2s;
 		margin-left: 1rem;

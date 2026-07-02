@@ -294,11 +294,11 @@
 	}
 
 	.error-message {
-		background: #fee;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 8px;
 		padding: 12px 16px;
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin-bottom: 20px;
 		text-align: center;

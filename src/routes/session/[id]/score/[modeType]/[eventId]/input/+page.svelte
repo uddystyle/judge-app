@@ -114,9 +114,9 @@
 
 <style>
 	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		border: 1px solid var(--color-error);
+		color: var(--color-error);
 		padding: 12px;
 		border-radius: 8px;
 		margin: 20px;

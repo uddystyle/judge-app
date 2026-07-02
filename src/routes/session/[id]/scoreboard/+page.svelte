@@ -228,7 +228,7 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 	}
 	.event-title {
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		padding: 12px 16px;
 		font-size: 16px;
 		font-weight: 600;
@@ -238,7 +238,7 @@
 	.ranking-header {
 		display: grid;
 		grid-template-columns: 80px 1fr 120px;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		padding: 12px 16px;
 		font-size: 14px;
 		font-weight: 600;
@@ -309,7 +309,7 @@
 		border-radius: 8px;
 		font-size: 14px;
 		font-family: 'SF Mono', Monaco, monospace;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		color: var(--primary-text);
 	}
 	.share-btn {

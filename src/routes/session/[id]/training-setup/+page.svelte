@@ -101,7 +101,7 @@
 	}
 	.setup-card.optional {
 		border-style: dashed;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 	}
 	.card-icon {
 		font-size: 32px;

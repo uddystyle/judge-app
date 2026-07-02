@@ -83,7 +83,7 @@
 		margin-top: 28px;
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 	}
 

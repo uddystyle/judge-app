@@ -138,11 +138,11 @@
 		margin-left: auto;
 	}
 	.score-value.max-score {
-		color: #d32f2f;
+		color: var(--color-error);
 		font-weight: 700;
 	}
 	.score-value.min-score {
-		color: #1976d2;
+		color: var(--accent);
 		font-weight: 700;
 	}
 	.correction-btn {

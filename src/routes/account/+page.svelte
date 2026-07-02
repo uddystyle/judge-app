@@ -419,7 +419,7 @@
 	.message {
 		text-align: center;
 		margin-top: 1rem;
-		color: #dc3545;
+		color: var(--color-error);
 	}
 	.divider {
 		border: none;

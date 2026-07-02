@@ -26,7 +26,7 @@
 	{#if data.error}
 		<div class="error-container">
 			<div class="error-icon">
-				<Icon name="alert" size={64} color="#dc3545" />
+				<Icon name="alert" size={64} color="var(--color-error)" />
 			</div>
 			<h2 class="error-title">リンクが無効です</h2>
 			<p class="error-text">{data.error}</p>
@@ -196,13 +196,13 @@
 		color: var(--text-secondary);
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
-		background: #fff5f5;
+		background: var(--color-error-tint);
 		border-radius: 8px;
-		border: 1px solid #ffdddd;
+		border: 1px solid var(--color-error-tint);
 	}
 	.nav-buttons {
 		display: flex;
@@ -215,7 +215,7 @@
 		background: var(--bg-primary);
 		padding: 32px 24px;
 		border-radius: 20px;
-		border: 2px solid #ffdddd;
+		border: 2px solid var(--color-error-tint);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 	}
 	.error-icon {

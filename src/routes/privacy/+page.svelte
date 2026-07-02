@@ -366,8 +366,8 @@
 	}
 
 	.section a:hover {
-		color: #0051d5;
-		border-bottom-color: #0051d5;
+		color: var(--link-hover);
+		border-bottom-color: var(--link-hover);
 	}
 
 	.back-section {

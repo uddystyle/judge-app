@@ -876,20 +876,20 @@
 	.chief-badge {
 		font-size: 12px;
 		font-weight: 600;
-		color: #2d7a3e;
+		color: var(--color-success);
 		margin-left: 8px;
 	}
 	.guest-badge {
 		font-size: 12px;
 		font-weight: 600;
-		color: #666;
+		color: var(--text-secondary);
 		margin-left: 8px;
 	}
 	.removed-badge {
 		font-size: 12px;
 		font-weight: 600;
-		color: #999;
-		background: #f0f0f0;
+		color: var(--text-muted);
+		background: var(--bg-tertiary);
 		padding: 2px 6px;
 		border-radius: 4px;
 		margin-left: 8px;
@@ -898,7 +898,7 @@
 		opacity: 0.6;
 	}
 	.participant-item.removed .participant-name {
-		color: #666;
+		color: var(--text-secondary);
 	}
 	.nav-buttons {
 		display: flex;
@@ -929,18 +929,18 @@
 	}
 	.appoint-btn.danger {
 		background-color: transparent;
-		color: #dc3545;
-		border: 1.5px solid #dc3545;
+		color: var(--color-error);
+		border: 1.5px solid var(--color-error);
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
 	}
 	.appoint-btn.danger:hover {
-		background-color: #ffe6e6;
+		background-color: var(--color-error-tint);
 	}
 	.appoint-btn.danger:active {
-		background-color: #ffcccc;
+		background-color: var(--color-error-tint);
 	}
 	.settings-section {
 		text-align: left;
@@ -1022,13 +1022,13 @@
 	}
 
 	.scoreboard-header {
-		background: #f5f5f5;
+		background: var(--bg-secondary);
 		font-weight: 600;
 		border-bottom: 2px solid var(--separator-gray);
 	}
 
 	.scoreboard-row {
-		border-bottom: 1px solid #f0f0f0;
+		border-bottom: 1px solid var(--border-light);
 	}
 
 	.scoreboard-row:last-child {
@@ -1047,13 +1047,13 @@
 	.col-score {
 		text-align: right;
 		font-weight: 600;
-		color: #ff9800;
+		color: var(--color-warning);
 	}
 
 	.athlete-name {
 		display: block;
 		font-size: 12px;
-		color: #666;
+		color: var(--text-secondary);
 		margin-top: 2px;
 	}
 
@@ -1173,8 +1173,8 @@
 	}
 
 	.success-notification {
-		background: #e8f5e9;
-		color: #2d7a3e;
+		background: var(--color-success-tint);
+		color: var(--color-success);
 		padding: 12px 16px;
 		border-radius: 8px;
 		margin-bottom: 16px;
@@ -1183,8 +1183,8 @@
 	}
 
 	.error-notification {
-		background: #fee;
-		color: #c33;
+		background: var(--color-error-tint);
+		color: var(--color-error);
 		padding: 12px 16px;
 		border-radius: 8px;
 		margin-bottom: 16px;

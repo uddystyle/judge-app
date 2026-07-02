@@ -132,22 +132,22 @@
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.success-message {
-		color: #10b981;
+		color: var(--color-success);
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
-		background: #f0fdf4;
+		background: var(--color-success-tint);
 		border-radius: 8px;
-		border: 1px solid #bbf7d0;
+		border: 1px solid var(--color-success-tint);
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
-		background: #fff5f5;
+		background: var(--color-error-tint);
 		border-radius: 8px;
-		border: 1px solid #ffdddd;
+		border: 1px solid var(--color-error-tint);
 	}
 	.forgot-password-link {
 		text-align: right;

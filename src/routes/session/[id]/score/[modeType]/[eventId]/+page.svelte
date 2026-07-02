@@ -142,10 +142,10 @@
 	.scoring-badge {
 		display: inline-block;
 		background: transparent;
-		color: #6b7280;
+		color: var(--text-secondary);
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-medium);
 		font-size: 12px;
 		font-weight: 500;
 		margin-bottom: 8px;
@@ -153,13 +153,13 @@
 	}
 
 	.scoring-badge.advanced {
-		color: #6b7280;
-		border-color: #d1d5db;
+		color: var(--text-secondary);
+		border-color: var(--border-medium);
 	}
 
 	.scoring-badge.training {
-		color: #6b7280;
-		border-color: #d1d5db;
+		color: var(--text-secondary);
+		border-color: var(--border-medium);
 	}
 
 	.scoring-description {
@@ -169,9 +169,9 @@
 	}
 
 	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		border: 1px solid var(--color-error);
+		color: var(--color-error);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;

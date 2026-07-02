@@ -113,12 +113,12 @@
 		gap: 8px;
 		font-size: 28px;
 		font-weight: 700;
-		color: #dc3545;
+		color: var(--color-error);
 		margin-bottom: 8px;
 	}
 	.warning-section {
-		background: #fff5f5;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 16px;
 		padding: 24px;
 		margin-bottom: 24px;
@@ -131,7 +131,7 @@
 		gap: 8px;
 		font-size: 20px;
 		font-weight: 700;
-		color: #dc3545;
+		color: var(--color-error);
 		margin-bottom: 12px;
 		text-align: center;
 	}
@@ -157,7 +157,7 @@
 		content: '•';
 		position: absolute;
 		left: 8px;
-		color: #dc3545;
+		color: var(--color-error);
 		font-weight: bold;
 	}
 
@@ -229,19 +229,19 @@
 	}
 	.confirm-input:focus {
 		outline: none;
-		border-color: #dc3545;
+		border-color: var(--color-error);
 		box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.1);
 	}
 	.error-container {
-		background: #fee;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
 		margin-bottom: 20px;
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 	}
@@ -256,7 +256,7 @@
 		justify-content: center;
 		gap: 6px;
 		width: 100%;
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 		border: none;
 		border-radius: 12px;
@@ -267,7 +267,7 @@
 		transition: all 0.2s;
 	}
 	.delete-btn:hover:not(:disabled) {
-		background: #d32f2f;
+		background: var(--color-error);
 		box-shadow: 0 4px 16px rgba(255, 59, 48, 0.3);
 	}
 	.delete-btn:active:not(:disabled) {

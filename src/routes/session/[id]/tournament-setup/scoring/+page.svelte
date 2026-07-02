@@ -145,7 +145,7 @@
 		color: var(--primary-text);
 	}
 	.judge-count-info {
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border-radius: 8px;
 		padding: 12px 16px;
 		margin-bottom: 24px;
@@ -161,18 +161,18 @@
 		font-size: 18px;
 	}
 	.success-message {
-		background: #e6f6e8;
-		border: 1px solid #2d7a3e;
-		color: #1e5c2e;
+		background: var(--color-success-tint);
+		border: 1px solid var(--color-success);
+		color: var(--color-success);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
 		text-align: center;
 	}
 	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		border: 1px solid var(--color-error);
+		color: var(--color-error);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -201,7 +201,7 @@
 	}
 	.scoring-option.selected {
 		border-color: var(--ios-blue);
-		background: #f0f8ff;
+		background: var(--accent-tint);
 	}
 	.scoring-option:hover:not(.disabled) {
 		border-color: var(--ios-blue);
@@ -209,7 +209,7 @@
 	.scoring-option.disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		pointer-events: none;
 	}
 	.scoring-option.disabled:hover {
@@ -240,7 +240,7 @@
 		border-radius: 4px;
 	}
 	.option-badge.advanced {
-		background: #2d7a3e;
+		background: var(--color-success);
 	}
 	.option-description {
 		font-size: 15px;
@@ -251,19 +251,19 @@
 		font-size: 14px;
 		color: var(--secondary-text);
 		font-family: 'SF Mono', Monaco, monospace;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		padding: 8px 12px;
 		border-radius: 6px;
 		margin-top: 4px;
 	}
 	.excluded {
 		text-decoration: line-through;
-		color: #dc3545;
+		color: var(--color-error);
 	}
 	.requirement-warning {
 		font-size: 14px;
-		color: #dc3545;
-		background: #ffe6e6;
+		color: var(--color-error);
+		background: var(--color-error-tint);
 		padding: 8px 12px;
 		border-radius: 6px;
 		margin-top: 8px;

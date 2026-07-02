@@ -355,7 +355,7 @@
 	}
 
 	.role-badge {
-		background: #6b7280;
+		background: var(--text-secondary);
 		color: white;
 		padding: 4px 12px;
 		border-radius: 6px;

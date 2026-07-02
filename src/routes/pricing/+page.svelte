@@ -435,8 +435,8 @@
 	}
 
 	.success-message {
-		background: #e6f6e8;
-		border: 2px solid #2d7a3e;
+		background: var(--color-success-tint);
+		border: 2px solid var(--color-success);
 		border-radius: 12px;
 		padding: 20px;
 		display: flex;
@@ -490,7 +490,7 @@
 
 	.billing-toggle {
 		display: inline-flex;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border-radius: 10px;
 		padding: 4px;
 		gap: 4px;
@@ -550,8 +550,8 @@
 	}
 
 	.plan-card.current {
-		border-color: #2d7a3e;
-		background: #f8fff9;
+		border-color: var(--color-success);
+		background: var(--color-success-tint);
 	}
 
 	.recommended-badge {
@@ -572,7 +572,7 @@
 		top: -12px;
 		left: 50%;
 		transform: translateX(-50%);
-		background: #2d7a3e;
+		background: var(--color-success);
 		color: white;
 		padding: 6px 16px;
 		border-radius: 100px;
@@ -670,7 +670,7 @@
 	}
 
 	.comparison-table th {
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		padding: 16px;
 		text-align: left;
 		font-weight: 600;
@@ -758,7 +758,7 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 10px 0;
-		border-bottom: 1px solid #f0f0f0;
+		border-bottom: 1px solid var(--border-light);
 	}
 
 	.card-feature-row:last-child {
@@ -809,12 +809,12 @@
 
 	.back-btn.cancel {
 		background: white;
-		color: #dc3545;
-		border: 2px solid #dc3545;
+		color: var(--color-error);
+		border: 2px solid var(--color-error);
 	}
 
 	.back-btn.cancel:hover:not(:disabled) {
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 	}
 

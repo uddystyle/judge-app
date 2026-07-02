@@ -220,7 +220,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
 		border: 2px solid var(--border-medium);
 		border-radius: 20px;
 		padding: 8px 16px;
@@ -239,8 +239,8 @@
 	}
 
 	.error-message {
-		background: #fee;
-		color: #c33;
+		background: var(--color-error-tint);
+		color: var(--color-error);
 		padding: 12px 16px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -383,7 +383,7 @@
 		content: '✓';
 		position: absolute;
 		left: 0;
-		color: #2d7a3e;
+		color: var(--color-success);
 		font-weight: 700;
 	}
 

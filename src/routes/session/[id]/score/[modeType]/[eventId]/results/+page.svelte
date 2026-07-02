@@ -107,7 +107,7 @@
 	}
 
 	.info-box {
-		background: #f0f4ff;
+		background: var(--accent-tint);
 		border-radius: 12px;
 		padding: 16px;
 		margin-bottom: 24px;
@@ -117,7 +117,7 @@
 	.info-box p {
 		margin: 0;
 		font-size: 14px;
-		color: #374151;
+		color: var(--text-primary);
 		line-height: 1.6;
 	}
 
@@ -135,36 +135,36 @@
 	}
 
 	.tabs-container::-webkit-scrollbar-track {
-		background: #f1f1f1;
+		background: var(--bg-tertiary);
 		border-radius: 4px;
 	}
 
 	.tabs-container::-webkit-scrollbar-thumb {
-		background: #888;
+		background: var(--text-muted);
 		border-radius: 4px;
 	}
 
 	.tabs-container::-webkit-scrollbar-thumb:hover {
-		background: #555;
+		background: var(--text-secondary);
 	}
 
 	.tab-button {
 		flex-shrink: 0;
 		padding: 10px 20px;
 		background: white;
-		border: 2px solid #e5e7eb;
+		border: 2px solid var(--border-medium);
 		border-radius: 8px;
 		font-size: 15px;
 		font-weight: 600;
-		color: #6b7280;
+		color: var(--text-secondary);
 		cursor: pointer;
 		transition: all 0.2s;
 		white-space: nowrap;
 	}
 
 	.tab-button:hover {
-		border-color: #d1d5db;
-		background: #f9fafb;
+		border-color: var(--border-medium);
+		background: var(--bg-secondary);
 	}
 
 	.tab-button.active {
@@ -216,7 +216,7 @@
 	.bib-number {
 		font-size: 16px;
 		font-weight: 600;
-		color: #374151;
+		color: var(--text-primary);
 	}
 
 	.score-value {
@@ -235,7 +235,7 @@
 	.summary-box p {
 		margin: 0;
 		font-size: 15px;
-		color: #6b7280;
+		color: var(--text-secondary);
 	}
 
 	.summary-box strong {
@@ -253,7 +253,7 @@
 	.empty-state p {
 		margin: 0;
 		font-size: 15px;
-		color: #9ca3af;
+		color: var(--text-muted);
 	}
 
 	.nav-buttons {

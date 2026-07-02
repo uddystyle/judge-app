@@ -229,9 +229,9 @@
 		text-align: center;
 		font-size: 16px;
 		max-width: 400px;
-		background: #e6f6e8;
-		border: 2px solid #2d7a3e;
-		color: #1e5c2e;
+		background: var(--color-success-tint);
+		border: 2px solid var(--color-success);
+		color: var(--color-success);
 		line-height: 1.6;
 	}
 	.nav-buttons {
@@ -282,11 +282,11 @@
 	.average-score {
 		text-align: center;
 		font-size: 20px;
-		color: #2d7a3e;
+		color: var(--color-success);
 		padding: 16px;
-		background: #e6f6e8;
+		background: var(--color-success-tint);
 		border-radius: 12px;
-		border: 2px solid #2d7a3e;
+		border: 2px solid var(--color-success);
 	}
 	.single-score {
 		text-align: center;

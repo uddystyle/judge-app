@@ -333,25 +333,25 @@
 	.scoring-badge {
 		display: inline-block;
 		background: transparent;
-		color: #6b7280;
+		color: var(--text-secondary);
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-medium);
 		font-size: 12px;
 		font-weight: 500;
 		letter-spacing: 0.01em;
 	}
 	.scoring-badge.advanced {
-		color: #6b7280;
-		border-color: #d1d5db;
+		color: var(--text-secondary);
+		border-color: var(--border-medium);
 	}
 	.score-diff-badge {
 		display: inline-block;
 		background: transparent;
-		color: #6b7280;
+		color: var(--text-secondary);
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-medium);
 		font-size: 12px;
 		font-weight: 500;
 		letter-spacing: 0.01em;
@@ -385,8 +385,8 @@
 	/* Realtimeエラー通知のスタイル */
 	.realtime-error-banner {
 		margin: 16px 0;
-		background: #fff3cd;
-		border: 1px solid #ffc107;
+		background: var(--color-warning-tint);
+		border: 1px solid var(--color-warning);
 		border-radius: 8px;
 		padding: 12px 16px;
 		display: flex;
@@ -395,7 +395,7 @@
 		gap: 12px;
 	}
 	.error-message {
-		color: #856404;
+		color: var(--color-warning);
 		font-size: 14px;
 		font-weight: 500;
 		flex: 1;

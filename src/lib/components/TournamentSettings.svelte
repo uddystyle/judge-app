@@ -171,18 +171,18 @@
 		text-align: left;
 	}
 	.success-message {
-		background: #e6f6e8;
-		border: 1px solid #2d7a3e;
-		color: #1e5c2e;
+		background: var(--color-success-tint);
+		border: 1px solid var(--color-success);
+		color: var(--color-success);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
 		text-align: center;
 	}
 	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		border: 1px solid var(--color-error);
+		color: var(--color-error);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -210,7 +210,7 @@
 	}
 	.scoring-option.selected {
 		border-color: var(--ios-blue);
-		background: #f0f8ff;
+		background: var(--accent-tint);
 	}
 	.scoring-option:hover {
 		border-color: var(--ios-blue);
@@ -218,7 +218,7 @@
 	.scoring-option.disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-		background: #f5f5f5;
+		background: var(--bg-secondary);
 	}
 	.scoring-option.disabled:hover {
 		border-color: var(--separator-gray);
@@ -242,7 +242,7 @@
 	}
 	.required-badge {
 		display: inline-block;
-		background: #ff9800;
+		background: var(--color-warning);
 		color: white;
 		padding: 4px 10px;
 		border-radius: 12px;
@@ -258,7 +258,7 @@
 		font-size: 14px;
 		color: var(--secondary-text);
 		font-family: 'SF Mono', Monaco, monospace;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		padding: 8px 12px;
 		border-radius: 6px;
 		margin-top: 4px;
@@ -266,7 +266,7 @@
 	/* Used inside {@html} block - scoped via parent */
 	.option-example :global(.excluded) {
 		text-decoration: line-through;
-		color: #dc3545;
+		color: var(--color-error);
 	}
 	.form-actions {
 		margin-bottom: 12px;
@@ -334,7 +334,7 @@
 	}
 	.readonly-notice {
 		font-size: 14px;
-		color: #666;
+		color: var(--text-secondary);
 		font-style: italic;
 		margin-top: 12px;
 		text-align: center;

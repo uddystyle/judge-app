@@ -334,10 +334,10 @@
 		background: var(--gray-200);
 	}
 	.menu-item.logout {
-		color: #dc3545;
+		color: var(--color-error);
 	}
 	.menu-item.logout:hover {
-		background: #fff5f5;
+		background: var(--color-error-tint);
 	}
 	.menu-label {
 		font-size: 14px;
@@ -346,7 +346,7 @@
 		letter-spacing: -0.01em;
 	}
 	.menu-item.logout .menu-label {
-		color: #dc3545;
+		color: var(--color-error);
 	}
 	.menu-divider {
 		height: 1px;

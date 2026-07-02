@@ -256,7 +256,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+		background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
 		border: 2px solid var(--border-medium);
 		border-radius: 20px;
 		padding: 8px 16px;
@@ -427,15 +427,15 @@
 	}
 
 	.error-container {
-		background: #fee;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
 	}
 
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 	}

@@ -242,11 +242,11 @@
 		margin: 0 0 20px 0;
 	}
 	.error-message {
-		background: #fff5f5;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		color: var(--color-error);
 		padding: 16px;
 		border-radius: 12px;
-		border: 2px solid #ffdddd;
+		border: 2px solid var(--color-error-tint);
 		text-align: center;
 		margin-bottom: 24px;
 		font-size: 14px;

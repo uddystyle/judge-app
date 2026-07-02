@@ -106,7 +106,7 @@
 		margin-top: 28px;
 	}
 	.message {
-		color: #dc3545;
+		color: var(--color-error);
 		margin-top: 1rem;
 	}
 </style>

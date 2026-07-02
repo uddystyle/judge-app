@@ -393,7 +393,7 @@
 		margin-left: 6px;
 		font-size: 12px;
 		padding: 2px 6px;
-		background: #2d7a3e;
+		background: var(--color-success);
 		color: white;
 		border-radius: 4px;
 	}
@@ -467,7 +467,7 @@
 		content: '✓';
 		position: absolute;
 		left: 0;
-		color: #2d7a3e;
+		color: var(--color-success);
 		font-weight: 700;
 	}
 	.selected-badge {
@@ -482,13 +482,13 @@
 		font-weight: 600;
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
-		background: #fff5f5;
+		background: var(--color-error-tint);
 		border-radius: 8px;
-		border: 1px solid #ffdddd;
+		border: 1px solid var(--color-error-tint);
 		text-align: center;
 	}
 	.nav-buttons {

@@ -305,8 +305,8 @@
 	/* Realtimeエラー通知のスタイル */
 	.realtime-error-banner {
 		margin: 16px 0;
-		background: #fff3cd;
-		border: 1px solid #ffc107;
+		background: var(--color-warning-tint);
+		border: 1px solid var(--color-warning);
 		border-radius: 8px;
 		padding: 12px 16px;
 		display: flex;
@@ -315,7 +315,7 @@
 		gap: 12px;
 	}
 	.error-message {
-		color: #856404;
+		color: var(--color-warning);
 		font-size: 14px;
 		font-weight: 500;
 		flex: 1;

@@ -134,13 +134,13 @@
 		box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1);
 	}
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 		padding: 12px;
-		background: #fff5f5;
+		background: var(--color-error-tint);
 		border-radius: 8px;
-		border: 1px solid #ffdddd;
+		border: 1px solid var(--color-error-tint);
 	}
 	.nav-buttons {
 		display: flex;

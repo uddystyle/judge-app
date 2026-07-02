@@ -424,8 +424,8 @@
 	}
 
 	.error-container {
-		background: #fee;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
@@ -433,14 +433,14 @@
 	}
 
 	.error-message {
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin: 0;
 	}
 
 	.success-container {
-		background: #d4edda;
-		border: 2px solid #28a745;
+		background: var(--color-success-tint);
+		border: 2px solid var(--color-success);
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
@@ -584,7 +584,7 @@
 	.plan-discount {
 		font-size: 14px;
 		font-weight: 600;
-		color: #2d7a3e;
+		color: var(--color-success);
 		margin: 0 0 16px 0;
 	}
 
@@ -665,8 +665,8 @@
 	}
 
 	.debug-info {
-		background: #f0f0f0;
-		border: 2px solid #333;
+		background: var(--bg-tertiary);
+		border: 2px solid var(--text-primary);
 		border-radius: 8px;
 		padding: 16px;
 		margin-bottom: 20px;
@@ -692,8 +692,8 @@
 	.cancel-btn {
 		width: 100%;
 		background: var(--bg-primary);
-		color: #dc3545;
-		border: 2px solid #dc3545;
+		color: var(--color-error);
+		border: 2px solid var(--color-error);
 		border-radius: 12px;
 		padding: 16px;
 		font-size: 16px;
@@ -703,7 +703,7 @@
 	}
 
 	.cancel-btn:hover {
-		background: #dc3545;
+		background: var(--color-error);
 		color: var(--bg-primary);
 		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
 	}
@@ -713,8 +713,8 @@
 	}
 
 	.confirm-box {
-		background: #fff3cd;
-		border: 2px solid #ffc107;
+		background: var(--color-warning-tint);
+		border: 2px solid var(--color-warning);
 		border-radius: 12px;
 		padding: 24px;
 		text-align: center;
@@ -723,14 +723,14 @@
 	.confirm-title {
 		font-size: 18px;
 		font-weight: 700;
-		color: #856404;
+		color: var(--color-warning);
 		margin: 0 0 16px 0;
 	}
 
 	.confirm-description {
 		font-size: 14px;
 		line-height: 1.6;
-		color: #856404;
+		color: var(--color-warning);
 		margin: 0 0 20px 0;
 		text-align: left;
 	}
@@ -738,10 +738,10 @@
 	.confirm-question {
 		font-size: 16px;
 		font-weight: 600;
-		color: #dc3545;
+		color: var(--color-error);
 		margin: 0 0 20px 0;
 		padding-top: 12px;
-		border-top: 1px solid #ffc107;
+		border-top: 1px solid var(--color-warning);
 	}
 
 	.confirm-buttons {
@@ -752,7 +752,7 @@
 
 	.cancel-submit-btn {
 		width: 100%;
-		background: #dc3545;
+		background: var(--color-error);
 		color: var(--bg-primary);
 		border: none;
 		border-radius: 12px;
@@ -764,7 +764,7 @@
 	}
 
 	.cancel-submit-btn:hover:not(:disabled) {
-		background: #c82333;
+		background: var(--color-error);
 		box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
 	}
 

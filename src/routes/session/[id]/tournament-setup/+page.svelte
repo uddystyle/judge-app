@@ -116,7 +116,7 @@
 	}
 	.setup-card.optional {
 		border-style: dashed;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 	}
 	.card-content h3 {
 		font-size: 18px;

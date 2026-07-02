@@ -1005,7 +1005,7 @@
 	.settings-info {
 		margin-top: 20px;
 		padding: 16px;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border-radius: 8px;
 		text-align: center;
 	}
@@ -1029,14 +1029,14 @@
 
 	.settings-badge.multi-judge-on {
 		background: transparent;
-		color: #6b7280;
-		border: 1px solid #d1d5db;
+		color: var(--text-secondary);
+		border: 1px solid var(--border-medium);
 	}
 
 	.settings-badge.multi-judge-off {
 		background: transparent;
-		color: #6b7280;
-		border: 1px solid #d1d5db;
+		color: var(--text-secondary);
+		border: 1px solid var(--border-medium);
 	}
 
 	/* ゲストユーザー待機画面 */

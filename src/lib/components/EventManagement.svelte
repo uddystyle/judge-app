@@ -148,18 +148,18 @@
 		text-align: left;
 	}
 	.success-message {
-		background: #e6f6e8;
-		border: 1px solid #2d7a3e;
-		color: #1e5c2e;
+		background: var(--color-success-tint);
+		border: 1px solid var(--color-success);
+		color: var(--color-success);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
 		text-align: center;
 	}
 	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		border: 1px solid var(--color-error);
+		color: var(--color-error);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -229,19 +229,19 @@
 	}
 	.delete-btn-small {
 		background: transparent;
-		color: #dc3545;
-		border: 1.5px solid #dc3545;
+		color: var(--color-error);
+		border: 1.5px solid var(--color-error);
 	}
 	.delete-btn-small:hover {
-		background: #ffe6e6;
+		background: var(--color-error-tint);
 		opacity: 1;
 	}
 	.delete-btn-small:active {
-		background: #ffcccc;
+		background: var(--color-error-tint);
 		opacity: 1;
 	}
 	.save-btn-small {
-		background: #2d7a3e;
+		background: var(--accent);
 		color: white;
 	}
 	.cancel-btn-small {
@@ -307,13 +307,13 @@
 		color: var(--secondary-text);
 		padding: 20px;
 		font-size: 14px;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border-radius: 8px;
 		margin-bottom: 16px;
 	}
 	.readonly-notice {
 		font-size: 14px;
-		color: #666;
+		color: var(--text-secondary);
 		font-style: italic;
 		margin-top: 12px;
 		text-align: center;

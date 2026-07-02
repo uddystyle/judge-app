@@ -145,18 +145,18 @@
 		color: var(--primary-text);
 	}
 	.success-message {
-		background: #e6f6e8;
-		border: 1px solid #2d7a3e;
-		color: #1e5c2e;
+		background: var(--color-success-tint);
+		border: 1px solid var(--color-success);
+		color: var(--color-success);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
 		text-align: center;
 	}
 	.error-message {
-		background: #ffe6e6;
-		border: 1px solid #dc3545;
-		color: #dc3545;
+		background: var(--color-error-tint);
+		border: 1px solid var(--color-error);
+		color: var(--color-error);
 		padding: 12px;
 		border-radius: 8px;
 		margin-bottom: 20px;
@@ -227,7 +227,7 @@
 		opacity: 0.7;
 	}
 	.delete-btn {
-		background: #dc3545;
+		background: var(--color-error);
 		color: white;
 	}
 	.delete-btn:active {
@@ -265,7 +265,7 @@
 		transition: opacity 0.2s;
 	}
 	.save-btn {
-		background: #2d7a3e;
+		background: var(--accent);
 		color: white;
 	}
 	.cancel-btn {
@@ -279,7 +279,7 @@
 
 	/* 追加フォーム */
 	.add-section {
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border: 2px dashed var(--separator-gray);
 		border-radius: 12px;
 		padding: 20px;

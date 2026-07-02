@@ -226,7 +226,7 @@
 	.success-icon {
 		width: 80px;
 		height: 80px;
-		background: #2d7a3e;
+		background: var(--color-success);
 		color: white;
 		border-radius: 50%;
 		display: flex;
@@ -316,8 +316,8 @@
 	}
 
 	.error-message {
-		background: #fee;
-		color: #c33;
+		background: var(--color-error-tint);
+		color: var(--color-error);
 		padding: 12px 16px;
 		border-radius: 8px;
 		margin-bottom: 20px;
