@@ -408,27 +408,42 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 			// 指している（手順2）ため、この解約で発火する customer.subscription.deleted が
 			// handleSubscriptionDeleted の一致チェックで組織を free に降格させることはない。
 			// 失敗時は RetryableError で再送させる（DB操作はすべてUPSERT/条件付きで冪等）。
-			let oldStripeSubs;
-			try {
-				oldStripeSubs = await stripe.subscriptions.list({ customer: customerId, limit: 100 });
-			} catch (err: any) {
-				console.error('[Webhook] 旧サブスクリプション一覧取得エラー:', err.message);
-				throw new RetryableError(`旧サブスクリプション一覧取得エラー: ${err.message}`);
-			}
-
-			for (const oldSub of oldStripeSubs.data) {
-				if (oldSub.id === subscriptionId) continue;
-				if (oldSub.status === 'canceled') continue;
+			//
+			// SEC-1b: 非同期決済（動的支払い方法で有効化され得る）では、checkout完了時点で
+			// 新サブスクが incomplete（決済未確定）のことがある。後で決済が失敗した場合に
+			// 組織が課金中の旧サブスクを失わないよう、決済確定時のみ解約する。
+			if (!['active', 'trialing'].includes(subscription.status)) {
+				// 監視で検知できるよう高重大度で記録（決済確定後、旧サブスクは二重課金状態のため
+				// 手動解約が必要になり得る。JPYサブスクは実質カードのみのため発生確率は極めて低い）
+				console.error(
+					'[Webhook] SEC-1b: 新サブスクリプションが未確定のため旧サブスクリプション解約をスキップ:',
+					subscriptionId,
+					'status:',
+					subscription.status
+				);
+			} else {
+				let oldStripeSubs;
 				try {
-					await stripe.subscriptions.cancel(oldSub.id);
-					console.log('[Webhook] 旧サブスクリプションをStripeで解約:', oldSub.id);
+					oldStripeSubs = await stripe.subscriptions.list({ customer: customerId, limit: 100 });
 				} catch (err: any) {
-					if (err?.code === 'resource_missing') {
-						console.log('[Webhook] 旧サブスクリプションは既に存在しません:', oldSub.id);
-						continue;
+					console.error('[Webhook] 旧サブスクリプション一覧取得エラー:', err.message);
+					throw new RetryableError(`旧サブスクリプション一覧取得エラー: ${err.message}`);
+				}
+
+				for (const oldSub of oldStripeSubs.data) {
+					if (oldSub.id === subscriptionId) continue;
+					if (oldSub.status === 'canceled') continue;
+					try {
+						await stripe.subscriptions.cancel(oldSub.id);
+						console.log('[Webhook] 旧サブスクリプションをStripeで解約:', oldSub.id);
+					} catch (err: any) {
+						if (err?.code === 'resource_missing') {
+							console.log('[Webhook] 旧サブスクリプションは既に存在しません:', oldSub.id);
+							continue;
+						}
+						console.error('[Webhook] 旧サブスクリプション解約エラー:', oldSub.id, err.message);
+						throw new RetryableError(`旧サブスクリプション解約エラー: ${err.message}`);
 					}
-					console.error('[Webhook] 旧サブスクリプション解約エラー:', oldSub.id, err.message);
-					throw new RetryableError(`旧サブスクリプション解約エラー: ${err.message}`);
 				}
 			}
 
