@@ -1,5 +1,23 @@
 # Current Tasks
 
+## TENTO Web カラーパレット全面適用 + UI改善（2026-07-03）— ✅ 完了
+
+Claude Design プロジェクトの新パレット（`カラーパレット Web版` / `Before-After`）を全面適用し、UIを分かりやすく改善。
+- **app.css**: iOSモノクロ → Web版パレット（意味色/モード色/リンク/focus/elevation トークン化）。主操作=ブランドブルー `#005AB5`。submit 総称ルールは `:where()` でゼロ詳細度の既定にし、danger 等コンポーネント色を常に優先（`.delete-btn` 赤を維持）。
+- **主操作の青化**: NavButton / ConfirmDialog / AlertDialog / NumericKeypad / landing の墨グラデーション → `var(--accent)`（hover→`--accent-hover`、active→`--accent-active`）。
+- **一括トークン化（workflow 54ファイル 339置換 + 手動3）**: ハードコード意味色/中立色を `--color-*` / `--mode-*` / neutral トークンへ。app全体で意味色ハードコード0。shadow/白/透過は維持。
+- **ダッシュボードのセッションカード刷新（Before-After の核心）**: モード色のアイコンタイル（検定=青チェック/大会=橙トロフィー/研修=緑キャップ）、モード色バッジ、待機は橙の警告バナー、左寄せで一覧性向上。主操作=青CTA。
+- **モードカードのアイコン着色**: `/modes`・`セッション作成` を検定=青/大会=橙/研修=緑。
+
+### 検証
+- `npm run build` 成功 ／ `npm run check` **256（既存ベースライン・新規0）**。
+- 実ページ（ログイン画面）で主操作=青・リンク=青・中立色を確認。ダッシュボードカードは標準レンダリングで Before-After AFTER と一致を確認。
+- 2回の `/code-review`（xhigh）で検出のバグを修正済み: (1) global submit ルールが `.delete-btn` を青く上書き → `:where()` で根治、(2) 4ボタンの `:active` が `--accent`→`--accent-active` に。
+
+### フォローアップ（任意）
+- 意味色の hover 濃淡トークン（`--color-error-hover` 等）追加で押下感を戻す（現状 lift+影で代替）。
+- 一部 input の `:focus{outline:none}` がグローバル `:focus-visible` を上書き（a11y、恒久はコンポーネント個別）。
+
 ## Stripeセキュリティレビュー修正（2026-07-03）— ✅ 完了
 
 セキュリティレビューの指摘を重大度順にTDD（RED→GREEN確認）で修正した。
