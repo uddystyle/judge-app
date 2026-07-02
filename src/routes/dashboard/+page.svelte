@@ -125,36 +125,47 @@
 				{#each data.sessions as session}
 					{@const isTournament = session.mode === 'tournament'}
 					{@const canStart = !isTournament || canStartTournament(session.participantCount)}
+					{@const modeUi =
+						session.mode === 'tournament'
+							? { icon: 'taikai', cls: 'taikai' }
+							: session.mode === 'training'
+								? { icon: 'kenshu', cls: 'kenshu' }
+								: { icon: 'kentei', cls: 'kentei' }}
 					<div class="key select-item" class:disabled={!canStart}>
 						<div class="session-info-wrapper">
-							<div class="session-left-section">
-								<div class="badges-container">
-									{#if session.mode === 'tournament'}
-										<span class="mode-badge tournament">{m.mode_tournament()}</span>
-										{#if canStart}
-											<span class="scoring-method-badge">
-												{session.exclude_extremes ? m.mode_5judge3score() : m.mode_3judge3score()}
+							<div class="session-header">
+								<div class="mode-icon-badge {modeUi.cls}">
+									<Icon name={modeUi.icon} size={24} />
+								</div>
+								<div class="session-left-section">
+									<div class="badges-container">
+										{#if session.mode === 'tournament'}
+											<span class="mode-badge tournament">{m.mode_tournament()}</span>
+											{#if canStart}
+												<span class="scoring-method-badge">
+													{session.exclude_extremes ? m.mode_5judge3score() : m.mode_3judge3score()}
+												</span>
+											{/if}
+										{:else if session.mode === 'training'}
+											<span class="mode-badge training">{m.mode_training()}</span>
+											<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
+												{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
+											</span>
+										{:else}
+											<span class="mode-badge">{m.mode_certification()}</span>
+											<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
+												{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
 											</span>
 										{/if}
-									{:else if session.mode === 'training'}
-										<span class="mode-badge training">{m.mode_training()}</span>
-										<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-											{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
-										</span>
-									{:else}
-										<span class="mode-badge">{m.mode_certification()}</span>
-										<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
-											{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
-										</span>
-									{/if}
-									{#if session.organizations?.name}
-										<span class="organization-name">
-											{session.organizations.name}
-										</span>
-									{/if}
-								</div>
-								<div class="session-name">
-									{session.name}
+										{#if session.organizations?.name}
+											<span class="organization-name">
+												{session.organizations.name}
+											</span>
+										{/if}
+									</div>
+									<div class="session-name">
+										{session.name}
+									</div>
 								</div>
 							</div>
 							{#if isTournament && !canStart}
@@ -167,7 +178,9 @@
 								</div>
 							{/if}
 							<div class="session-buttons">
-								<a href="/session/{session.id}/details" class="details-btn"> {m.dashboard_details()} </a>
+								<a href="/session/{session.id}/details" class="details-btn">
+									{m.dashboard_details()}
+								</a>
 								<button
 									class="start-btn"
 									class:disabled={!canStart}
@@ -243,8 +256,7 @@
 		background: var(--bg-primary);
 		color: var(--gray-900);
 		border: 2px solid transparent;
-		background-image:
-			linear-gradient(white, white), linear-gradient(135deg, #404040 0%, #262626 100%);
+		background-image: linear-gradient(white, white), linear-gradient(var(--accent), var(--accent));
 		background-origin: padding-box, border-box;
 		background-clip: padding-box, border-box;
 		border-radius: 8px;
@@ -259,8 +271,8 @@
 	}
 	.details-btn:hover {
 		background-image:
-			linear-gradient(135deg, #404040 0%, #262626 100%),
-			linear-gradient(135deg, #525252 0%, #404040 100%);
+			linear-gradient(var(--accent-hover), var(--accent-hover)),
+			linear-gradient(var(--accent-hover), var(--accent-hover));
 		color: white;
 		transform: translateY(-1px);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -273,7 +285,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
-		background: linear-gradient(135deg, #404040 0%, #262626 100%);
+		background: var(--accent);
 		color: white;
 		border: none;
 		border-radius: 8px;
@@ -287,7 +299,7 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 	}
 	.start-btn:hover {
-		background: linear-gradient(135deg, #525252 0%, #404040 100%);
+		background: var(--accent-hover);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 		transform: translateY(-1px);
 	}
@@ -306,7 +318,7 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
-		align-items: center;
+		align-items: stretch;
 		padding: 16px;
 		gap: 8px;
 		height: auto;
@@ -318,7 +330,7 @@
 		max-width: 100%;
 		font-size: 17px;
 		font-weight: 600;
-		text-align: center;
+		text-align: left;
 		border: 1px solid var(--border-light);
 	}
 	.key.select-item.disabled .session-info-wrapper {
@@ -327,14 +339,44 @@
 	.session-info-wrapper {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 		width: 100%;
+	}
+	.session-header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		text-align: left;
+	}
+	.mode-icon-badge {
+		flex: none;
+		width: 48px;
+		height: 48px;
+		border-radius: 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.mode-icon-badge.kentei {
+		background: var(--mode-kentei-tint);
+		color: var(--mode-kentei);
+	}
+	.mode-icon-badge.taikai {
+		background: var(--mode-taikai-tint);
+		color: var(--mode-taikai);
+	}
+	.mode-icon-badge.kenshu {
+		background: var(--mode-kenshu-tint);
+		color: var(--mode-kenshu);
 	}
 	.session-left-section {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		width: 100%;
+		align-items: flex-start;
+		gap: 4px;
+		flex: 1;
+		min-width: 0;
 	}
 	.organization-name {
 		display: inline-flex;
@@ -346,13 +388,13 @@
 		background: transparent;
 		padding: 4px 10px;
 		border-radius: 6px;
-		border: 1px solid #e5e7eb;
+		border: 1px solid var(--border-light);
 		letter-spacing: 0.01em;
 	}
 	.session-name {
 		font-size: 18px;
-		font-weight: 600;
-		text-align: center;
+		font-weight: 700;
+		text-align: left;
 		color: var(--text-primary);
 	}
 	.badges-container {
@@ -360,15 +402,18 @@
 		align-items: center;
 		gap: 8px;
 		flex-wrap: wrap;
-		justify-content: center;
+		justify-content: flex-start;
 	}
 	.participant-count {
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		justify-content: flex-start;
 		gap: 6px;
 		font-size: 14px;
 		flex-wrap: wrap;
+		background: var(--color-warning-tint);
+		padding: 10px 12px;
+		border-radius: 10px;
 	}
 	.participant-label {
 		font-weight: 500;
@@ -379,33 +424,33 @@
 		color: var(--text-primary);
 	}
 	.participant-value.warning {
-		color: #dc3545;
+		color: var(--color-warning);
 	}
 	.warning-text {
 		font-size: 12px;
-		color: #dc3545;
-		font-weight: 500;
+		color: var(--color-warning);
+		font-weight: 600;
 	}
 	.mode-badge {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		font-size: 12px;
-		font-weight: 500;
-		color: #6b7280;
-		background: transparent;
+		font-weight: 600;
+		color: var(--mode-kentei);
+		background: var(--mode-kentei-tint);
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid transparent;
 		letter-spacing: 0.01em;
 	}
 	.mode-badge.tournament {
-		color: #6b7280;
-		border-color: #d1d5db;
+		color: var(--mode-taikai);
+		background: var(--mode-taikai-tint);
 	}
 	.mode-badge.training {
-		color: #6b7280;
-		border-color: #d1d5db;
+		color: var(--mode-kenshu);
+		background: var(--mode-kenshu-tint);
 	}
 	.scoring-method-badge {
 		display: inline-flex;
@@ -413,11 +458,11 @@
 		justify-content: center;
 		font-size: 12px;
 		font-weight: 500;
-		color: #6b7280;
+		color: var(--text-secondary);
 		background: transparent;
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-medium);
 		letter-spacing: 0.01em;
 	}
 	.judge-mode-badge {
@@ -426,16 +471,16 @@
 		justify-content: center;
 		font-size: 12px;
 		font-weight: 500;
-		color: #6b7280;
+		color: var(--text-secondary);
 		background: transparent;
 		padding: 4px 12px;
 		border-radius: 6px;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--border-medium);
 		letter-spacing: 0.01em;
 	}
 	.judge-mode-badge.individual {
-		color: #6b7280;
-		border-color: #d1d5db;
+		color: var(--text-secondary);
+		border-color: var(--border-medium);
 	}
 
 	/* セクション区切り */
@@ -504,6 +549,10 @@
 			align-items: center;
 			justify-content: space-between;
 			gap: 20px;
+		}
+		.session-header {
+			flex: 1;
+			min-width: 0;
 		}
 		.session-left-section {
 			flex-direction: column;
