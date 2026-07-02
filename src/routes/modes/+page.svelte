@@ -28,7 +28,9 @@
 		<!-- 検定モード -->
 		<div class="mode-card">
 			<div class="mode-header">
-				<h2 class="mode-title"><Icon name="kentei" size={24} />検定モード</h2>
+				<h2 class="mode-title">
+					<Icon name="kentei" size={24} color="var(--mode-kentei)" />検定モード
+				</h2>
 			</div>
 			<p class="mode-description">既定の種目・レベルで検定を実施するモードです。</p>
 			<div class="mode-features">
@@ -49,7 +51,9 @@
 		<!-- 大会モード -->
 		<div class="mode-card">
 			<div class="mode-header">
-				<h2 class="mode-title"><Icon name="taikai" size={24} />大会モード</h2>
+				<h2 class="mode-title">
+					<Icon name="taikai" size={24} color="var(--mode-taikai)" />大会モード
+				</h2>
 			</div>
 			<p class="mode-description">
 				複数の検定員で公式な採点を行い、正確な順位を決定するモードです。
@@ -73,7 +77,9 @@
 		<!-- 研修モード -->
 		<div class="mode-card">
 			<div class="mode-header">
-				<h2 class="mode-title"><Icon name="kenshu" size={24} />研修モード</h2>
+				<h2 class="mode-title">
+					<Icon name="kenshu" size={24} color="var(--mode-kenshu)" />研修モード
+				</h2>
 			</div>
 			<p class="mode-description">
 				検定員同士で採点を比較し、採点基準のすり合わせを行うモードです。

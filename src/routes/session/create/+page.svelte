@@ -76,7 +76,9 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title"><Icon name="kentei" size={24} />{m.session_certMode()}</div>
+						<div class="mode-title">
+							<Icon name="kentei" size={24} color="var(--mode-kentei)" />{m.session_certMode()}
+						</div>
 						<div class="mode-description">{m.session_certModeDesc()}</div>
 					</div>
 				</label>
@@ -90,7 +92,13 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title"><Icon name="taikai" size={24} />{m.session_tournamentMode()}</div>
+						<div class="mode-title">
+							<Icon
+								name="taikai"
+								size={24}
+								color="var(--mode-taikai)"
+							/>{m.session_tournamentMode()}
+						</div>
 						<div class="mode-description">{m.session_tournamentModeDesc()}</div>
 					</div>
 				</label>
@@ -104,7 +112,9 @@
 						disabled={isSubmitting}
 					/>
 					<div class="mode-content">
-						<div class="mode-title"><Icon name="kenshu" size={24} />{m.session_trainingMode()}</div>
+						<div class="mode-title">
+							<Icon name="kenshu" size={24} color="var(--mode-kenshu)" />{m.session_trainingMode()}
+						</div>
 						<div class="mode-description">{m.session_trainingModeDesc()}</div>
 					</div>
 				</label>
@@ -133,7 +143,9 @@
 					</div>
 
 					<div class="setting-item toggle-item">
-						<label for="multi-judge-toggle" class="setting-label">{m.settings_multiJudgeTraining()}</label>
+						<label for="multi-judge-toggle" class="setting-label"
+							>{m.settings_multiJudgeTraining()}</label
+						>
 						<div class="toggle-switch">
 							<input
 								type="checkbox"
@@ -224,8 +236,8 @@
 		margin-top: 28px;
 	}
 	.error-container {
-		background: #fee;
-		border: 2px solid #dc3545;
+		background: var(--color-error-tint);
+		border: 2px solid var(--color-error);
 		border-radius: 12px;
 		padding: 16px;
 		text-align: center;
@@ -235,7 +247,7 @@
 		justify-content: center;
 		align-items: center;
 		gap: 8px;
-		color: #dc3545;
+		color: var(--color-error);
 		font-size: 14px;
 		margin-bottom: 12px;
 	}
@@ -277,11 +289,11 @@
 	}
 	.mode-option:hover {
 		border-color: var(--ios-blue);
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 	}
 	.mode-option.selected {
 		border-color: var(--ios-blue);
-		background: #e8f4ff;
+		background: var(--accent-tint);
 	}
 	.mode-option input[type='radio'] {
 		margin-top: 2px;
@@ -308,7 +320,7 @@
 		line-height: 1.4;
 	}
 	.training-settings {
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border: 1px solid var(--separator-gray);
 		border-radius: 12px;
 		padding: 16px;
@@ -336,7 +348,7 @@
 	}
 	.number-input {
 		width: 100%;
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border: 1px solid var(--separator-gray);
 		border-radius: 6px;
 		padding: 10px;
@@ -382,7 +394,7 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background-color: #d1d1d6;
+		background-color: var(--border-medium);
 		transition: 0.4s;
 		border-radius: 34px;
 	}
@@ -399,7 +411,7 @@
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
 	.toggle-switch input:checked + label {
-		background-color: #2d7a3e;
+		background-color: var(--color-success);
 	}
 	.toggle-switch input:checked + label:before {
 		transform: translateX(20px);
@@ -409,7 +421,7 @@
 		opacity: 0.5;
 	}
 	.info-box {
-		background: #f8f9fa;
+		background: var(--bg-secondary);
 		border-left: 3px solid var(--ios-blue);
 		padding: 12px 16px;
 		border-radius: 6px;
