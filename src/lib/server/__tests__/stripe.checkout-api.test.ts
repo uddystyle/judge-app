@@ -28,6 +28,9 @@ vi.mock('$lib/server/stripe', () => ({
 			sessions: {
 				create: vi.fn()
 			}
+		},
+		promotionCodes: {
+			list: vi.fn()
 		}
 	}
 }));
@@ -924,7 +927,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('Stripe API is temporarily unavailable');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('Stripe API is temporarily unavailable');
 			}
 		});
 	});
@@ -993,7 +998,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('Stripe service unavailable');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('Stripe service unavailable');
 			}
 		});
 	});
@@ -1051,7 +1058,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('Rate limit exceeded');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('Rate limit exceeded');
 			}
 		});
 
@@ -1078,7 +1087,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('Network connection timeout');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('Network connection timeout');
 			}
 		});
 
@@ -1106,7 +1117,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('No such customer');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('No such customer');
 			}
 		});
 
@@ -1133,7 +1146,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('An error occurred with our API');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('An error occurred with our API');
 			}
 		});
 	});
@@ -1211,7 +1226,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('Rate limit exceeded');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('Rate limit exceeded');
 			}
 		});
 
@@ -1239,7 +1256,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('Network connection timeout');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('Network connection timeout');
 			}
 		});
 
@@ -1268,7 +1287,9 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('No such customer');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('No such customer');
 			}
 		});
 
@@ -1296,8 +1317,254 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 				expect.fail('Expected error to be thrown');
 			} catch (err: any) {
 				expect(err.status).toBe(500);
-				expect(err.body?.message).toContain('An error occurred with our API');
+				// SEC-4: 内部エラー詳細はクライアントに漏らさない（汎用メッセージのみ）
+				expect(err.body?.message).toContain('Customer Portalセッションの作成に失敗しました');
+				expect(err.body?.message).not.toContain('An error occurred with our API');
 			}
+		});
+	});
+});
+// ============================================================
+// SEC-2: クーポンはpromotion code経由でのみ適用（coupon ID直接適用の廃止）
+// SEC-5: payment_method_typesを指定しない（動的支払い方法）
+// ============================================================
+
+describe('クーポンのpromotion code解決（SEC-2）', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const createMockRequest = (body: any) => {
+		return {
+			json: vi.fn().mockResolvedValue(body)
+		} as unknown as Request;
+	};
+
+	/**
+	 * Supabaseクエリビルダーのチェーン可能なthenableモック
+	 */
+	const createChainMock = (result: any) => {
+		const chain: any = {};
+		const methods = [
+			'select', 'update', 'upsert', 'insert', 'delete',
+			'eq', 'neq', 'in', 'is', 'not', 'or',
+			'single', 'maybeSingle', 'order', 'limit'
+		];
+		for (const m of methods) {
+			chain[m] = vi.fn(() => chain);
+		}
+		chain.then = (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject);
+		return chain;
+	};
+
+	describe('create-organization-checkout', () => {
+		const setupAuthAndProfile = () => {
+			mockSupabaseClient.auth.getUser.mockResolvedValue({
+				data: { user: { id: 'user_123', email: 'test@example.com' } },
+				error: null
+			});
+			// profiles取得
+			mockSupabaseClient.from.mockReturnValue(
+				createChainMock({ data: { full_name: 'Test User' }, error: null })
+			);
+			vi.mocked(stripe.customers.create).mockResolvedValue({ id: 'cus_new_1' } as any);
+			vi.mocked(stripe.checkout.sessions.create).mockResolvedValue({
+				id: 'cs_1',
+				url: 'https://checkout.stripe.com/c/pay/cs_1'
+			} as any);
+		};
+
+		const baseBody = {
+			organizationName: 'Test Org',
+			planType: 'standard',
+			billingInterval: 'month',
+			returnUrl: 'http://localhost/dashboard',
+			cancelUrl: 'http://localhost/pricing'
+		};
+
+		it('couponCodeはpromotion codeとして解決され、discountsにpromotion code IDが渡る', async () => {
+			setupAuthAndProfile();
+
+			vi.mocked(stripe.promotionCodes.list).mockResolvedValue({
+				data: [{ id: 'promo_abc123', active: true }]
+			} as any);
+
+			const request = createMockRequest({ ...baseBody, couponCode: 'SPRING2026' });
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			const response = await createOrganizationCheckout(event);
+			expect(response.status).toBe(200);
+
+			// promotion codeはコード文字列で検索される
+			expect(stripe.promotionCodes.list).toHaveBeenCalledWith(
+				expect.objectContaining({ code: 'SPRING2026', active: true })
+			);
+
+			const sessionParams = vi.mocked(stripe.checkout.sessions.create).mock.calls[0][0] as any;
+			// coupon IDの直接適用は行われない
+			expect(sessionParams.discounts).toEqual([{ promotion_code: 'promo_abc123' }]);
+		});
+
+		it('有効なpromotion codeが存在しない場合は400を返す（coupon ID直接適用の防止）', async () => {
+			setupAuthAndProfile();
+
+			// アクティブなpromotion codeが見つからない
+			vi.mocked(stripe.promotionCodes.list).mockResolvedValue({ data: [] } as any);
+
+			const request = createMockRequest({ ...baseBody, couponCode: 'internal_coupon_id' });
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			try {
+				await createOrganizationCheckout(event);
+				expect.fail('Expected error');
+			} catch (err: any) {
+				expect(err.status).toBe(400);
+				expect(err.body?.message).toContain('無効なクーポンコード');
+			}
+
+			// Checkout Sessionは作成されない
+			expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+		});
+
+		it('couponCode未指定の場合はallow_promotion_codesが有効になる', async () => {
+			setupAuthAndProfile();
+
+			const request = createMockRequest(baseBody);
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			const response = await createOrganizationCheckout(event);
+			expect(response.status).toBe(200);
+
+			const sessionParams = vi.mocked(stripe.checkout.sessions.create).mock.calls[0][0] as any;
+			expect(sessionParams.allow_promotion_codes).toBe(true);
+			expect(sessionParams.discounts).toBeUndefined();
+		});
+
+		it('payment_method_typesを指定しない（SEC-5: 動的支払い方法を有効化）', async () => {
+			setupAuthAndProfile();
+
+			const request = createMockRequest(baseBody);
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			const response = await createOrganizationCheckout(event);
+			expect(response.status).toBe(200);
+
+			const sessionParams = vi.mocked(stripe.checkout.sessions.create).mock.calls[0][0] as any;
+			expect(sessionParams.payment_method_types).toBeUndefined();
+		});
+	});
+
+	describe('upgrade-organization', () => {
+		const setupAuthOrgAdminProfile = () => {
+			mockSupabaseClient.auth.getUser.mockResolvedValue({
+				data: { user: { id: 'user_123', email: 'test@example.com' } },
+				error: null
+			});
+
+			mockSupabaseClient.from
+				// organizations
+				.mockReturnValueOnce(
+					createChainMock({
+						data: {
+							id: 'org_123',
+							name: 'Test Org',
+							plan_type: 'free',
+							stripe_customer_id: 'cus_org_1'
+						},
+						error: null
+					})
+				)
+				// organization_members（admin）
+				.mockReturnValueOnce(createChainMock({ data: { role: 'admin' }, error: null }))
+				// profiles
+				.mockReturnValueOnce(
+					createChainMock({ data: { full_name: 'Test User' }, error: null })
+				);
+
+			vi.mocked(stripe.checkout.sessions.create).mockResolvedValue({
+				id: 'cs_2',
+				url: 'https://checkout.stripe.com/c/pay/cs_2'
+			} as any);
+		};
+
+		const baseBody = {
+			organizationId: 'org_123',
+			planType: 'premium',
+			billingInterval: 'year',
+			returnUrl: 'http://localhost/dashboard',
+			cancelUrl: 'http://localhost/pricing'
+		};
+
+		it('couponCodeはpromotion codeとして解決され、discountsにpromotion code IDが渡る', async () => {
+			setupAuthOrgAdminProfile();
+
+			vi.mocked(stripe.promotionCodes.list).mockResolvedValue({
+				data: [{ id: 'promo_xyz789', active: true }]
+			} as any);
+
+			const request = createMockRequest({ ...baseBody, couponCode: 'UPGRADE10' });
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			const response = await upgradeOrganization(event);
+			expect(response.status).toBe(200);
+
+			const sessionParams = vi.mocked(stripe.checkout.sessions.create).mock.calls[0][0] as any;
+			expect(sessionParams.discounts).toEqual([{ promotion_code: 'promo_xyz789' }]);
+		});
+
+		it('有効なpromotion codeが存在しない場合は400を返す', async () => {
+			setupAuthOrgAdminProfile();
+
+			vi.mocked(stripe.promotionCodes.list).mockResolvedValue({ data: [] } as any);
+
+			const request = createMockRequest({ ...baseBody, couponCode: 'internal_coupon_id' });
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			try {
+				await upgradeOrganization(event);
+				expect.fail('Expected error');
+			} catch (err: any) {
+				expect(err.status).toBe(400);
+				expect(err.body?.message).toContain('無効なクーポンコード');
+			}
+
+			expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+		});
+
+		it('couponCode未指定の場合はallow_promotion_codesが有効になり、payment_method_typesは指定しない', async () => {
+			setupAuthOrgAdminProfile();
+
+			const request = createMockRequest(baseBody);
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			const response = await upgradeOrganization(event);
+			expect(response.status).toBe(200);
+
+			const sessionParams = vi.mocked(stripe.checkout.sessions.create).mock.calls[0][0] as any;
+			expect(sessionParams.allow_promotion_codes).toBe(true);
+			expect(sessionParams.discounts).toBeUndefined();
+			expect(sessionParams.payment_method_types).toBeUndefined();
 		});
 	});
 });

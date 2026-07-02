@@ -86,7 +86,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 };
 
 export const actions: Actions = {
-	cancelSubscription: async ({ params, locals: { supabase } }) => {
+	cancelSubscription: async ({ params, locals: { supabase, supabaseAdmin } }) => {
 		const {
 			data: { user },
 			error: userError
@@ -146,6 +146,13 @@ export const actions: Actions = {
 			});
 		}
 
+		// SEC-3: DB書き込みはRLSに依存せずservice roleクライアントで行う。
+		// Stripe側だけ変更されDBが未反映になる事故を防ぐため、Stripe呼び出し前に確認する。
+		if (!supabaseAdmin) {
+			console.error('[Cancel Subscription] supabaseAdminが未設定です');
+			return fail(500, { error: 'サーバー設定エラーが発生しました。管理者に連絡してください。' });
+		}
+
 		try {
 			console.log('[Cancel Subscription] サブスクリプションキャンセル開始:', {
 				organizationId: organization.id,
@@ -167,8 +174,8 @@ export const actions: Actions = {
 				cancel_at: updatedSubscription.cancel_at
 			});
 
-			// データベースのsubscriptionsテーブルを更新
-			const { error: subUpdateError } = await supabase
+			// データベースのsubscriptionsテーブルを更新（SEC-3: service roleで書き込み）
+			const { error: subUpdateError } = await supabaseAdmin
 				.from('subscriptions')
 				.update({
 					cancel_at_period_end: true,
@@ -199,7 +206,7 @@ export const actions: Actions = {
 		}
 	},
 
-	changePlan: async ({ request, params, locals: { supabase } }) => {
+	changePlan: async ({ request, params, locals: { supabase, supabaseAdmin } }) => {
 		const {
 			data: { user },
 			error: userError
@@ -297,6 +304,13 @@ export const actions: Actions = {
 			return fail(400, { error: '既に同じプラン・請求間隔を利用中です。' });
 		}
 
+		// SEC-3: DB書き込みはRLSに依存せずservice roleクライアントで行う。
+		// Stripe側だけ変更されDBが未反映になる事故を防ぐため、Stripe呼び出し前に確認する。
+		if (!supabaseAdmin) {
+			console.error('[Change Plan] supabaseAdminが未設定です');
+			return fail(500, { error: 'サーバー設定エラーが発生しました。管理者に連絡してください。' });
+		}
+
 		try {
 			// 新しいPrice IDを取得
 			const newPriceId = getPriceId(newPlanType, billingInterval);
@@ -391,7 +405,8 @@ export const actions: Actions = {
 				.eq('plan_type', newPlanType)
 				.single();
 
-			const { error: orgUpdateError } = await supabase
+			// SEC-3: service roleで書き込み（RLS非依存）
+			const { error: orgUpdateError } = await supabaseAdmin
 				.from('organizations')
 				.update({
 					plan_type: newPlanType,
@@ -404,8 +419,8 @@ export const actions: Actions = {
 				return fail(500, { error: '組織情報の更新に失敗しました。' });
 			}
 
-			// データベースのsubscriptionsテーブルを更新
-			const { error: subUpdateError } = await supabase
+			// データベースのsubscriptionsテーブルを更新（SEC-3: service roleで書き込み）
+			const { error: subUpdateError } = await supabaseAdmin
 				.from('subscriptions')
 				.update({
 					plan_type: newPlanType,

@@ -47,20 +47,32 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 	const couponCode = url.searchParams.get('coupon');
 	let validCoupon = null;
 
-	// クーポンコードが指定されている場合、Stripeで有効性を確認
-	if (couponCode) {
+	// Security: クーポンはpromotion code（顧客配布用コード）としてのみ解決する
+	// coupon IDの直接参照は行わない（内部用クーポンの悪用・列挙を防ぐ）
+	if (couponCode && /^[a-zA-Z0-9_-]{1,100}$/.test(couponCode)) {
 		try {
-			const coupon = await stripe.coupons.retrieve(couponCode);
-			if (coupon.valid) {
+			const promotionCodes = await stripe.promotionCodes.list({
+				code: couponCode,
+				active: true,
+				limit: 1
+			});
+			const promotionCode = promotionCodes.data[0];
+			if (promotionCode) {
+				// pin中のAPIバージョン（acacia）はトップレベル coupon、新形状は promotion.coupon。
+				// SDK型とAPIバージョンの不一致に備え両形状を防御的に読む（webhookのgetSubscriptionPeriodと同方針）
+				const rawCoupon =
+					(promotionCode as any).coupon ?? (promotionCode as any).promotion?.coupon;
+				const coupon = rawCoupon && typeof rawCoupon === 'object' ? rawCoupon : null;
 				validCoupon = {
-					id: coupon.id,
-					percentOff: coupon.percent_off,
-					amountOff: coupon.amount_off,
-					currency: coupon.currency
+					// checkout側で再解決するため、入力コード（promotion code文字列）をそのまま返す
+					id: couponCode,
+					percentOff: coupon?.percent_off ?? null,
+					amountOff: coupon?.amount_off ?? null,
+					currency: coupon?.currency ?? null
 				};
 			}
 		} catch (error) {
-			console.error('Invalid coupon code:', error);
+			console.error('Invalid promotion code:', error);
 			// クーポンが無効でもエラーにせず、通常料金で表示
 		}
 	}

@@ -1,5 +1,41 @@
 # Current Tasks
 
+## Stripeセキュリティレビュー修正（2026-07-03）— ✅ 完了
+
+セキュリティレビューの指摘を重大度順にTDD（RED→GREEN確認）で修正した。
+
+- [x] 1.【中】アップグレード時に旧Stripeサブスクリプションが解約されず二重課金
+  - webhook `handleOrganizationCheckout` upgrade 分岐の末尾（DB更新で org が新サブスクを指した後）で
+    `stripe.subscriptions.list({customer})` → 新サブスク以外を `subscriptions.cancel()`
+  - `resource_missing` は許容。その他の失敗は RetryableError（Stripe再送で再試行、DB操作は冪等）
+  - org 更新後に解約する順序により、`customer.subscription.deleted` が組織を誤って free 降格しない
+- [x] 2.【中】任意の coupon ID を直接適用できる（内部クーポン悪用・列挙リスク）
+  - couponCode を promotion code として `stripe.promotionCodes.list({code, active:true})` で解決
+    → `discounts: [{promotion_code}]`。見つからなければ 400。未指定時は `allow_promotion_codes: true`
+  - 対象: create-organization-checkout / upgrade-organization / organization/create の load（バッジ表示、
+    acacia/新形状の両対応で coupon を防御的に読む）
+  - ⚠️ 運用注意: 既存配布済みの「coupon ID 直リンク」は、同じ文字列の promotion code を
+    Stripeダッシュボードで作成するまで無効になる
+- [x] 3.【低〜中】change-plan の DB 更新がユーザー権限クライアント（RLS依存）
+  - changePlan / cancelSubscription の organizations・subscriptions 書き込みを `locals.supabaseAdmin` に変更
+  - supabaseAdmin 未設定時は Stripe 変更前に fail(500)（Stripeだけ変わる事故を防ぐ）
+- [x] 4.【低】ポータル系エンドポイントが Stripe エラー詳細をクライアントに漏らす
+  - create-portal-session / customer-portal の 500 応答を汎用メッセージに統一（詳細はログのみ）
+  - 既存 T3/T12 テスト（×10）を「汎用メッセージ＋内部詳細を含まない」契約に更新（意図的変更）
+- [x] 5.【低】checkout の `payment_method_types: ['card']` 明示指定を削除（動的支払い方法が有効に。
+  Dashboard の支払い方法設定が反映されるようになる点に注意）
+
+スコープ外（報告済み・別対応）: 個人プラン Price ID の env 化 / Customer 重複作成 / メンバー追加失敗の監視 / APIバージョン更新 / RAK・IP許可リスト
+
+### レビュー（検証結果）
+- 新規テスト17件追加（SEC-1×4 / SEC-2 checkout×7 / SEC-2 load×3 / SEC-3 action×3）。全てRED→GREENを確認
+- `npx vitest run src/`: **748 passed / 0 failed**（47 files）
+- `npm run check`: **256 errors / 25 warnings ＝ 修正前ベースラインと完全一致**（stashで前後比較し新規エラー0を確認。
+  既存256はSDK型とpin中APIバージョンの不一致等の既知分）
+- `npm run build`: 成功
+- 変更ファイル: webhook / create-organization-checkout / upgrade-organization / create-portal-session /
+  customer-portal / change-plan+page.server / organization/create+page.server ＋ テスト4ファイル
+
 ## アイコン適用拡大バッチ（2026-06-30）— ✅ 完了
 
 新規 TENTO `Icon.svelte`（dd4e708 で導入、5ファイルのみ利用）を、適用可能な箇所へ展開した。

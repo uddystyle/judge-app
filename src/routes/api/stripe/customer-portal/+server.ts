@@ -72,13 +72,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// 5. Portal URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
-		console.error('[Customer Portal API] エラー:', err);
-		console.error('[Customer Portal API] エラー詳細:', JSON.stringify(err, null, 2));
+		// 詳細なエラーはログのみに出力（セキュリティ：情報漏洩防止）
+		console.error('[Customer Portal API] エラー:', err.message);
+		console.error('[Customer Portal API] エラータイプ:', err.type);
+		console.error('[Customer Portal API] エラーコード:', err.code);
 		// T3: 4xxのHttpErrorはそのまま返す
 		if (err?.status && err.status >= 400 && err.status < 500) {
 			throw err;
 		}
-		// T3: Stripe API障害時は error() で統一
-		throw error(500, err.message || 'Customer Portalセッションの作成に失敗しました。');
+		// T3: Stripe API障害時は error() で統一。クライアントには汎用的なメッセージのみ返す
+		throw error(500, 'Customer Portalセッションの作成に失敗しました。しばらくしてから再度お試しください。');
 	}
 };

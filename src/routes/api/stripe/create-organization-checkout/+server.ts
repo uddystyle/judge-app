@@ -143,10 +143,10 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		console.log('[Organization Checkout API] 新しいCustomerを作成:', customer.id);
 
 		// 6. Stripe Checkout Sessionを作成
+		// payment_method_types は指定しない（動的支払い方法。Dashboard側で支払い方法を制御）
 		const sessionParams: any = {
 			customer: customer.id,
 			mode: 'subscription',
-			payment_method_types: ['card'],
 			line_items: [
 				{
 					price: priceId,
@@ -174,23 +174,36 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			}
 		};
 
-		// Security: Validate coupon code
+		// Security: クーポンはpromotion code（顧客配布用コード）としてのみ受け付ける
+		// coupon IDの直接適用は行わない（内部用クーポンの悪用・列挙を防ぐ）
 		if (couponCode) {
-			// 長さ制限（Stripeのcoupon IDは通常50文字以内）
-			if (typeof couponCode !== 'string' || couponCode.length > 100) {
+			if (
+				typeof couponCode !== 'string' ||
+				couponCode.length > 100 ||
+				!/^[a-zA-Z0-9_-]+$/.test(couponCode)
+			) {
 				throw error(400, '無効なクーポンコードです。');
 			}
 
-			// 英数字、アンダースコア、ハイフンのみ許可
-			if (!/^[a-zA-Z0-9_-]+$/.test(couponCode)) {
+			const promotionCodes = await stripe.promotionCodes.list({
+				code: couponCode,
+				active: true,
+				limit: 1
+			});
+			const promotionCode = promotionCodes.data[0];
+
+			if (!promotionCode) {
 				throw error(400, '無効なクーポンコードです。');
 			}
 
-			sessionParams.discounts = [{ coupon: couponCode }];
+			sessionParams.discounts = [{ promotion_code: promotionCode.id }];
 			// ログには最初の10文字のみ出力（プライバシー保護）
 			const maskedCoupon =
 				couponCode.length > 10 ? couponCode.substring(0, 10) + '...' : couponCode;
-			console.log('[Organization Checkout API] クーポンコード適用:', maskedCoupon);
+			console.log('[Organization Checkout API] プロモーションコード適用:', maskedCoupon);
+		} else {
+			// コード未指定時はCheckout画面でのプロモーションコード入力を許可
+			sessionParams.allow_promotion_codes = true;
 		}
 
 		const session = await stripe.checkout.sessions.create(sessionParams);

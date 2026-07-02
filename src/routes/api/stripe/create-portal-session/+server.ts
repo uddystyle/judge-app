@@ -70,12 +70,13 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		if (isRedirect(err) || isHttpError(err)) {
 			throw err;
 		}
+		// 詳細なエラーはログのみに出力（セキュリティ：情報漏洩防止）
 		console.error('[Portal API] エラー詳細:');
 		console.error('  メッセージ:', err.message);
 		console.error('  タイプ:', err.type);
 		console.error('  コード:', err.code);
 		console.error('  ステータスコード:', err.statusCode);
-		console.error('  完全なエラー:', JSON.stringify(err, null, 2));
-		throw error(500, err.message || 'Customer Portal Sessionの作成に失敗しました。');
+		// クライアントには汎用的なメッセージのみ返す
+		throw error(500, 'Customer Portalセッションの作成に失敗しました。しばらくしてから再度お試しください。');
 	}
 };

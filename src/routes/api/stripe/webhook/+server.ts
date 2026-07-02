@@ -402,6 +402,36 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				throw new RetryableError(`subscription作成エラー: ${subError.message}`);
 			}
 
+			// 4. 旧Stripeサブスクリプションを解約（SEC-1: 二重課金防止）
+			// DB上のクリア（手順1）だけではStripe側の課金が継続するため、同一Customerの
+			// 他のサブスクリプションをStripe側でも解約する。組織は既に新サブスクリプションを
+			// 指している（手順2）ため、この解約で発火する customer.subscription.deleted が
+			// handleSubscriptionDeleted の一致チェックで組織を free に降格させることはない。
+			// 失敗時は RetryableError で再送させる（DB操作はすべてUPSERT/条件付きで冪等）。
+			let oldStripeSubs;
+			try {
+				oldStripeSubs = await stripe.subscriptions.list({ customer: customerId, limit: 100 });
+			} catch (err: any) {
+				console.error('[Webhook] 旧サブスクリプション一覧取得エラー:', err.message);
+				throw new RetryableError(`旧サブスクリプション一覧取得エラー: ${err.message}`);
+			}
+
+			for (const oldSub of oldStripeSubs.data) {
+				if (oldSub.id === subscriptionId) continue;
+				if (oldSub.status === 'canceled') continue;
+				try {
+					await stripe.subscriptions.cancel(oldSub.id);
+					console.log('[Webhook] 旧サブスクリプションをStripeで解約:', oldSub.id);
+				} catch (err: any) {
+					if (err?.code === 'resource_missing') {
+						console.log('[Webhook] 旧サブスクリプションは既に存在しません:', oldSub.id);
+						continue;
+					}
+					console.error('[Webhook] 旧サブスクリプション解約エラー:', oldSub.id, err.message);
+					throw new RetryableError(`旧サブスクリプション解約エラー: ${err.message}`);
+				}
+			}
+
 			console.log('[Webhook] 組織アップグレード完了:', organizationId);
 		}
 		// 新規作成の場合

@@ -17,7 +17,9 @@ vi.mock('$lib/server/stripe', () => ({
 			constructEvent: vi.fn()
 		},
 		subscriptions: {
-			retrieve: vi.fn()
+			retrieve: vi.fn(),
+			list: vi.fn(),
+			cancel: vi.fn()
 		}
 	}
 }));
@@ -753,6 +755,15 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 			eq: mockEq2
 		} as any);
 
+		// SEC-1: アップグレード時は同一Customerの旧サブスクリプションをStripe側でも解約する
+		vi.mocked(stripe.subscriptions.list).mockResolvedValue({
+			data: [
+				{ id: 'sub_old_123', status: 'active' },
+				{ id: 'sub_new_123', status: 'active' }
+			]
+		} as any);
+		vi.mocked(stripe.subscriptions.cancel).mockResolvedValue({ id: 'sub_old_123' } as any);
+
 		const response = await POST(event);
 
 		expect(response.status).toBe(200);
@@ -762,6 +773,10 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 			organization_id: null,
 			status: 'canceled'
 		});
+
+		// SEC-1: 旧Stripeサブスクリプションのみが解約される
+		expect(stripe.subscriptions.cancel).toHaveBeenCalledWith('sub_old_123');
+		expect(stripe.subscriptions.cancel).not.toHaveBeenCalledWith('sub_new_123');
 
 		// Verify organization was updated
 		expect(mockUpdate2).toHaveBeenCalledWith({
@@ -4885,5 +4900,177 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 			}),
 			{ onConflict: 'user_id' }
 		);
+	});
+});
+
+// ============================================================
+// SEC-1: 組織アップグレード時の旧Stripeサブスクリプション解約（二重課金防止）
+// ============================================================
+
+describe('組織アップグレード時の旧サブスクリプション解約（SEC-1）', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const createMockRequest = (signature: string, body: string = '{}') => {
+		return {
+			headers: {
+				get: vi.fn((name: string) => {
+					if (name === 'stripe-signature') return signature;
+					return null;
+				})
+			},
+			text: vi.fn().mockResolvedValue(body)
+		} as unknown as Request;
+	};
+
+	/**
+	 * Supabaseクエリビルダーのチェーン可能なthenableモック。
+	 * どのメソッドを何回チェーンしても自身を返し、awaitすると result を解決する。
+	 */
+	const createChainMock = (result: any) => {
+		const chain: any = {};
+		const methods = [
+			'select', 'update', 'upsert', 'insert', 'delete',
+			'eq', 'neq', 'in', 'is', 'not', 'or',
+			'single', 'maybeSingle', 'order', 'limit'
+		];
+		for (const m of methods) {
+			chain[m] = vi.fn(() => chain);
+		}
+		chain.then = (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject);
+		return chain;
+	};
+
+	const setupUpgradeEvent = () => {
+		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
+			id: 'evt_upgrade_1',
+			type: 'checkout.session.completed',
+			livemode: false,
+			data: {
+				object: {
+					id: 'cs_upgrade_1',
+					customer: 'cus_org_1',
+					subscription: 'sub_new_1',
+					metadata: {
+						user_id: 'user_1',
+						organization_id: 'org_1',
+						organization_name: 'Test Org',
+						max_members: '30',
+						is_organization: 'true',
+						is_upgrade: 'true'
+					}
+				}
+			}
+		} as any);
+
+		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
+			id: 'sub_new_1',
+			status: 'active',
+			cancel_at_period_end: false,
+			current_period_start: 1750000000,
+			current_period_end: 1752600000,
+			items: {
+				data: [
+					{
+						id: 'si_new_1',
+						price: {
+							id: 'price_standard_month',
+							recurring: { interval: 'month' }
+						}
+					}
+				]
+			}
+		} as any);
+
+		// DB操作（旧サブスククリア→org更新→新サブスクupsert）はすべて成功
+		mockSupabaseClient.from.mockImplementation(() =>
+			createChainMock({ data: null, error: null })
+		);
+	};
+
+	it('アップグレード完了時、旧Stripeサブスクリプションのみを解約する', async () => {
+		setupUpgradeEvent();
+
+		// 同一Customerに旧サブスクと新サブスクが存在する
+		vi.mocked(stripe.subscriptions.list).mockResolvedValue({
+			data: [
+				{ id: 'sub_old_1', status: 'active' },
+				{ id: 'sub_new_1', status: 'active' }
+			]
+		} as any);
+		vi.mocked(stripe.subscriptions.cancel).mockResolvedValue({ id: 'sub_old_1' } as any);
+
+		const request = createMockRequest('valid_signature', 'webhook_body');
+		const event = { request } as any;
+
+		const response = await POST(event);
+
+		expect(response.status).toBe(200);
+		// 旧サブスクは解約される
+		expect(stripe.subscriptions.cancel).toHaveBeenCalledWith('sub_old_1');
+		// 新サブスク（今回のCheckoutで作成されたもの）は解約されない
+		expect(stripe.subscriptions.cancel).not.toHaveBeenCalledWith('sub_new_1');
+	});
+
+	it('旧サブスクリプションが既に存在しない場合（resource_missing）は正常終了する', async () => {
+		setupUpgradeEvent();
+
+		vi.mocked(stripe.subscriptions.list).mockResolvedValue({
+			data: [
+				{ id: 'sub_old_1', status: 'active' },
+				{ id: 'sub_new_1', status: 'active' }
+			]
+		} as any);
+		const missingError: any = new Error('No such subscription: sub_old_1');
+		missingError.code = 'resource_missing';
+		vi.mocked(stripe.subscriptions.cancel).mockRejectedValue(missingError);
+
+		const request = createMockRequest('valid_signature', 'webhook_body');
+		const event = { request } as any;
+
+		const response = await POST(event);
+
+		expect(response.status).toBe(200);
+	});
+
+	it('旧サブスクリプションの解約が失敗した場合は500を返す（Stripe再送でリトライ）', async () => {
+		setupUpgradeEvent();
+
+		vi.mocked(stripe.subscriptions.list).mockResolvedValue({
+			data: [
+				{ id: 'sub_old_1', status: 'active' },
+				{ id: 'sub_new_1', status: 'active' }
+			]
+		} as any);
+		vi.mocked(stripe.subscriptions.cancel).mockRejectedValue(
+			new Error('Stripe API is temporarily unavailable')
+		);
+
+		const request = createMockRequest('valid_signature', 'webhook_body');
+		const event = { request } as any;
+
+		try {
+			await POST(event);
+			expect.fail('Expected POST to throw an error');
+		} catch (err: any) {
+			expect(err.status).toBe(500);
+		}
+	});
+
+	it('旧サブスクリプションが存在しない場合はcancelを呼ばない', async () => {
+		setupUpgradeEvent();
+
+		vi.mocked(stripe.subscriptions.list).mockResolvedValue({
+			data: [{ id: 'sub_new_1', status: 'active' }]
+		} as any);
+
+		const request = createMockRequest('valid_signature', 'webhook_body');
+		const event = { request } as any;
+
+		const response = await POST(event);
+
+		expect(response.status).toBe(200);
+		expect(stripe.subscriptions.cancel).not.toHaveBeenCalled();
 	});
 });
