@@ -1,17 +1,14 @@
 <script lang="ts">
 	import { setContext, onMount } from 'svelte';
-	import { createBrowserClient, isBrowser } from '@supabase/ssr';
 	import { invalidateAll } from '$app/navigation';
 	import { navigating } from '$app/stores';
-	import type { LayoutData } from './$types';
+	import { supabase } from '$lib/supabaseClient';
 	import '../app.css';
-	export let data: LayoutData;
 
-	// サーバーから渡されたURLとキーを使って、ブラウザ用のSupabaseクライアントを作成
-	const supabase = createBrowserClient(data.supabaseUrl, data.supabaseAnonKey);
-
-	// 作成したクライアントを、SvelteのContext APIを使って
-	// アプリ内の全コンポーネントで利用できるように共有する
+	// ブラウザ用Supabaseクライアントは $lib/supabaseClient の1箇所でのみ生成する
+	// （@supabase/ssr の createBrowserClient はブラウザではシングルトンを返すため、
+	//   生成箇所を分散させると同一インスタンスでも構造が分かりにくくなる）
+	// SvelteのContext APIでアプリ内の全コンポーネントに共有する
 	setContext('supabase', supabase);
 
 	// ページ遷移時に自動的にページトップにスクロール

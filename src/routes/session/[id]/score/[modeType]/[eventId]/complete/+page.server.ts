@@ -1,5 +1,6 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
+import { calculateFinalScore } from '$lib/scoreCalculation';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
 import {
 	fetchSessionDetails,
@@ -118,14 +119,17 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			// URLパラメータがない場合のみデータベースから計算（一般検定員の場合など）
 			if (!score && scores.length > 0) {
 				// 合計点を計算（3審3採 / 5審3採対応）
-				const sortedScores = [...scores].map(s => parseFloat(s.score)).sort((a, b) => a - b);
-				if (sessionDetails.exclude_extremes && sortedScores.length >= 5) {
-					// 5審3採: 最高点と最低点を除外した3人の合計
-					const middleScores = sortedScores.slice(1, -1);
-					displayScore = parseFloat(middleScores.reduce((acc, s) => acc + s, 0).toFixed(2));
+				// status ページの確定計算と同じ scoreCalculation を使い、5審3採は中央3人の合計に統一する
+				const rawScores = scores.map((s) => parseFloat(s.score));
+				if (sessionDetails.exclude_extremes && rawScores.length >= 5) {
+					// 5審3採: 最高点と最低点を除外した中央3人の合計
+					const result = calculateFinalScore(rawScores, { useSum: true, excludeExtremes: true });
+					if (result.success) {
+						displayScore = result.finalScore;
+					}
 				} else {
 					// 3審3採: 全員の合計
-					displayScore = parseFloat(sortedScores.reduce((acc, s) => acc + s, 0).toFixed(2));
+					displayScore = parseFloat(rawScores.reduce((acc, s) => acc + s, 0).toFixed(2));
 				}
 			}
 		}

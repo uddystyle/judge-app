@@ -150,56 +150,6 @@ export function validateSessionName(name: string | null | undefined): {
 	return { valid: true, sanitized };
 }
 
-/**
- * ゼッケン番号のバリデーション
- */
-export function validateBibNumber(bib: string | number | null | undefined): {
-	valid: boolean;
-	error?: string;
-	value?: number;
-} {
-	if (bib === null || bib === undefined || bib === '') {
-		return { valid: false, error: m.validation_bibRequired() };
-	}
-
-	const bibNum = typeof bib === 'string' ? parseInt(bib, 10) : bib;
-
-	if (isNaN(bibNum)) {
-		return { valid: false, error: m.validation_bibInvalid() };
-	}
-
-	if (bibNum < 1 || bibNum > 9999) {
-		return { valid: false, error: m.validation_bibRange({ min: '1', max: '9999' }) };
-	}
-
-	return { valid: true, value: bibNum };
-}
-
-/**
- * スコアのバリデーション
- */
-export function validateScore(score: string | number | null | undefined): {
-	valid: boolean;
-	error?: string;
-	value?: number;
-} {
-	if (score === null || score === undefined || score === '') {
-		return { valid: false, error: m.validation_scoreRequired() };
-	}
-
-	const scoreNum = typeof score === 'string' ? parseFloat(score) : score;
-
-	if (isNaN(scoreNum)) {
-		return { valid: false, error: m.validation_scoreInvalid() };
-	}
-
-	if (scoreNum < 0 || scoreNum > 100) {
-		return { valid: false, error: m.validation_scoreRange({ min: '0', max: '100' }) };
-	}
-
-	return { valid: true, value: scoreNum };
-}
-
 // ============================================================
 // 採点フォーム用バリデーション（submitScore アクション共通）
 // ============================================================
@@ -296,48 +246,6 @@ export function validateUUID(uuid: string | null | undefined): {
 	}
 
 	return { valid: true };
-}
-
-/**
- * 整数IDのバリデーション
- */
-export function validateIntegerId(id: string | number | null | undefined): {
-	valid: boolean;
-	error?: string;
-	value?: number;
-} {
-	if (id === null || id === undefined || id === '') {
-		return { valid: false, error: m.validation_idRequired() };
-	}
-
-	const idNum = typeof id === 'string' ? parseInt(id, 10) : id;
-
-	if (isNaN(idNum) || idNum < 1) {
-		return { valid: false, error: m.validation_idInvalid() };
-	}
-
-	return { valid: true, value: idNum };
-}
-
-/**
- * 日付のバリデーション
- */
-export function validateDate(date: string | null | undefined): {
-	valid: boolean;
-	error?: string;
-	value?: Date;
-} {
-	if (!date) {
-		return { valid: false, error: m.validation_dateRequired() };
-	}
-
-	const dateObj = new Date(date);
-
-	if (isNaN(dateObj.getTime())) {
-		return { valid: false, error: m.validation_dateInvalid() };
-	}
-
-	return { valid: true, value: dateObj };
 }
 
 /**

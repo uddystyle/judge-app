@@ -5,14 +5,10 @@ import {
 	validatePassword,
 	validateOrganizationName,
 	validateSessionName,
-	validateBibNumber,
-	validateScore,
 	validateBib,
 	validateScoreInput,
 	validateScoreRange,
 	validateUUID,
-	validateIntegerId,
-	validateDate,
 	validateText
 } from '$lib/server/validation';
 
@@ -98,38 +94,6 @@ describe('validation.ts - i18nメッセージが返される', () => {
 		});
 	});
 
-	describe('validateBibNumber', () => {
-		it('空入力でエラーメッセージが返される', () => {
-			const result = validateBibNumber('');
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-		});
-
-		it('範囲外でパラメータ付きエラーメッセージが返される', () => {
-			const result = validateBibNumber(10000);
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-			expect(result.error).not.toContain('{min}');
-			expect(result.error).not.toContain('{max}');
-		});
-	});
-
-	describe('validateScore', () => {
-		it('空入力でエラーメッセージが返される', () => {
-			const result = validateScore('');
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-		});
-
-		it('範囲外でパラメータ付きエラーメッセージが返される', () => {
-			const result = validateScore(101);
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-			expect(result.error).not.toContain('{min}');
-			expect(result.error).not.toContain('{max}');
-		});
-	});
-
 	describe('validateBib (採点フォーム用)', () => {
 		it('不正入力でエラーメッセージが返される', () => {
 			const result = validateBib('abc');
@@ -179,28 +143,6 @@ describe('validation.ts - i18nメッセージが返される', () => {
 
 		it('不正なUUIDでエラーメッセージが返される', () => {
 			const result = validateUUID('not-a-uuid');
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-		});
-	});
-
-	describe('validateIntegerId', () => {
-		it('空入力でエラーメッセージが返される', () => {
-			const result = validateIntegerId('');
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-		});
-	});
-
-	describe('validateDate', () => {
-		it('空入力でエラーメッセージが返される', () => {
-			const result = validateDate('');
-			expect(result.valid).toBe(false);
-			expect(result.error).toBeTruthy();
-		});
-
-		it('不正な日付でエラーメッセージが返される', () => {
-			const result = validateDate('not-a-date');
 			expect(result.valid).toBe(false);
 			expect(result.error).toBeTruthy();
 		});

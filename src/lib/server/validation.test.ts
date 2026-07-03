@@ -6,11 +6,7 @@ import {
 	validatePassword,
 	validateOrganizationName,
 	validateSessionName,
-	validateBibNumber,
-	validateScore,
 	validateUUID,
-	validateIntegerId,
-	validateDate,
 	validateText
 } from './validation';
 
@@ -152,55 +148,6 @@ describe('validateSessionName', () => {
 	});
 });
 
-describe('validateBibNumber', () => {
-	it('should accept valid bib numbers', () => {
-		expect(validateBibNumber(1)).toEqual({ valid: true, value: 1 });
-		expect(validateBibNumber(9999)).toEqual({ valid: true, value: 9999 });
-		expect(validateBibNumber('100')).toEqual({ valid: true, value: 100 });
-	});
-
-	it('should reject bib numbers out of range', () => {
-		expect(validateBibNumber(0)).toMatchObject({ valid: false });
-		expect(validateBibNumber(10000)).toMatchObject({ valid: false });
-		expect(validateBibNumber(-1)).toMatchObject({ valid: false });
-	});
-
-	it('should reject non-numeric values', () => {
-		expect(validateBibNumber('abc')).toMatchObject({ valid: false });
-		expect(validateBibNumber('12.5')).toEqual({ valid: true, value: 12 }); // parseIntは小数点以下を切り捨てる
-	});
-
-	it('should reject empty or null values', () => {
-		expect(validateBibNumber('')).toMatchObject({ valid: false });
-		expect(validateBibNumber(null)).toMatchObject({ valid: false });
-		expect(validateBibNumber(undefined)).toMatchObject({ valid: false });
-	});
-});
-
-describe('validateScore', () => {
-	it('should accept valid scores', () => {
-		expect(validateScore(0)).toEqual({ valid: true, value: 0 });
-		expect(validateScore(50)).toEqual({ valid: true, value: 50 });
-		expect(validateScore(100)).toEqual({ valid: true, value: 100 });
-		expect(validateScore('75.5')).toEqual({ valid: true, value: 75.5 });
-	});
-
-	it('should reject scores out of range', () => {
-		expect(validateScore(-1)).toMatchObject({ valid: false });
-		expect(validateScore(101)).toMatchObject({ valid: false });
-	});
-
-	it('should reject non-numeric values', () => {
-		expect(validateScore('abc')).toMatchObject({ valid: false });
-	});
-
-	it('should reject empty or null values', () => {
-		expect(validateScore('')).toMatchObject({ valid: false });
-		expect(validateScore(null)).toMatchObject({ valid: false });
-		expect(validateScore(undefined)).toMatchObject({ valid: false });
-	});
-});
-
 describe('validateUUID', () => {
 	it('should accept valid UUIDs', () => {
 		expect(validateUUID('123e4567-e89b-12d3-a456-426614174000')).toEqual({ valid: true });
@@ -221,53 +168,6 @@ describe('validateUUID', () => {
 
 	it('should accept uppercase UUIDs', () => {
 		expect(validateUUID('123E4567-E89B-12D3-A456-426614174000')).toEqual({ valid: true });
-	});
-});
-
-describe('validateIntegerId', () => {
-	it('should accept valid integer IDs', () => {
-		expect(validateIntegerId(1)).toEqual({ valid: true, value: 1 });
-		expect(validateIntegerId('123')).toEqual({ valid: true, value: 123 });
-	});
-
-	it('should reject IDs less than 1', () => {
-		expect(validateIntegerId(0)).toMatchObject({ valid: false });
-		expect(validateIntegerId(-1)).toMatchObject({ valid: false });
-	});
-
-	it('should reject non-integer values', () => {
-		expect(validateIntegerId('abc')).toMatchObject({ valid: false });
-		expect(validateIntegerId('12.5')).toEqual({ valid: true, value: 12 }); // parseIntは小数点以下を切り捨てる
-	});
-
-	it('should reject empty or null values', () => {
-		expect(validateIntegerId('')).toMatchObject({ valid: false });
-		expect(validateIntegerId(null)).toMatchObject({ valid: false });
-		expect(validateIntegerId(undefined)).toMatchObject({ valid: false });
-	});
-});
-
-describe('validateDate', () => {
-	it('should accept valid dates', () => {
-		const result = validateDate('2025-01-01');
-		expect(result.valid).toBe(true);
-		expect(result.value).toBeInstanceOf(Date);
-	});
-
-	it('should accept ISO 8601 format', () => {
-		const result = validateDate('2025-01-01T00:00:00Z');
-		expect(result.valid).toBe(true);
-	});
-
-	it('should reject invalid date strings', () => {
-		expect(validateDate('invalid-date')).toMatchObject({ valid: false });
-		expect(validateDate('2025-13-01')).toMatchObject({ valid: false });
-	});
-
-	it('should reject empty or null values', () => {
-		expect(validateDate('')).toMatchObject({ valid: false });
-		expect(validateDate(null)).toMatchObject({ valid: false });
-		expect(validateDate(undefined)).toMatchObject({ valid: false });
 	});
 });
 

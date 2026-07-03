@@ -1,4 +1,3 @@
-import { env } from '$env/dynamic/public';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ locals, locals: { supabase } }) => {
@@ -11,8 +10,6 @@ export const load: LayoutServerLoad = async ({ locals, locals: { supabase } }) =
 
 	return {
 		user: user && !userError ? user : null,
-		supabaseUrl: env.PUBLIC_SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL,
-		supabaseAnonKey: env.PUBLIC_SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY,
 		lang: locals.lang ?? 'ja'
 	};
 };

@@ -1,5 +1,29 @@
 # Current Tasks
 
+## リファクタリング: 死コード削除 + 潜在バグ修正（2026-07-04）— ✅ 完了
+
+ベースライン: vitest 749 passed / 11 skipped(全緑)、svelte-check 256 errors(増やさないこと)
+
+### ステップ1: 死コード削除
+- [x] `.bak` ファイル6個を削除(legal/privacy/terms 配下)
+- [x] `src/routes/score/+page.svelte`(孤児ルート)を削除
+- [x] `/invite/[token]` join アクションにメンバー上限チェックを移植(TDD: RED→GREEN、テスト2件追加)
+- [x] `src/routes/organization/invite/[token]/**`(孤児ルート)を削除
+- [x] `src/routes/api/stripe/create-portal-session/+server.ts` + 対応テスト3ブロックを削除
+- [x] `validation.ts` の未使用4関数(validateBibNumber/validateScore/validateIntegerId/validateDate)+ 対応テストを削除
+- [x] `errors.ts`/`logger.ts` は温存(後続で「採用」予定)
+
+### ステップ2: 潜在バグ修正
+- [x] 得点計算の乖離: complete ページのインライン `slice(1,-1)` を `calculateFinalScore()`(中央3人合計)に置換。6人以上採点時に status ページと結果が食い違うバグを修正。3審3採・5人未満のフォールバック挙動は維持
+- [x] ブラウザ Supabase クライアント: 調査の結果 `@supabase/ssr` の `createBrowserClient` はブラウザではシングルトンキャッシュを返すため二重接続は実害なしと判明。生成箇所を `$lib/supabaseClient` の1箇所に統一(layout は import + setContext のみ)、layout.server の不要な supabaseUrl/AnonKey 返却も削除
+
+### 検証(レビュー)
+- [x] vitest: 718 passed / 11 skipped 全緑(削除テスト33件減・join テスト2件増)
+- [x] svelte-check: 252 errors / 25 warnings(ベースライン 256/25 → エラー4減、警告同数)
+- [x] `npm run build` 成功
+- [x] eslint/prettier: 変更ファイルの指摘は全て HEAD 時点から存在する既存のもの(新規指摘ゼロ)
+- 注: `create-portal-session` は UI から到達不能を確認済みだが、外部クライアントが直接叩いていた可能性だけは運用ログで要確認
+
 ## TENTO Web カラーパレット全面適用 + UI改善（2026-07-03）— ✅ 完了
 
 Claude Design プロジェクトの新パレット（`カラーパレット Web版` / `Before-After`）を全面適用し、UIを分かりやすく改善。

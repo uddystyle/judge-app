@@ -25,8 +25,14 @@ vi.mock('@supabase/supabase-js', () => ({
 	createClient: vi.fn(() => mockSupabaseAdmin)
 }));
 
+// organizationLimits のモック（join アクションのメンバー上限チェック用）
+vi.mock('$lib/server/organizationLimits', () => ({
+	checkCanAddMember: vi.fn(() => Promise.resolve({ allowed: true }))
+}));
+
 // モックセットアップ後にインポート
 const { actions } = await import('./+page.server');
+const { checkCanAddMember } = await import('$lib/server/organizationLimits');
 
 describe('invite/[token] - signup action', () => {
 	beforeEach(() => {
@@ -814,6 +820,100 @@ describe('invite/[token] - signup action', () => {
 					error: '無効な招待です'
 				}
 			});
+		});
+	});
+});
+
+describe('invite/[token] - join action', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const mockInvitation = {
+		id: 'invite-123',
+		email: null,
+		organization_id: 'org-123',
+		role: 'member',
+		expires_at: new Date(Date.now() + 86400000).toISOString(),
+		used_count: 0
+	};
+
+	// join アクションが参照するテーブルごとのモックを組み立てる
+	const setupJoinMocks = () => {
+		mockSupabase.auth.getUser.mockResolvedValue({
+			data: { user: { id: 'user-123', email: 'member@example.com' } },
+			error: null
+		});
+
+		const membersTable = {
+			select: vi.fn().mockReturnValue({
+				eq: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						single: vi.fn().mockResolvedValue({ data: null, error: null })
+					})
+				})
+			}),
+			insert: vi.fn().mockResolvedValue({ error: null })
+		};
+		const invitationsTable = {
+			select: vi.fn().mockReturnValue({
+				eq: vi.fn().mockReturnValue({
+					single: vi.fn().mockResolvedValue({ data: mockInvitation, error: null })
+				})
+			}),
+			update: vi.fn().mockReturnValue({
+				eq: vi.fn().mockResolvedValue({ error: null })
+			})
+		};
+		const usesTable = { insert: vi.fn().mockResolvedValue({ error: null }) };
+
+		mockSupabaseAdmin.from.mockImplementation((table: string) => {
+			if (table === 'invitations') return invitationsTable;
+			if (table === 'organization_members') return membersTable;
+			if (table === 'invitation_uses') return usesTable;
+			return {};
+		});
+
+		return { membersTable, invitationsTable, usesTable };
+	};
+
+	const createJoinEvent = () =>
+		({
+			params: { token: 'test-token' },
+			locals: { supabase: mockSupabase }
+		}) as unknown as RequestEvent;
+
+	it('メンバー上限に達している場合、403エラーを返しメンバー追加しない', async () => {
+		const { membersTable } = setupJoinMocks();
+		vi.mocked(checkCanAddMember).mockResolvedValue({
+			allowed: false,
+			reason: '組織メンバー数の上限（10人）に達しています。'
+		});
+
+		const result = await actions.join(createJoinEvent());
+
+		expect(result).toMatchObject({
+			status: 403,
+			data: {
+				error: '組織メンバー数の上限（10人）に達しています。'
+			}
+		});
+		expect(membersTable.insert).not.toHaveBeenCalled();
+	});
+
+	it('上限内の場合、メンバー追加して組織ページへリダイレクトする', async () => {
+		const { membersTable } = setupJoinMocks();
+		vi.mocked(checkCanAddMember).mockResolvedValue({ allowed: true });
+
+		await expect(actions.join(createJoinEvent())).rejects.toMatchObject({
+			status: 303,
+			location: '/organization/org-123'
+		});
+
+		expect(membersTable.insert).toHaveBeenCalledWith({
+			organization_id: 'org-123',
+			user_id: 'user-123',
+			role: 'member'
 		});
 	});
 });

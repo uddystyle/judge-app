@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SITE_URL } from '$env/static/public';
 import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
+import { checkCanAddMember } from '$lib/server/organizationLimits';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -307,6 +308,16 @@ export const actions: Actions = {
 
 		if (existingMembership) {
 			throw redirect(303, `/organization/${invitation.organization_id}`);
+		}
+
+		// メンバー上限チェック（招待「作成」時だけでなく「受諾」時にも強制する。
+		// complete フロー（メール確認経由）と同じガード）
+		const memberLimitCheck = await checkCanAddMember(supabaseAdmin, invitation.organization_id);
+		if (!memberLimitCheck.allowed) {
+			console.warn('[Invite Join] メンバー上限により参加拒否:', memberLimitCheck.reason);
+			return fail(403, {
+				error: memberLimitCheck.reason || '組織のメンバー数が上限に達しています。'
+			});
 		}
 
 		try {
