@@ -1,5 +1,21 @@
 # Current Tasks
 
+## リファクタリング ステップ4: setup 系ページ統合（2026-07-04）— ✅ 完了
+
+tournament-setup / training-setup の participants・events 4ページ（ほぼ完全コピー）を統合。
+
+- [x] **characterization テスト先行**: `src/lib/server/__tests__/setup-pages.characterization.test.ts`（30テスト）で4ルートの現挙動を固定してからリファクタ。モードガード、認可（作成者/主任のみ）、CSV インポート（洗い替え・ヘッダースキップ・行検証）、参加者/種目 CRUD、モード固有 insert ペイロード（custom_events vs training_events のテーブル/カラム差）をカバー
+- [x] サーバー共通化: `$lib/server/sessionSetup.ts` — `loadSetupParticipants`/`participantsSetupActions`（モード非依存）、`loadSetupEvents`/`createSetupEventsActions`（テーブル/カラム/ペイロードは EVENTS_CONFIG に集約）。4つの `+page.server.ts` は6行のラッパーに
+- [x] UI 共通化: `$lib/components/SetupParticipants.svelte`（差分= backPath のみ）、`SetupEvents.svelte`（差分= backPath + nameKey）。4つの `+page.svelte` は10行前後のラッパーに。`{#each}` にキーを追加（元コードの lint 違反を解消）
+- 差分: 既存8ファイルで **+24 / −2,704 行**（新規4ファイル分を含めても正味 約1,300行削減）
+
+### 検証
+- [x] characterization 30テスト: リファクタ前後どちらも全緑（挙動不変の証明）
+- [x] vitest 全体: 756 passed / 11 skipped 全緑
+- [x] svelte-check: 249 errors / 25 warnings（ベースライン 252/25 から3件改善）
+- [x] `npm run build` 成功
+- 残 lint 2件（goto の resolve 未使用）はリポジトリ全域共通の既存パターンのため踏襲
+
 ## リファクタリング ステップ3: 純関数抽出 + プラン一元化（2026-07-04）— ✅ 完了
 
 ### 3-1. スコアボードランキングの純関数抽出
