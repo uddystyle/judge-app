@@ -1,37 +1,13 @@
 import { json, redirect, error, isRedirect, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
-import { env } from '$env/dynamic/private';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { ORG_PRICE_IDS as PRICE_IDS, MAX_MEMBERS } from '$lib/server/plans';
 import {
 	validateRedirectUrl,
 	validateOrganizationName,
 	ALLOWED_STRIPE_REDIRECT_PATHS
 } from '$lib/server/validation';
-
-// Stripe Price IDのマッピング
-// 注意: 実際のPrice IDはStripeダッシュボードで作成後、環境変数に設定してください
-const PRICE_IDS: Record<string, { month: string; year: string }> = {
-	basic: {
-		month: env.STRIPE_PRICE_BASIC_MONTH || 'price_basic_month_placeholder',
-		year: env.STRIPE_PRICE_BASIC_YEAR || 'price_basic_year_placeholder'
-	},
-	standard: {
-		month: env.STRIPE_PRICE_STANDARD_MONTH || 'price_standard_month_placeholder',
-		year: env.STRIPE_PRICE_STANDARD_YEAR || 'price_standard_year_placeholder'
-	},
-	premium: {
-		month: env.STRIPE_PRICE_PREMIUM_MONTH || 'price_premium_month_placeholder',
-		year: env.STRIPE_PRICE_PREMIUM_YEAR || 'price_premium_year_placeholder'
-	}
-};
-
-// プランの最大メンバー数
-const MAX_MEMBERS: Record<string, number> = {
-	basic: 10,
-	standard: 30,
-	premium: 100
-};
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行

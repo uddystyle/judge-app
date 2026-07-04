@@ -4,14 +4,9 @@ import { stripe } from '$lib/server/stripe';
 import {
 	STRIPE_WEBHOOK_SECRET,
 	STRIPE_SECRET_KEY,
-	SUPABASE_SERVICE_ROLE_KEY,
-	STRIPE_PRICE_BASIC_MONTH,
-	STRIPE_PRICE_BASIC_YEAR,
-	STRIPE_PRICE_STANDARD_MONTH,
-	STRIPE_PRICE_STANDARD_YEAR,
-	STRIPE_PRICE_PREMIUM_MONTH,
-	STRIPE_PRICE_PREMIUM_YEAR
+	SUPABASE_SERVICE_ROLE_KEY
 } from '$env/static/private';
+import { findPlanTypeByPriceId } from '$lib/server/plans';
 import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 
@@ -1112,47 +1107,19 @@ async function handlePaymentFailed(invoice: any) {
 
 /**
  * Price IDからプランタイプを判定（T2: 未知IDは明示エラー化）
+ * マッピングの実体は $lib/server/plans に一元化されている
  */
 function getPlanTypeFromPrice(
 	priceId: string
 ): 'free' | 'standard' | 'pro' | 'basic' | 'premium' {
-	// 個人向けプランのPrice IDマッピング
-	const STANDARD_PRICES = [
-		'price_1SPHtjIsuW568CJsdqnUsm9d', // 月額
-		'price_1SPHurIsuW568CJsFfJ6kwYV' // 年額
-	];
+	const planType = findPlanTypeByPriceId(priceId);
 
-	const PRO_PRICES = [
-		'price_1SPHvrIsuW568CJsBsRymAvZ', // 月額
-		'price_1SPHwCIsuW568CJsuuhrug0G' // 年額
-	];
-
-	// 組織向けプランのPrice IDマッピング（環境変数から取得）
-	const BASIC_PRICES = [STRIPE_PRICE_BASIC_MONTH, STRIPE_PRICE_BASIC_YEAR].filter(Boolean);
-
-	const ORG_STANDARD_PRICES = [STRIPE_PRICE_STANDARD_MONTH, STRIPE_PRICE_STANDARD_YEAR].filter(
-		Boolean
-	);
-
-	const PREMIUM_PRICES = [STRIPE_PRICE_PREMIUM_MONTH, STRIPE_PRICE_PREMIUM_YEAR].filter(Boolean);
-
-	// 組織向けプランのチェック（環境変数が設定されている場合）
-	if (BASIC_PRICES.includes(priceId)) {
-		return 'basic';
-	} else if (ORG_STANDARD_PRICES.includes(priceId)) {
-		return 'standard';
-	} else if (PREMIUM_PRICES.includes(priceId)) {
-		return 'premium';
-	}
-	// 個人向けプランのチェック
-	else if (STANDARD_PRICES.includes(priceId)) {
-		return 'standard';
-	} else if (PRO_PRICES.includes(priceId)) {
-		return 'pro';
-	} else {
+	if (!planType) {
 		// T2: 未知のprice IDは明示的にエラーとして扱う（誤った plan_type 保存を防止）
 		const errMsg = `未知のprice ID: ${priceId}。正しいプランタイプを判定できません`;
 		console.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
+
+	return planType;
 }

@@ -46,6 +46,18 @@ vi.mock('$env/static/public', () => ({
 	PUBLIC_SUPABASE_URL: 'https://test.supabase.co'
 }));
 
+// $lib/server/plans が参照する動的環境変数（値は上の static モックと揃える）
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		STRIPE_PRICE_BASIC_MONTH: 'price_basic_month',
+		STRIPE_PRICE_BASIC_YEAR: 'price_basic_year',
+		STRIPE_PRICE_STANDARD_MONTH: 'price_standard_month',
+		STRIPE_PRICE_STANDARD_YEAR: 'price_standard_year',
+		STRIPE_PRICE_PREMIUM_MONTH: 'price_premium_month',
+		STRIPE_PRICE_PREMIUM_YEAR: 'price_premium_year'
+	}
+}));
+
 // Import after mocks
 import { POST } from '../../../routes/api/stripe/webhook/+server';
 import { stripe } from '$lib/server/stripe';

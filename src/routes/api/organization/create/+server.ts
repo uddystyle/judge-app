@@ -4,15 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { MAX_MEMBERS } from '$lib/server/plans';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-// プランごとの組織メンバー数制限
-const MAX_MEMBERS: Record<string, number> = {
-	basic: 10,
-	standard: 30,
-	premium: 100
-};
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行

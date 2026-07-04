@@ -5,6 +5,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { ORG_PLANS } from '$lib/plans';
 
 	import * as m from '$lib/paraglide/messages.js';
 
@@ -43,14 +44,14 @@
 		},
 		{
 			id: 'basic',
-			name: 'Basic',
+			name: ORG_PLANS.basic.name,
 			subtitle: '小規模クラブ向け',
-			monthlyPrice: 8800,
-			yearlyPrice: 70000,
-			maxMembers: '組織メンバー: 10名まで',
+			monthlyPrice: ORG_PLANS.basic.monthlyPrice,
+			yearlyPrice: ORG_PLANS.basic.yearlyPrice,
+			maxMembers: `組織メンバー: ${ORG_PLANS.basic.maxMembers}名まで`,
 			features: [
-				'組織メンバー: 10名まで',
-				'検定員: 15名まで',
+				`組織メンバー: ${ORG_PLANS.basic.maxMembers}名まで`,
+				`検定員: ${ORG_PLANS.basic.maxJudges}名まで`,
 				'月間セッション: 無制限',
 				'検定・大会・研修モード',
 				'スコアボード公開機能',
@@ -61,14 +62,14 @@
 		},
 		{
 			id: 'standard',
-			name: 'Standard',
+			name: ORG_PLANS.standard.name,
 			subtitle: '中規模組織向け',
-			monthlyPrice: 24800,
-			yearlyPrice: 180000,
-			maxMembers: '組織メンバー: 30名まで',
+			monthlyPrice: ORG_PLANS.standard.monthlyPrice,
+			yearlyPrice: ORG_PLANS.standard.yearlyPrice,
+			maxMembers: `組織メンバー: ${ORG_PLANS.standard.maxMembers}名まで`,
 			features: [
-				'組織メンバー: 30名まで',
-				'検定員: 50名まで',
+				`組織メンバー: ${ORG_PLANS.standard.maxMembers}名まで`,
+				`検定員: ${ORG_PLANS.standard.maxJudges}名まで`,
 				'月間セッション: 無制限',
 				'検定・大会・研修モード',
 				'スコアボード公開機能',
@@ -80,14 +81,14 @@
 		},
 		{
 			id: 'premium',
-			name: 'Premium',
+			name: ORG_PLANS.premium.name,
 			subtitle: '大規模組織向け',
-			monthlyPrice: 49800,
-			yearlyPrice: 300000,
-			maxMembers: '組織メンバー: 100名まで',
+			monthlyPrice: ORG_PLANS.premium.monthlyPrice,
+			yearlyPrice: ORG_PLANS.premium.yearlyPrice,
+			maxMembers: `組織メンバー: ${ORG_PLANS.premium.maxMembers}名まで`,
 			features: [
-				'組織メンバー: 100名まで',
-				'検定員: 100名まで',
+				`組織メンバー: ${ORG_PLANS.premium.maxMembers}名まで`,
+				`検定員: ${ORG_PLANS.premium.maxJudges}名まで`,
 				'月間セッション: 無制限',
 				'検定・大会・研修モード',
 				'スコアボード公開機能',

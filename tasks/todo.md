@@ -1,5 +1,26 @@
 # Current Tasks
 
+## リファクタリング ステップ3: 純関数抽出 + プラン一元化（2026-07-04）— ✅ 完了
+
+### 3-1. スコアボードランキングの純関数抽出
+- [x] `$lib/scoreboard.ts` に `computeScoreboardRankings()` を抽出（認証版/公開版で文字単位一致していた集計約75行×2を置換）
+- [x] ユニットテスト8件を新規作成（`src/lib/tests/scoreboard.test.ts`）— 複数検定員の合算、総合/種目別ランキング、同点連番、null 耐性。テストゼロだった領域に初の安全網
+- [x] ついで修正: 認証版の未使用 `redirect` import 除去（HEAD 時点から未使用）
+
+### 3-2. プラン/価格マッピングの一元化
+- [x] `$lib/plans.ts`（表示用カタログ: 価格/上限/機能、`getPlanPrice`/`formatPrice`）を新規作成
+- [x] `$lib/server/plans.ts`（Stripe Price ID マッピング、`MAX_MEMBERS` は表示カタログから導出、`findPlanTypeByPriceId`）を新規作成
+- [x] 配線: `create-organization-checkout` / `upgrade-organization`（PRICE_IDS+MAX_MEMBERS 削除）、`api/organization/create`（MAX_MEMBERS 削除）、webhook（`getPlanTypeFromPrice` が共有関数を参照、T2 の RetryableError 変換は webhook 側に維持）
+- [x] フロント: `organization/create` / `change-plan` / `upgrade` の同一カタログ3コピーを import に置換、`pricing` は数値のみ参照化（ページ固有コピーは維持）
+- [x] webhook テストに `$env/dynamic/private` モック追加（値は static モックと同一、アサーション変更なし）
+- 効果: プラン↔価格↔上限の定義箇所が **7箇所 → 2ファイル**（表示=`$lib/plans.ts`、Stripe対応=`$lib/server/plans.ts`）
+
+### 検証
+- [x] vitest: 726 passed / 11 skipped 全緑（スコアボード8件追加）
+- [x] svelte-check: 252 errors / 25 warnings（ベースライン維持、増加なし）
+- [x] `npm run build` 成功、新規ファイルは eslint/prettier クリーン
+- 残: onboarding/create-organization は DB `plan_limits` 駆動のため今回対象外（表示カタログとの整合は将来 DB 駆動へ寄せる際に統合）
+
 ## リファクタリング: 死コード削除 + 潜在バグ修正（2026-07-04）— ✅ 完了
 
 ベースライン: vitest 749 passed / 11 skipped(全緑)、svelte-check 256 errors(増やさないこと)

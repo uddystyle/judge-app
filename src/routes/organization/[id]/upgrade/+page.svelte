@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import { ORG_PLANS as plans, getPlanPrice, formatPrice } from '$lib/plans';
 	import type { PageData } from './$types';
 
 	export let data: PageData;
@@ -15,42 +16,8 @@
 	let loading = false;
 	let errorMessage = '';
 
-	const plans = {
-		basic: {
-			name: 'Basic',
-			maxMembers: 10,
-			maxJudges: 15,
-			monthlyPrice: 8800,
-			yearlyPrice: 70000,
-			features: ['組織メンバー10名まで', '検定員15名まで', 'セッション無制限', '検定・大会・研修モード']
-		},
-		standard: {
-			name: 'Standard',
-			maxMembers: 30,
-			maxJudges: 50,
-			monthlyPrice: 24800,
-			yearlyPrice: 180000,
-			features: ['組織メンバー30名まで', '検定員50名まで', 'セッション無制限', '検定・大会・研修モード']
-		},
-		premium: {
-			name: 'Premium',
-			maxMembers: 100,
-			maxJudges: 100,
-			monthlyPrice: 49800,
-			yearlyPrice: 300000,
-			features: ['組織メンバー100名まで', '検定員100名まで', 'セッション無制限', '検定・大会・研修モード']
-		}
-	};
-
 	function getPrice(plan: 'basic' | 'standard' | 'premium') {
-		return billingInterval === 'month' ? plans[plan].monthlyPrice : plans[plan].yearlyPrice;
-	}
-
-	function formatPrice(price: number) {
-		return new Intl.NumberFormat('ja-JP', {
-			style: 'currency',
-			currency: 'JPY'
-		}).format(price);
+		return getPlanPrice(plan, billingInterval);
 	}
 
 	async function handleUpgrade() {

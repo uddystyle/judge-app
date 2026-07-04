@@ -1,6 +1,7 @@
-import { error, redirect } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { authenticateSession } from '$lib/server/sessionAuth';
+import { computeScoreboardRankings } from '$lib/scoreboard';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, setHeaders }) => {
 	// スコアボードは頻繁に更新されるため超短期キャッシュ（10秒）
@@ -69,74 +70,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 		profile = profileData;
 	}
 
-	// ゼッケン番号ごとに得点を集計
-	const bibScores = new Map<number, { total: number; events: Map<string, number> }>();
-
-	results?.forEach((result) => {
-		const bib = result.bib;
-		const eventKey = `${result.discipline}-${result.level}-${result.event_name}`;
-		const score = result.score;
-
-		if (!bibScores.has(bib)) {
-			bibScores.set(bib, { total: 0, events: new Map() });
-		}
-
-		const bibData = bibScores.get(bib)!;
-
-		// 種目ごとの得点を保存
-		if (!bibData.events.has(eventKey)) {
-			bibData.events.set(eventKey, 0);
-		}
-
-		// 種目ごとの得点を累積（同じ種目で複数の検定員がいる場合は合計）
-		bibData.events.set(eventKey, bibData.events.get(eventKey)! + score);
-	});
-
-	// 種目ごとの得点を合計して総合得点を計算
-	bibScores.forEach((bibData) => {
-		bibData.total = Array.from(bibData.events.values()).reduce((sum, score) => sum + score, 0);
-	});
-
-	// 総合ランキングを作成
-	const overallRanking = Array.from(bibScores.entries())
-		.map(([bib, data]) => ({
-			rank: 0,
-			bib,
-			total_score: data.total
-		}))
-		.sort((a, b) => b.total_score - a.total_score);
-
-	// 順位を設定
-	overallRanking.forEach((item, index) => {
-		item.rank = index + 1;
-	});
-
-	// 種目別ランキングを作成
-	const eventRankings = events?.map((event) => {
-		const eventKey = `${event.discipline}-${event.level}-${event.event_name}`;
-
-		const ranking = Array.from(bibScores.entries())
-			.filter(([_, data]) => data.events.has(eventKey))
-			.map(([bib, data]) => ({
-				rank: 0,
-				bib,
-				score: data.events.get(eventKey)!
-			}))
-			.sort((a, b) => b.score - a.score);
-
-		// 順位を設定
-		ranking.forEach((item, index) => {
-			item.rank = index + 1;
-		});
-
-		return {
-			event_id: event.id,
-			discipline: event.discipline,
-			level: event.level,
-			event_name: event.event_name,
-			ranking
-		};
-	});
+	// ランキング集計（公開版スコアボードと共通の純粋関数）
+	const { overallRanking, eventRankings } = computeScoreboardRankings(events, results);
 
 	return {
 		user,
@@ -145,6 +80,6 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 		sessionDetails,
 		events: events || [],
 		overallRanking,
-		eventRankings: eventRankings || []
+		eventRankings
 	};
 };
