@@ -1,5 +1,21 @@
 # Current Tasks
 
+## リファクタリング ステップ9: Stripe webhook の分割（2026-07-05）— ✅ 完了
+
+1,126行の `webhook/+server.ts` を move-only で分割（ロジック・ログ・エラー分類は一切変更なし）。
+
+- [x] `+server.ts`（141行）: 署名検証・T14 livemode検証・ディスパッチ・エラー分類のみ
+- [x] `$lib/server/stripeWebhook/shared.ts`（80行）: RetryableError/NonRetryableError、supabaseAdmin、Basil/acacia 両対応の `getSubscriptionPeriod`/`getInvoiceSubscriptionId`、`getPlanTypeFromPrice`
+- [x] `checkout.ts`（383行）: handleCheckoutCompleted + handleOrganizationCheckout（旧サブスク解約含む）
+- [x] `subscription.ts`（384行）: created / updated / deleted
+- [x] `invoice.ts`（172行）: payment_succeeded / payment_failed
+- [x] webhook テスト66件（冪等性・リプレイ・T番号エッジケース含む）が**無修正で全緑** — POST 経由の E2E アサーションのため分割の影響を受けない
+
+### 検証
+- [x] vitest: 782 passed / 11 skipped 全緑
+- [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン
+- [x] eslint: 24件全て移動元から持ち越した既存 `any`（新規カテゴリなし）
+
 ## リファクタリング ステップ8b: session/[id] 待機画面の移行（2026-07-05）— ✅ 完了
 
 手書きチャネル最後の1ページ（約270行 + startFallbackPolling）を `createRealtimeChannelWithRetry` へ移行。**手書きチャネルはゼロに**。
