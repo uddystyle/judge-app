@@ -1,5 +1,19 @@
 # Current Tasks
 
+## リファクタリング ステップ10: details アクションの分割（2026-07-05）— ✅ 完了
+
+`details/+page.server.ts`（1,089行・15アクション、12未テスト）を characterization テスト先行で move-only 分割。
+
+- [x] **characterization テスト29件を先に作成**（`page.server.actions.test.ts`）: appointChief のトグル仕様、removeGuest/Participant の作成者限定＋自分・主任削除禁止、training_sessions の upsert 分岐、点差バリデーション、requiredJudges の参加者数上限、種目 CRUD のモード別テーブル/ペイロード、updateName のサニタイズ、deleteSession のカスケード削除＋リダイレクト、未認証時の redirect/401 の使い分け。リファクタ前後どちらも全緑
+- [x] 分割: `+page.server.ts`（243行 = load + actions 合成）+ `./actions/participants.ts`（3）/ `settings.ts`（3）/ `events.ts`（3）/ `dangerZone.ts`（updateName・deleteSession・purge 3兄弟）。各アクションは `RequestEvent` 型付きの named export
+- [x] 既存 `page.server.deleteData.test.ts`（23件）も import 経路そのままで全緑（actions 合成の re-export により無修正）
+- [x] load は意図的に無変更（authenticateSession への寄せは挙動変更を伴うため見送り）
+
+### 検証
+- [x] vitest: 811 passed / 11 skipped 全緑（+29件）
+- [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン
+- [x] eslint: 新規指摘なし（残る2件は load の既存 `any`）
+
 ## リファクタリング ステップ9: Stripe webhook の分割（2026-07-05）— ✅ 完了
 
 1,126行の `webhook/+server.ts` を move-only で分割（ロジック・ログ・エラー分類は一切変更なし）。
