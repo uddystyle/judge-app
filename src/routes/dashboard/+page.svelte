@@ -117,34 +117,34 @@
 				{#each data.sessions as session}
 					{@const isTournament = session.mode === 'tournament'}
 					{@const canStart = !isTournament || canStartTournament(session.participantCount)}
-					{@const modeUi =
-						session.mode === 'tournament'
-							? { icon: 'taikai', cls: 'taikai' }
-							: session.mode === 'training'
-								? { icon: 'kenshu', cls: 'kenshu' }
-								: { icon: 'kentei', cls: 'kentei' }}
 					<div class="key select-item" class:disabled={!canStart}>
 						<div class="session-info-wrapper">
 							<div class="session-header">
-								<div class="mode-icon-badge {modeUi.cls}">
-									<Icon name={modeUi.icon} size={24} />
-								</div>
 								<div class="session-left-section">
 									<div class="badges-container">
 										{#if session.mode === 'tournament'}
-											<span class="mode-badge tournament">{m.mode_tournament()}</span>
+											<span class="mode-badge tournament">
+												<Icon name="taikai" size={14} />
+												{m.mode_tournament()}
+											</span>
 											{#if canStart}
 												<span class="scoring-method-badge">
 													{session.exclude_extremes ? m.mode_5judge3score() : m.mode_3judge3score()}
 												</span>
 											{/if}
 										{:else if session.mode === 'training'}
-											<span class="mode-badge training">{m.mode_training()}</span>
+											<span class="mode-badge training">
+												<Icon name="kenshu" size={14} />
+												{m.mode_training()}
+											</span>
 											<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
 												{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
 											</span>
 										{:else}
-											<span class="mode-badge">{m.mode_certification()}</span>
+											<span class="mode-badge">
+												<Icon name="kentei" size={14} />
+												{m.mode_certification()}
+											</span>
 											<span class="judge-mode-badge" class:individual={!session.isMultiJudge}>
 												{session.isMultiJudge ? m.mode_multiJudge() : m.mode_individualJudge()}
 											</span>
@@ -341,27 +341,6 @@
 		width: 100%;
 		text-align: left;
 	}
-	.mode-icon-badge {
-		flex: none;
-		width: 48px;
-		height: 48px;
-		border-radius: 12px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.mode-icon-badge.kentei {
-		background: var(--mode-kentei-tint);
-		color: var(--mode-kentei);
-	}
-	.mode-icon-badge.taikai {
-		background: var(--mode-taikai-tint);
-		color: var(--mode-taikai);
-	}
-	.mode-icon-badge.kenshu {
-		background: var(--mode-kenshu-tint);
-		color: var(--mode-kenshu);
-	}
 	.session-left-section {
 		display: flex;
 		flex-direction: column;
@@ -427,6 +406,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		gap: 5px;
 		font-size: 12px;
 		font-weight: 600;
 		color: var(--mode-kentei);
