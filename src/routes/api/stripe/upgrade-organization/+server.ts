@@ -2,6 +2,7 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { stripe } from '$lib/server/stripe';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { isOrgAdmin } from '$lib/server/orgAuth';
 import { ORG_PRICE_IDS as PRICE_IDS, MAX_MEMBERS } from '$lib/server/plans';
 import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
 
@@ -81,16 +82,8 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			throw error(404, '組織が見つかりません。');
 		}
 
-		// 4. 組織の管理者権限を確認
-		const { data: member } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', organizationId)
-			.eq('user_id', user.id)
-			.is('removed_at', null) // 退会済みメンバーを明示的に除外（RLS依存でなくサーバー側で保証）
-			.single();
-
-		if (!member || member.role !== 'admin') {
+		// 4. 組織の管理者権限を確認（orgAuth が退会済みメンバーを除外する）
+		if (!(await isOrgAdmin(supabase, organizationId, user.id))) {
 			throw error(403, '組織の管理者権限が必要です。');
 		}
 

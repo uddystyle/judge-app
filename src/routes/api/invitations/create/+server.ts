@@ -6,6 +6,7 @@ import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { randomBytes } from 'crypto';
 import { checkCanAddMember } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { isOrgAdmin } from '$lib/server/orgAuth';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -37,16 +38,8 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			return json({ error: '無効な役割です' }, { status: 400 });
 		}
 
-		// ユーザーがこの組織の管理者かチェック
-		const { data: membership } = await supabaseAdmin
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', organizationId)
-			.eq('user_id', user.id)
-			.is('removed_at', null) // 退会済みメンバーを明示的に除外
-			.single();
-
-		if (!membership || membership.role !== 'admin') {
+		// ユーザーがこの組織の管理者かチェック（orgAuth が退会済みメンバーを除外する）
+		if (!(await isOrgAdmin(supabaseAdmin, organizationId, user.id))) {
 			return json({ error: '招待を作成する権限がありません。' }, { status: 403 });
 		}
 

@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { redirect, error } from '@sveltejs/kit';
+import { isOrgAdmin } from '$lib/server/orgAuth';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	// 1. ユーザー認証確認
@@ -30,15 +31,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		stripe_customer_id: organization.stripe_customer_id
 	});
 
-	// 3. 管理者権限を確認
-	const { data: member } = await supabase
-		.from('organization_members')
-		.select('role')
-		.eq('organization_id', params.id)
-		.eq('user_id', user.id)
-		.single();
-
-	if (!member || member.role !== 'admin') {
+	// 3. 管理者権限を確認（orgAuth 経由で退会済みメンバーを除外。
+	//    以前はこのページだけ removed_at フィルタが欠けていた）
+	if (!(await isOrgAdmin(supabase, params.id, user.id))) {
 		throw error(403, '組織の管理者権限が必要です。');
 	}
 

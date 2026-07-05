@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { stripe } from '$lib/server/stripe';
+import { isOrgAdmin } from '$lib/server/orgAuth';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -15,19 +16,19 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	const organizationId = params.id;
 
 	// ユーザーがこの組織の管理者かチェック
-	const { data: membership } = await supabase
-		.from('organization_members')
-		.select('role, organizations(id, name, plan_type, stripe_customer_id, stripe_subscription_id)')
-		.eq('organization_id', organizationId)
-		.eq('user_id', user.id)
-		.is('removed_at', null)
-		.single();
-
-	if (!membership || membership.role !== 'admin') {
+	if (!(await isOrgAdmin(supabase, organizationId, user.id))) {
 		throw redirect(303, '/dashboard');
 	}
 
-	const organization = membership.organizations;
+	const { data: organization } = await supabase
+		.from('organizations')
+		.select('id, name, plan_type, stripe_customer_id, stripe_subscription_id')
+		.eq('id', organizationId)
+		.single();
+
+	if (!organization) {
+		throw redirect(303, '/dashboard');
+	}
 
 	// アクティブなサブスクリプション情報を取得
 	let hasActiveSubscription = false;
@@ -106,15 +107,7 @@ export const actions: Actions = {
 		const organizationId = params.id;
 
 		// ユーザーがこの組織の管理者かチェック
-		const { data: membership } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', organizationId)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
-
-		if (!membership || membership.role !== 'admin') {
+		if (!(await isOrgAdmin(supabase, organizationId, user.id))) {
 			return fail(403, { error: '組織を削除する権限がありません。' });
 		}
 

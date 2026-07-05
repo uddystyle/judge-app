@@ -1,5 +1,21 @@
 # Current Tasks
 
+## リファクタリング ステップ5: orgAuth 集約（2026-07-05）— ✅ 完了
+
+org-admin/メンバーシップ認可チェックのコピペ 17箇所+member チェック1箇所を `$lib/server/orgAuth.ts`（`getActiveOrgRole`/`isOrgAdmin`）に集約。失敗時の応答（error/fail/json/redirect、メッセージ、分割/結合）は各サイトの現行仕様を厳密に維持。
+
+- [x] テスト先行: orgAuth ユニット6件 + 未テストだった認可付きエンドポイント（members/[memberId] DELETE・POST、sessions/[id] DELETE・POST、permanent DELETE）の characterization 10件をリファクタ前に作成し全緑を確認
+- [x] **セキュリティ修正（TDD: RED→GREEN）**: `organization/[id]/upgrade` の load だけ `.is('removed_at', null)` が欠落しており退会済み管理者がアクセス可能だった。orgAuth 経由に統一して修正（`upgrade/page.server.test.ts` 3件で固定）
+- [x] 置換対象: organization/[id]（load+updateName）、change-plan ×3、upgrade、archive、delete ×2、members/archive、api: members/[memberId] ×2、sessions/[id] ×2、permanent、customer-portal、upgrade-organization、invitations/create、export（member チェック）
+- [x] delete load は join クエリを isOrgAdmin + organizations 直接取得に分離（結果は同一、非存在時は従来同様 /dashboard へ）
+- 差分: 既存13ファイルで +65 / −177 行、新規テスト3ファイル+ヘルパー
+
+### 検証
+- [x] vitest: 775 passed / 11 skipped 全緑（新規テスト19件含む。change-plan アクション・stripe checkout の既存テストも全緑）
+- [x] svelte-check: 243 errors / 25 warnings（ベースライン 249 から6件改善）
+- [x] `npm run build` 成功、新規4ファイルは eslint/prettier クリーン
+- [x] インライン `role !== 'admin'` チェックの残存ゼロを grep で確認
+
 ## リファクタリング ステップ4: setup 系ページ統合（2026-07-04）— ✅ 完了
 
 tournament-setup / training-setup の participants・events 4ページ（ほぼ完全コピー）を統合。

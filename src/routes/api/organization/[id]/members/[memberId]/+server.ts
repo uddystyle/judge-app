@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { getActiveOrgRole } from '$lib/server/orgAuth';
 
 // メンバー削除（Soft Delete）
 export const DELETE: RequestHandler = async ({ params, request, locals: { supabase } }) => {
@@ -24,19 +25,13 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 
 	try {
 		// 1. 権限チェック: 実行ユーザーが組織の管理者かどうか確認
-		const { data: executorMembership, error: executorError } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', orgId)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
+		const executorRole = await getActiveOrgRole(supabase, orgId, user.id);
 
-		if (executorError || !executorMembership) {
+		if (!executorRole) {
 			return json({ error: 'この組織のメンバーではありません' }, { status: 403 });
 		}
 
-		if (executorMembership.role !== 'admin') {
+		if (executorRole !== 'admin') {
 			return json({ error: '管理者権限が必要です' }, { status: 403 });
 		}
 
@@ -122,19 +117,13 @@ export const POST: RequestHandler = async ({ params, locals: { supabase } }) => 
 
 	try {
 		// 1. 権限チェック: 実行ユーザーが組織の管理者かどうか確認
-		const { data: executorMembership, error: executorError } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', orgId)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
+		const executorRole = await getActiveOrgRole(supabase, orgId, user.id);
 
-		if (executorError || !executorMembership) {
+		if (!executorRole) {
 			return json({ error: 'この組織のメンバーではありません' }, { status: 403 });
 		}
 
-		if (executorMembership.role !== 'admin') {
+		if (executorRole !== 'admin') {
 			return json({ error: '管理者権限が必要です' }, { status: 403 });
 		}
 

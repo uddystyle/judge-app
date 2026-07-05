@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, error, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
+import { isOrgAdmin } from '$lib/server/orgAuth';
 import {
 	STRIPE_PRICE_BASIC_MONTH,
 	STRIPE_PRICE_BASIC_YEAR,
@@ -33,15 +34,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 	}
 
 	// 3. 管理者権限を確認
-	const { data: member } = await supabase
-		.from('organization_members')
-		.select('role')
-		.eq('organization_id', params.id)
-		.eq('user_id', user.id)
-		.is('removed_at', null)
-		.single();
-
-	if (!member || member.role !== 'admin') {
+	if (!(await isOrgAdmin(supabase, params.id, user.id))) {
 		throw error(403, '組織の管理者権限が必要です。');
 	}
 
@@ -108,15 +101,7 @@ export const actions: Actions = {
 		}
 
 		// 管理者権限を確認
-		const { data: member } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', params.id)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
-
-		if (!member || member.role !== 'admin') {
+		if (!(await isOrgAdmin(supabase, params.id, user.id))) {
 			return fail(403, { error: '組織の管理者権限が必要です。' });
 		}
 
@@ -239,15 +224,7 @@ export const actions: Actions = {
 
 		// 管理者権限を確認（Stripe へのプラン変更呼び出しより前に必ず実施する）
 		// cancelSubscription / load と同じ admin 判定。退会済みメンバーは removed_at で除外。
-		const { data: member } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', params.id)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
-
-		if (!member || member.role !== 'admin') {
+		if (!(await isOrgAdmin(supabase, params.id, user.id))) {
 			return fail(403, { error: '組織の管理者権限が必要です。' });
 		}
 

@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { error, redirect } from '@sveltejs/kit';
+import { getActiveOrgRole } from '$lib/server/orgAuth';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const { id: orgId } = params;
@@ -26,19 +27,13 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	}
 
 	// ユーザーがこの組織の管理者かチェック
-	const { data: membership, error: membershipError } = await supabase
-		.from('organization_members')
-		.select('role')
-		.eq('organization_id', orgId)
-		.eq('user_id', user.id)
-		.is('removed_at', null)
-		.single();
+	const userRole = await getActiveOrgRole(supabase, orgId, user.id);
 
-	if (membershipError || !membership) {
+	if (!userRole) {
 		throw error(403, '組織にアクセスする権限がありません');
 	}
 
-	if (membership.role !== 'admin') {
+	if (userRole !== 'admin') {
 		throw error(403, '管理者のみメンバーアーカイブにアクセスできます');
 	}
 

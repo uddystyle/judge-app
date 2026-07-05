@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { getActiveOrgRole } from '$lib/server/orgAuth';
 
 // セッション完全削除（Premium限定）
 export const DELETE: RequestHandler = async ({ params, request, locals: { supabase } }) => {
@@ -55,19 +56,13 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 		}
 
 		// 4. 権限チェック: 実行ユーザーがセッションの組織の管理者かどうか確認
-		const { data: membership, error: membershipError } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', session.organization_id)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
+		const userRole = await getActiveOrgRole(supabase, session.organization_id, user.id);
 
-		if (membershipError || !membership) {
+		if (!userRole) {
 			return json({ error: 'この組織のメンバーではありません' }, { status: 403 });
 		}
 
-		if (membership.role !== 'admin') {
+		if (userRole !== 'admin') {
 			return json({ error: '管理者権限が必要です' }, { status: 403 });
 		}
 

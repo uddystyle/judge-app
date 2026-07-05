@@ -1,6 +1,7 @@
 import { json, redirect, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { getActiveOrgRole } from '$lib/server/orgAuth';
 
 export const GET: RequestHandler = async ({ params, request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
@@ -57,20 +58,13 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 	// 新規追加: 組織メンバーシップのチェック
 	if (session.organization_id) {
 		// ユーザーがまだ組織のメンバーであることを確認
-		const { data: membership, error: membershipError } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', session.organization_id)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
+		const userRole = await getActiveOrgRole(supabase, session.organization_id, user.id);
 
-		if (membershipError || !membership) {
+		if (!userRole) {
 			console.error('[Export API] Unauthorized: User not in organization', {
 				userId: user.id,
 				sessionId: sessionIdNum,
-				orgId: session.organization_id,
-				error: membershipError
+				orgId: session.organization_id
 			});
 			throw error(403, 'この組織のメンバーではありません。');
 		}

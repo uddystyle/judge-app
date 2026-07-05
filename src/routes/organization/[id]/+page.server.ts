@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { error, redirect, fail } from '@sveltejs/kit';
 import { validateOrganizationName } from '$lib/server/validation';
+import { getActiveOrgRole, isOrgAdmin } from '$lib/server/orgAuth';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	// 未ログインの場合はログインページへリダイレクト
@@ -26,15 +27,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	// ユーザーがこの組織のメンバーかチェック（アクティブなメンバーのみ）
-	const { data: membership } = await locals.supabase
-		.from('organization_members')
-		.select('role')
-		.eq('organization_id', organizationId)
-		.eq('user_id', user.id)
-		.is('removed_at', null)
-		.single();
+	const userRole = await getActiveOrgRole(locals.supabase, organizationId, user.id);
 
-	if (!membership) {
+	if (!userRole) {
 		throw error(403, '組織にアクセスする権限がありません。');
 	}
 
@@ -74,7 +69,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	// 組織の有効な招待を取得（管理者のみ）
 	let invitations = [];
-	if (membership.role === 'admin') {
+	if (userRole === 'admin') {
 		const { data: invitationsData } = await locals.supabase
 			.from('invitations')
 			.select('*')
@@ -99,7 +94,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		user,
 		profile,
 		organization,
-		userRole: membership.role,
+		userRole,
 		members: members || [],
 		invitations,
 		hasOrganization
@@ -122,15 +117,7 @@ export const actions = {
 		}
 
 		// ユーザーがこの組織の管理者かチェック（アクティブなメンバーのみ）
-		const { data: membership } = await supabase
-			.from('organization_members')
-			.select('role')
-			.eq('organization_id', organizationId)
-			.eq('user_id', user.id)
-			.is('removed_at', null)
-			.single();
-
-		if (!membership || membership.role !== 'admin') {
+		if (!(await isOrgAdmin(supabase, organizationId, user.id))) {
 			return fail(403, { error: '組織名を変更する権限がありません。' });
 		}
 
