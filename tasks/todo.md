@@ -1,5 +1,18 @@
 # Current Tasks
 
+## リファクタリング ステップ7: realtime.ts 内部統合（2026-07-05）— ✅ 完了
+
+4つの公開ファクトリ（createRealtimeChannel / WithRetry / SessionMonitorChannel / SessionMonitorWithPolling）に4重コピーされていた「上限つき指数バックオフ再購読 + setupChannel + タイマー管理」を内部コア `createManagedChannel` に集約。各ファクトリは差分（フォールバックポーリング / 最終手段 reload / 常時ポーリング保険）だけを持つ薄いラッパーに。551行 → 452行。
+
+- [x] 安全網の確認: 既存 `realtime-channel-with-retry.test.ts` が監査時の想定と異なり**4ファクトリ全てを32テストでカバー済み**（バックオフ、reload キャンセル、polling 多重化防止、cleanup）と判明 → characterization 追加不要と判断
+- [x] 公開 API・型・ログ文言・タイマー挙動は完全維持（manualRefresh の「await 前に retryTimer クリア」も `cancelRetry`/`reconnect` の分離で保存）
+- [x] 公開型の `payload: any` は利用側10箇所の互換のため意図的に維持（eslint any 指摘は 12→7 に減、新規なし）
+- 残: 3ページ（session/[id]、検定 score、dashboard）の手書きチャネル約270行のヘルパー移行は**未着手**（session/[id] は4テストファイルが手書き実装をロックしており、テスト改修込みの別ステップとする）
+
+### 検証
+- [x] realtime 関連47テスト全緑（32 + score-monitoring 15）、vitest 全体 779 passed / 11 skipped
+- [x] svelte-check: 243 errors / 25 warnings（増加なし）、`npm run build` 成功、prettier クリーン
+
 ## リファクタリング ステップ6: サーバーログの logger 全面移行（2026-07-05）— ✅ 完了
 
 サーバーサイドの `console.*` 614箇所（54ファイル）を `$lib/server/logger` に一括移行。本番環境で ①debug/info（旧 console.log/info）が抑制され、②オブジェクト引数の機密キー（user_id/email/token/stripe_customer_id 等）が [REDACTED] される。開発/テスト環境では全レベル出力・レダクションなしで従来どおり。

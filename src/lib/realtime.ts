@@ -36,72 +36,106 @@ export interface RealtimeChannelWithRetryHandle extends RealtimeChannelHandle {
 	hasConnectionError: () => boolean;
 }
 
-/**
- * Simple realtime channel subscription.
- * Use for scoreboards and other simple monitoring cases.
- */
-export function createRealtimeChannel(
+// ============================================================
+// 内部コア: 上限つき指数バックオフ再購読を持つチャンネル管理
+// 4つの公開ファクトリはすべてこのコアの薄いラッパー
+// ============================================================
+
+interface ManagedChannelOptions {
+	channelName: string;
+	table: string;
+	schema?: string;
+	event?: string; // default '*'
+	filter: string;
+	maxRetryCount: number;
+	onPayload: (payload: any) => void;
+	/** SUBSCRIBED 時の追加処理（コアが retryCount リセット・retryTimer クリアを済ませた後） */
+	onSubscribed?: () => void;
+	/** エラーステータス時の追加処理（バックオフ再購読の前） */
+	onErrorStatus?: () => void;
+	/** 再購読上限到達時の最終手段（ログ出力も呼び出し側の責務） */
+	onMaxRetriesExhausted: () => void;
+}
+
+interface ManagedChannelHandle {
+	cleanup: () => void;
+	getChannel: () => RealtimeChannel | null;
+	/** 保留中のバックオフ再購読をキャンセルし、リトライ状態をリセットする */
+	cancelRetry: () => void;
+	/** チャンネルを張り直す（リトライ状態もリセット） */
+	reconnect: () => void;
+}
+
+function createManagedChannel(
 	supabase: SupabaseClient,
-	config: RealtimeChannelConfig
-): RealtimeChannelHandle {
-	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
+	opts: ManagedChannelOptions
+): ManagedChannelHandle {
 	let channel: RealtimeChannel | null = null;
 	let retryCount = 0;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-	function retryConnection() {
+	function clearRetryTimer() {
 		if (retryTimer) {
 			clearTimeout(retryTimer);
 			retryTimer = null;
 		}
-		if (retryCount >= maxRetryCount) {
-			console.error(
-				`[realtime/${config.channelName}] max retries (${maxRetryCount}) reached, giving up`
-			);
+	}
+
+	function removeChannel() {
+		if (channel) {
+			supabase.removeChannel(channel);
+			channel = null;
+		}
+	}
+
+	function retryConnection() {
+		// 既存タイマーをクリアして重複購読を防ぐ
+		clearRetryTimer();
+
+		if (retryCount >= opts.maxRetryCount) {
+			opts.onMaxRetriesExhausted();
 			return;
 		}
+
 		const backoffDelay = Math.pow(2, retryCount) * 1000;
 		retryCount++;
 		console.log(
-			`[realtime/${config.channelName}] retry ${retryCount}/${maxRetryCount} in ${backoffDelay}ms`
+			`[realtime/${opts.channelName}] retry ${retryCount}/${opts.maxRetryCount} in ${backoffDelay}ms`
 		);
+
 		retryTimer = setTimeout(() => {
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
+			removeChannel();
 			setupChannel();
 		}, backoffDelay);
 	}
 
 	function setupChannel() {
 		channel = supabase
-			.channel(config.channelName)
+			.channel(opts.channelName)
 			.on(
 				'postgres_changes',
 				{
-					event: (config.event || '*') as any,
-					schema: config.schema || 'public',
-					table: config.table,
-					filter: config.filter
+					event: (opts.event || '*') as any,
+					schema: opts.schema || 'public',
+					table: opts.table,
+					filter: opts.filter
 				},
 				(payload: any) => {
-					config.onPayload(payload);
+					opts.onPayload(payload);
 				}
 			)
 			.subscribe((status: string) => {
-				console.log(`[realtime/${config.channelName}] status:`, status);
+				console.log(`[realtime/${opts.channelName}] status:`, status);
 				if (status === 'SUBSCRIBED') {
-					console.log(`[realtime/${config.channelName}] connected`);
-					// 接続成功でリトライ状態をリセット（再購読の上限を使い果たさない）。
+					console.log(`[realtime/${opts.channelName}] connected`);
+					// 接続成功でリトライ状態をリセット（再購読の上限を使い果たさない）
 					retryCount = 0;
-					if (retryTimer) {
-						clearTimeout(retryTimer);
-						retryTimer = null;
-					}
+					clearRetryTimer();
+					opts.onSubscribed?.();
 				} else if (isErrorStatus(status)) {
-					console.error(`[realtime/${config.channelName}] error:`, status);
-					// 現状 no-op だったところを、上限つきバックオフ再購読に。
+					console.error(`[realtime/${opts.channelName}] error:`, status);
+					opts.onErrorStatus?.();
+					// 即諦めず、上限つきバックオフ再購読
 					retryConnection();
 				}
 			});
@@ -111,16 +145,55 @@ export function createRealtimeChannel(
 
 	return {
 		cleanup: () => {
-			if (retryTimer) {
-				clearTimeout(retryTimer);
-				retryTimer = null;
-			}
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
+			clearRetryTimer();
+			removeChannel();
 		},
-		getChannel: () => channel
+		getChannel: () => channel,
+		cancelRetry: () => {
+			clearRetryTimer();
+			retryCount = 0;
+		},
+		reconnect: () => {
+			clearRetryTimer();
+			retryCount = 0;
+			removeChannel();
+			setupChannel();
+		}
+	};
+}
+
+// ============================================================
+// 公開ファクトリ
+// ============================================================
+
+/**
+ * Simple realtime channel subscription.
+ * Use for scoreboards and other simple monitoring cases.
+ */
+export function createRealtimeChannel(
+	supabase: SupabaseClient,
+	config: RealtimeChannelConfig
+): RealtimeChannelHandle {
+	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
+
+	const core = createManagedChannel(supabase, {
+		channelName: config.channelName,
+		table: config.table,
+		schema: config.schema,
+		event: config.event,
+		filter: config.filter,
+		maxRetryCount,
+		onPayload: config.onPayload,
+		onMaxRetriesExhausted: () => {
+			console.error(
+				`[realtime/${config.channelName}] max retries (${maxRetryCount}) reached, giving up`
+			);
+		}
+	});
+
+	return {
+		cleanup: core.cleanup,
+		getChannel: core.getChannel
 	};
 }
 
@@ -135,9 +208,6 @@ export function createRealtimeChannelWithRetry(
 	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
 	const pollingIntervalMs = config.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS;
 
-	let channel: RealtimeChannel | null = null;
-	let retryCount = 0;
-	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 	let fallbackPolling: ReturnType<typeof setInterval> | null = null;
 	let connectionError = false;
 
@@ -159,104 +229,46 @@ export function createRealtimeChannelWithRetry(
 		}
 	}
 
-	function retryConnection() {
-		// Clear existing timer to prevent duplicate subscriptions
-		if (retryTimer) {
-			clearTimeout(retryTimer);
-			retryTimer = null;
-		}
-
-		if (retryCount >= maxRetryCount) {
+	const core = createManagedChannel(supabase, {
+		channelName: config.channelName,
+		table: config.table,
+		schema: config.schema,
+		event: config.event,
+		filter: config.filter,
+		maxRetryCount,
+		onPayload: config.onPayload,
+		onSubscribed: () => {
+			connectionError = false;
+			config.onConnectionError?.(false);
+			// realtime 接続中はフォールバックポーリング不要
+			stopFallbackPolling();
+		},
+		onErrorStatus: () => {
+			connectionError = true;
+			config.onConnectionError?.(true);
+		},
+		onMaxRetriesExhausted: () => {
 			console.error(
 				`[realtime/${config.channelName}] max retries (${maxRetryCount}) reached, switching to fallback polling`
 			);
 			connectionError = true;
 			config.onConnectionError?.(true);
 			startFallbackPolling();
-			return;
 		}
-
-		const backoffDelay = Math.pow(2, retryCount) * 1000;
-		retryCount++;
-		console.log(
-			`[realtime/${config.channelName}] retry ${retryCount}/${maxRetryCount} in ${backoffDelay}ms`
-		);
-
-		retryTimer = setTimeout(() => {
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
-			setupChannel();
-		}, backoffDelay);
-	}
-
-	function setupChannel() {
-		channel = supabase
-			.channel(config.channelName)
-			.on(
-				'postgres_changes',
-				{
-					event: (config.event || '*') as any,
-					schema: config.schema || 'public',
-					table: config.table,
-					filter: config.filter
-				},
-				(payload: any) => {
-					config.onPayload(payload);
-				}
-			)
-			.subscribe((status: string) => {
-				console.log(`[realtime/${config.channelName}] status:`, status);
-				if (status === 'SUBSCRIBED') {
-					console.log(`[realtime/${config.channelName}] connected`);
-					connectionError = false;
-					retryCount = 0;
-					config.onConnectionError?.(false);
-
-					// Clear retry timer to prevent duplicate subscriptions
-					if (retryTimer) {
-						clearTimeout(retryTimer);
-						retryTimer = null;
-					}
-
-					// Stop fallback polling when realtime is connected
-					stopFallbackPolling();
-				} else if (isErrorStatus(status)) {
-					console.error(`[realtime/${config.channelName}] error:`, status);
-					connectionError = true;
-					config.onConnectionError?.(true);
-					retryConnection();
-				}
-			});
-	}
-
-	// Start the channel
-	setupChannel();
+	});
 
 	return {
 		cleanup: () => {
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
-			if (retryTimer) {
-				clearTimeout(retryTimer);
-				retryTimer = null;
-			}
+			core.cleanup();
 			stopFallbackPolling();
 		},
-		getChannel: () => channel,
+		getChannel: core.getChannel,
 		hasConnectionError: () => connectionError,
 		manualRefresh: async (refreshFn?: () => Promise<void>) => {
-			// Clear pending retry timer to prevent duplicate setupChannel() calls
-			if (retryTimer) {
-				clearTimeout(retryTimer);
-				retryTimer = null;
-			}
+			// 保留中のバックオフ再購読をキャンセルして重複 setupChannel を防ぐ
+			core.cancelRetry();
 
 			connectionError = false;
-			retryCount = 0;
 			config.onConnectionError?.(false);
 
 			stopFallbackPolling();
@@ -268,11 +280,7 @@ export function createRealtimeChannelWithRetry(
 			}
 
 			// Reconnect immediately
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
-			setupChannel();
+			core.reconnect();
 		}
 	};
 }
@@ -295,16 +303,9 @@ export function createSessionMonitorChannel(
 	const prefix = config.channelPrefix || 'session-monitor';
 	const channelName = `${prefix}-${config.sessionId}`;
 	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
-	let channel: RealtimeChannel | null = null;
-	let retryCount = 0;
-	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 	let errorReloadTimer: ReturnType<typeof setTimeout> | null = null;
 
-	function clearTimers() {
-		if (retryTimer) {
-			clearTimeout(retryTimer);
-			retryTimer = null;
-		}
+	function clearErrorReloadTimer() {
 		if (errorReloadTimer) {
 			clearTimeout(errorReloadTimer);
 			errorReloadTimer = null;
@@ -316,84 +317,39 @@ export function createSessionMonitorChannel(
 		if (config.onError) {
 			config.onError();
 		} else {
-			if (errorReloadTimer) clearTimeout(errorReloadTimer);
+			clearErrorReloadTimer();
 			errorReloadTimer = setTimeout(() => {
-				if (channel) {
-					supabase.removeChannel(channel);
-					channel = null;
-				}
+				core.cleanup();
 				window.location.reload();
 			}, 2000);
 		}
 	}
 
-	function retryConnection() {
-		if (retryTimer) {
-			clearTimeout(retryTimer);
-			retryTimer = null;
-		}
-		if (retryCount >= maxRetryCount) {
+	const core = createManagedChannel(supabase, {
+		channelName,
+		table: 'sessions',
+		event: 'UPDATE',
+		filter: `id=eq.${config.sessionId}`,
+		maxRetryCount,
+		onPayload: config.onPayload,
+		onSubscribed: () => {
+			// 接続成功・再接続復帰: 最終手段(reload)もリセット
+			clearErrorReloadTimer();
+		},
+		onMaxRetriesExhausted: () => {
 			console.error(
 				`[realtime/${channelName}] max retries (${maxRetryCount}) reached, falling back`
 			);
 			terminalFallback();
-			return;
 		}
-		const backoffDelay = Math.pow(2, retryCount) * 1000;
-		retryCount++;
-		console.log(
-			`[realtime/${channelName}] retry ${retryCount}/${maxRetryCount} in ${backoffDelay}ms`
-		);
-		retryTimer = setTimeout(() => {
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
-			setupChannel();
-		}, backoffDelay);
-	}
-
-	function setupChannel() {
-		channel = supabase
-			.channel(channelName)
-			.on(
-				'postgres_changes',
-				{
-					event: 'UPDATE' as any,
-					schema: 'public',
-					table: 'sessions',
-					filter: `id=eq.${config.sessionId}`
-				},
-				(payload: any) => {
-					config.onPayload(payload);
-				}
-			)
-			.subscribe((status: string) => {
-				console.log(`[realtime/${channelName}] status:`, status);
-				if (status === 'SUBSCRIBED') {
-					console.log(`[realtime/${channelName}] connected`);
-					// 接続成功・再接続復帰: リトライと最終手段(reload)をリセット。
-					retryCount = 0;
-					clearTimers();
-				} else if (isErrorStatus(status)) {
-					console.error(`[realtime/${channelName}] error:`, status);
-					// 即 reload せず、まず上限つきバックオフ再購読。使い切ったら最終手段。
-					retryConnection();
-				}
-			});
-	}
-
-	setupChannel();
+	});
 
 	return {
 		cleanup: () => {
-			clearTimers();
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
+			clearErrorReloadTimer();
+			core.cleanup();
 		},
-		getChannel: () => channel
+		getChannel: core.getChannel
 	};
 }
 
@@ -417,10 +373,7 @@ export function createSessionMonitorWithPolling(
 	const channelName = `${prefix}-${config.sessionId}`;
 	const pollingMs = config.pollingIntervalMs ?? 3000;
 	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
-	let channel: RealtimeChannel | null = null;
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
-	let retryCount = 0;
-	let retryTimer: ReturnType<typeof setTimeout> | null = null;
 	let errorReloadTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function stopPolling() {
@@ -431,6 +384,8 @@ export function createSessionMonitorWithPolling(
 	}
 
 	function startPolling() {
+		// Supabase は SUBSCRIBED を複数回発火しうる（再接続）。既存 interval を
+		// clear してから張り直すので多重化しない。
 		stopPolling();
 		pollingInterval = setInterval(async () => {
 			const { data, error } = await supabase
@@ -445,10 +400,10 @@ export function createSessionMonitorWithPolling(
 		}, pollingMs);
 	}
 
-	function clearRetryTimer() {
-		if (retryTimer) {
-			clearTimeout(retryTimer);
-			retryTimer = null;
+	function clearErrorReloadTimer() {
+		if (errorReloadTimer) {
+			clearTimeout(errorReloadTimer);
+			errorReloadTimer = null;
 		}
 	}
 
@@ -457,95 +412,41 @@ export function createSessionMonitorWithPolling(
 		if (config.onError) {
 			config.onError();
 		} else {
-			if (errorReloadTimer) clearTimeout(errorReloadTimer);
+			clearErrorReloadTimer();
 			errorReloadTimer = setTimeout(() => {
-				if (channel) {
-					supabase.removeChannel(channel);
-					channel = null;
-				}
+				core.cleanup();
 				window.location.reload();
 			}, 2000);
 		}
 	}
 
-	function retryConnection() {
-		clearRetryTimer();
-		if (retryCount >= maxRetryCount) {
+	const core = createManagedChannel(supabase, {
+		channelName,
+		table: 'sessions',
+		event: 'UPDATE',
+		filter: `id=eq.${config.sessionId}`,
+		maxRetryCount,
+		onPayload: config.onRealtimePayload,
+		onSubscribed: () => {
+			// 接続成功・再接続復帰: 最終手段(reload)をリセットし、保険のポーリングを開始
+			clearErrorReloadTimer();
+			startPolling();
+		},
+		// エラー中もポーリングは止めない（再購読中の取りこぼしを防ぐ保険として走らせ続ける）
+		onMaxRetriesExhausted: () => {
 			console.error(
 				`[realtime/${channelName}] max retries (${maxRetryCount}) reached, falling back`
 			);
 			terminalFallback();
-			return;
 		}
-		const backoffDelay = Math.pow(2, retryCount) * 1000;
-		retryCount++;
-		console.log(
-			`[realtime/${channelName}] retry ${retryCount}/${maxRetryCount} in ${backoffDelay}ms`
-		);
-		retryTimer = setTimeout(() => {
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
-			setupChannel();
-		}, backoffDelay);
-	}
-
-	function setupChannel() {
-		channel = supabase
-			.channel(channelName)
-			.on(
-				'postgres_changes',
-				{
-					event: 'UPDATE' as any,
-					schema: 'public',
-					table: 'sessions',
-					filter: `id=eq.${config.sessionId}`
-				},
-				(payload: any) => {
-					config.onRealtimePayload(payload);
-				}
-			)
-			.subscribe((status: string) => {
-				console.log(`[realtime/${channelName}] status:`, status);
-				if (status === 'SUBSCRIBED') {
-					console.log(`[realtime/${channelName}] connected`);
-
-					// 接続成功・再接続復帰: リトライと最終手段(reload)をリセット。
-					retryCount = 0;
-					clearRetryTimer();
-					if (errorReloadTimer) {
-						clearTimeout(errorReloadTimer);
-						errorReloadTimer = null;
-					}
-
-					// Supabase は SUBSCRIBED を複数回発火しうる（再接続）。startPolling() は
-					// 既存intervalをclearしてから張り直すので多重化しない。
-					startPolling();
-				} else if (isErrorStatus(status)) {
-					console.error(`[realtime/${channelName}] error:`, status);
-					// ポーリングは止めない（再購読中の取りこぼしを防ぐ保険として走らせ続ける）。
-					// 即 reload せず、まず上限つきバックオフ再購読。使い切ったら最終手段。
-					retryConnection();
-				}
-			});
-	}
-
-	setupChannel();
+	});
 
 	return {
 		cleanup: () => {
-			clearRetryTimer();
-			if (errorReloadTimer) {
-				clearTimeout(errorReloadTimer);
-				errorReloadTimer = null;
-			}
-			if (channel) {
-				supabase.removeChannel(channel);
-				channel = null;
-			}
+			clearErrorReloadTimer();
+			core.cleanup();
 			stopPolling();
 		},
-		getChannel: () => channel
+		getChannel: core.getChannel
 	};
 }
