@@ -1,6 +1,7 @@
 import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -187,7 +188,7 @@ export const actions: Actions = {
 			.maybeSingle();
 
 		if (checkError) {
-			console.error('[submitBib] Error checking existing participant:', checkError);
+			logger.error('[submitBib] Error checking existing participant:', checkError);
 		}
 
 		let participantId: string;
@@ -196,7 +197,7 @@ export const actions: Actions = {
 			participantId = existingParticipant.id;
 		} else {
 			// 参加者レコードを新規作成
-			console.log('[submitBib] Creating new participant:', {
+			logger.debug('[submitBib] Creating new participant:', {
 				session_id: sessionIdInt,
 				bib_number: bibNumber,
 				athlete_name: `選手${bibNumber}`
@@ -213,8 +214,8 @@ export const actions: Actions = {
 				.single();
 
 			if (createError) {
-				console.error('[submitBib] Error creating participant:', createError);
-				console.error('[submitBib] Error details:', {
+				logger.error('[submitBib] Error creating participant:', createError);
+				logger.error('[submitBib] Error details:', {
 					code: createError.code,
 					message: createError.message,
 					details: createError.details,
@@ -268,7 +269,7 @@ export const actions: Actions = {
 				// scoring_prompts に採点指示を作成
 				// event_id と mode を保存するために、discipline または level カラムを活用
 				// discipline に mode (tournament/training) を、level に eventId を文字列として保存
-				console.log('[submitBib] Creating scoring prompt:', {
+				logger.debug('[submitBib] Creating scoring prompt:', {
 					session_id: sessionIdInt,
 					discipline: modeType,
 					level: eventId.toString(),
@@ -289,8 +290,8 @@ export const actions: Actions = {
 					.single();
 
 				if (promptError) {
-					console.error('[submitBib] Error creating scoring prompt:', promptError);
-					console.error('[submitBib] Prompt error details:', {
+					logger.error('[submitBib] Error creating scoring prompt:', promptError);
+					logger.error('[submitBib] Prompt error details:', {
 						code: promptError.code,
 						message: promptError.message,
 						details: promptError.details
@@ -298,7 +299,7 @@ export const actions: Actions = {
 				}
 
 				if (!promptError && prompt) {
-					console.log('[submitBib] Scoring prompt created:', prompt.id);
+					logger.debug('[submitBib] Scoring prompt created:', prompt.id);
 					// セッションをアクティブにし、active_prompt_idを設定
 					// status を 'active' に戻すことで、ended 状態から再開可能
 					const { error: updateError } = await supabase
@@ -311,13 +312,13 @@ export const actions: Actions = {
 						.eq('id', sessionIdInt);
 
 					if (updateError) {
-						console.error('[submitBib] Error updating session:', updateError);
+						logger.error('[submitBib] Error updating session:', updateError);
 						// #5: UPDATE 失敗時に success を返すと、プロンプトが伝播しないのに送信者は成功表示になる
 						// （沈黙失敗）。挿入済みプロンプトを掃除してから明示的に失敗を返す。
 						await supabase.from('scoring_prompts').delete().eq('id', prompt.id);
 						return fail(500, { error: '採点の開始に失敗しました。再度お試しください。' });
 					}
-					console.log('[submitBib] Session updated with active_prompt_id:', prompt.id);
+					logger.debug('[submitBib] Session updated with active_prompt_id:', prompt.id);
 				}
 			}
 		}

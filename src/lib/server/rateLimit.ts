@@ -1,5 +1,6 @@
 import { Redis } from '@upstash/redis';
 import { Ratelimit } from '@upstash/ratelimit';
+import { logger } from '$lib/server/logger';
 
 // 環境変数の存在確認
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -139,8 +140,8 @@ export async function checkRateLimit(
 	} catch (error) {
 		// Fail-open: Upstash/Redisの障害時でもリクエストを通す
 		// これにより、レート制限サービスの障害がアプリケーション全体の停止を引き起こさない
-		console.error('[RateLimit] レート制限チェック失敗（Upstash障害の可能性）:', error);
-		console.error('[RateLimit] Fail-open: リクエストを許可します');
+		logger.error('[RateLimit] レート制限チェック失敗（Upstash障害の可能性）:', error);
+		logger.error('[RateLimit] Fail-open: リクエストを許可します');
 
 		// TODO: 本番環境では監視アラートを送信
 		// 例: Sentry.captureException(error)

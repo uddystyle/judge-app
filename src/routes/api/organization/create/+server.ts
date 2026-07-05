@@ -5,6 +5,7 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { MAX_MEMBERS } from '$lib/server/plans';
+import { logger } from '$lib/server/logger';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -55,11 +56,11 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			);
 		}
 
-		console.log('[Organization Create API] Creating organization with transaction');
-		console.log('[Organization Create API] User:', user.id);
-		console.log('[Organization Create API] Organization:', organizationName.trim());
-		console.log('[Organization Create API] Plan:', planType);
-		console.log('[Organization Create API] Subscription:', subscription.id);
+		logger.debug('[Organization Create API] Creating organization with transaction');
+		logger.debug('[Organization Create API] User:', user.id);
+		logger.debug('[Organization Create API] Organization:', organizationName.trim());
+		logger.debug('[Organization Create API] Plan:', planType);
+		logger.debug('[Organization Create API] Subscription:', subscription.id);
 
 		// トランザクション処理を使用して組織を作成
 		// Postgres関数により、組織作成・メンバー追加・サブスクリプション更新が原子的に実行される
@@ -75,15 +76,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		);
 
 		if (rpcError) {
-			console.error('[Organization Create API] RPC Error:', rpcError);
-			console.error('[Organization Create API] Error details:', JSON.stringify(rpcError, null, 2));
+			logger.error('[Organization Create API] RPC Error:', rpcError);
+			logger.error('[Organization Create API] Error details:', JSON.stringify(rpcError, null, 2));
 			return json({ error: '組織の作成に失敗しました' }, { status: 500 });
 		}
 
 		if (result.already_exists) {
-			console.log('[Organization Create API] Organization already exists (idempotent):', result.organization_id);
+			logger.debug('[Organization Create API] Organization already exists (idempotent):', result.organization_id);
 		} else {
-			console.log('[Organization Create API] Organization created successfully:', result.organization_id);
+			logger.debug('[Organization Create API] Organization created successfully:', result.organization_id);
 		}
 
 		return json({
@@ -95,7 +96,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			}
 		});
 	} catch (error) {
-		console.error('Organization creation error:', error);
+		logger.error('Organization creation error:', error);
 		return json({ error: '組織の作成中にエラーが発生しました' }, { status: 500 });
 	}
 };

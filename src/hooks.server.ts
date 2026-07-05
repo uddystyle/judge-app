@@ -5,6 +5,7 @@ import type { Handle } from '@sveltejs/kit';
 import { randomBytes } from 'crypto';
 import { paraglideMiddleware } from '$lib/paraglide/server';
 import { getTextDirection } from '$lib/paraglide/runtime';
+import { logger } from '$lib/server/logger';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// リクエストIDを生成して追跡
@@ -16,7 +17,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 	if (!supabaseUrl || !supabaseAnonKey) {
-		console.error('Missing Supabase environment variables:', {
+		logger.error('Missing Supabase environment variables:', {
 			hasUrl: !!supabaseUrl,
 			hasKey: !!supabaseAnonKey,
 			envKeys: Object.keys(env),

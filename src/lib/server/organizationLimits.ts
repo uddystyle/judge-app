@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '$lib/server/logger';
 
 /**
  * 組織の現在のプラン制限を取得
@@ -15,7 +16,7 @@ export async function getOrganizationPlanLimits(
 		.single();
 
 	if (!organization) {
-		console.error('[Organization Limits] 組織が見つかりません:', organizationId);
+		logger.error('[Organization Limits] 組織が見つかりません:', organizationId);
 		return null;
 	}
 
@@ -29,7 +30,7 @@ export async function getOrganizationPlanLimits(
 		.single();
 
 	if (error) {
-		console.error('[Organization Limits] プラン制限の取得エラー:', error);
+		logger.error('[Organization Limits] プラン制限の取得エラー:', error);
 		// デフォルトでフリープランの制限を返す
 		return {
 			plan_type: 'free',
@@ -198,7 +199,7 @@ export async function checkCanAddJudgeToSession(
 	supabase: SupabaseClient,
 	sessionId: string
 ): Promise<{ allowed: boolean; reason?: string; upgradeUrl?: string }> {
-	console.log('[checkCanAddJudgeToSession] チェック開始:', { sessionId });
+	logger.debug('[checkCanAddJudgeToSession] チェック開始:', { sessionId });
 
 	// 1. セッションの組織とプランを取得
 	const { data: session, error: sessionError } = await supabase
@@ -207,10 +208,10 @@ export async function checkCanAddJudgeToSession(
 		.eq('id', sessionId)
 		.maybeSingle();
 
-	console.log('[checkCanAddJudgeToSession] セッション取得結果:', { session, error: sessionError });
+	logger.debug('[checkCanAddJudgeToSession] セッション取得結果:', { session, error: sessionError });
 
 	if (sessionError) {
-		console.error('[checkCanAddJudgeToSession] セッション取得エラー:', sessionError);
+		logger.error('[checkCanAddJudgeToSession] セッション取得エラー:', sessionError);
 		return {
 			allowed: false,
 			reason: `セッション情報の取得に失敗しました。${sessionError.message || ''}`
@@ -218,21 +219,21 @@ export async function checkCanAddJudgeToSession(
 	}
 
 	if (!session) {
-		console.log('[checkCanAddJudgeToSession] セッションが見つかりません');
+		logger.debug('[checkCanAddJudgeToSession] セッションが見つかりません');
 		return {
 			allowed: false,
 			reason: 'セッション情報の取得に失敗しました。'
 		};
 	}
 
-	console.log('[checkCanAddJudgeToSession] 組織ID:', session.organization_id);
+	logger.debug('[checkCanAddJudgeToSession] 組織ID:', session.organization_id);
 
 	// 2. プラン制限を取得
 	const limits = await getOrganizationPlanLimits(supabase, session.organization_id);
-	console.log('[checkCanAddJudgeToSession] プラン制限:', limits);
+	logger.debug('[checkCanAddJudgeToSession] プラン制限:', limits);
 
 	if (!limits) {
-		console.error('[checkCanAddJudgeToSession] プラン制限の取得に失敗');
+		logger.error('[checkCanAddJudgeToSession] プラン制限の取得に失敗');
 		return {
 			allowed: false,
 			reason: '組織情報の取得に失敗しました。'
@@ -246,12 +247,12 @@ export async function checkCanAddJudgeToSession(
 		.eq('session_id', sessionId);
 
 	const currentJudgeCount = count || 0;
-	console.log('[checkCanAddJudgeToSession] 現在の検定員数:', currentJudgeCount);
-	console.log('[checkCanAddJudgeToSession] 上限:', limits.max_judges_per_session);
+	logger.debug('[checkCanAddJudgeToSession] 現在の検定員数:', currentJudgeCount);
+	logger.debug('[checkCanAddJudgeToSession] 上限:', limits.max_judges_per_session);
 
 	// 4. 制限チェック（無制限の場合は -1）
 	if (limits.max_judges_per_session !== -1 && currentJudgeCount >= limits.max_judges_per_session) {
-		console.log('[checkCanAddJudgeToSession] 検定員数上限に達している');
+		logger.debug('[checkCanAddJudgeToSession] 検定員数上限に達している');
 		return {
 			allowed: false,
 			reason: `セッションの検定員数上限（${limits.max_judges_per_session}人）に達しています。`,
@@ -259,7 +260,7 @@ export async function checkCanAddJudgeToSession(
 		};
 	}
 
-	console.log('[checkCanAddJudgeToSession] チェック完了: 参加可能');
+	logger.debug('[checkCanAddJudgeToSession] チェック完了: 参加可能');
 	return { allowed: true };
 }
 

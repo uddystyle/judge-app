@@ -13,6 +13,7 @@ import {
 } from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
 import { deleteTrainingScore } from '$lib/server/scoreActions';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -46,7 +47,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			.select('*', { count: 'exact' })
 			.eq('session_id', sessionId);
 
-		console.log('[status/load] 参加検定員の取得:', {
+		logger.debug('[status/load] 参加検定員の取得:', {
 			sessionId,
 			isTrainingMode,
 			isMultiJudge,
@@ -266,7 +267,7 @@ export const actions: Actions = {
 			const { error: deleteError } = await deleteQuery;
 
 			if (deleteError) {
-				console.error('Error deleting result:', deleteError);
+				logger.error('Error deleting result:', deleteError);
 				return fail(500, { error: '得点の削除に失敗しました。' });
 			}
 		}

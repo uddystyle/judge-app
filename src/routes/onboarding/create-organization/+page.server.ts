@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { validateOrganizationName } from '$lib/server/validation';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	const {
@@ -30,7 +31,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 	// プロフィールがまだ作成されていない場合は作成
 	if (profileError || !profile) {
-		console.log('[onboarding/load] プロフィールが存在しないため作成します:', user.id);
+		logger.debug('[onboarding/load] プロフィールが存在しないため作成します:', user.id);
 		const { error: createProfileError } = await supabase.from('profiles').insert({
 			id: user.id,
 			full_name: user.user_metadata?.full_name || ''
@@ -38,7 +39,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 
 		// エラーコード23505（unique constraint violation）は無視（既にプロフィールが存在する場合）
 		if (createProfileError && createProfileError.code !== '23505') {
-			console.error('[onboarding/load] プロフィール作成エラー:', createProfileError);
+			logger.error('[onboarding/load] プロフィール作成エラー:', createProfileError);
 		}
 	}
 
@@ -104,7 +105,7 @@ export const actions: Actions = {
 			.single();
 
 		if (planError || !planLimits) {
-			console.error('Failed to fetch plan limits:', planError);
+			logger.error('Failed to fetch plan limits:', planError);
 			return fail(400, {
 				organizationName,
 				error: 'プラン情報の取得に失敗しました。'
@@ -117,7 +118,7 @@ export const actions: Actions = {
 		// 作成直後は呼び出し元がまだ membership を持たないため、organizations の member スコープ
 		// RLS（1016）では INSERT...RETURNING(.select()) を読み戻せない。service role で作成する。
 		if (!supabaseAdmin) {
-			console.error(
+			logger.error(
 				'[Create Org] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 			);
 			return fail(500, {
@@ -136,7 +137,7 @@ export const actions: Actions = {
 			.single();
 
 		if (orgError) {
-			console.error('Failed to create organization:', orgError);
+			logger.error('Failed to create organization:', orgError);
 			return fail(500, {
 				organizationName,
 				error: `サーバーエラー: 組織の作成に失敗しました。[${orgError.code}] ${orgError.message}`
@@ -151,14 +152,14 @@ export const actions: Actions = {
 		});
 
 		if (memberError) {
-			console.error('Failed to add organization member:', memberError);
+			logger.error('Failed to add organization member:', memberError);
 			return fail(500, {
 				organizationName,
 				error: `サーバーエラー: 組織への参加に失敗しました。[${memberError.code}] ${memberError.message}`
 			});
 		}
 
-		console.log('[create] 組織作成完了:', organization.id, planType);
+		logger.debug('[create] 組織作成完了:', organization.id, planType);
 
 		// プランに応じてリダイレクト
 		if (planType === 'free') {

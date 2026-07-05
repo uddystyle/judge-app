@@ -4,6 +4,7 @@ import { json, error as svelteError } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { randomBytes } from 'crypto';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 
 // 8桁の暗号学的に安全な参加コードを生成するヘルパー関数
 // 紛らわしい文字を除外: 0,O,1,I
@@ -64,7 +65,7 @@ export async function POST({ request }) {
 		.single();
 
 	if (sessionError) {
-		console.error('Failed to create session:', sessionError);
+		logger.error('Failed to create session:', sessionError);
 		return json({ error: 'セッションの作成に失敗しました。' }, { status: 500 });
 	}
 

@@ -2,6 +2,7 @@ import type { PageServerLoad, Actions } from './$types';
 import { error, redirect, fail } from '@sveltejs/kit';
 import { validateOrganizationName } from '$lib/server/validation';
 import { getActiveOrgRole, isOrgAdmin } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	// 未ログインの場合はログインページへリダイレクト
@@ -42,7 +43,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.order('joined_at', { ascending: true });
 
 	if (membershipsError) {
-		console.error('Error fetching memberships:', membershipsError);
+		logger.error('Error fetching memberships:', membershipsError);
 	}
 
 	// メンバーのプロフィール情報を取得
@@ -55,7 +56,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			.in('id', userIds);
 
 		if (profilesError) {
-			console.error('Error fetching profiles:', profilesError);
+			logger.error('Error fetching profiles:', profilesError);
 		} else {
 			// メンバーシップとプロフィールを結合
 			members = membershipsData.map((membership: any) => ({
@@ -142,7 +143,7 @@ export const actions = {
 			.eq('id', organizationId);
 
 		if (updateError) {
-			console.error('Organization name update error:', updateError);
+			logger.error('Organization name update error:', updateError);
 			return fail(500, {
 				error: '組織名の更新に失敗しました。しばらくしてから再度お試しください。',
 				name: nameRaw

@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateSession } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 /**
  * tournament-setup / training-setup 配下の participants・events ページの共通実装
@@ -115,7 +116,7 @@ export async function loadSetupParticipants(
 		.order('bib_number', { ascending: true });
 
 	if (participantsError) {
-		console.error('Error fetching participants:', participantsError);
+		logger.error('Error fetching participants:', participantsError);
 		throw error(500, '参加者の取得に失敗しました。');
 	}
 
@@ -202,7 +203,7 @@ export const participantsSetupActions = {
 				.eq('session_id', params.id);
 
 			if (deleteError) {
-				console.error('Error deleting existing participants:', deleteError);
+				logger.error('Error deleting existing participants:', deleteError);
 				return fail(500, { error: '既存の参加者データの削除に失敗しました。' });
 			}
 
@@ -211,7 +212,7 @@ export const participantsSetupActions = {
 				.insert(participantsToInsert);
 
 			if (insertError) {
-				console.error('Error importing participants:', insertError);
+				logger.error('Error importing participants:', insertError);
 				return fail(500, { error: '参加者のインポートに失敗しました。' });
 			}
 
@@ -220,7 +221,7 @@ export const participantsSetupActions = {
 				message: `${participantsToInsert.length}件の参加者をインポートしました。`
 			};
 		} catch (err) {
-			console.error('Error processing CSV:', err);
+			logger.error('Error processing CSV:', err);
 			return fail(500, { error: 'CSVファイルの処理中にエラーが発生しました。' });
 		}
 	},
@@ -266,7 +267,7 @@ export const participantsSetupActions = {
 		});
 
 		if (insertError) {
-			console.error('Error adding participant:', insertError);
+			logger.error('Error adding participant:', insertError);
 			return fail(500, { error: '参加者の追加に失敗しました。' });
 		}
 
@@ -323,7 +324,7 @@ export const participantsSetupActions = {
 			.eq('session_id', params.id);
 
 		if (updateError) {
-			console.error('Error updating participant:', updateError);
+			logger.error('Error updating participant:', updateError);
 			return fail(500, { error: '参加者の更新に失敗しました。' });
 		}
 
@@ -351,7 +352,7 @@ export const participantsSetupActions = {
 			.eq('session_id', params.id);
 
 		if (deleteError) {
-			console.error('Error deleting participant:', deleteError);
+			logger.error('Error deleting participant:', deleteError);
 			return fail(500, { error: '参加者の削除に失敗しました。' });
 		}
 
@@ -419,7 +420,7 @@ export async function loadSetupEvents(
 		.order(config.orderColumn, { ascending: true });
 
 	if (eventsError) {
-		console.error('Error fetching events:', eventsError);
+		logger.error('Error fetching events:', eventsError);
 		throw error(500, '種目の取得に失敗しました。');
 	}
 
@@ -469,7 +470,7 @@ export function createSetupEventsActions(mode: SetupMode) {
 				.insert(config.insertPayload(params.id, eventName.trim(), nextOrder));
 
 			if (insertError) {
-				console.error('Error adding event:', insertError);
+				logger.error('Error adding event:', insertError);
 				return fail(500, { error: '種目の追加に失敗しました。' });
 			}
 
@@ -498,7 +499,7 @@ export function createSetupEventsActions(mode: SetupMode) {
 				.eq('session_id', params.id);
 
 			if (deleteError) {
-				console.error('Error deleting event:', deleteError);
+				logger.error('Error deleting event:', deleteError);
 				return fail(500, { error: '種目の削除に失敗しました。' });
 			}
 
@@ -529,7 +530,7 @@ export function createSetupEventsActions(mode: SetupMode) {
 				.eq('session_id', params.id);
 
 			if (updateError) {
-				console.error('Error updating event:', updateError);
+				logger.error('Error updating event:', updateError);
 				return fail(500, { error: '種目の更新に失敗しました。' });
 			}
 

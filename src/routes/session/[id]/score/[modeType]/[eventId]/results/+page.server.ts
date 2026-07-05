@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { authenticateSession } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -114,7 +115,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			});
 
 			if (scoresError) {
-				console.error('[results/load] training_scores取得エラー:', scoresError);
+				logger.error('[results/load] training_scores取得エラー:', scoresError);
 			}
 
 			if (trainingScores) {
@@ -139,7 +140,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			});
 
 			if (resultsError) {
-				console.error('[results/load] results取得エラー:', resultsError);
+				logger.error('[results/load] results取得エラー:', resultsError);
 			}
 
 			if (results) {

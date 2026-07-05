@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const { id: sessionId } = params;
@@ -120,8 +121,8 @@ export const actions: Actions = {
 			.single();
 
 		if (promptError) {
-			console.error('Failed to create scoring prompt:', promptError);
-			console.error('Prompt error details:', JSON.stringify(promptError, null, 2));
+			logger.error('Failed to create scoring prompt:', promptError);
+			logger.error('Prompt error details:', JSON.stringify(promptError, null, 2));
 			return fail(500, { error: '採点指示の作成に失敗しました。再度お試しください。' });
 		}
 
@@ -134,7 +135,7 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (sessionUpdateError) {
-			console.error('Failed to update session:', sessionUpdateError);
+			logger.error('Failed to update session:', sessionUpdateError);
 			return fail(500, { error: 'セッションの更新に失敗しました。' });
 		}
 

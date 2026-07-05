@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { checkCanAddMember } from '$lib/server/organizationLimits';
+import { logger } from '$lib/server/logger';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -18,7 +19,7 @@ function normalizeEmail(email: string): string {
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const token = params.token;
 
-	console.log('[Invite Complete] Loading invitation completion with token:', token);
+	logger.debug('[Invite Complete] Loading invitation completion with token:', token);
 
 	// 認証チェック
 	const {
@@ -27,11 +28,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	} = await locals.supabase.auth.getUser();
 
 	if (userError || !user) {
-		console.error('[Invite Complete] User not authenticated');
+		logger.error('[Invite Complete] User not authenticated');
 		throw redirect(303, `/login?next=/invite/${token}/complete`);
 	}
 
-	console.log('[Invite Complete] User authenticated:', {
+	logger.debug('[Invite Complete] User authenticated:', {
 		userId: user.id,
 		email: user.email,
 		emailConfirmedAt: user.email_confirmed_at
@@ -39,7 +40,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 	// メール確認済みかチェック
 	if (!user.email_confirmed_at) {
-		console.warn('[Invite Complete] Email not confirmed yet');
+		logger.warn('[Invite Complete] Email not confirmed yet');
 		throw redirect(303, `/invite/${token}/check-email`);
 	}
 
@@ -51,7 +52,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.single();
 
 	if (inviteError || !invitation) {
-		console.error('[Invite Complete] Error fetching invitation:', inviteError);
+		logger.error('[Invite Complete] Error fetching invitation:', inviteError);
 		throw error(404, '招待が見つかりません');
 	}
 
@@ -72,7 +73,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		user.email &&
 		normalizeEmail(invitation.email) !== normalizeEmail(user.email)
 	) {
-		console.error('[Invite Complete] Email mismatch:', {
+		logger.error('[Invite Complete] Email mismatch:', {
 			invitationEmail: invitation.email,
 			userEmail: user.email,
 			normalizedInvitation: normalizeEmail(invitation.email),
@@ -91,7 +92,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.single();
 
 	if (existingMembership) {
-		console.log('[Invite Complete] User is already a member, redirecting to organization');
+		logger.debug('[Invite Complete] User is already a member, redirecting to organization');
 		throw redirect(303, `/organization/${invitation.organization_id}`);
 	}
 
@@ -103,7 +104,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.single();
 
 	if (!existingProfile) {
-		console.log('[Invite Complete] Creating profile for user:', user.id);
+		logger.debug('[Invite Complete] Creating profile for user:', user.id);
 		const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'ユーザー';
 
 		const { error: profileError } = await supabaseAdmin.from('profiles').insert({
@@ -115,12 +116,12 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			// PostgreSQLエラーコード '23505' は一意制約違反
 			// 同時アクセスでプロフィールが既に作成されている場合、成功として扱う
 			if (profileError.code === '23505') {
-				console.log(
+				logger.debug(
 					'[Invite Complete] Profile already exists (race condition detected), continuing'
 				);
 			} else {
 				// その他のエラーはログに記録するが、招待フローは継続
-				console.error('[Invite Complete] Error creating profile:', {
+				logger.error('[Invite Complete] Error creating profile:', {
 					code: profileError.code,
 					message: profileError.message,
 					details: profileError
@@ -133,7 +134,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	// max_uses:null の招待や永続 invite_code が上限を超えて受諾されるのを防ぐ）
 	const memberLimitCheck = await checkCanAddMember(supabaseAdmin, invitation.organization_id);
 	if (!memberLimitCheck.allowed) {
-		console.warn('[Invite Complete] メンバー上限により参加拒否:', memberLimitCheck.reason);
+		logger.warn('[Invite Complete] メンバー上限により参加拒否:', memberLimitCheck.reason);
 		throw error(403, memberLimitCheck.reason || '組織のメンバー数が上限に達しています。');
 	}
 
@@ -149,14 +150,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		// 同時アクセスでexistingMembershipチェック後にinsertが競合した場合に発生
 		// この場合、既に参加済みとして成功扱いし、組織ページにリダイレクト
 		if (memberError.code === '23505') {
-			console.log(
+			logger.debug(
 				'[Invite Complete] User is already a member (race condition detected), redirecting to organization'
 			);
 			throw redirect(303, `/organization/${invitation.organization_id}`);
 		}
 
 		// その他の予期しないエラー
-		console.error('[Invite Complete] Error adding member:', {
+		logger.error('[Invite Complete] Error adding member:', {
 			code: memberError.code,
 			message: memberError.message,
 			details: memberError
@@ -180,11 +181,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		// PostgreSQLエラーコード '23505' は一意制約違反
 		// 既に記録済みの場合、成功として扱う
 		if (usageError.code === '23505') {
-			console.log('[Invite Complete] Invitation usage already recorded (race condition detected)');
+			logger.debug('[Invite Complete] Invitation usage already recorded (race condition detected)');
 		} else {
 			// その他のエラーはログに記録するが、招待フローは継続
 			// 履歴記録の失敗はメンバー追加の成功を妨げるべきではない
-			console.error('[Invite Complete] Error recording invitation usage:', {
+			logger.error('[Invite Complete] Error recording invitation usage:', {
 				code: usageError.code,
 				message: usageError.message,
 				details: usageError
@@ -192,7 +193,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		}
 	}
 
-	console.log('[Invite Complete] Successfully added user to organization:', {
+	logger.debug('[Invite Complete] Successfully added user to organization:', {
 		userId: user.id,
 		organizationId: invitation.organization_id,
 		role: invitation.role

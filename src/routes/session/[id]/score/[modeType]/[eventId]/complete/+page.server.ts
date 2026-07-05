@@ -10,6 +10,7 @@ import {
 	isChiefJudge,
 	isTrainingModeCheck
 } from '$lib/server/sessionHelpers';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -180,9 +181,9 @@ export const actions: Actions = {
 
 		// セッションを終了状態に更新
 		// status を 'ended' に設定し、is_active と active_prompt_id をクリア
-		console.log('[主任検定員] ========== セッション終了処理開始 ==========');
-		console.log('[主任検定員] sessionId:', sessionId);
-		console.log('[主任検定員] 更新内容: { status: "ended", is_active: false, active_prompt_id: null }');
+		logger.debug('[主任検定員] ========== セッション終了処理開始 ==========');
+		logger.debug('[主任検定員] sessionId:', sessionId);
+		logger.debug('[主任検定員] 更新内容: { status: "ended", is_active: false, active_prompt_id: null }');
 
 		const { data: updateResult, error } = await supabase
 			.from('sessions')
@@ -194,14 +195,14 @@ export const actions: Actions = {
 			.eq('id', sessionId)
 			.select();
 
-		console.log('[主任検定員] 更新結果:', { updateResult, error });
+		logger.debug('[主任検定員] 更新結果:', { updateResult, error });
 
 		if (error) {
-			console.error('[主任検定員] ❌ Error ending session:', error);
+			logger.error('[主任検定員] ❌ Error ending session:', error);
 			return { success: false, error: 'セッションの終了に失敗しました: ' + error.message };
 		}
 
-		console.log('[主任検定員] ✅ セッション終了の更新が完了しました', { sessionId });
+		logger.debug('[主任検定員] ✅ セッション終了の更新が完了しました', { sessionId });
 
 		// 更新後の状態を確認
 		const { data: verifyData, error: verifyError } = await supabase
@@ -210,7 +211,7 @@ export const actions: Actions = {
 			.eq('id', sessionId)
 			.single();
 
-		console.log('[主任検定員] 更新後の確認:', { verifyData, verifyError });
+		logger.debug('[主任検定員] 更新後の確認:', { verifyData, verifyError });
 
 		// セッション詳細画面（終了画面）にリダイレクト
 		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
@@ -250,7 +251,7 @@ export const actions: Actions = {
 			.eq('id', sessionId);
 
 		if (error) {
-			console.error('Error changing event:', error);
+			logger.error('Error changing event:', error);
 			return { success: false };
 		}
 

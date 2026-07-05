@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	const {
@@ -32,7 +33,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		// エラーコード23505（unique constraint violation）は無視（既にプロフィールが存在する場合）
 		// その他のエラーの場合はログ出力
 		if (createProfileError && createProfileError.code !== '23505') {
-			console.error('[account/load] プロフィール作成エラー:', createProfileError);
+			logger.error('[account/load] プロフィール作成エラー:', createProfileError);
 		}
 
 		// 新しく作成したプロフィールを使用（作成に失敗した場合は空のオブジェクト）

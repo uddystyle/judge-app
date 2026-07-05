@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '$lib/server/logger';
 
 /**
  * 研修モードの得点を削除する（3段階の検定員ID解決付き）
@@ -28,11 +29,11 @@ export async function deleteTrainingScore(
 
 	if (params.guestIdentifier) {
 		// 1. ゲストユーザーの場合
-		console.log('[deleteTrainingScore] Deleting guest score:', params.guestIdentifier);
+		logger.debug('[deleteTrainingScore] Deleting guest score:', params.guestIdentifier);
 		deleteQuery = deleteQuery.eq('guest_identifier', params.guestIdentifier);
 	} else if (params.judgeId) {
 		// 2. 認証ユーザーの場合（judgeIdがフォームから送信されている）
-		console.log('[deleteTrainingScore] Deleting user score:', params.judgeId);
+		logger.debug('[deleteTrainingScore] Deleting user score:', params.judgeId);
 		deleteQuery = deleteQuery.eq('judge_id', params.judgeId);
 	} else {
 		// 3. フォールバック: judge_nameから検定員を特定
@@ -46,14 +47,14 @@ export async function deleteTrainingScore(
 			return { success: false, error: '検定員が見つかりません。' };
 		}
 
-		console.log('[deleteTrainingScore] Deleting user score (fallback):', judgeProfile.id);
+		logger.debug('[deleteTrainingScore] Deleting user score (fallback):', judgeProfile.id);
 		deleteQuery = deleteQuery.eq('judge_id', judgeProfile.id);
 	}
 
 	const { error: deleteError } = await deleteQuery;
 
 	if (deleteError) {
-		console.error('[deleteTrainingScore] Error:', deleteError);
+		logger.error('[deleteTrainingScore] Error:', deleteError);
 		return { success: false, error: '得点の削除に失敗しました。時間をおいて再度お試しください。' };
 	}
 

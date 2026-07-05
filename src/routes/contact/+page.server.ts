@@ -3,6 +3,7 @@ import { fail } from '@sveltejs/kit';
 import { validateEmail, validateName, validateText } from '$lib/server/validation';
 import { Resend } from 'resend';
 import { RESEND_API_KEY } from '$env/static/private';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const { supabase } = locals;
@@ -108,7 +109,7 @@ export const actions = {
 			});
 
 			if (insertError) {
-				console.error('Contact submission error:', insertError);
+				logger.error('Contact submission error:', insertError);
 				return fail(500, {
 					error: 'お問い合わせの送信に失敗しました。しばらくしてから再度お試しください。',
 					name: nameRaw,
@@ -171,11 +172,11 @@ ${message}
 						`.trim()
 					});
 
-					console.log('Contact notification email sent successfully');
+					logger.debug('Contact notification email sent successfully');
 				} catch (emailError) {
 					// メール送信に失敗してもデータベースには保存されているので、
 					// エラーログのみ出力してユーザーには成功を返す
-					console.error('Failed to send contact notification email:', emailError);
+					logger.error('Failed to send contact notification email:', emailError);
 				}
 			}
 
@@ -184,7 +185,7 @@ ${message}
 				success: true
 			};
 		} catch (err) {
-			console.error('Contact submission error:', err);
+			logger.error('Contact submission error:', err);
 			return fail(500, {
 				error: 'お問い合わせの送信に失敗しました。しばらくしてから再度お試しください。',
 				name: nameRaw,

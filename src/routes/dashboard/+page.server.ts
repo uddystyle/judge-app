@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals: { supabase }, setHeaders }) => {
 	// 動的コンテンツだが短期キャッシュ（30秒）
@@ -102,11 +103,11 @@ export const load: PageServerLoad = async ({ locals: { supabase }, setHeaders })
 	]);
 
 	if (orgSessionsResult.error) {
-		console.error('Error fetching org sessions:', orgSessionsResult.error);
+		logger.error('Error fetching org sessions:', orgSessionsResult.error);
 	}
 
 	if (guestSessionsResult.error) {
-		console.error('Error fetching guest sessions:', guestSessionsResult.error);
+		logger.error('Error fetching guest sessions:', guestSessionsResult.error);
 	}
 
 	const orgSessions = orgSessionsResult.data || [];

@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { redirect, error } from '@sveltejs/kit';
 import { isOrgAdmin } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	// 1. ユーザー認証確認
@@ -24,7 +25,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		throw error(404, '組織が見つかりません。');
 	}
 
-	console.log('[Upgrade Page Load] 組織情報:', {
+	logger.debug('[Upgrade Page Load] 組織情報:', {
 		id: organization.id,
 		name: organization.name,
 		plan_type: organization.plan_type,
@@ -47,7 +48,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.single();
 
 	if (subscription) {
-		console.log('[Upgrade Page Load] 既にアクティブなサブスクリプションがあります。/accountにリダイレクト');
+		logger.debug('[Upgrade Page Load] 既にアクティブなサブスクリプションがあります。/accountにリダイレクト');
 		throw redirect(303, '/account');
 	}
 

@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { checkCanAddMember } from '$lib/server/organizationLimits';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 	const {
@@ -69,7 +70,7 @@ export const actions: Actions = {
 		// 招待コードに一致する組織を検索。参加前で呼び出し元はまだ非メンバーのため、
 		// organizations の member スコープ RLS（1016）では anon/authed で読めない。service role で照合する。
 		if (!supabaseAdmin) {
-			console.error(
+			logger.error(
 				'[Org Join] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 			);
 			return fail(500, {
@@ -121,7 +122,7 @@ export const actions: Actions = {
 		});
 
 		if (joinError) {
-			console.error('Failed to join organization:', joinError);
+			logger.error('Failed to join organization:', joinError);
 			return fail(500, {
 				joinCode,
 				error: 'サーバーエラー: 組織への参加に失敗しました。'

@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	// getUser() で JWT を Supabase Auth サーバー側で検証する
@@ -72,7 +73,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 				};
 			}
 		} catch (error) {
-			console.error('Invalid promotion code:', error);
+			logger.error('Invalid promotion code:', error);
 			// クーポンが無効でもエラーにせず、通常料金で表示
 		}
 	}

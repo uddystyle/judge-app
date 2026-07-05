@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { getActiveOrgRole } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 // セッション完全削除（Premium限定）
 export const DELETE: RequestHandler = async ({ params, request, locals: { supabase } }) => {
@@ -74,7 +75,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 			.eq('session_id', sessionId);
 
 		if (participantsDeleteError) {
-			console.error('Participants delete error:', participantsDeleteError);
+			logger.error('Participants delete error:', participantsDeleteError);
 			return json({ error: '参加者データの削除に失敗しました' }, { status: 500 });
 		}
 
@@ -85,7 +86,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 			.eq('session_id', sessionId);
 
 		if (scoresDeleteError) {
-			console.error('Scores delete error:', scoresDeleteError);
+			logger.error('Scores delete error:', scoresDeleteError);
 			return json({ error: 'スコアデータの削除に失敗しました' }, { status: 500 });
 		}
 
@@ -104,7 +105,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 			.eq('id', sessionId);
 
 		if (deleteError) {
-			console.error('Permanent delete error:', deleteError);
+			logger.error('Permanent delete error:', deleteError);
 			return json({ error: 'セッションの完全削除に失敗しました' }, { status: 500 });
 		}
 
@@ -113,7 +114,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 			message: 'セッションを完全に削除しました'
 		});
 	} catch (error: any) {
-		console.error('Unexpected error:', error);
+		logger.error('Unexpected error:', error);
 		return json({ error: 'サーバーエラーが発生しました' }, { status: 500 });
 	}
 };

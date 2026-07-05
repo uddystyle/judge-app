@@ -8,6 +8,7 @@ import {
 	validateOrganizationName,
 	ALLOWED_STRIPE_REDIRECT_PATHS
 } from '$lib/server/validation';
+import { logger } from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
@@ -54,7 +55,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// Security: Validate redirect URLs to prevent Open Redirect attacks
 		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!returnValidation.valid) {
-			console.error(
+			logger.error(
 				'[Organization Checkout] Invalid returnUrl:',
 				returnUrl,
 				'Error:',
@@ -65,7 +66,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		const cancelValidation = validateRedirectUrl(cancelUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!cancelValidation.valid) {
-			console.error(
+			logger.error(
 				'[Organization Checkout] Invalid cancelUrl:',
 				cancelUrl,
 				'Error:',
@@ -77,17 +78,17 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		const sanitizedReturnUrl = returnValidation.sanitizedUrl!;
 		const sanitizedCancelUrl = cancelValidation.sanitizedUrl!;
 
-		console.log('[Organization Checkout API] ユーザー:', user.id);
-		console.log('[Organization Checkout API] 組織名:', sanitizedOrgName);
-		console.log('[Organization Checkout API] プラン:', planType, billingInterval);
+		logger.debug('[Organization Checkout API] ユーザー:', user.id);
+		logger.debug('[Organization Checkout API] 組織名:', sanitizedOrgName);
+		logger.debug('[Organization Checkout API] プラン:', planType, billingInterval);
 
 		// 3. Price IDを取得
 		const priceId = PRICE_IDS[planType][billingInterval];
 
 		if (priceId.includes('placeholder')) {
 			// 詳細はログのみに出力（セキュリティ：内部実装の詳細を隠す）
-			console.error('[Organization Checkout API] CRITICAL: Stripe Price ID not configured!');
-			console.error(
+			logger.error('[Organization Checkout API] CRITICAL: Stripe Price ID not configured!');
+			logger.error(
 				'[Organization Checkout API] planType:',
 				planType,
 				'billingInterval:',
@@ -116,7 +117,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			}
 		});
 
-		console.log('[Organization Checkout API] 新しいCustomerを作成:', customer.id);
+		logger.debug('[Organization Checkout API] 新しいCustomerを作成:', customer.id);
 
 		// 6. Stripe Checkout Sessionを作成
 		// payment_method_types は指定しない（動的支払い方法。Dashboard側で支払い方法を制御）
@@ -176,7 +177,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			// ログには最初の10文字のみ出力（プライバシー保護）
 			const maskedCoupon =
 				couponCode.length > 10 ? couponCode.substring(0, 10) + '...' : couponCode;
-			console.log('[Organization Checkout API] プロモーションコード適用:', maskedCoupon);
+			logger.debug('[Organization Checkout API] プロモーションコード適用:', maskedCoupon);
 		} else {
 			// コード未指定時はCheckout画面でのプロモーションコード入力を許可
 			sessionParams.allow_promotion_codes = true;
@@ -184,7 +185,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		const session = await stripe.checkout.sessions.create(sessionParams);
 
-		console.log('[Organization Checkout API] Checkout Session作成成功:', session.id);
+		logger.debug('[Organization Checkout API] Checkout Session作成成功:', session.id);
 
 		// 7. Checkout URLを返す
 		return json({ url: session.url });
@@ -195,9 +196,9 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		}
 
 		// 詳細なエラーはログのみに出力（セキュリティ：情報漏洩防止）
-		console.error('[Organization Checkout API] エラー:', err.message);
-		console.error('[Organization Checkout API] エラータイプ:', err.type);
-		console.error('[Organization Checkout API] エラーコード:', err.code);
+		logger.error('[Organization Checkout API] エラー:', err.message);
+		logger.error('[Organization Checkout API] エラータイプ:', err.type);
+		logger.error('[Organization Checkout API] エラーコード:', err.code);
 
 		// クライアントには汎用的なメッセージのみ返す
 		throw error(500, 'Checkout Sessionの作成に失敗しました。しばらくしてから再度お試しください。');

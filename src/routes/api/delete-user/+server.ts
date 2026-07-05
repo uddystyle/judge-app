@@ -4,6 +4,7 @@ import { env } from '$env/dynamic/private';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { stripe } from '$lib/server/stripe';
 import { computeOwnershipReassign } from '$lib/server/sessionOwnership';
+import { logger } from '$lib/server/logger';
 
 // 稼働中とみなすサブスクリプションのステータス
 const ACTIVE_SUB_STATUSES = ['active', 'trialing', 'past_due', 'unpaid'];
@@ -52,7 +53,7 @@ export async function POST({ request }) {
 		.is('removed_at', null);
 
 	if (adminError) {
-		console.error('[delete-user] 管理メンバーシップ取得エラー:', adminError.message);
+		logger.error('[delete-user] 管理メンバーシップ取得エラー:', adminError.message);
 		throw svelteError(500, 'アカウント情報の確認に失敗しました。');
 	}
 
@@ -67,7 +68,7 @@ export async function POST({ request }) {
 			.in('status', ACTIVE_SUB_STATUSES);
 
 		if (orgSubError) {
-			console.error('[delete-user] 組織サブスク取得エラー:', orgSubError.message);
+			logger.error('[delete-user] 組織サブスク取得エラー:', orgSubError.message);
 			throw svelteError(500, 'アカウント情報の確認に失敗しました。');
 		}
 
@@ -86,7 +87,7 @@ export async function POST({ request }) {
 				.is('removed_at', null);
 
 			if (countError) {
-				console.error('[delete-user] 管理者数カウントエラー:', countError.message);
+				logger.error('[delete-user] 管理者数カウントエラー:', countError.message);
 				throw svelteError(500, 'アカウント情報の確認に失敗しました。');
 			}
 
@@ -124,7 +125,7 @@ export async function POST({ request }) {
 		.not('stripe_subscription_id', 'is', null);
 
 	if (personalSubError) {
-		console.error('[delete-user] 個人サブスク取得エラー:', personalSubError.message);
+		logger.error('[delete-user] 個人サブスク取得エラー:', personalSubError.message);
 		throw svelteError(500, 'アカウント情報の確認に失敗しました。');
 	}
 
@@ -132,18 +133,18 @@ export async function POST({ request }) {
 		if (!sub.stripe_subscription_id) continue;
 		try {
 			await stripe.subscriptions.cancel(sub.stripe_subscription_id);
-			console.log('[delete-user] 個人サブスクを解約:', sub.stripe_subscription_id);
+			logger.debug('[delete-user] 個人サブスクを解約:', sub.stripe_subscription_id);
 		} catch (err: any) {
 			// 既に解約済み/存在しない場合は成功扱いで継続
 			if (err?.code === 'resource_missing') {
-				console.warn(
+				logger.warn(
 					'[delete-user] サブスクは既に存在しません（解約済み扱い）:',
 					sub.stripe_subscription_id
 				);
 				continue;
 			}
 			// それ以外の Stripe エラーは削除を中断（課金継続を防ぐため）
-			console.error('[delete-user] サブスク解約失敗:', err?.message);
+			logger.error('[delete-user] サブスク解約失敗:', err?.message);
 			throw svelteError(
 				500,
 				'サブスクリプションの解約に失敗したため、アカウントを削除できませんでした。時間をおいて再度お試しください。'
@@ -163,7 +164,7 @@ export async function POST({ request }) {
 			.or(`chief_judge_id.eq.${user.id},created_by.eq.${user.id}`);
 
 		if (ownedError) {
-			console.error('[delete-user] 所有セッション取得エラー:', ownedError.message);
+			logger.error('[delete-user] 所有セッション取得エラー:', ownedError.message);
 		} else {
 			for (const session of ownedSessions ?? []) {
 				// 残存する非ゲストメンバーを1名（引き継ぎ先）
@@ -186,14 +187,14 @@ export async function POST({ request }) {
 						.update(update)
 						.eq('id', session.id);
 					if (reassignError) {
-						console.error('[delete-user] 所有権引き継ぎエラー:', session.id, reassignError.message);
+						logger.error('[delete-user] 所有権引き継ぎエラー:', session.id, reassignError.message);
 					}
 				}
 			}
 		}
 	} catch (err) {
 		// best-effort: 引き継ぎ失敗でアカウント削除はブロックしない
-		console.error(
+		logger.error(
 			'[delete-user] 所有権引き継ぎ処理で例外:',
 			err instanceof Error ? err.message : String(err)
 		);
@@ -205,7 +206,7 @@ export async function POST({ request }) {
 	const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
 
 	if (deleteError) {
-		console.error('Supabase delete user error:', deleteError.message);
+		logger.error('Supabase delete user error:', deleteError.message);
 		throw svelteError(500, 'アカウントの削除に失敗しました。');
 	}
 

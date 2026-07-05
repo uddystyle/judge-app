@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { getActiveOrgRole } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 // メンバー削除（Soft Delete）
 export const DELETE: RequestHandler = async ({ params, request, locals: { supabase } }) => {
@@ -63,7 +64,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 				.is('removed_at', null);
 
 			if (countError) {
-				console.error('Admin count error:', countError);
+				logger.error('Admin count error:', countError);
 				return json({ error: 'サーバーエラーが発生しました' }, { status: 500 });
 			}
 
@@ -87,7 +88,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 			.eq('id', memberId);
 
 		if (deleteError) {
-			console.error('Delete error:', deleteError);
+			logger.error('Delete error:', deleteError);
 			return json({ error: 'メンバーの削除に失敗しました' }, { status: 500 });
 		}
 
@@ -96,7 +97,7 @@ export const DELETE: RequestHandler = async ({ params, request, locals: { supaba
 			message: 'メンバーを削除しました'
 		});
 	} catch (error: any) {
-		console.error('Unexpected error:', error);
+		logger.error('Unexpected error:', error);
 		return json({ error: 'サーバーエラーが発生しました' }, { status: 500 });
 	}
 };
@@ -150,7 +151,7 @@ export const POST: RequestHandler = async ({ params, locals: { supabase } }) => 
 			.eq('id', memberId);
 
 		if (restoreError) {
-			console.error('Restore error:', restoreError);
+			logger.error('Restore error:', restoreError);
 			return json({ error: 'メンバーの復元に失敗しました' }, { status: 500 });
 		}
 
@@ -159,7 +160,7 @@ export const POST: RequestHandler = async ({ params, locals: { supabase } }) => 
 			message: 'メンバーを復元しました'
 		});
 	} catch (error: any) {
-		console.error('Unexpected error:', error);
+		logger.error('Unexpected error:', error);
 		return json({ error: 'サーバーエラーが発生しました' }, { status: 500 });
 	}
 };

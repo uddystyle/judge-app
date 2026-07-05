@@ -9,6 +9,7 @@ import {
 import { validateSessionName, validateUUID } from '$lib/server/validation';
 import { randomBytes } from 'crypto';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const {
@@ -75,7 +76,7 @@ const generateUniqueJoinCode = async (supabase: SupabaseClient): Promise<string>
 			.maybeSingle();
 
 		if (error) {
-			console.error('Error checking join code:', error);
+			logger.error('Error checking join code:', error);
 			continue;
 		}
 
@@ -85,7 +86,7 @@ const generateUniqueJoinCode = async (supabase: SupabaseClient): Promise<string>
 		}
 
 		// 重複あり - 再試行
-		console.log(`Join code collision detected: ${code}, retrying...`);
+		logger.debug(`Join code collision detected: ${code}, retrying...`);
 	}
 
 	throw new Error('ユニークな参加コードの生成に失敗しました。');
@@ -200,7 +201,7 @@ export const actions: Actions = {
 		try {
 			joinCode = await generateUniqueJoinCode(supabase);
 		} catch (error) {
-			console.error('Failed to generate join code:', error);
+			logger.error('Failed to generate join code:', error);
 			return fail(500, {
 				sessionName,
 				error: 'サーバーエラー: 参加コードの生成に失敗しました。もう一度お試しください。'
@@ -241,7 +242,7 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError) {
-			console.error('Failed to create session:', sessionError);
+			logger.error('Failed to create session:', sessionError);
 			return fail(500, {
 				sessionName,
 				error: 'サーバーエラー: 検定の作成に失敗しました。'
@@ -255,7 +256,7 @@ export const actions: Actions = {
 		});
 
 		if (participantError) {
-			console.error('Failed to add participant:', participantError);
+			logger.error('Failed to add participant:', participantError);
 			// セッションは作成されたが参加者追加に失敗
 			// RLSで自動的にアクセスできるはずだが、念のためエラーログを残す
 			return fail(500, {
@@ -287,7 +288,7 @@ export const actions: Actions = {
 			});
 
 			if (trainingError) {
-				console.error('Failed to create training session:', trainingError);
+				logger.error('Failed to create training session:', trainingError);
 				return fail(500, {
 					sessionName,
 					error: 'サーバーエラー: 研修モード設定の作成に失敗しました。'

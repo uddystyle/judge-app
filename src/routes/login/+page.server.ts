@@ -3,6 +3,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import { getSafeRedirectPath } from '$lib/safeRedirect';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import * as m from '$lib/paraglide/messages.js';
+import { logger } from '$lib/server/logger';
 
 /**
  * メールアドレスを正規化（小文字化 + トリム）
@@ -63,7 +64,7 @@ export const actions: Actions = {
 
 		if (error) {
 			// 最小限のエラー情報のみログ出力（個人情報保護）
-			console.error('[login] signIn error:', {
+			logger.error('[login] signIn error:', {
 				code: error.code,
 				status: (error as any).status
 			});

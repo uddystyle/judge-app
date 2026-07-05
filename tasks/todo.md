@@ -1,5 +1,21 @@
 # Current Tasks
 
+## リファクタリング ステップ6: サーバーログの logger 全面移行（2026-07-05）— ✅ 完了
+
+サーバーサイドの `console.*` 614箇所（54ファイル）を `$lib/server/logger` に一括移行。本番環境で ①debug/info（旧 console.log/info）が抑制され、②オブジェクト引数の機密キー（user_id/email/token/stripe_customer_id 等）が [REDACTED] される。開発/テスト環境では全レベル出力・レダクションなしで従来どおり。
+
+- [x] `logger.ts` を可変長引数 API に刷新（プレフィックス引数を廃止、`unknown` 型で lint クリーン、配列レダクション時の型も整理）+ ユニットテスト4件（環境別出力・再帰レダクション）
+- [x] 変換規則: console.log→logger.debug / info→info / warn→warn / error→error（スクリプトで機械的置換 + import 自動挿入、残存ゼロを機械検証）
+- [x] 対象: src/lib/server（テスト除く）、routes の +server.ts / +page.server.ts / +layout.server.ts、hooks.server.ts。クライアントサイドは対象外
+- [x] **errors.ts の採用は見送り（判断記録）**: paraglide の error_* 文言が現行ハードコード文言と不一致（例:「この組織のメンバーではありません」vs error_notOrgMember「組織のメンバーではありません」）のため、採用＝ユーザー向け文言と応答形状の変更になり characterization テストとも矛盾する。文言統一はプロダクト判断が必要。errors.ts は新規コード用に温存
+- 運用上の注意: 本番ログから旧 console.log 相当の情報ログは消える（意図どおり）。本番で詳細ログが必要になったら logger.ts の1箇所でポリシー変更可能
+
+### 検証
+- [x] vitest: 779 passed / 11 skipped 全緑（webhook 66・checkout 28 など全既存テスト通過）
+- [x] svelte-check: 243 errors / 25 warnings（増加なし）
+- [x] `npm run build` 成功、logger.ts / logger.test.ts は eslint/prettier クリーン
+- [x] サーバーコードの生 console.* 残存は logger.ts 内部のみであることを grep 確認
+
 ## リファクタリング ステップ5: orgAuth 集約（2026-07-05）— ✅ 完了
 
 org-admin/メンバーシップ認可チェックのコピペ 17箇所+member チェック1箇所を `$lib/server/orgAuth.ts`（`getActiveOrgRole`/`isOrgAdmin`）に集約。失敗時の応答（error/fail/json/redirect、メッセージ、分割/結合）は各サイトの現行仕様を厳密に維持。

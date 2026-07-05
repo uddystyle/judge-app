@@ -1,6 +1,7 @@
 import { redirect, isRedirect, isHttpError } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 
 export const GET: RequestHandler = async ({ request, url, locals: { supabase } }) => {
 	// レート制限（唯一未保護だった認証経路。トークン総当たり試行・Auth quota浪費を抑止）
@@ -40,11 +41,11 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 		: '/onboarding/create-organization';
 
 	if (nextParam !== next) {
-		console.warn('[auth/callback] 不正なリダイレクト先を検出。デフォルトにリダイレクト:', nextParam);
+		logger.warn('[auth/callback] 不正なリダイレクト先を検出。デフォルトにリダイレクト:', nextParam);
 	}
 
-	console.log('[auth/callback] ========== 認証コールバック開始 ==========');
-	console.log('[auth/callback] パラメータ:', {
+	logger.debug('[auth/callback] ========== 認証コールバック開始 ==========');
+	logger.debug('[auth/callback] パラメータ:', {
 		has_token_hash: !!token_hash,
 		has_type: !!type,
 		has_code: !!code,
@@ -54,28 +55,28 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 
 	// メール認証リンクから来た場合（codeまたはtoken_hashあり）は、既存セッションチェックをスキップ
 	if (!code && !token_hash) {
-		console.log('[auth/callback] 認証パラメータなし。既存セッションをチェック...');
+		logger.debug('[auth/callback] 認証パラメータなし。既存セッションをチェック...');
 		const { data: { user: existingUser } } = await supabase.auth.getUser();
 		if (existingUser) {
-			console.log('[auth/callback] 既に認証済みのユーザー。ダッシュボードへリダイレクト');
+			logger.debug('[auth/callback] 既に認証済みのユーザー。ダッシュボードへリダイレクト');
 			throw redirect(303, '/dashboard');
 		}
-		console.log('[auth/callback] 認証パラメータも既存セッションもなし');
+		logger.debug('[auth/callback] 認証パラメータも既存セッションもなし');
 	} else {
-		console.log('[auth/callback] メール認証からのアクセス。認証処理を開始...');
+		logger.debug('[auth/callback] メール認証からのアクセス。認証処理を開始...');
 	}
 
 	// PKCEフロー（推奨される方式）
 	if (code) {
 		try {
-			console.log('[auth/callback] コードフローで認証を試みます');
-			console.log('[auth/callback] code:', code.substring(0, 10) + '...');
-			console.log('[auth/callback] next:', next);
+			logger.debug('[auth/callback] コードフローで認証を試みます');
+			logger.debug('[auth/callback] code:', code.substring(0, 10) + '...');
+			logger.debug('[auth/callback] next:', next);
 
 			const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
 			if (error) {
-				console.error('[auth/callback] コード交換エラー:', {
+				logger.error('[auth/callback] コード交換エラー:', {
 					code: error.code,
 					message: error.message,
 					status: (error as any).status,
@@ -86,16 +87,16 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 				// Supabase Auth エラーコード: https://supabase.com/docs/reference/javascript/auth-error-codes
 				if (error.code === 'invalid_grant') {
 					// invalid_grant: コードが無効、期限切れ、または既に使用済み
-					console.log('[auth/callback] invalid_grant検出。コードが使用済み/無効/期限切れ。現在のセッションを確認...');
+					logger.debug('[auth/callback] invalid_grant検出。コードが使用済み/無効/期限切れ。現在のセッションを確認...');
 
 					// 既に認証済みかチェック
 					const { data: { user: currentUser } } = await supabase.auth.getUser();
 					if (currentUser) {
-						console.log('[auth/callback] コードは使用済みだが、ユーザーは認証済み。ダッシュボードへリダイレクト');
+						logger.debug('[auth/callback] コードは使用済みだが、ユーザーは認証済み。ダッシュボードへリダイレクト');
 						throw redirect(303, '/dashboard');
 					}
 
-					console.log('[auth/callback] セッションも存在しない。ログインへリダイレクト（再利用リンク案内）');
+					logger.debug('[auth/callback] セッションも存在しない。ログインへリダイレクト（再利用リンク案内）');
 					throw redirect(
 						303,
 						`/login?error=${encodeURIComponent(
@@ -106,18 +107,18 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 
 				if (error.code === 'otp_expired') {
 					// OTP/コードが期限切れ
-					console.error('[auth/callback] otp_expired検出。コードが期限切れ');
+					logger.error('[auth/callback] otp_expired検出。コードが期限切れ');
 					throw redirect(303, `/login?error=${encodeURIComponent('認証リンクの有効期限が切れています。再度サインアップしてください。')}`);
 				}
 
 				// その他の予期しないエラー
-				console.error('[auth/callback] 予期しないエラーコード:', error.code);
+				logger.error('[auth/callback] 予期しないエラーコード:', error.code);
 				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました。再度お試しください。')}`);
 			}
 
-			console.log('[auth/callback] 認証成功、ユーザー:', data.user?.email);
-			console.log('[auth/callback] セッション作成完了');
-			console.log('[auth/callback] リダイレクト先:', next);
+			logger.debug('[auth/callback] 認証成功、ユーザー:', data.user?.email);
+			logger.debug('[auth/callback] セッション作成完了');
+			logger.debug('[auth/callback] リダイレクト先:', next);
 			throw redirect(303, next);
 		} catch (error: any) {
 			// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
@@ -126,9 +127,9 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 			}
 
 			// 詳細なエラー情報はログに記録（内部用）
-			console.error('[auth/callback] コード交換処理エラー:', error);
-			console.error('[auth/callback] エラータイプ:', typeof error);
-			console.error('[auth/callback] エラー内容:', JSON.stringify(error, null, 2));
+			logger.error('[auth/callback] コード交換処理エラー:', error);
+			logger.error('[auth/callback] エラータイプ:', typeof error);
+			logger.error('[auth/callback] エラー内容:', JSON.stringify(error, null, 2));
 
 			// ユーザーには固定文言を表示（内部エラーメッセージを露出しない）
 			throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました。再度お試しください。')}`);
@@ -138,14 +139,14 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 	// トークンハッシュフロー（古い方式との互換性）
 	if (token_hash && type) {
 		try {
-			console.log('[auth/callback] トークンハッシュフローで認証を試みます');
+			logger.debug('[auth/callback] トークンハッシュフローで認証を試みます');
 			const { error } = await supabase.auth.verifyOtp({
 				token_hash,
 				type: type as any
 			});
 
 			if (error) {
-				console.error('[auth/callback] トークン検証エラー:', {
+				logger.error('[auth/callback] トークン検証エラー:', {
 					code: error.code,
 					message: error.message,
 					status: (error as any).status,
@@ -155,7 +156,7 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 				// エラーコードベースの判定（文字列マッチングではなくコード判定）
 				if (error.code === 'invalid_grant' || error.code === 'otp_expired') {
 					// invalid_grant/otp_expired: トークンが無効、期限切れ、または既に使用済み
-					console.log('[auth/callback] トークンが使用済み/無効/期限切れ');
+					logger.debug('[auth/callback] トークンが使用済み/無効/期限切れ');
 					throw redirect(
 						303,
 						`/login?error=${encodeURIComponent(
@@ -165,11 +166,11 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 				}
 
 				// その他の予期しないエラー
-				console.error('[auth/callback] 予期しないエラーコード:', error.code);
+				logger.error('[auth/callback] 予期しないエラーコード:', error.code);
 				throw redirect(303, `/login?error=${encodeURIComponent('認証に失敗しました。再度お試しください。')}`);
 			}
 
-			console.log('[auth/callback] 認証成功、リダイレクト:', next);
+			logger.debug('[auth/callback] 認証成功、リダイレクト:', next);
 			throw redirect(303, next);
 		} catch (error: any) {
 			// SvelteKitのredirectやerrorは再throw（正常な制御フロー）
@@ -177,13 +178,13 @@ export const GET: RequestHandler = async ({ request, url, locals: { supabase } }
 				throw error;
 			}
 
-			console.error('[auth/callback] トークン検証処理エラー:', error);
+			logger.error('[auth/callback] トークン検証処理エラー:', error);
 			throw redirect(303, `/login?error=${encodeURIComponent('認証処理中にエラーが発生しました')}`);
 		}
 	}
 
 	// パラメータがない場合
-	console.error('[auth/callback] 認証パラメータが見つかりません');
-	console.error('[auth/callback] URL:', url.toString());
+	logger.error('[auth/callback] 認証パラメータが見つかりません');
+	logger.error('[auth/callback] URL:', url.toString());
 	throw redirect(303, `/login?error=${encodeURIComponent('無効な認証リンクです。認証パラメータが見つかりません。')}`);
 };

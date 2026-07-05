@@ -10,6 +10,7 @@ import {
 	STRIPE_PRICE_PREMIUM_MONTH,
 	STRIPE_PRICE_PREMIUM_YEAR
 } from '$env/static/private';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	// 1. ユーザー認証確認
@@ -48,7 +49,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 
 	// エラーログ（デバッグ用）
 	if (subError) {
-		console.error('[Change Plan Load] サブスクリプション取得エラー:', subError);
+		logger.error('[Change Plan Load] サブスクリプション取得エラー:', subError);
 	}
 
 	// サブスクリプション情報（フリープランの場合はnull）
@@ -119,7 +120,7 @@ export const actions: Actions = {
 			.maybeSingle();
 
 		if (subError) {
-			console.error('[Cancel Subscription] サブスクリプション取得エラー:', subError);
+			logger.error('[Cancel Subscription] サブスクリプション取得エラー:', subError);
 			return fail(500, {
 				error: `サブスクリプション情報の取得に失敗しました。${subError.message || ''}`
 			});
@@ -134,12 +135,12 @@ export const actions: Actions = {
 		// SEC-3: DB書き込みはRLSに依存せずservice roleクライアントで行う。
 		// Stripe側だけ変更されDBが未反映になる事故を防ぐため、Stripe呼び出し前に確認する。
 		if (!supabaseAdmin) {
-			console.error('[Cancel Subscription] supabaseAdminが未設定です');
+			logger.error('[Cancel Subscription] supabaseAdminが未設定です');
 			return fail(500, { error: 'サーバー設定エラーが発生しました。管理者に連絡してください。' });
 		}
 
 		try {
-			console.log('[Cancel Subscription] サブスクリプションキャンセル開始:', {
+			logger.debug('[Cancel Subscription] サブスクリプションキャンセル開始:', {
 				organizationId: organization.id,
 				subscriptionId: subscription.stripe_subscription_id
 			});
@@ -153,7 +154,7 @@ export const actions: Actions = {
 				}
 			);
 
-			console.log('[Cancel Subscription] Stripeサブスクリプション更新完了:', {
+			logger.debug('[Cancel Subscription] Stripeサブスクリプション更新完了:', {
 				subscriptionId: updatedSubscription.id,
 				cancel_at_period_end: updatedSubscription.cancel_at_period_end,
 				cancel_at: updatedSubscription.cancel_at
@@ -171,11 +172,11 @@ export const actions: Actions = {
 				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
 
 			if (subUpdateError) {
-				console.error('[Cancel Subscription] サブスクリプション更新エラー:', subUpdateError);
+				logger.error('[Cancel Subscription] サブスクリプション更新エラー:', subUpdateError);
 				return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
 			}
 
-			console.log('[Cancel Subscription] データベース更新完了');
+			logger.debug('[Cancel Subscription] データベース更新完了');
 
 			// 成功メッセージとともに同じページへリダイレクト
 			throw redirect(303, `/organization/${params.id}/change-plan?cancelled=true`);
@@ -184,7 +185,7 @@ export const actions: Actions = {
 			if (isRedirect(err) || isHttpError(err)) {
 				throw err;
 			}
-			console.error('[Cancel Subscription] エラー:', err);
+			logger.error('[Cancel Subscription] エラー:', err);
 			return fail(500, {
 				error: `サブスクリプションのキャンセルに失敗しました。${err.message || ''}`
 			});
@@ -242,14 +243,14 @@ export const actions: Actions = {
 			.maybeSingle();
 
 		// デバッグログ
-		console.log('[Change Plan Action] サブスクリプション取得結果:', {
+		logger.debug('[Change Plan Action] サブスクリプション取得結果:', {
 			subscription,
 			error: subError,
 			organizationId: params.id
 		});
 
 		if (subError) {
-			console.error('[Change Plan Action] サブスクリプション取得エラー:', subError);
+			logger.error('[Change Plan Action] サブスクリプション取得エラー:', subError);
 			return fail(500, {
 				error: `サブスクリプション情報の取得に失敗しました。${subError.message || ''}`
 			});
@@ -262,7 +263,7 @@ export const actions: Actions = {
 				.select('status, stripe_subscription_id')
 				.eq('organization_id', params.id);
 
-			console.error('[Change Plan Action] アクティブなサブスクリプションが見つかりません:', {
+			logger.error('[Change Plan Action] アクティブなサブスクリプションが見つかりません:', {
 				organizationId: params.id,
 				allSubscriptions: allSubs
 			});
@@ -284,7 +285,7 @@ export const actions: Actions = {
 		// SEC-3: DB書き込みはRLSに依存せずservice roleクライアントで行う。
 		// Stripe側だけ変更されDBが未反映になる事故を防ぐため、Stripe呼び出し前に確認する。
 		if (!supabaseAdmin) {
-			console.error('[Change Plan] supabaseAdminが未設定です');
+			logger.error('[Change Plan] supabaseAdminが未設定です');
 			return fail(500, { error: 'サーバー設定エラーが発生しました。管理者に連絡してください。' });
 		}
 
@@ -299,7 +300,7 @@ export const actions: Actions = {
 			// アップグレードかダウングレードかを判定
 			const isUpgrade = isPlanUpgrade(organization.plan_type, newPlanType);
 
-			console.log('[Change Plan] プラン変更開始:', {
+			logger.debug('[Change Plan] プラン変更開始:', {
 				organizationId: organization.id,
 				currentPlan: organization.plan_type,
 				newPlan: newPlanType,
@@ -341,7 +342,7 @@ export const actions: Actions = {
 				billingCycleAnchor = 'unchanged';
 			}
 
-			console.log('[Change Plan] 請求設定:', {
+			logger.debug('[Change Plan] 請求設定:', {
 				currentBillingInterval,
 				newBillingInterval: billingInterval,
 				isBillingIntervalChange,
@@ -367,13 +368,13 @@ export const actions: Actions = {
 				}
 			);
 
-			console.log('[Change Plan] Stripeサブスクリプション更新完了:', {
+			logger.debug('[Change Plan] Stripeサブスクリプション更新完了:', {
 				subscriptionId: updatedSubscription.id,
 				status: updatedSubscription.status
 			});
 
 			// データベースを即座に更新（アップグレード・ダウングレード共通）
-			console.log('[Change Plan] データベースを即座に更新');
+			logger.debug('[Change Plan] データベースを即座に更新');
 
 			// データベースのorganizationsテーブルを更新
 			const { data: planLimits } = await supabase
@@ -392,7 +393,7 @@ export const actions: Actions = {
 				.eq('id', params.id);
 
 			if (orgUpdateError) {
-				console.error('[Change Plan] 組織更新エラー:', orgUpdateError);
+				logger.error('[Change Plan] 組織更新エラー:', orgUpdateError);
 				return fail(500, { error: '組織情報の更新に失敗しました。' });
 			}
 
@@ -413,12 +414,12 @@ export const actions: Actions = {
 				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
 
 			if (subUpdateError) {
-				console.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
+				logger.error('[Change Plan] サブスクリプション更新エラー:', subUpdateError);
 				return fail(500, { error: 'サブスクリプション情報の更新に失敗しました。' });
 			}
 
-			console.log('[Change Plan] データベース更新完了');
-			console.log('[Change Plan] プラン変更完了:', {
+			logger.debug('[Change Plan] データベース更新完了');
+			logger.debug('[Change Plan] プラン変更完了:', {
 				organizationId: organization.id,
 				newPlan: newPlanType,
 				billingInterval
@@ -431,7 +432,7 @@ export const actions: Actions = {
 			if (isRedirect(err) || isHttpError(err)) {
 				throw err;
 			}
-			console.error('[Change Plan] エラー:', err);
+			logger.error('[Change Plan] エラー:', err);
 			return fail(500, {
 				error: `プラン変更に失敗しました。${err.message || ''}`
 			});

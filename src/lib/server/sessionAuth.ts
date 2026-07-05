@@ -1,5 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
+import { logger } from '$lib/server/logger';
 
 /**
  * セッション参加者（ゲストユーザー）の型
@@ -49,7 +50,7 @@ export async function authenticateSession(
 		userError = result.error;
 	} catch (error) {
 		// getUser() が throw した場合も認証エラーとして扱う
-		console.error('[authenticateSession] getUser() threw exception:', error);
+		logger.error('[authenticateSession] getUser() threw exception:', error);
 		throw redirect(303, '/login');
 	}
 
@@ -74,14 +75,14 @@ export async function authenticateSession(
 			.single();
 
 		if (guestError || !guestData) {
-			console.error('[authenticateSession] ゲスト認証失敗:', guestError);
+			logger.error('[authenticateSession] ゲスト認証失敗:', guestError);
 			throw redirect(303, '/session/join');
 		}
 
 		guestParticipant = guestData as GuestParticipant;
 	} else if (userError || !user) {
 		// 認証ユーザーでもゲストでもない場合
-		console.error('[authenticateSession] 認証失敗:', userError);
+		logger.error('[authenticateSession] 認証失敗:', userError);
 		throw redirect(303, '/login');
 	}
 
@@ -118,7 +119,7 @@ export async function authenticateAction(
 		userError = result.error;
 	} catch (error) {
 		// getUser() が throw した場合も認証エラーとして扱う
-		console.error('[authenticateAction] getUser() threw exception:', error);
+		logger.error('[authenticateAction] getUser() threw exception:', error);
 		return null;
 	}
 
@@ -143,14 +144,14 @@ export async function authenticateAction(
 			.single();
 
 		if (guestError || !guestData) {
-			console.error('[authenticateAction] ゲスト認証失敗:', guestError);
+			logger.error('[authenticateAction] ゲスト認証失敗:', guestError);
 			return null;
 		}
 
 		guestParticipant = guestData as GuestParticipant;
 	} else if (userError || !user) {
 		// 認証ユーザーでもゲストでもない場合
-		console.error('[authenticateAction] 認証失敗:', userError);
+		logger.error('[authenticateAction] 認証失敗:', userError);
 		return null;
 	}
 

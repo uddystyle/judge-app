@@ -3,6 +3,7 @@ import type { Actions } from './$types';
 import { validateEmail } from '$lib/server/validation';
 import { PUBLIC_SITE_URL } from '$env/static/public';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 
 /**
  * メールアドレスを正規化（小文字化 + トリム）
@@ -42,8 +43,8 @@ export const actions: Actions = {
 
 		if (error) {
 			// 最小限のエラー情報のみログ出力（個人情報保護）
-			console.error('[reset-password] エラーコード:', error.code);
-			console.error('[reset-password] エラーメッセージ:', error.message);
+			logger.error('[reset-password] エラーコード:', error.code);
+			logger.error('[reset-password] エラーメッセージ:', error.message);
 			// セキュリティ上の理由から、メールアドレスが存在しない場合でも成功メッセージを表示
 			// （アカウントの存在を推測されないようにするため）
 		}

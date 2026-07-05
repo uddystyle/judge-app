@@ -7,6 +7,7 @@ import { randomBytes } from 'crypto';
 import { checkCanAddMember } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { isOrgAdmin } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -78,7 +79,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			.single();
 
 		if (inviteError) {
-			console.error('Error creating invitation:', inviteError);
+			logger.error('Error creating invitation:', inviteError);
 			return json({ error: '招待の作成に失敗しました' }, { status: 500 });
 		}
 
@@ -91,7 +92,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			}
 		});
 	} catch (error) {
-		console.error('Invitation creation error:', error);
+		logger.error('Invitation creation error:', error);
 		return json({ error: '招待の作成中にエラーが発生しました' }, { status: 500 });
 	}
 };

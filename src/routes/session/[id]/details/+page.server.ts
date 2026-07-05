@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import * as m from '$lib/paraglide/messages.js';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -383,10 +384,10 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const isMultiJudge = formData.get('isMultiJudge') === 'true';
 
-		console.log('[updateTrainingSettings] ========== 研修設定更新 ==========');
-		console.log('[updateTrainingSettings] sessionId:', params.id);
-		console.log('[updateTrainingSettings] isMultiJudge:', isMultiJudge);
-		console.log('[updateTrainingSettings] user:', user.id);
+		logger.debug('[updateTrainingSettings] ========== 研修設定更新 ==========');
+		logger.debug('[updateTrainingSettings] sessionId:', params.id);
+		logger.debug('[updateTrainingSettings] isMultiJudge:', isMultiJudge);
+		logger.debug('[updateTrainingSettings] user:', user.id);
 
 		// training_sessionsレコードが存在するか確認
 		const { data: existingSession } = await supabase
@@ -395,11 +396,11 @@ export const actions: Actions = {
 			.eq('session_id', params.id)
 			.maybeSingle();
 
-		console.log('[updateTrainingSettings] 既存レコード:', existingSession);
+		logger.debug('[updateTrainingSettings] 既存レコード:', existingSession);
 
 		if (!existingSession) {
 			// レコードが存在しない場合は新規作成
-			console.log('[updateTrainingSettings] レコードが存在しないため新規作成します');
+			logger.debug('[updateTrainingSettings] レコードが存在しないため新規作成します');
 			const { data: insertResult, error: insertError } = await supabase
 				.from('training_sessions')
 				.insert({
@@ -412,14 +413,14 @@ export const actions: Actions = {
 				})
 				.select();
 
-			console.log('[updateTrainingSettings] 作成結果:', { insertResult, insertError });
+			logger.debug('[updateTrainingSettings] 作成結果:', { insertResult, insertError });
 
 			if (insertError) {
-				console.error('[updateTrainingSettings] ❌ 作成失敗:', insertError);
+				logger.error('[updateTrainingSettings] ❌ 作成失敗:', insertError);
 				return fail(500, { trainingSettingsError: m.action_trainingSettingsCreateFailed() });
 			}
 
-			console.log('[updateTrainingSettings] ✅ 作成成功');
+			logger.debug('[updateTrainingSettings] ✅ 作成成功');
 			return { trainingSettingsSuccess: m.action_trainingSettingsCreated() };
 		}
 
@@ -432,14 +433,14 @@ export const actions: Actions = {
 			.eq('session_id', params.id)
 			.select();
 
-		console.log('[updateTrainingSettings] 更新結果:', { updateResult, updateError });
+		logger.debug('[updateTrainingSettings] 更新結果:', { updateResult, updateError });
 
 		if (updateError) {
-			console.error('[updateTrainingSettings] ❌ 更新失敗:', updateError);
+			logger.error('[updateTrainingSettings] ❌ 更新失敗:', updateError);
 			return fail(500, { trainingSettingsError: m.action_settingsUpdateFailed() });
 		}
 
-		console.log('[updateTrainingSettings] ✅ 更新成功');
+		logger.debug('[updateTrainingSettings] ✅ 更新成功');
 		return { trainingSettingsSuccess: m.action_trainingSettingsUpdated() };
 	},
 
@@ -767,7 +768,7 @@ export const actions: Actions = {
 			.eq('id', sessionId);
 
 		if (updateError) {
-			console.error('Session name update error:', updateError);
+			logger.error('Session name update error:', updateError);
 			return fail(500, {
 				error: m.action_sessionNameUpdateFailed(),
 				name: nameRaw
@@ -817,8 +818,8 @@ export const actions: Actions = {
 	},
 
 	deleteTrainingData: async ({ params, locals: { supabase } }) => {
-		console.log('[deleteTrainingData] ========== 採点データ削除開始 ==========');
-		console.log('[deleteTrainingData] sessionId:', params.id);
+		logger.debug('[deleteTrainingData] ========== 採点データ削除開始 ==========');
+		logger.debug('[deleteTrainingData] sessionId:', params.id);
 
 		const {
 			data: { user },
@@ -826,11 +827,11 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			console.error('[deleteTrainingData] ユーザー認証エラー:', userError);
+			logger.error('[deleteTrainingData] ユーザー認証エラー:', userError);
 			throw redirect(303, '/login');
 		}
 
-		console.log('[deleteTrainingData] ユーザーID:', user.id);
+		logger.debug('[deleteTrainingData] ユーザーID:', user.id);
 
 		const sessionId = params.id;
 
@@ -841,26 +842,26 @@ export const actions: Actions = {
 			.eq('id', sessionId)
 			.single();
 
-		console.log('[deleteTrainingData] セッション情報:', { sessionData, sessionError });
+		logger.debug('[deleteTrainingData] セッション情報:', { sessionData, sessionError });
 
 		if (sessionError || !sessionData) {
-			console.error('[deleteTrainingData] セッション取得エラー:', sessionError);
+			logger.error('[deleteTrainingData] セッション取得エラー:', sessionError);
 			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
-			console.error('[deleteTrainingData] 権限エラー: 作成者ではない');
+			logger.error('[deleteTrainingData] 権限エラー: 作成者ではない');
 			return fail(403, { error: m.action_noPermissionDeleteData() });
 		}
 
 		// 研修モードのみデータ削除可能
 		if (sessionData.mode !== 'training') {
-			console.error('[deleteTrainingData] モードエラー:', sessionData.mode);
+			logger.error('[deleteTrainingData] モードエラー:', sessionData.mode);
 			return fail(400, { error: m.action_trainingModeOnly() });
 		}
 
-		console.log('[deleteTrainingData] 権限チェック完了');
+		logger.debug('[deleteTrainingData] 権限チェック完了');
 
 		// training_eventsを取得
 		const { data: trainingEvents, error: eventsError } = await supabase
@@ -868,21 +869,21 @@ export const actions: Actions = {
 			.select('id')
 			.eq('session_id', sessionId);
 
-		console.log('[deleteTrainingData] training_events取得:', {
+		logger.debug('[deleteTrainingData] training_events取得:', {
 			count: trainingEvents?.length || 0,
 			eventIds: trainingEvents?.map(e => e.id),
 			error: eventsError
 		});
 
 		if (eventsError) {
-			console.error('[deleteTrainingData] training_events取得エラー:', eventsError);
+			logger.error('[deleteTrainingData] training_events取得エラー:', eventsError);
 			return fail(500, { error: m.action_eventFetchFailed() });
 		}
 
 		if (trainingEvents && trainingEvents.length > 0) {
 			const eventIds = trainingEvents.map(e => e.id);
 
-			console.log('[deleteTrainingData] training_scores削除を実行...');
+			logger.debug('[deleteTrainingData] training_scores削除を実行...');
 
 			// RLSをバイパスするためにService Roleクライアントを使用
 			const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -892,7 +893,7 @@ export const actions: Actions = {
 				}
 			});
 
-			console.log('[deleteTrainingData] Service Roleクライアントを作成しました');
+			logger.debug('[deleteTrainingData] Service Roleクライアントを作成しました');
 
 			// training_scoresを削除
 			const { error: deleteScoresError, count } = await supabaseAdmin
@@ -900,18 +901,18 @@ export const actions: Actions = {
 				.delete({ count: 'exact' })
 				.in('event_id', eventIds);
 
-			console.log('[deleteTrainingData] 削除結果:', { count, error: deleteScoresError });
+			logger.debug('[deleteTrainingData] 削除結果:', { count, error: deleteScoresError });
 
 			if (deleteScoresError) {
-				console.error('[deleteTrainingData] 採点データの削除エラー:', deleteScoresError);
+				logger.error('[deleteTrainingData] 採点データの削除エラー:', deleteScoresError);
 				return fail(500, {
 					error: m.action_scoreDeleteFailed({ detail: deleteScoresError.message || '' })
 				});
 			}
 
-			console.log('[deleteTrainingData] ✅ 採点データを削除しました:', count, '件');
+			logger.debug('[deleteTrainingData] ✅ 採点データを削除しました:', count, '件');
 		} else {
-			console.log('[deleteTrainingData] 削除対象の種目がありません');
+			logger.debug('[deleteTrainingData] 削除対象の種目がありません');
 		}
 
 		// active_prompt_id をクリアして進行状態をリセット
@@ -921,16 +922,16 @@ export const actions: Actions = {
 			.eq('id', sessionId);
 
 		if (updateError) {
-			console.error('[deleteTrainingData] active_prompt_idクリアエラー:', updateError);
+			logger.error('[deleteTrainingData] active_prompt_idクリアエラー:', updateError);
 		}
 
-		console.log('[deleteTrainingData] ========== 採点データ削除完了 ==========');
+		logger.debug('[deleteTrainingData] ========== 採点データ削除完了 ==========');
 		return { success: true, message: m.action_trainingDataDeleted() };
 	},
 
 	deleteCertificationData: async ({ params, locals: { supabase } }) => {
-		console.log('[deleteCertificationData] ========== 採点データ削除開始 ==========');
-		console.log('[deleteCertificationData] sessionId:', params.id);
+		logger.debug('[deleteCertificationData] ========== 採点データ削除開始 ==========');
+		logger.debug('[deleteCertificationData] sessionId:', params.id);
 
 		const {
 			data: { user },
@@ -938,7 +939,7 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			console.error('[deleteCertificationData] ユーザー認証エラー:', userError);
+			logger.error('[deleteCertificationData] ユーザー認証エラー:', userError);
 			throw redirect(303, '/login');
 		}
 
@@ -952,19 +953,19 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError || !sessionData) {
-			console.error('[deleteCertificationData] セッション取得エラー:', sessionError);
+			logger.error('[deleteCertificationData] セッション取得エラー:', sessionError);
 			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
-			console.error('[deleteCertificationData] 権限エラー: 作成者ではない');
+			logger.error('[deleteCertificationData] 権限エラー: 作成者ではない');
 			return fail(403, { error: m.action_noPermissionDeleteData() });
 		}
 
 		// 検定モードのみデータ削除可能
 		if (sessionData.mode !== 'certification') {
-			console.error('[deleteCertificationData] モードエラー:', sessionData.mode);
+			logger.error('[deleteCertificationData] モードエラー:', sessionData.mode);
 			return fail(400, { error: m.action_certModeOnly() });
 		}
 
@@ -982,16 +983,16 @@ export const actions: Actions = {
 			.delete({ count: 'exact' })
 			.eq('session_id', sessionId);
 
-		console.log('[deleteCertificationData] 削除結果:', { count, error: deleteError });
+		logger.debug('[deleteCertificationData] 削除結果:', { count, error: deleteError });
 
 		if (deleteError) {
-			console.error('[deleteCertificationData] 採点データの削除エラー:', deleteError);
+			logger.error('[deleteCertificationData] 採点データの削除エラー:', deleteError);
 			return fail(500, {
 				error: m.action_scoreDeleteFailed({ detail: deleteError.message || '' })
 			});
 		}
 
-		console.log('[deleteCertificationData] ✅ 採点データを削除しました:', count, '件');
+		logger.debug('[deleteCertificationData] ✅ 採点データを削除しました:', count, '件');
 
 		// active_prompt_id をクリアして進行状態をリセット
 		const { error: updateError } = await supabase
@@ -1000,16 +1001,16 @@ export const actions: Actions = {
 			.eq('id', sessionId);
 
 		if (updateError) {
-			console.error('[deleteCertificationData] active_prompt_idクリアエラー:', updateError);
+			logger.error('[deleteCertificationData] active_prompt_idクリアエラー:', updateError);
 		}
 
-		console.log('[deleteCertificationData] ========== 採点データ削除完了 ==========');
+		logger.debug('[deleteCertificationData] ========== 採点データ削除完了 ==========');
 		return { success: true, message: m.action_certDataDeleted() };
 	},
 
 	deleteTournamentData: async ({ params, locals: { supabase } }) => {
-		console.log('[deleteTournamentData] ========== 採点データ削除開始 ==========');
-		console.log('[deleteTournamentData] sessionId:', params.id);
+		logger.debug('[deleteTournamentData] ========== 採点データ削除開始 ==========');
+		logger.debug('[deleteTournamentData] sessionId:', params.id);
 
 		const {
 			data: { user },
@@ -1017,7 +1018,7 @@ export const actions: Actions = {
 		} = await supabase.auth.getUser();
 
 		if (userError || !user) {
-			console.error('[deleteTournamentData] ユーザー認証エラー:', userError);
+			logger.error('[deleteTournamentData] ユーザー認証エラー:', userError);
 			throw redirect(303, '/login');
 		}
 
@@ -1031,19 +1032,19 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError || !sessionData) {
-			console.error('[deleteTournamentData] セッション取得エラー:', sessionError);
+			logger.error('[deleteTournamentData] セッション取得エラー:', sessionError);
 			return fail(404, { error: m.action_sessionNotFound() });
 		}
 
 		// セッション作成者のみがデータを削除できる
 		if (sessionData.created_by !== user.id) {
-			console.error('[deleteTournamentData] 権限エラー: 作成者ではない');
+			logger.error('[deleteTournamentData] 権限エラー: 作成者ではない');
 			return fail(403, { error: m.action_noPermissionDeleteData() });
 		}
 
 		// 大会モードのみデータ削除可能
 		if (sessionData.mode !== 'tournament') {
-			console.error('[deleteTournamentData] モードエラー:', sessionData.mode);
+			logger.error('[deleteTournamentData] モードエラー:', sessionData.mode);
 			return fail(400, { error: m.action_tournamentModeOnly() });
 		}
 
@@ -1061,16 +1062,16 @@ export const actions: Actions = {
 			.delete({ count: 'exact' })
 			.eq('session_id', sessionId);
 
-		console.log('[deleteTournamentData] 削除結果:', { count, error: deleteError });
+		logger.debug('[deleteTournamentData] 削除結果:', { count, error: deleteError });
 
 		if (deleteError) {
-			console.error('[deleteTournamentData] 採点データの削除エラー:', deleteError);
+			logger.error('[deleteTournamentData] 採点データの削除エラー:', deleteError);
 			return fail(500, {
 				error: m.action_scoreDeleteFailed({ detail: deleteError.message || '' })
 			});
 		}
 
-		console.log('[deleteTournamentData] ✅ 採点データを削除しました:', count, '件');
+		logger.debug('[deleteTournamentData] ✅ 採点データを削除しました:', count, '件');
 
 		// active_prompt_id をクリアして進行状態をリセット
 		const { error: updateError } = await supabase
@@ -1079,10 +1080,10 @@ export const actions: Actions = {
 			.eq('id', sessionId);
 
 		if (updateError) {
-			console.error('[deleteTournamentData] active_prompt_idクリアエラー:', updateError);
+			logger.error('[deleteTournamentData] active_prompt_idクリアエラー:', updateError);
 		}
 
-		console.log('[deleteTournamentData] ========== 採点データ削除完了 ==========');
+		logger.debug('[deleteTournamentData] ========== 採点データ削除完了 ==========');
 		return { success: true, message: m.action_tournamentDataDeleted() };
 	}
 };

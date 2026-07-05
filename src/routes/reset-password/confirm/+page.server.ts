@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { validatePassword } from '$lib/server/validation';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 
 /**
  * パスワードリセット確認ページのロード処理
@@ -14,7 +15,7 @@ export const load: PageServerLoad = async ({ url, locals: { supabase } }) => {
 
 	if (error) {
 		// URLパラメータのエラーをログ出力（最小限）
-		console.error('[reset-password/confirm] URLエラー:', error);
+		logger.error('[reset-password/confirm] URLエラー:', error);
 		return {
 			error: errorDescription || 'リンクが無効または期限切れです。'
 		};
@@ -71,7 +72,7 @@ export const actions: Actions = {
 
 		if (error) {
 			// 最小限のエラー情報のみログ出力（個人情報保護）
-			console.error('[reset-password/confirm] パスワード更新エラー:', error.code, error.message);
+			logger.error('[reset-password/confirm] パスワード更新エラー:', error.code, error.message);
 
 			// エラーコード別の処理
 			if (error.code === 'same_password') {
@@ -85,14 +86,14 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log('[reset-password/confirm] パスワード更新成功');
+		logger.debug('[reset-password/confirm] パスワード更新成功');
 
 			// パスワード変更後は全セッションを失効させる
 			// 他タブ/他デバイスの既存セッションを継続利用させないため
 			const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
 			if (signOutError) {
 				// 最小限のエラー情報のみログ出力（個人情報保護）
-				console.error('[reset-password/confirm] グローバルサインアウトエラー:', signOutError.message);
+				logger.error('[reset-password/confirm] グローバルサインアウトエラー:', signOutError.message);
 				// 失効に失敗しても、パスワード更新自体は成功しているため処理は継続
 			}
 

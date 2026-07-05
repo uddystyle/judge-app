@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { error, redirect } from '@sveltejs/kit';
 import { getActiveOrgRole } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const { id: orgId } = params;
@@ -46,7 +47,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.order('removed_at', { ascending: false });
 
 	if (membersError) {
-		console.error('Error fetching removed members:', membersError);
+		logger.error('Error fetching removed members:', membersError);
 		throw error(500, '削除されたメンバーの取得に失敗しました');
 	}
 

@@ -5,6 +5,7 @@ import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import { ORG_PRICE_IDS as PRICE_IDS, MAX_MEMBERS } from '$lib/server/plans';
 import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
+import { logger } from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
@@ -44,7 +45,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// Security: Validate redirect URLs to prevent Open Redirect attacks
 		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!returnValidation.valid) {
-			console.error(
+			logger.error(
 				'[Organization Upgrade] Invalid returnUrl:',
 				returnUrl,
 				'Error:',
@@ -55,7 +56,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		const cancelValidation = validateRedirectUrl(cancelUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!cancelValidation.valid) {
-			console.error(
+			logger.error(
 				'[Organization Upgrade] Invalid cancelUrl:',
 				cancelUrl,
 				'Error:',
@@ -67,9 +68,9 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		const sanitizedReturnUrl = returnValidation.sanitizedUrl!;
 		const sanitizedCancelUrl = cancelValidation.sanitizedUrl!;
 
-		console.log('[Organization Upgrade API] ユーザー:', user.id);
-		console.log('[Organization Upgrade API] 組織ID:', organizationId);
-		console.log('[Organization Upgrade API] プラン:', planType, billingInterval);
+		logger.debug('[Organization Upgrade API] ユーザー:', user.id);
+		logger.debug('[Organization Upgrade API] 組織ID:', organizationId);
+		logger.debug('[Organization Upgrade API] プラン:', planType, billingInterval);
 
 		// 3. 組織情報を取得
 		const { data: organization } = await supabase
@@ -92,8 +93,8 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		if (priceId.includes('placeholder')) {
 			// 詳細はログのみに出力（セキュリティ：内部実装の詳細を隠す）
-			console.error('[Organization Upgrade API] CRITICAL: Stripe Price ID not configured!');
-			console.error(
+			logger.error('[Organization Upgrade API] CRITICAL: Stripe Price ID not configured!');
+			logger.error(
 				'[Organization Upgrade API] planType:',
 				planType,
 				'billingInterval:',
@@ -127,7 +128,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			});
 
 			customerId = customer.id;
-			console.log('[Organization Upgrade API] 新しいCustomerを作成:', customerId);
+			logger.debug('[Organization Upgrade API] 新しいCustomerを作成:', customerId);
 
 			// Customerをorganizationsテーブルに保存
 			await supabase
@@ -198,7 +199,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			// ログには最初の10文字のみ出力（プライバシー保護）
 			const maskedCoupon =
 				couponCode.length > 10 ? couponCode.substring(0, 10) + '...' : couponCode;
-			console.log('[Organization Upgrade API] プロモーションコード適用:', maskedCoupon);
+			logger.debug('[Organization Upgrade API] プロモーションコード適用:', maskedCoupon);
 		} else {
 			// コード未指定時はCheckout画面でのプロモーションコード入力を許可
 			sessionParams.allow_promotion_codes = true;
@@ -206,15 +207,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		const session = await stripe.checkout.sessions.create(sessionParams);
 
-		console.log('[Organization Upgrade API] Checkout Session作成成功:', session.id);
+		logger.debug('[Organization Upgrade API] Checkout Session作成成功:', session.id);
 
 		// 9. Checkout URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
 		// 詳細なエラーはログのみに出力（セキュリティ：情報漏洩防止、個人情報保護）
-		console.error('[Organization Upgrade API] エラー:', err.message);
-		console.error('[Organization Upgrade API] エラータイプ:', err.type);
-		console.error('[Organization Upgrade API] エラーコード:', err.code);
+		logger.error('[Organization Upgrade API] エラー:', err.message);
+		logger.error('[Organization Upgrade API] エラータイプ:', err.type);
+		logger.error('[Organization Upgrade API] エラーコード:', err.code);
 
 		// 4xxのHttpErrorはそのまま返す
 		if (err?.status && err.status >= 400 && err.status < 500) {

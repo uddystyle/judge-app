@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '$lib/server/logger';
 
 /**
  * ユーザーの現在のプラン制限を取得
@@ -21,7 +22,7 @@ export async function getUserPlanLimits(supabase: SupabaseClient, userId: string
 		.single();
 
 	if (error) {
-		console.error('[Plan Limits] プラン制限の取得エラー:', error);
+		logger.error('[Plan Limits] プラン制限の取得エラー:', error);
 		// デフォルトでフリープランの制限を返す
 		return {
 			plan_type: 'free',

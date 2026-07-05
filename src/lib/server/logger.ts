@@ -1,7 +1,18 @@
-const isDevelopment = process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * サーバーサイド共通ロガー
+ *
+ * - 本番環境では warn / error のみ出力する（debug / info は抑制）
+ * - 本番環境ではオブジェクト引数の機密キー（user_id, email, token など）を
+ *   再帰的に [REDACTED] へ置換してから出力する
+ *
+ * サーバーサイドのコードでは console.* ではなく必ずこのロガーを使うこと。
+ * console.log → logger.debug / console.info → logger.info /
+ * console.warn → logger.warn / console.error → logger.error が対応。
+ */
 
 // 機密フィールドパターン
 const SENSITIVE_PATTERNS = [
@@ -15,16 +26,18 @@ const SENSITIVE_PATTERNS = [
 	/secret/i,
 	/api_key/i,
 	/auth/i,
-	/session/i,
+	/session/i
 ];
 
-// 機密データの編集
-function redactSensitive(data: any): any {
+// 機密データの編集（本番のみ）
+function redactSensitive(data: unknown): unknown {
 	if (isProduction && typeof data === 'object' && data !== null) {
-		const redacted = Array.isArray(data) ? [...data] : { ...data };
+		const redacted: Record<string, unknown> = Array.isArray(data)
+			? { ...([...data] as unknown as Record<string, unknown>) }
+			: { ...(data as Record<string, unknown>) };
 
 		for (const key in redacted) {
-			const isSensitive = SENSITIVE_PATTERNS.some(pattern => pattern.test(key));
+			const isSensitive = SENSITIVE_PATTERNS.some((pattern) => pattern.test(key));
 
 			if (isSensitive) {
 				redacted[key] = '[REDACTED]';
@@ -33,52 +46,52 @@ function redactSensitive(data: any): any {
 			}
 		}
 
-		return redacted;
+		return Array.isArray(data) ? Object.values(redacted) : redacted;
 	}
 
 	return data;
 }
 
 class Logger {
-	private log(level: LogLevel, prefix: string, ...args: any[]) {
+	private log(level: LogLevel, ...args: unknown[]) {
 		// 本番環境では警告とエラーのみログ出力
 		if (isProduction && (level === 'debug' || level === 'info')) {
 			return;
 		}
 
 		const timestamp = new Date().toISOString();
-		const redactedArgs = args.map(arg => redactSensitive(arg));
+		const redactedArgs = args.map((arg) => redactSensitive(arg));
 
 		switch (level) {
 			case 'error':
-				console.error(`[${timestamp}] [${prefix}] ERROR:`, ...redactedArgs);
+				console.error(`[${timestamp}] ERROR:`, ...redactedArgs);
 				break;
 			case 'warn':
-				console.warn(`[${timestamp}] [${prefix}] WARN:`, ...redactedArgs);
+				console.warn(`[${timestamp}] WARN:`, ...redactedArgs);
 				break;
 			case 'info':
-				console.info(`[${timestamp}] [${prefix}] INFO:`, ...redactedArgs);
+				console.info(`[${timestamp}] INFO:`, ...redactedArgs);
 				break;
 			case 'debug':
-				console.log(`[${timestamp}] [${prefix}] DEBUG:`, ...redactedArgs);
+				console.log(`[${timestamp}] DEBUG:`, ...redactedArgs);
 				break;
 		}
 	}
 
-	debug(prefix: string, ...args: any[]) {
-		this.log('debug', prefix, ...args);
+	debug(...args: unknown[]) {
+		this.log('debug', ...args);
 	}
 
-	info(prefix: string, ...args: any[]) {
-		this.log('info', prefix, ...args);
+	info(...args: unknown[]) {
+		this.log('info', ...args);
 	}
 
-	warn(prefix: string, ...args: any[]) {
-		this.log('warn', prefix, ...args);
+	warn(...args: unknown[]) {
+		this.log('warn', ...args);
 	}
 
-	error(prefix: string, ...args: any[]) {
-		this.log('error', prefix, ...args);
+	error(...args: unknown[]) {
+		this.log('error', ...args);
 	}
 }
 

@@ -3,6 +3,7 @@ import type { Actions } from './$types';
 import { PUBLIC_SITE_URL } from '$env/static/public';
 import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 
 /**
  * メールアドレスを正規化（小文字化 + トリム）
@@ -52,7 +53,7 @@ export const actions: Actions = {
 
 		// --- Create User in Supabase Auth ---
 		// Pass full_name in metadata so the database trigger can use it
-		console.log('[signup] サインアップ開始:', {
+		logger.debug('[signup] サインアップ開始:', {
 			originalEmail: email,
 			sanitizedEmail,
 			normalizedEmail,
@@ -71,7 +72,7 @@ export const actions: Actions = {
 			}
 		});
 
-		console.log('[signup] Supabase signUp レスポンス:', {
+		logger.debug('[signup] Supabase signUp レスポンス:', {
 			hasUser: !!authData.user,
 			hasError: !!authError,
 			errorMessage: authError?.message
@@ -80,7 +81,7 @@ export const actions: Actions = {
 		});
 
 		if (authError) {
-			console.error('[signup] signUp error:', {
+			logger.error('[signup] signUp error:', {
 				code: authError.code,
 				message: authError.message,
 				status: (authError as any).status
@@ -93,7 +94,7 @@ export const actions: Actions = {
 			// セキュリティ対策: ユーザー列挙攻撃を防ぐため、成功メッセージを返す
 			if (authError.code === 'user_already_exists' ||
 			    authError.code === 'email_exists') {
-				console.log('[signup] 既存ユーザー検出 - 成功レスポンスを返す（セキュリティ対策）');
+				logger.debug('[signup] 既存ユーザー検出 - 成功レスポンスを返す（セキュリティ対策）');
 				// 既存ユーザーには確認メールが送信されないが、新規ユーザーと完全に同一の
 				// レスポンス（303 → /signup/success）を返す。応答差によるユーザー列挙を防ぐ。
 				throw redirect(303, '/signup/success');
@@ -119,13 +120,13 @@ export const actions: Actions = {
 				if (message.includes('already registered') ||
 				    message.includes('already exists') ||
 				    message.includes('already been registered')) {
-					console.log('[signup] 既存ユーザー検出（メッセージフォールバック） - 成功レスポンスを返す');
+					logger.debug('[signup] 既存ユーザー検出（メッセージフォールバック） - 成功レスポンスを返す');
 					throw redirect(303, '/signup/success');
 				}
 			}
 
 			// その他の予期しないエラー
-			console.error('[signup] Unexpected error code:', authError.code);
+			logger.error('[signup] Unexpected error code:', authError.code);
 			return fail(500, {
 				fullName: sanitizedFullName,
 				email: sanitizedEmail,
@@ -137,7 +138,7 @@ export const actions: Actions = {
 		// identitiesが空なら既存登録済みとして扱う
 		// セキュリティ対策: ユーザー列挙攻撃を防ぐため、成功メッセージを返す
 		if (authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
-			console.log('[signup] 既存ユーザーを検出（identitiesが空） - 成功レスポンスを返す:', {
+			logger.debug('[signup] 既存ユーザーを検出（identitiesが空） - 成功レスポンスを返す:', {
 				email: authData.user.email,
 				userId: authData.user.id,
 				reason: 'このケースではメールは送信されません'
@@ -156,7 +157,7 @@ export const actions: Actions = {
 		// 【セキュリティチェック】session が null であることを確認
 		// session が存在する場合、Supabase設定でメール確認が無効になっている可能性がある
 		if (authData.session) {
-			console.error('[signup] SECURITY WARNING: Session was returned immediately after signup.', {
+			logger.error('[signup] SECURITY WARNING: Session was returned immediately after signup.', {
 				userId: authData.user.id,
 				email: authData.user.email,
 				emailConfirmedAt: authData.user.email_confirmed_at,
@@ -169,7 +170,7 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log('[signup] User created, email confirmation required:', {
+		logger.debug('[signup] User created, email confirmation required:', {
 			hasSession: false,
 			emailConfirmedAt: authData.user.email_confirmed_at
 			// userId と email は個人情報のため出力しない（GDPR/プライバシー保護）

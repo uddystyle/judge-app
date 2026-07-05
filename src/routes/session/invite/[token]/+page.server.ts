@@ -3,13 +3,14 @@ import type { Actions, PageServerLoad } from './$types';
 import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { validateName } from '$lib/server/validation';
 import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase, supabaseAdmin } }) => {
 	const token = params.token;
 
 	// anon の sessions 全読み（invite_token 漏洩）を塞いだため、トークン照合は service role で行う。
 	if (!supabaseAdmin) {
-		console.error(
+		logger.error(
 			'[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 		);
 		return { error: 'サーバー設定エラーにより招待ページを表示できません。', session: null };
@@ -34,8 +35,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase, supabas
 		.single();
 
 	if (error || !session) {
-		console.error('[Guest Invite] Error fetching session:', error);
-		console.log('[Guest Invite] Token:', token);
+		logger.error('[Guest Invite] Error fetching session:', error);
+		logger.debug('[Guest Invite] Token:', token);
 		return {
 			error: `招待リンクが無効です。${error ? ` (${error.message})` : ''}`,
 			session: null
@@ -85,7 +86,7 @@ export const actions: Actions = {
 
 		// anon の sessions 全読み（invite_token 漏洩）を塞いだため、トークン照合は service role で行う。
 		if (!supabaseAdmin) {
-			console.error(
+			logger.error(
 				'[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 			);
 			return fail(500, {
@@ -118,7 +119,7 @@ export const actions: Actions = {
 		// ゲスト登録は RLS をバイパスする service role で実行する（migration 1002 で
 		// anon からの session_participants 直接INSERTを禁止したため）。
 		if (!supabaseAdmin) {
-			console.error(
+			logger.error(
 				'[Guest Invite] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 			);
 			return fail(500, {
@@ -146,14 +147,14 @@ export const actions: Actions = {
 		});
 
 		if (insertError) {
-			console.error('[Guest Join] Error inserting participant:', insertError);
+			logger.error('[Guest Join] Error inserting participant:', insertError);
 			return fail(500, {
 				error: 'セッションへの参加に失敗しました。'
 			});
 		}
 
 		// Step 2: Supabase Anonymous Authでゲスト用JWTを発行
-		console.log('[Guest Invite] ゲスト用JWT発行開始:', { guestIdentifier });
+		logger.debug('[Guest Invite] ゲスト用JWT発行開始:', { guestIdentifier });
 		const { data: authData, error: authError } = await supabase.auth.signInAnonymously({
 			options: {
 				data: {
@@ -166,20 +167,20 @@ export const actions: Actions = {
 		});
 
 		if (authError || !authData.session) {
-			console.error('[Guest Invite] JWT発行エラー:', authError);
+			logger.error('[Guest Invite] JWT発行エラー:', authError);
 
 			// ⚠️ CRITICAL: JWT発行失敗時は session_participants レコードをロールバック
-			console.log('[Guest Invite] JWT発行失敗のため、参加者レコードをロールバック中...');
+			logger.debug('[Guest Invite] JWT発行失敗のため、参加者レコードをロールバック中...');
 			const { error: rollbackError } = await supabaseAdmin
 				.from('session_participants')
 				.delete()
 				.eq('guest_identifier', guestIdentifier);
 
 			if (rollbackError) {
-				console.error('[Guest Invite] ロールバック失敗:', rollbackError);
+				logger.error('[Guest Invite] ロールバック失敗:', rollbackError);
 				// ロールバック失敗でも、ユーザーには認証失敗として通知
 			} else {
-				console.log('[Guest Invite] ロールバック成功');
+				logger.debug('[Guest Invite] ロールバック成功');
 			}
 
 			return fail(500, {
@@ -187,7 +188,7 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log(
+		logger.debug(
 			'[Guest Invite] ゲスト参加成功。JWT発行完了。リダイレクト先:',
 			`/session/${session.id}`
 		);

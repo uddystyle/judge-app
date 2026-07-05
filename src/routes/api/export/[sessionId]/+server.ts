@@ -2,6 +2,7 @@ import { json, redirect, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { getActiveOrgRole } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 export const GET: RequestHandler = async ({ params, request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
@@ -22,16 +23,16 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 
 	const { sessionId } = params;
 
-	console.log('[Export API] セッションID:', sessionId);
+	logger.debug('[Export API] セッションID:', sessionId);
 
 	// セッションIDのバリデーション
 	const sessionIdNum = parseInt(sessionId);
 	if (isNaN(sessionIdNum)) {
-		console.error('[Export API] 無効なセッションID');
+		logger.error('[Export API] 無効なセッションID');
 		throw error(400, '無効なセッションIDです。');
 	}
 
-	console.log('[Export API] ユーザーID:', user.id, 'セッションID:', sessionIdNum);
+	logger.debug('[Export API] ユーザーID:', user.id, 'セッションID:', sessionIdNum);
 
 	// セッション情報を取得して作成者を確認
 	const { data: session, error: sessionError } = await supabase
@@ -40,20 +41,20 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 		.eq('id', sessionIdNum)
 		.single();
 
-	console.log('[Export API] セッション情報:', { session, error: sessionError });
+	logger.debug('[Export API] セッション情報:', { session, error: sessionError });
 
 	if (sessionError || !session) {
-		console.error('[Export API] Failed to fetch session:', sessionError);
+		logger.error('[Export API] Failed to fetch session:', sessionError);
 		throw error(404, 'セッションが見つかりません。');
 	}
 
 	// 作成者のみがエクスポート可能
 	if (session.created_by !== user.id) {
-		console.error('[Export API] Unauthorized export attempt:', { userId: user.id, sessionId: sessionIdNum, createdBy: session.created_by });
+		logger.error('[Export API] Unauthorized export attempt:', { userId: user.id, sessionId: sessionIdNum, createdBy: session.created_by });
 		throw error(403, 'データをエクスポートする権限がありません。セッションの作成者のみがデータをエクスポートできます。');
 	}
 
-	console.log('[Export API] 作成者チェック完了:', { userId: user.id, createdBy: session.created_by });
+	logger.debug('[Export API] 作成者チェック完了:', { userId: user.id, createdBy: session.created_by });
 
 	// 新規追加: 組織メンバーシップのチェック
 	if (session.organization_id) {
@@ -61,7 +62,7 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 		const userRole = await getActiveOrgRole(supabase, session.organization_id, user.id);
 
 		if (!userRole) {
-			console.error('[Export API] Unauthorized: User not in organization', {
+			logger.error('[Export API] Unauthorized: User not in organization', {
 				userId: user.id,
 				sessionId: sessionIdNum,
 				orgId: session.organization_id
@@ -69,7 +70,7 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 			throw error(403, 'この組織のメンバーではありません。');
 		}
 
-		console.log('[Export API] 組織メンバーシップ確認完了:', {
+		logger.debug('[Export API] 組織メンバーシップ確認完了:', {
 			userId: user.id,
 			orgId: session.organization_id,
 			role: membership.role
@@ -79,11 +80,11 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 	let exportData: any[] = [];
 
 	// モードに応じてデータを取得
-	console.log('[Export API] セッションモード:', session.mode);
+	logger.debug('[Export API] セッションモード:', session.mode);
 
 	if (session.mode === 'training') {
 		// 研修モード: training_scoresから取得
-		console.log('[Export API] 研修モードの結果を取得中...');
+		logger.debug('[Export API] 研修モードの結果を取得中...');
 		const { data: trainingScores, error: scoresError } = await supabase
 			.from('training_scores')
 			.select(
@@ -99,10 +100,10 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 			.eq('training_events.session_id', sessionIdNum)
 			.order('created_at', { ascending: true });
 
-		console.log('[Export API] 研修モード結果:', { count: trainingScores?.length, error: scoresError });
+		logger.debug('[Export API] 研修モード結果:', { count: trainingScores?.length, error: scoresError });
 
 		if (scoresError) {
-			console.error('[Export API] Failed to fetch training scores:', scoresError);
+			logger.error('[Export API] Failed to fetch training scores:', scoresError);
 			return json({ error: '研修モードの結果取得に失敗しました。' }, { status: 500 });
 		}
 
@@ -132,7 +133,7 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 					.in('guest_identifier', guestIdentifiers)
 				: { data: [] };
 
-			console.log('[Export API] 検定員情報取得:', {
+			logger.debug('[Export API] 検定員情報取得:', {
 				judgeCount: judgeProfiles?.length || 0,
 				guestCount: guestParticipants?.length || 0
 			});
@@ -162,24 +163,24 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 		}
 	} else {
 		// 検定モード・大会モード: resultsから取得
-		console.log('[Export API] 検定/大会モードの結果を取得中...');
+		logger.debug('[Export API] 検定/大会モードの結果を取得中...');
 		const { data, error: resultsError } = await supabase
 			.from('results')
 			.select('created_at, bib, score, discipline, level, event_name, judge_name')
 			.eq('session_id', sessionIdNum)
 			.order('created_at', { ascending: true });
 
-		console.log('[Export API] 検定/大会モード結果:', { count: data?.length, error: resultsError });
+		logger.debug('[Export API] 検定/大会モード結果:', { count: data?.length, error: resultsError });
 
 		if (resultsError) {
-			console.error('[Export API] Failed to fetch results:', resultsError);
+			logger.error('[Export API] Failed to fetch results:', resultsError);
 			return json({ error: '結果の取得に失敗しました。' }, { status: 500 });
 		}
 
 		exportData = data || [];
 	}
 
-	console.log('[Export API] エクスポートデータ件数:', exportData.length);
+	logger.debug('[Export API] エクスポートデータ件数:', exportData.length);
 
 	// Return the data as a JSON response
 	return json({ results: exportData });

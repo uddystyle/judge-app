@@ -8,6 +8,7 @@ import {
 	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const sessionId = params.id;
@@ -81,7 +82,7 @@ export const actions: Actions = {
 		const judgeId = formData.get('judgeId') as string;
 		const formGuestIdentifier = formData.get('guestIdentifier') as string;
 
-		console.log('[requestCorrection] 修正要求を受信:', { bib, judgeName, sessionId: id });
+		logger.debug('[requestCorrection] 修正要求を受信:', { bib, judgeName, sessionId: id });
 
 		if (!bib || !judgeName) {
 			return fail(400, { error: 'パラメータが不足しています。' });
@@ -101,7 +102,7 @@ export const actions: Actions = {
 		}
 
 		// 該当する検定員の得点を削除
-		console.log('[requestCorrection] 得点を削除中...', {
+		logger.debug('[requestCorrection] 得点を削除中...', {
 			session_id: id,
 			bib,
 			discipline,
@@ -130,11 +131,11 @@ export const actions: Actions = {
 		const { data: deletedData, error: deleteError, count } = await deleteQuery.select();
 
 		if (deleteError) {
-			console.error('[requestCorrection] ❌ 削除失敗:', deleteError);
+			logger.error('[requestCorrection] ❌ 削除失敗:', deleteError);
 			return fail(500, { error: '得点の削除に失敗しました。' });
 		}
 
-		console.log('[requestCorrection] 削除結果:', {
+		logger.debug('[requestCorrection] 削除結果:', {
 			judgeName,
 			deletedCount: count,
 			deletedRows: deletedData?.length || 0,
@@ -142,13 +143,13 @@ export const actions: Actions = {
 		});
 
 		if (!count || count === 0) {
-			console.error(
+			logger.error(
 				'[requestCorrection] ⚠️ 削除された行が0件です。RLSポリシーの問題の可能性があります。'
 			);
 			return fail(500, { error: '得点の削除に失敗しました（削除された行が0件）。' });
 		}
 
-		console.log('[requestCorrection] ✅ 削除成功:', { judgeName, deletedCount: count });
+		logger.debug('[requestCorrection] ✅ 削除成功:', { judgeName, deletedCount: count });
 		return { success: true, message: `${judgeName}に修正を要求しました。` };
 	},
 

@@ -2,6 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { stripe } from '$lib/server/stripe';
 import { isOrgAdmin } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const {
@@ -60,7 +61,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 					subscriptionEndDate = new Date(subscription.current_period_end * 1000).toISOString();
 				}
 			} catch (error) {
-				console.error('[Load] stripe_subscription_id検証エラー:', error);
+				logger.error('[Load] stripe_subscription_id検証エラー:', error);
 			}
 		}
 
@@ -81,7 +82,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 					}
 				}
 			} catch (error) {
-				console.error('[Load] stripe_customer_id検証エラー:', error);
+				logger.error('[Load] stripe_customer_id検証エラー:', error);
 			}
 		}
 	}
@@ -185,7 +186,7 @@ export const actions: Actions = {
 					}
 				}
 			} catch (stripeError: any) {
-				console.error(
+				logger.error(
 					`[Organization Delete] Stripe顧客のサブスクリプション取得に失敗:`,
 					stripeError
 				);
@@ -194,7 +195,7 @@ export const actions: Actions = {
 
 		// 見つかったすべてのサブスクリプションをキャンセル
 		if (subscriptionsToCancel.length > 0) {
-			console.log(
+			logger.debug(
 				`[Organization Delete] ${subscriptionsToCancel.length}件のサブスクリプションをキャンセル`
 			);
 
@@ -202,7 +203,7 @@ export const actions: Actions = {
 				try {
 					// Stripe APIでサブスクリプションを即座にキャンセル
 					await stripe.subscriptions.cancel(subscriptionId);
-					console.log(
+					logger.debug(
 						`[Organization Delete] Stripeサブスクリプションをキャンセル: ${subscriptionId}`
 					);
 
@@ -216,11 +217,11 @@ export const actions: Actions = {
 						})
 						.eq('stripe_subscription_id', subscriptionId);
 
-					console.log(
+					logger.debug(
 						`[Organization Delete] データベースのサブスクリプションステータスを更新: ${subscriptionId}`
 					);
 				} catch (stripeError: any) {
-					console.error(
+					logger.error(
 						`[Organization Delete] Stripeサブスクリプションのキャンセルに失敗:`,
 						stripeError
 					);
@@ -241,11 +242,11 @@ export const actions: Actions = {
 			.eq('organization_id', organizationId);
 
 		if (subscriptionDeleteError) {
-			console.error('Failed to delete subscriptions:', subscriptionDeleteError);
+			logger.error('Failed to delete subscriptions:', subscriptionDeleteError);
 			return fail(500, { error: 'サブスクリプション情報の削除に失敗しました。' });
 		}
 
-		console.log('[Organization Delete] subscriptionsレコードを削除');
+		logger.debug('[Organization Delete] subscriptionsレコードを削除');
 
 		// 組織メンバーを削除（自分自身）
 		const { error: memberDeleteError } = await supabase
@@ -255,7 +256,7 @@ export const actions: Actions = {
 			.eq('user_id', user.id);
 
 		if (memberDeleteError) {
-			console.error('Failed to delete organization member:', memberDeleteError);
+			logger.error('Failed to delete organization member:', memberDeleteError);
 			return fail(500, { error: 'メンバーの削除に失敗しました。' });
 		}
 
@@ -266,7 +267,7 @@ export const actions: Actions = {
 			.eq('id', organizationId);
 
 		if (orgDeleteError) {
-			console.error('Failed to delete organization:', orgDeleteError);
+			logger.error('Failed to delete organization:', orgDeleteError);
 			return fail(500, { error: '組織の削除に失敗しました。' });
 		}
 

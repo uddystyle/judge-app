@@ -12,6 +12,7 @@ import {
 	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId, modeType, eventId } = params;
@@ -60,7 +61,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	]);
 
 	if (participantResult.error) {
-		console.error('[load] 参加者取得エラー:', participantResult.error);
+		logger.error('[load] 参加者取得エラー:', participantResult.error);
 		throw error(404, '参加者が見つかりません。このセッションに所属していない可能性があります。');
 	}
 
@@ -110,7 +111,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 export const actions: Actions = {
 	submitScore: async ({ request, params, url, locals: { supabase } }) => {
-		console.log('[submitScore] Action called');
+		logger.debug('[submitScore] Action called');
 
 		const guestIdentifier = url.searchParams.get('guest');
 
@@ -118,12 +119,12 @@ export const actions: Actions = {
 		const authResult = await authenticateAction(supabase, params.id, guestIdentifier);
 
 		if (!authResult) {
-			console.error('[submitScore] Authentication failed');
+			logger.error('[submitScore] Authentication failed');
 			return fail(401, { error: '認証が必要です。' });
 		}
 
 		const { user, guestParticipant } = authResult;
-		console.log('[submitScore] User check:', { hasUser: !!user, hasGuest: !!guestParticipant });
+		logger.debug('[submitScore] User check:', { hasUser: !!user, hasGuest: !!guestParticipant });
 
 		const formData = await request.formData();
 		const participantId = formData.get('participantId') as string;
@@ -139,14 +140,14 @@ export const actions: Actions = {
 
 		// 1. participantId のバリデーション
 		if (!participantId || participantId.trim() === '') {
-			console.error('[submitScore] participantId が空です');
+			logger.error('[submitScore] participantId が空です');
 			return fail(400, { error: '参加者IDが指定されていません。' });
 		}
 
 		// 2. bibNumber のバリデーション
 		const bibResult = validateBib(bibNumberRaw);
 		if (!bibResult.success) {
-			console.error('[submitScore] bibNumber が不正:', bibNumberRaw);
+			logger.error('[submitScore] bibNumber が不正:', bibNumberRaw);
 			return fail(400, { error: bibResult.error });
 		}
 		const bibNumber = bibResult.value;
@@ -154,7 +155,7 @@ export const actions: Actions = {
 		// 3. score のバリデーション
 		const scoreResult = validateScoreInput(scoreRaw);
 		if (!scoreResult.success) {
-			console.error('[submitScore] score が不正:', scoreRaw);
+			logger.error('[submitScore] score が不正:', scoreRaw);
 			return fail(400, { error: scoreResult.error });
 		}
 		const score = scoreResult.value;
@@ -169,7 +170,7 @@ export const actions: Actions = {
 			.single();
 
 		if (participantError || !participant) {
-			console.error('[submitScore] participantId と bibNumber の整合性エラー:', {
+			logger.error('[submitScore] participantId と bibNumber の整合性エラー:', {
 				participantId,
 				bibNumber,
 				error: participantError
@@ -179,7 +180,7 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log('[submitScore] 参加者確認成功:', participant);
+		logger.debug('[submitScore] 参加者確認成功:', participant);
 
 		// 4.5. #4: 複数審判モードでは、非主任・非ゲストの審判は主任が指定した bib のみ採点できる
 		{
@@ -198,7 +199,7 @@ export const actions: Actions = {
 					activePrompt.bib_number !== bibNumber ||
 					String(activePrompt.level) !== String(eventId)
 				) {
-					console.error('[submitScore] 主任指定外の bib への採点を拒否:', { bibNumber, eventId });
+					logger.error('[submitScore] 主任指定外の bib への採点を拒否:', { bibNumber, eventId });
 					return fail(403, { error: '主任検定員が指定した選手のみ採点できます。' });
 				}
 			}
@@ -218,7 +219,7 @@ export const actions: Actions = {
 				.single();
 
 			if (eventError || !eventData) {
-				console.error('[submitScore] training_events の取得エラー:', eventError);
+				logger.error('[submitScore] training_events の取得エラー:', eventError);
 				return fail(404, { error: '種目情報が見つかりません。' });
 			}
 
@@ -234,7 +235,7 @@ export const actions: Actions = {
 				.single();
 
 			if (eventError || !eventData) {
-				console.error('[submitScore] custom_events の取得エラー:', eventError);
+				logger.error('[submitScore] custom_events の取得エラー:', eventError);
 				return fail(404, { error: '種目情報が見つかりません。' });
 			}
 
@@ -246,11 +247,11 @@ export const actions: Actions = {
 		// 6. 得点範囲チェック
 		const rangeResult = validateScoreRange(score, minScore, maxScore);
 		if (!rangeResult.success) {
-			console.error('[submitScore] 得点範囲外:', { score, minScore, maxScore });
+			logger.error('[submitScore] 得点範囲外:', { score, minScore, maxScore });
 			return fail(400, { error: rangeResult.error });
 		}
 
-		console.log('[submitScore] バリデーション完了。得点を保存します。');
+		logger.debug('[submitScore] バリデーション完了。得点を保存します。');
 
 		// 得点をデータベースに保存
 		if (modeType === 'training') {
@@ -301,11 +302,11 @@ export const actions: Actions = {
 				if (guestParticipant) {
 					// ゲストユーザーの場合: JWT 検証済みの guest_identifier を使う（生のURL値は使わない）
 					scoreData.guest_identifier = guestParticipant.guest_identifier;
-					console.log('[submitScore] Inserting training score for guest');
+					logger.debug('[submitScore] Inserting training score for guest');
 				} else {
 					// 認証ユーザーの場合
 					scoreData.judge_id = user.id;
-					console.log('[submitScore] Inserting training score for user');
+					logger.debug('[submitScore] Inserting training score for user');
 				}
 
 				const { error: insertErr } = await supabase.from('training_scores').insert(scoreData);
@@ -328,7 +329,7 @@ export const actions: Actions = {
 			}
 
 			if (saveError) {
-				console.error('[submitScore] Error saving training score:', saveError);
+				logger.error('[submitScore] Error saving training score:', saveError);
 				return fail(500, { error: '採点の保存に失敗しました。時間をおいて再度お試しください。' });
 			}
 		} else {
@@ -350,7 +351,7 @@ export const actions: Actions = {
 			// 接尾辞が必要なら表示時に付与する。
 			const judgeName = await getJudgeName(supabase, user, guestParticipant);
 			if (!judgeName) {
-				console.error('[submitScore] Neither user nor guest found!');
+				logger.error('[submitScore] Neither user nor guest found!');
 				return fail(401, { error: '認証が必要です。' });
 			}
 			// #7: owner（認証=judge_id / ゲスト=guest_identifier）で識別する。
@@ -422,11 +423,11 @@ export const actions: Actions = {
 				});
 			}
 			if (resultSaveError) {
-				console.error('[submitScore] Error saving tournament score:', resultSaveError);
+				logger.error('[submitScore] Error saving tournament score:', resultSaveError);
 				return fail(500, { error: '採点の保存に失敗しました。時間をおいて再度お試しください。' });
 			}
 
-			console.log('[submitScore] Score saved successfully');
+			logger.debug('[submitScore] Score saved successfully');
 		}
 
 		return {

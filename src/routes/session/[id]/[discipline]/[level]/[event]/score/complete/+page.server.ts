@@ -6,6 +6,7 @@ import {
 	fetchUserProfile,
 	isChiefJudge
 } from '$lib/server/sessionHelpers';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id, discipline, level, event } = params;
@@ -39,7 +40,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		.eq('event_name', event);
 
 	if (scoresError) {
-		console.error('Failed to fetch scores:', scoresError);
+		logger.error('Failed to fetch scores:', scoresError);
 		throw error(500, '得点の取得に失敗しました。');
 	}
 
@@ -138,11 +139,11 @@ export const actions: Actions = {
 			.eq('id', id);
 
 		if (updateError) {
-			console.error('Error ending session:', updateError);
+			logger.error('Error ending session:', updateError);
 			return fail(500, { error: '検定の終了に失敗しました。' });
 		}
 
-		console.log('[主任検定員] ✅ セッションを終了しました', { sessionId: id });
+		logger.debug('[主任検定員] ✅ セッションを終了しました', { sessionId: id });
 
 		const guestParam = guestIdentifier ? `&guest=${guestIdentifier}` : '';
 		throw redirect(303, `/session/${id}?ended=true${guestParam}`);

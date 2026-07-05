@@ -2,6 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const sessionId = params.id;
@@ -15,7 +16,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		// ✅ SECURITY: 通常ユーザー（認証済みでゲストではない）の場合、ゲスト移行をスキップ
 		// 通常ユーザーが誤ってゲストリンクを踏んでも、匿名JWTに置き換わらないようにする
 		if (user && user.user_metadata?.is_guest !== true) {
-			console.log('[ゲスト移行] 通常ユーザーのため、ゲスト移行をスキップ');
+			logger.debug('[ゲスト移行] 通常ユーザーのため、ゲスト移行をスキップ');
 			// URLパラメータを削除してリダイレクト
 			throw redirect(303, `/session/${sessionId}`);
 		}
@@ -23,7 +24,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		// ゲストユーザーまたは未認証の場合のみゲスト移行を実行
 		if (!user || user.user_metadata?.guest_identifier !== guestParam) {
 			// まだJWT認証されていない → 自動的にJWT発行
-			console.log('[ゲスト移行] URLパラメータ検出、JWT発行開始:', { guestParam, sessionId });
+			logger.debug('[ゲスト移行] URLパラメータ検出、JWT発行開始:', { guestParam, sessionId });
 
 			// ✅ SECURITY: URLのsessionIdと一致するguest_identifierのみ取得
 			const { data: participant } = await supabase
@@ -37,7 +38,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			if (participant) {
 				// ✅ SECURITY: 念のため、取得したparticipantのsession_idがURLと一致するか確認
 				if (participant.session_id.toString() !== sessionId) {
-					console.error('[ゲスト移行] セッションID不一致:', {
+					logger.error('[ゲスト移行] セッションID不一致:', {
 						urlSessionId: sessionId,
 						participantSessionId: participant.session_id
 					});
@@ -45,7 +46,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				}
 
 				// JWT発行
-				console.log('[ゲスト移行] session_participants取得成功、JWT発行中');
+				logger.debug('[ゲスト移行] session_participants取得成功、JWT発行中');
 				const { error } = await supabase.auth.signInAnonymously({
 					options: {
 						data: {
@@ -58,21 +59,21 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				});
 
 				if (!error) {
-					console.log('[ゲスト移行] JWT発行成功、リダイレクト');
+					logger.debug('[ゲスト移行] JWT発行成功、リダイレクト');
 					// リダイレクト（URLパラメータを削除）
 					throw redirect(303, `/session/${sessionId}`);
 				} else {
-					console.error('[ゲスト移行] JWT発行エラー:', error);
+					logger.error('[ゲスト移行] JWT発行エラー:', error);
 				}
 			} else {
-				console.warn('[ゲスト移行] session_participants が見つかりません:', {
+				logger.warn('[ゲスト移行] session_participants が見つかりません:', {
 					guestParam,
 					sessionId,
 					reason: 'URLのsessionIdと一致するguest_identifierが存在しない'
 				});
 			}
 		} else {
-			console.log('[ゲスト移行] 既にJWT認証済み、URLパラメータを削除してリダイレクト');
+			logger.debug('[ゲスト移行] 既にJWT認証済み、URLパラメータを削除してリダイレクト');
 			// 既にJWT認証済みの場合もURLパラメータを削除
 			throw redirect(303, `/session/${sessionId}`);
 		}
@@ -156,7 +157,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// ただし、ended=trueパラメータがある場合（終了画面表示中）は再開しない
 	const isEndedPage = url.searchParams.get('ended') === 'true';
 	if (isChief && sessionDetails.status === 'ended' && !isEndedPage) {
-		console.log('[Session Page] 主任検定員が終了したセッションを選択 - 自動的に再開します', { sessionId });
+		logger.debug('[Session Page] 主任検定員が終了したセッションを選択 - 自動的に再開します', { sessionId });
 		await supabase
 			.from('sessions')
 			.update({
@@ -170,15 +171,15 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		sessionDetails.status = 'active';
 		sessionDetails.is_active = true;
 		sessionDetails.active_prompt_id = null;
-		console.log('[Session Page] ✅ セッションを自動再開しました');
+		logger.debug('[Session Page] ✅ セッションを自動再開しました');
 	}
 
 	// 研修モードの場合
 	if (sessionDetails.mode === 'training') {
-		console.log('[Session Page Load] ========== 研修モード ==========');
-		console.log('[Session Page Load] sessionId:', sessionId);
-		console.log('[Session Page Load] user:', user?.id || 'guest');
-		console.log('[Session Page Load] guestIdentifier:', guestIdentifier);
+		logger.debug('[Session Page Load] ========== 研修モード ==========');
+		logger.debug('[Session Page Load] sessionId:', sessionId);
+		logger.debug('[Session Page Load] user:', user?.id || 'guest');
+		logger.debug('[Session Page Load] guestIdentifier:', guestIdentifier);
 
 		// 研修セッション情報、種目数、参加者を並列取得（約200ms短縮）
 		const [trainingResult, eventsCountResult, participantsResult] = await Promise.all([
@@ -208,15 +209,15 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		const participants = participantsResult.data;
 		const participantsError = participantsResult.error;
 
-		console.log('[Session Page Load] training_sessions取得結果:', { trainingSession, trainingError });
-		console.log('[Session Page Load] is_multi_judge:', trainingSession?.is_multi_judge);
+		logger.debug('[Session Page Load] training_sessions取得結果:', { trainingSession, trainingError });
+		logger.debug('[Session Page Load] is_multi_judge:', trainingSession?.is_multi_judge);
 
 		if (trainingError) {
 			throw error(500, '研修セッション情報の取得に失敗しました。');
 		}
 
 		if (participantsError) {
-			console.error('Error fetching participants:', participantsError);
+			logger.error('Error fetching participants:', participantsError);
 			throw error(500, '参加者情報の取得に失敗しました。');
 		}
 
@@ -542,11 +543,11 @@ export const actions: Actions = {
 			.eq('id', id);
 
 		if (updateError) {
-			console.error('Error restarting session:', updateError);
+			logger.error('Error restarting session:', updateError);
 			return fail(500, { error: 'セッションの再開に失敗しました。' });
 		}
 
-		console.log('[セッション再開] ✅ セッションを再開しました', { sessionId: id });
+		logger.debug('[セッション再開] ✅ セッションを再開しました', { sessionId: id });
 
 		// 同じページにリダイレクト（終了フラグを削除）
 		// restart=true パラメータを付けて、誤った終了検知を防ぐ

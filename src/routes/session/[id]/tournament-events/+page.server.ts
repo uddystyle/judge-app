@@ -1,6 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { authenticateSession } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
 	const { id: sessionId } = params;
@@ -53,7 +54,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		.order('display_order', { ascending: true });
 
 	if (eventsError) {
-		console.error('Error fetching custom events:', eventsError);
+		logger.error('Error fetching custom events:', eventsError);
 		throw error(500, 'カスタム種目の取得に失敗しました。');
 	}
 

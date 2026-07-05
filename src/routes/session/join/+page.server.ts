@@ -4,6 +4,7 @@ import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { validateName } from '$lib/server/validation';
 import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
+import { logger } from '$lib/server/logger';
 
 export const actions: Actions = {
 	// 'join'アクションは、フォームが送信されたときに呼び出される
@@ -55,7 +56,7 @@ export const actions: Actions = {
 		// anon の sessions 全読み（join_code 漏洩）を塞いだため、join 時点（呼び出し元はまだ非メンバー）の
 		// 参加コード照合は anon クライアントでは読めない。
 		if (!supabaseAdmin) {
-			console.error(
+			logger.error(
 				'[Join Session] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 			);
 			return fail(500, {
@@ -65,17 +66,17 @@ export const actions: Actions = {
 		}
 
 		// 参加コードに一致するセッションをデータベースから検索
-		console.log('[Join Session] 参加コードでセッション検索:', joinCode);
+		logger.debug('[Join Session] 参加コードでセッション検索:', joinCode);
 		const { data: sessionData, error: sessionError } = await supabaseAdmin
 			.from('sessions')
 			.select('id, is_accepting_participants, organization_id, is_locked')
 			.eq('join_code', joinCode)
 			.maybeSingle();
 
-		console.log('[Join Session] セッション検索結果:', { sessionData, error: sessionError });
+		logger.debug('[Join Session] セッション検索結果:', { sessionData, error: sessionError });
 
 		if (sessionError) {
-			console.error('[Join Session] セッション検索エラー:', sessionError);
+			logger.error('[Join Session] セッション検索エラー:', sessionError);
 			return fail(500, { joinCode, error: 'セッションの検索に失敗しました。' });
 		}
 
@@ -85,13 +86,13 @@ export const actions: Actions = {
 			if (!rl.success) {
 				return rl.response;
 			}
-			console.log('[Join Session] 参加コードに一致するセッションが見つかりません');
+			logger.debug('[Join Session] 参加コードに一致するセッションが見つかりません');
 			return fail(404, { joinCode, error: '無効な参加コードです。' });
 		}
 
 		// セッションがロックされているかチェック
 		if (sessionData.is_locked) {
-			console.log('[Join Session] ロックされたセッションへのアクセス試行:', {
+			logger.debug('[Join Session] ロックされたセッションへのアクセス試行:', {
 				sessionId: sessionData.id
 			});
 			return fail(423, {
@@ -113,16 +114,16 @@ export const actions: Actions = {
 		// 検定員数制限チェック（ゲスト・認証ユーザー共通）
 		// ゲストも session_participants に検定員として登録されカウント対象になるため、
 		// ゲスト参加でも有料プランの検定員上限を回避できないよう必ずチェックする
-		console.log('[Join Session] 検定員数制限チェック開始:', {
+		logger.debug('[Join Session] 検定員数制限チェック開始:', {
 			sessionId: sessionData.id,
 			organizationId: sessionData.organization_id,
 			isGuestMode
 		});
 		const judgeCheck = await checkCanAddJudgeToSession(supabaseAdmin, sessionData.id);
-		console.log('[Join Session] 検定員数制限チェック結果:', judgeCheck);
+		logger.debug('[Join Session] 検定員数制限チェック結果:', judgeCheck);
 
 		if (!judgeCheck.allowed) {
-			console.log('[Join Session] 検定員数制限により参加拒否:', judgeCheck.reason);
+			logger.debug('[Join Session] 検定員数制限により参加拒否:', judgeCheck.reason);
 			return fail(403, {
 				joinCode,
 				guestName,
@@ -133,7 +134,7 @@ export const actions: Actions = {
 
 		// ゲストユーザーの場合
 		if (isGuestMode) {
-			console.log('[Join Session] ゲストとして参加:', {
+			logger.debug('[Join Session] ゲストとして参加:', {
 				sessionId: sessionData.id,
 				guestName: guestName.trim()
 			});
@@ -144,7 +145,7 @@ export const actions: Actions = {
 			// 通過した後にのみサーバ側で登録することで、公開anonキーによる
 			// 任意セッションへの参加者注入を防ぐ。
 			if (!supabaseAdmin) {
-				console.error(
+				logger.error(
 					'[Join Session] supabaseAdmin が利用できません（SUPABASE_SERVICE_ROLE_KEY 未設定）'
 				);
 				return fail(500, {
@@ -175,7 +176,7 @@ export const actions: Actions = {
 			});
 
 			if (insertError) {
-				console.error('[Join Session] ゲスト参加者追加エラー:', insertError);
+				logger.error('[Join Session] ゲスト参加者追加エラー:', insertError);
 				return fail(500, {
 					joinCode,
 					guestName,
@@ -184,7 +185,7 @@ export const actions: Actions = {
 			}
 
 			// Step 2: Supabase Anonymous Authでゲスト用JWTを発行
-			console.log('[Join Session] ゲスト用JWT発行開始:', { guestIdentifier });
+			logger.debug('[Join Session] ゲスト用JWT発行開始:', { guestIdentifier });
 			const { data: authData, error: authError } = await supabase.auth.signInAnonymously({
 				options: {
 					data: {
@@ -197,20 +198,20 @@ export const actions: Actions = {
 			});
 
 			if (authError || !authData.session) {
-				console.error('[Join Session] JWT発行エラー:', authError);
+				logger.error('[Join Session] JWT発行エラー:', authError);
 
 				// ⚠️ CRITICAL: JWT発行失敗時は session_participants レコードをロールバック
-				console.log('[Join Session] JWT発行失敗のため、参加者レコードをロールバック中...');
+				logger.debug('[Join Session] JWT発行失敗のため、参加者レコードをロールバック中...');
 				const { error: rollbackError } = await supabaseAdmin
 					.from('session_participants')
 					.delete()
 					.eq('guest_identifier', guestIdentifier);
 
 				if (rollbackError) {
-					console.error('[Join Session] ロールバック失敗:', rollbackError);
+					logger.error('[Join Session] ロールバック失敗:', rollbackError);
 					// ロールバック失敗でも、ユーザーには認証失敗として通知
 				} else {
-					console.log('[Join Session] ロールバック成功');
+					logger.debug('[Join Session] ロールバック成功');
 				}
 
 				return fail(500, {
@@ -220,7 +221,7 @@ export const actions: Actions = {
 				});
 			}
 
-			console.log(
+			logger.debug(
 				'[Join Session] ゲスト参加成功。JWT発行完了。リダイレクト先:',
 				`/session/${sessionData.id}`
 			);
@@ -229,7 +230,7 @@ export const actions: Actions = {
 		}
 
 		// 認証ユーザーの場合
-		console.log('[Join Session] 参加者追加を実行:', {
+		logger.debug('[Join Session] 参加者追加を実行:', {
 			sessionId: sessionData.id,
 			userId: user.id
 		});
@@ -239,12 +240,12 @@ export const actions: Actions = {
 			user_id: user.id
 		});
 
-		console.log('[Join Session] 参加者追加結果:', { error: joinError });
+		logger.debug('[Join Session] 参加者追加結果:', { error: joinError });
 
 		// 23505はunique_violationエラー（既にメンバーである場合）。
 		// このエラーは無視して成功とみなす。それ以外のエラーは失敗として処理。
 		if (joinError && joinError.code !== '23505') {
-			console.error('[Join Session] 参加者追加エラー:', joinError);
+			logger.error('[Join Session] 参加者追加エラー:', joinError);
 			return fail(500, {
 				joinCode,
 				guestName,
@@ -252,7 +253,7 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log('[Join Session] 参加成功。リダイレクト先:', `/session/${sessionData.id}`);
+		logger.debug('[Join Session] 参加成功。リダイレクト先:', `/session/${sessionData.id}`);
 		// 成功したら、セッション待機画面へリダイレクト
 		throw redirect(303, `/session/${sessionData.id}`);
 	}

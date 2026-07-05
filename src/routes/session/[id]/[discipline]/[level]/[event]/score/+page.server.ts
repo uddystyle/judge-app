@@ -9,6 +9,7 @@ import {
 	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const { id: sessionId } = params;
@@ -29,7 +30,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		.single();
 
 	if (sessionError) {
-		console.error('Failed to fetch session details:', sessionError);
+		logger.error('Failed to fetch session details:', sessionError);
 		return {
 			isChief: false,
 			isMultiJudge: false
@@ -61,27 +62,27 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 
 export const actions: Actions = {
 	submitScore: async ({ request, params, url, locals: { supabase } }) => {
-		console.log('[submitScore/inspection] Action called');
+		logger.debug('[submitScore/inspection] Action called');
 
 		const guestIdentifier = url.searchParams.get('guest');
-		console.log('[submitScore/inspection] Guest identifier from URL:', guestIdentifier);
+		logger.debug('[submitScore/inspection] Guest identifier from URL:', guestIdentifier);
 
 		// セッション認証
 		const authResult = await authenticateAction(supabase, params.id, guestIdentifier);
 
 		if (!authResult) {
-			console.error('[submitScore/inspection] Authentication failed');
+			logger.error('[submitScore/inspection] Authentication failed');
 			return fail(401, { error: '認証が必要です。' });
 		}
 
 		const { user, guestParticipant } = authResult;
-		console.log('[submitScore/inspection] User check:', {
+		logger.debug('[submitScore/inspection] User check:', {
 			hasUser: !!user,
 			hasGuest: !!guestParticipant
 		});
 
 		if (guestParticipant) {
-			console.log('[submitScore/inspection] Guest authenticated:', guestParticipant.guest_name);
+			logger.debug('[submitScore/inspection] Guest authenticated:', guestParticipant.guest_name);
 		}
 
 		const formData = await request.formData();
@@ -90,7 +91,7 @@ export const actions: Actions = {
 
 		const { id: sessionId, discipline, level, event: eventName } = params;
 
-		console.log('[submitScore/inspection] Score submission (raw):', {
+		logger.debug('[submitScore/inspection] Score submission (raw):', {
 			scoreRaw,
 			bibRaw,
 			sessionId,
@@ -109,7 +110,7 @@ export const actions: Actions = {
 		// 1. bib のバリデーション
 		const bibResult = validateBib(bibRaw);
 		if (!bibResult.success) {
-			console.error('[submitScore/inspection] bib が不正:', bibRaw);
+			logger.error('[submitScore/inspection] bib が不正:', bibRaw);
 			return fail(400, { error: bibResult.error });
 		}
 		const bib = bibResult.value;
@@ -117,7 +118,7 @@ export const actions: Actions = {
 		// 2. score のバリデーション
 		const scoreResult = validateScoreInput(scoreRaw);
 		if (!scoreResult.success) {
-			console.error('[submitScore/inspection] score が不正:', scoreRaw);
+			logger.error('[submitScore/inspection] score が不正:', scoreRaw);
 			return fail(400, { error: scoreResult.error });
 		}
 		const score = scoreResult.value;
@@ -135,7 +136,7 @@ export const actions: Actions = {
 				String(activePrompt.level) !== String(level) ||
 				String(activePrompt.event_name) !== String(eventName)
 			) {
-				console.error('[submitScore/inspection] 主任指定外の bib/種目への採点を拒否:', {
+				logger.error('[submitScore/inspection] 主任指定外の bib/種目への採点を拒否:', {
 					bib,
 					discipline,
 					level,
@@ -159,7 +160,7 @@ export const actions: Actions = {
 			participant = existingParticipant;
 		} else {
 			// 検定モードでは参加者が事前登録されていない場合、自動作成する
-			console.log('[submitScore/inspection] 参加者が存在しないため自動作成:', { sessionId, bib });
+			logger.debug('[submitScore/inspection] 参加者が存在しないため自動作成:', { sessionId, bib });
 			const { data: newParticipant, error: createError } = await supabase
 				.from('participants')
 				.insert({
@@ -171,7 +172,7 @@ export const actions: Actions = {
 				.single();
 
 			if (createError || !newParticipant) {
-				console.error('[submitScore/inspection] 参加者の自動作成に失敗:', createError);
+				logger.error('[submitScore/inspection] 参加者の自動作成に失敗:', createError);
 				return fail(500, {
 					error: '参加者の登録に失敗しました。'
 				});
@@ -179,7 +180,7 @@ export const actions: Actions = {
 			participant = newParticipant;
 		}
 
-		console.log('[submitScore/inspection] 参加者確認成功:', participant);
+		logger.debug('[submitScore/inspection] 参加者確認成功:', participant);
 
 		// 4. 得点範囲チェック（検定モードは0～99の固定範囲）
 		const minScore = 0;
@@ -187,21 +188,21 @@ export const actions: Actions = {
 
 		const rangeResult = validateScoreRange(score, minScore, maxScore);
 		if (!rangeResult.success) {
-			console.error('[submitScore/inspection] 得点範囲外:', { score, minScore, maxScore });
+			logger.error('[submitScore/inspection] 得点範囲外:', { score, minScore, maxScore });
 			return fail(400, { error: rangeResult.error });
 		}
 
-		console.log('[submitScore/inspection] バリデーション完了。得点を保存します。');
+		logger.debug('[submitScore/inspection] バリデーション完了。得点を保存します。');
 
 		// 検定員名を取得（通常ユーザーまたはゲストユーザー）
 		const judgeName = await getJudgeName(supabase, user, guestParticipant);
 		if (!judgeName) {
-			console.error('[submitScore/inspection] Neither user nor guest found!');
+			logger.error('[submitScore/inspection] Neither user nor guest found!');
 			return fail(401, { error: '認証が必要です。' });
 		}
-		console.log('[submitScore/inspection] Using judge name:', judgeName);
+		logger.debug('[submitScore/inspection] Using judge name:', judgeName);
 
-		console.log('[submitScore/inspection] Inserting result:', {
+		logger.debug('[submitScore/inspection] Inserting result:', {
 			session_id: sessionId,
 			bib,
 			score,
@@ -273,11 +274,11 @@ export const actions: Actions = {
 			});
 		}
 		if (resultSaveError) {
-			console.error('[submitScore/inspection] Error saving score:', resultSaveError);
+			logger.error('[submitScore/inspection] Error saving score:', resultSaveError);
 			return fail(500, { error: '採点の保存に失敗しました。時間をおいて再度お試しください。' });
 		}
 
-		console.log('[submitScore/inspection] Score saved successfully');
+		logger.debug('[submitScore/inspection] Score saved successfully');
 
 		return {
 			success: true,

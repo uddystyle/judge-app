@@ -1,6 +1,7 @@
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { authenticateSession } from '$lib/server/sessionAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const { id: sessionId } = params;
@@ -110,7 +111,7 @@ export const actions: Actions = {
 			.eq('id', params.id);
 
 		if (updateError) {
-			console.error('Error updating scoring method:', updateError);
+			logger.error('Error updating scoring method:', updateError);
 			return fail(500, { error: '採点方式の更新に失敗しました。' });
 		}
 

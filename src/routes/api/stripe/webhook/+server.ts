@@ -9,6 +9,7 @@ import {
 import { findPlanTypeByPriceId } from '$lib/server/plans';
 import { createClient } from '@supabase/supabase-js';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { logger } from '$lib/server/logger';
 
 // Service Role Keyを使用してSupabaseクライアントを作成（RLSをバイパス）
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -47,7 +48,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const signature = request.headers.get('stripe-signature');
 
 	if (!signature) {
-		console.error('[Webhook] Stripe署名がありません');
+		logger.error('[Webhook] Stripe署名がありません');
 		throw error(400, 'Stripe署名がありません。');
 	}
 
@@ -60,9 +61,9 @@ export const POST: RequestHandler = async ({ request }) => {
 		// 2. Webhook署名を検証
 		event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
 
-		console.log('[Webhook] イベント受信:', event.type, 'ID:', event.id);
+		logger.debug('[Webhook] イベント受信:', event.type, 'ID:', event.id);
 	} catch (err: any) {
-		console.error('[Webhook] 署名検証エラー:', err.message);
+		logger.error('[Webhook] 署名検証エラー:', err.message);
 		throw error(400, `Webhook署名検証エラー: ${err.message}`);
 	}
 
@@ -76,7 +77,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			const envType = expectedLivemode ? '本番' : 'テスト';
 			const eventType = eventLivemode ? '本番' : 'テスト';
 			// 構成ミス検知のため高重大度で記録（warn ではなく error）
-			console.error(
+			logger.error(
 				`[Webhook] T14: livemode不一致を検出 - 環境: ${envType}, イベント: ${eventType}, event.id: ${event.id}`
 			);
 			// TODO: 監視アラート（Sentry等）を送信
@@ -92,19 +93,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			// 逆方向（本番環境にテストイベント）は無害なのでスキップ（200で再送させない）
-			console.warn('[Webhook] T14: 本番環境のテストイベントをスキップします');
+			logger.warn('[Webhook] T14: 本番環境のテストイベントをスキップします');
 			return json({ received: true, skipped: true, reason: 'livemode_mismatch' });
 		}
 	}
 
 	// 3. イベントタイプに応じて処理
 	try {
-		console.log('[Webhook] 処理開始 - イベントタイプ:', event.type);
+		logger.debug('[Webhook] 処理開始 - イベントタイプ:', event.type);
 		switch (event.type) {
 			case 'checkout.session.completed': {
 				const session = event.data.object as any;
-				console.log('[Webhook] checkout.session.completed - Session ID:', session.id);
-				console.log('[Webhook] Metadata:', session.metadata);
+				logger.debug('[Webhook] checkout.session.completed - Session ID:', session.id);
+				logger.debug('[Webhook] Metadata:', session.metadata);
 				await handleCheckoutCompleted(session);
 				break;
 			}
@@ -140,25 +141,25 @@ export const POST: RequestHandler = async ({ request }) => {
 			}
 
 			default:
-				console.log('[Webhook] 未処理のイベントタイプ:', event.type);
+				logger.debug('[Webhook] 未処理のイベントタイプ:', event.type);
 		}
 
 		return json({ received: true });
 	} catch (err: any) {
-		console.error('[Webhook] イベント処理エラー:', err);
+		logger.error('[Webhook] イベント処理エラー:', err);
 
 		// エラーの種類に応じて適切なHTTPステータスコードを返す
 		if (err instanceof NonRetryableError) {
 			// 400番台: リトライ不要なエラー（データ不正、必須データなしなど）
-			console.error('[Webhook] リトライ不要なエラー:', err.message);
+			logger.error('[Webhook] リトライ不要なエラー:', err.message);
 			throw error(400, `リトライ不要なエラー: ${err.message}`);
 		} else if (err instanceof RetryableError) {
 			// 500番台: リトライすべきエラー（DB障害、Stripe API障害など）
-			console.error('[Webhook] リトライ可能なエラー:', err.message);
+			logger.error('[Webhook] リトライ可能なエラー:', err.message);
 			throw error(500, `リトライ可能なエラー: ${err.message}`);
 		} else {
 			// デフォルト: 不明なエラーは500を返す（安全側に倒す）
-			console.error('[Webhook] 不明なエラー:', err.message);
+			logger.error('[Webhook] 不明なエラー:', err.message);
 			throw error(500, `イベント処理エラー: ${err.message}`);
 		}
 	}
@@ -173,7 +174,7 @@ export const POST: RequestHandler = async ({ request }) => {
  * 新規サブスクリプション登録成功時
  */
 async function handleCheckoutCompleted(session: any) {
-	console.log('[Webhook] Checkout完了:', session.id);
+	logger.debug('[Webhook] Checkout完了:', session.id);
 
 	const userId = session.metadata?.user_id;
 	const customerId = session.customer;
@@ -183,20 +184,20 @@ async function handleCheckoutCompleted(session: any) {
 	// 必須データの検証（リトライ不要なエラー）
 	if (!userId || !customerId) {
 		const errMsg = 'user_idまたはcustomer_idが見つかりません';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new NonRetryableError(errMsg);
 	}
 
 	if (!subscriptionId) {
 		const errMsg = 'Subscription IDが見つかりません';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new NonRetryableError(errMsg);
 	}
 
 	// is_organization の検証（T1）
 	if (!isOrganizationStr || (isOrganizationStr !== 'true' && isOrganizationStr !== 'false')) {
 		const errMsg = 'is_organizationは"true"または"false"である必要があります';
-		console.error('[Webhook]', errMsg, '値:', isOrganizationStr);
+		logger.error('[Webhook]', errMsg, '値:', isOrganizationStr);
 		throw new NonRetryableError(errMsg);
 	}
 
@@ -207,8 +208,8 @@ async function handleCheckoutCompleted(session: any) {
 	try {
 		subscription = await stripe.subscriptions.retrieve(subscriptionId);
 	} catch (err: any) {
-		console.error('[Webhook] Stripe API エラー:', err.message);
-		console.error('[Webhook] Subscription ID:', subscriptionId);
+		logger.error('[Webhook] Stripe API エラー:', err.message);
+		logger.error('[Webhook] Subscription ID:', subscriptionId);
 		throw new RetryableError(`Stripe API呼び出しエラー: ${err.message}`);
 	}
 
@@ -220,14 +221,14 @@ async function handleCheckoutCompleted(session: any) {
 		// T10: Stripe Subscriptionレスポンスの異常データ検証
 		if (!subscription.items?.data || subscription.items.data.length === 0) {
 			const errMsg = 'subscription.items.dataが空です';
-			console.error('[Webhook]', errMsg);
+			logger.error('[Webhook]', errMsg);
 			throw new RetryableError(errMsg);
 		}
 
 		const item = subscription.items.data[0];
 		if (!item.price || !item.price.id) {
 			const errMsg = 'subscription.items.data[0].priceが見つかりません';
-			console.error('[Webhook]', errMsg);
+			logger.error('[Webhook]', errMsg);
 			throw new RetryableError(errMsg);
 		}
 
@@ -235,7 +236,7 @@ async function handleCheckoutCompleted(session: any) {
 		const planType = getPlanTypeFromPrice(priceId);
 		const billingInterval = item.price.recurring?.interval || 'month';
 
-		console.log('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
+		logger.debug('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
 
 		const { error: upsertError } = await supabaseAdmin
 			.from('subscriptions')
@@ -255,11 +256,11 @@ async function handleCheckoutCompleted(session: any) {
 			);
 
 		if (upsertError) {
-			console.error('[Webhook] subscriptions更新エラー:', upsertError);
+			logger.error('[Webhook] subscriptions更新エラー:', upsertError);
 			throw new RetryableError(`データベース更新エラー: ${upsertError.message}`);
 		}
 
-		console.log('[Webhook] subscriptions更新成功:', userId, planType);
+		logger.debug('[Webhook] subscriptions更新成功:', userId, planType);
 	}
 }
 
@@ -278,7 +279,7 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	// 必須データの検証（リトライ不要なエラー）
 	if (!organizationName) {
 		const errMsg = 'organization_nameが見つかりません';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new NonRetryableError(errMsg);
 	}
 
@@ -286,14 +287,14 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	const maxMembers = parseInt(maxMembersStr);
 	if (isNaN(maxMembers) || maxMembers <= 0) {
 		const errMsg = 'max_membersは正の整数である必要があります';
-		console.error('[Webhook]', errMsg, '値:', maxMembersStr);
+		logger.error('[Webhook]', errMsg, '値:', maxMembersStr);
 		throw new NonRetryableError(errMsg);
 	}
 
 	// is_upgrade の検証（T1）
 	if (isUpgradeStr && isUpgradeStr !== 'true' && isUpgradeStr !== 'false') {
 		const errMsg = 'is_upgradeは"true"または"false"である必要があります';
-		console.error('[Webhook]', errMsg, '値:', isUpgradeStr);
+		logger.error('[Webhook]', errMsg, '値:', isUpgradeStr);
 		throw new NonRetryableError(errMsg);
 	}
 
@@ -302,7 +303,7 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	// T9: is_upgrade=trueの場合はorganization_idが必須
 	if (isUpgrade && !organizationId) {
 		const errMsg = 'is_upgrade=trueの場合はorganization_idが必須です';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new NonRetryableError(errMsg);
 	}
 
@@ -310,14 +311,14 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	// T10: Stripe Subscriptionレスポンスの異常データ検証
 	if (!subscription.items?.data || subscription.items.data.length === 0) {
 		const errMsg = 'subscription.items.dataが空です';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
 	const item = subscription.items.data[0];
 	if (!item.price || !item.price.id) {
 		const errMsg = 'subscription.items.data[0].priceが見つかりません';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
@@ -325,13 +326,13 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	const planType = getPlanTypeFromPrice(priceId);
 	const billingInterval = item.price.recurring?.interval || 'month';
 
-	console.log('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
+	logger.debug('[Webhook] Price ID:', priceId, '→ プランタイプ:', planType, '課金間隔:', billingInterval);
 
 	try {
 		// アップグレードの場合
 		if (isUpgrade && organizationId) {
-			console.log('[Webhook] 組織アップグレード開始:', organizationId);
-			console.log('[Webhook] プランタイプ:', planType, '最大メンバー:', maxMembers);
+			logger.debug('[Webhook] 組織アップグレード開始:', organizationId);
+			logger.debug('[Webhook] プランタイプ:', planType, '最大メンバー:', maxMembers);
 
 			// 1. 古いサブスクリプションのorganization_idをクリア（UNIQUE制約違反を回避）
 			// 新しいサブスクリプション以外のアクティブなサブスクリプションをクリア
@@ -346,11 +347,11 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				.neq('stripe_subscription_id', subscriptionId);
 
 			if (oldSubClearError) {
-				console.error('[Webhook] 古いサブスクリプションのクリアエラー:', oldSubClearError);
+				logger.error('[Webhook] 古いサブスクリプションのクリアエラー:', oldSubClearError);
 				throw new RetryableError(`古いサブスクリプションのクリアエラー: ${oldSubClearError.message}`);
 			}
 
-			console.log('[Webhook] 古いサブスクリプションをクリアしました');
+			logger.debug('[Webhook] 古いサブスクリプションをクリアしました');
 
 			// 2. 組織を更新
 			const { error: orgError } = await supabaseAdmin
@@ -364,11 +365,11 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				.eq('id', organizationId);
 
 			if (orgError) {
-				console.error('[Webhook] 組織更新エラー:', orgError);
+				logger.error('[Webhook] 組織更新エラー:', orgError);
 				throw new RetryableError(`組織更新エラー: ${orgError.message}`);
 			}
 
-			console.log('[Webhook] 組織更新成功:', organizationId, 'plan_type:', planType);
+			logger.debug('[Webhook] 組織更新成功:', organizationId, 'plan_type:', planType);
 
 			// 3. 新しいサブスクリプションをUPSERT（UNIQUE制約違反なし）
 			const { error: subError } = await supabaseAdmin
@@ -393,7 +394,7 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				);
 
 			if (subError) {
-				console.error('[Webhook] subscription作成エラー:', subError);
+				logger.error('[Webhook] subscription作成エラー:', subError);
 				throw new RetryableError(`subscription作成エラー: ${subError.message}`);
 			}
 
@@ -410,7 +411,7 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 			if (!['active', 'trialing'].includes(subscription.status)) {
 				// 監視で検知できるよう高重大度で記録（決済確定後、旧サブスクは二重課金状態のため
 				// 手動解約が必要になり得る。JPYサブスクは実質カードのみのため発生確率は極めて低い）
-				console.error(
+				logger.error(
 					'[Webhook] SEC-1b: 新サブスクリプションが未確定のため旧サブスクリプション解約をスキップ:',
 					subscriptionId,
 					'status:',
@@ -421,7 +422,7 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				try {
 					oldStripeSubs = await stripe.subscriptions.list({ customer: customerId, limit: 100 });
 				} catch (err: any) {
-					console.error('[Webhook] 旧サブスクリプション一覧取得エラー:', err.message);
+					logger.error('[Webhook] 旧サブスクリプション一覧取得エラー:', err.message);
 					throw new RetryableError(`旧サブスクリプション一覧取得エラー: ${err.message}`);
 				}
 
@@ -430,23 +431,23 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 					if (oldSub.status === 'canceled') continue;
 					try {
 						await stripe.subscriptions.cancel(oldSub.id);
-						console.log('[Webhook] 旧サブスクリプションをStripeで解約:', oldSub.id);
+						logger.debug('[Webhook] 旧サブスクリプションをStripeで解約:', oldSub.id);
 					} catch (err: any) {
 						if (err?.code === 'resource_missing') {
-							console.log('[Webhook] 旧サブスクリプションは既に存在しません:', oldSub.id);
+							logger.debug('[Webhook] 旧サブスクリプションは既に存在しません:', oldSub.id);
 							continue;
 						}
-						console.error('[Webhook] 旧サブスクリプション解約エラー:', oldSub.id, err.message);
+						logger.error('[Webhook] 旧サブスクリプション解約エラー:', oldSub.id, err.message);
 						throw new RetryableError(`旧サブスクリプション解約エラー: ${err.message}`);
 					}
 				}
 			}
 
-			console.log('[Webhook] 組織アップグレード完了:', organizationId);
+			logger.debug('[Webhook] 組織アップグレード完了:', organizationId);
 		}
 		// 新規作成の場合
 		else {
-			console.log('[Webhook] 組織作成開始:', organizationName);
+			logger.debug('[Webhook] 組織作成開始:', organizationName);
 
 			// 1. 組織を作成または取得（べき等性確保のためUPSERT使用）
 			// stripe_subscription_idがユニーク制約のため、Webhook再送時は既存組織を取得
@@ -469,11 +470,11 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				.single();
 
 			if (orgError) {
-				console.error('[Webhook] 組織作成/取得エラー:', orgError);
+				logger.error('[Webhook] 組織作成/取得エラー:', orgError);
 				throw new RetryableError(`組織作成/取得エラー: ${orgError.message}`);
 			}
 
-			console.log('[Webhook] 組織作成/取得成功:', organization.id);
+			logger.debug('[Webhook] 組織作成/取得成功:', organization.id);
 
 			// 2. 作成者を管理者としてメンバーに追加（べき等性確保のためUPSERT使用）
 			// organization_id + user_idがユニーク制約のため、Webhook再送時は既存メンバーを更新
@@ -492,12 +493,12 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				);
 
 			if (memberError) {
-				console.error('[Webhook] メンバー追加エラー:', memberError);
-				console.error('[Webhook] エラー詳細:', JSON.stringify(memberError, null, 2));
+				logger.error('[Webhook] メンバー追加エラー:', memberError);
+				logger.error('[Webhook] エラー詳細:', JSON.stringify(memberError, null, 2));
 				// メンバー追加失敗は致命的ではないので、警告のみでエラーを投げない
-				console.warn('[Webhook] メンバー追加に失敗しましたが処理を継続します');
+				logger.warn('[Webhook] メンバー追加に失敗しましたが処理を継続します');
 			} else {
-				console.log('[Webhook] 管理者メンバー追加成功:', userId);
+				logger.debug('[Webhook] 管理者メンバー追加成功:', userId);
 			}
 
 			// 3. subscriptionsテーブルに組織情報を保存（べき等性確保のためUPSERT使用）
@@ -524,15 +525,15 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 				);
 
 			if (subError) {
-				console.error('[Webhook] subscription作成/更新エラー:', subError);
-				console.error('[Webhook] エラー詳細:', JSON.stringify(subError, null, 2));
+				logger.error('[Webhook] subscription作成/更新エラー:', subError);
+				logger.error('[Webhook] エラー詳細:', JSON.stringify(subError, null, 2));
 				throw new RetryableError(`subscription作成/更新エラー: ${subError.message}`);
 			}
 
-			console.log('[Webhook] 組織向けサブスクリプション作成/更新完了:', organization.id);
+			logger.debug('[Webhook] 組織向けサブスクリプション作成/更新完了:', organization.id);
 		}
 	} catch (err: any) {
-		console.error('[Webhook] 組織処理でエラー:', err);
+		logger.error('[Webhook] 組織処理でエラー:', err);
 		// 既にカスタムエラーの場合はそのまま再throw
 		if (err instanceof NonRetryableError || err instanceof RetryableError) {
 			throw err;
@@ -568,7 +569,7 @@ function getInvoiceSubscriptionId(invoice: any): string | null {
  * サブスクリプション作成時（checkoutの後に来る）
  */
 async function handleSubscriptionCreated(subscription: any) {
-	console.log('[Webhook] Subscription作成:', subscription.id);
+	logger.debug('[Webhook] Subscription作成:', subscription.id);
 
 	const customerId = subscription.customer;
 
@@ -584,22 +585,22 @@ async function handleSubscriptionCreated(subscription: any) {
 		// 先に届くと subscriptions 行がまだ存在しない。NonRetryable(400) だと Stripe が再送せず
 		// イベントが恒久的にドロップされるため、Retryable(500) にして行が作られるまで再送させる。
 		const errMsg = `Customer ID: ${customerId} のsubscriptionが見つかりません`;
-		console.error('[Webhook] subscription取得エラー:', fetchError);
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook] subscription取得エラー:', fetchError);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
 	// T10/T11: Stripe Subscriptionレスポンスの異常データ検証
 	if (!subscription.items?.data || subscription.items.data.length === 0) {
 		const errMsg = 'subscription.items.dataが空です';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
 	const item = subscription.items.data[0];
 	if (!item.price || !item.price.id) {
 		const errMsg = 'subscription.items.data[0].priceが見つかりません';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
@@ -630,11 +631,11 @@ async function handleSubscriptionCreated(subscription: any) {
 		.eq('stripe_subscription_id', subscription.id);
 
 	if (updateError) {
-		console.error('[Webhook] subscriptions更新エラー:', updateError);
+		logger.error('[Webhook] subscriptions更新エラー:', updateError);
 		throw new RetryableError(`subscriptions更新エラー: ${updateError.message}`);
 	}
 
-	console.log('[Webhook] subscriptions更新成功:', subData.user_id, planType);
+	logger.debug('[Webhook] subscriptions更新成功:', subData.user_id, planType);
 
 	// 2. organizationIdが存在する場合のみorganizationsテーブルを更新
 	if (subData.organization_id) {
@@ -647,8 +648,8 @@ async function handleSubscriptionCreated(subscription: any) {
 
 		if (planLimitsError) {
 			const errMsg = `プランタイプ: ${planType} のplan_limitsが見つかりません`;
-			console.error('[Webhook] plan_limits取得エラー:', planLimitsError);
-			console.error('[Webhook]', errMsg);
+			logger.error('[Webhook] plan_limits取得エラー:', planLimitsError);
+			logger.error('[Webhook]', errMsg);
 			throw new NonRetryableError(errMsg);
 		}
 
@@ -665,12 +666,12 @@ async function handleSubscriptionCreated(subscription: any) {
 			.eq('id', subData.organization_id);
 
 		if (orgUpdateError) {
-			console.error('[Webhook] organizations更新エラー:', orgUpdateError);
-			console.error('[Webhook] Organization ID:', subData.organization_id);
+			logger.error('[Webhook] organizations更新エラー:', orgUpdateError);
+			logger.error('[Webhook] Organization ID:', subData.organization_id);
 			throw new RetryableError(`organizations更新エラー: ${orgUpdateError.message}`);
 		}
 
-		console.log(
+		logger.debug(
 			'[Webhook] organizations更新成功:',
 			subData.organization_id,
 			'plan_type:',
@@ -679,7 +680,7 @@ async function handleSubscriptionCreated(subscription: any) {
 			maxMembers
 		);
 	} else {
-		console.log(
+		logger.debug(
 			'[Webhook] organization_idが存在しないため、organizationsテーブルは更新しません（個人向けサブスクリプション）'
 		);
 	}
@@ -690,19 +691,19 @@ async function handleSubscriptionCreated(subscription: any) {
  * プラン変更時
  */
 async function handleSubscriptionUpdated(subscription: any) {
-	console.log('[Webhook] Subscription更新:', subscription.id);
+	logger.debug('[Webhook] Subscription更新:', subscription.id);
 
 	// T11: Stripe Subscriptionレスポンスの異常データ検証（T10と同様）
 	if (!subscription.items?.data || subscription.items.data.length === 0) {
 		const errMsg = 'subscription.items.dataが空です';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
 	const item = subscription.items.data[0];
 	if (!item.price || !item.price.id) {
 		const errMsg = 'subscription.items.data[0].priceが見つかりません';
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
@@ -730,8 +731,8 @@ async function handleSubscriptionUpdated(subscription: any) {
 		// 先に届くと該当行がまだ存在しない。NonRetryable(400) だと Stripe が再送せず恒久ドロップに
 		// なるため、Retryable(500) にして行が作られるまで再送させる。
 		const errMsg = `Subscription ID: ${subscription.id} が見つかりません`;
-		console.error('[Webhook] subscription取得エラー:', fetchError);
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook] subscription取得エラー:', fetchError);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 
@@ -745,9 +746,9 @@ async function handleSubscriptionUpdated(subscription: any) {
 		const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
 
 		if (eventPeriodEndTime < currentPeriodEnd) {
-			console.log('[Webhook] 古いイベントを検出 - 更新をスキップ');
-			console.log('[Webhook] 現在のcurrent_period_end:', subscriptionData.current_period_end);
-			console.log('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+			logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
+			logger.debug('[Webhook] 現在のcurrent_period_end:', subscriptionData.current_period_end);
+			logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
 			return; // T13: 古いイベントはスキップ
 		}
 
@@ -759,7 +760,7 @@ async function handleSubscriptionUpdated(subscription: any) {
 			subscriptionData.plan_type === planType &&
 			subscriptionData.billing_interval === billingInterval
 		) {
-			console.log('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
+			logger.debug('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
 			return;
 		}
 	}
@@ -778,11 +779,11 @@ async function handleSubscriptionUpdated(subscription: any) {
 		.eq('stripe_subscription_id', subscription.id);
 
 	if (updateError) {
-		console.error('[Webhook] subscriptions更新エラー:', updateError);
+		logger.error('[Webhook] subscriptions更新エラー:', updateError);
 		throw new RetryableError(`subscriptions更新エラー: ${updateError.message}`);
 	}
 
-	console.log('[Webhook] subscriptions更新成功:', subscription.id, planType);
+	logger.debug('[Webhook] subscriptions更新成功:', subscription.id, planType);
 
 	// 3. organizationIdが存在する場合のみorganizationsテーブルを更新
 	if (organizationId) {
@@ -801,8 +802,8 @@ async function handleSubscriptionUpdated(subscription: any) {
 
 		if (planLimitsError) {
 			const errMsg = `プランタイプ: ${effectivePlanType} のplan_limitsが見つかりません`;
-			console.error('[Webhook] plan_limits取得エラー:', planLimitsError);
-			console.error('[Webhook]', errMsg);
+			logger.error('[Webhook] plan_limits取得エラー:', planLimitsError);
+			logger.error('[Webhook]', errMsg);
 			throw new NonRetryableError(errMsg);
 		}
 
@@ -818,14 +819,14 @@ async function handleSubscriptionUpdated(subscription: any) {
 			.eq('id', organizationId);
 
 		if (orgUpdateError) {
-			console.error('[Webhook] organizations更新エラー:', orgUpdateError);
-			console.error('[Webhook] Organization ID:', organizationId);
+			logger.error('[Webhook] organizations更新エラー:', orgUpdateError);
+			logger.error('[Webhook] Organization ID:', organizationId);
 			throw new RetryableError(`organizations更新エラー: ${orgUpdateError.message}`);
 		}
 
-		console.log('[Webhook] organizations更新成功:', organizationId, 'plan_type:', planType, 'max_members:', maxMembers);
+		logger.debug('[Webhook] organizations更新成功:', organizationId, 'plan_type:', planType, 'max_members:', maxMembers);
 	} else {
-		console.log('[Webhook] organization_idが存在しないため、organizationsテーブルは更新しません（個人向けサブスクリプション）');
+		logger.debug('[Webhook] organization_idが存在しないため、organizationsテーブルは更新しません（個人向けサブスクリプション）');
 	}
 }
 
@@ -834,7 +835,7 @@ async function handleSubscriptionUpdated(subscription: any) {
  * サブスクリプションキャンセル時
  */
 async function handleSubscriptionDeleted(subscription: any) {
-	console.log('[Webhook] Subscriptionキャンセル:', subscription.id);
+	logger.debug('[Webhook] Subscriptionキャンセル:', subscription.id);
 
 	// 1. subscriptionsテーブルから組織IDを取得（削除前に取得）
 	const { data: subscriptionData, error: fetchError } = await supabaseAdmin
@@ -847,11 +848,11 @@ async function handleSubscriptionDeleted(subscription: any) {
 		// サブスクリプションが見つからない場合は、既に削除済みの可能性がある
 		// （例: 組織削除処理で先にsubscriptionsレコードが削除された場合）
 		// エラーを投げずに正常終了する
-		console.log('[Webhook] サブスクリプションが見つかりません（既に削除済みの可能性）:', subscription.id);
+		logger.debug('[Webhook] サブスクリプションが見つかりません（既に削除済みの可能性）:', subscription.id);
 		if (fetchError) {
-			console.log('[Webhook] fetchError:', fetchError.message);
+			logger.debug('[Webhook] fetchError:', fetchError.message);
 		}
-		console.log('[Webhook] 処理をスキップします');
+		logger.debug('[Webhook] 処理をスキップします');
 		return;
 	}
 
@@ -869,11 +870,11 @@ async function handleSubscriptionDeleted(subscription: any) {
 		.eq('stripe_subscription_id', subscription.id);
 
 	if (updateError) {
-		console.error('[Webhook] subscriptions更新エラー:', updateError);
+		logger.error('[Webhook] subscriptions更新エラー:', updateError);
 		throw new RetryableError(`subscriptions更新エラー: ${updateError.message}`);
 	}
 
-	console.log('[Webhook] subscriptionsをフリープランに降格:', subscription.id);
+	logger.debug('[Webhook] subscriptionsをフリープランに降格:', subscription.id);
 
 	// 3. organizationIdが存在する場合のみorganizationsテーブルを更新
 	if (organizationId) {
@@ -885,14 +886,14 @@ async function handleSubscriptionDeleted(subscription: any) {
 			.single();
 
 		if (orgFetchError) {
-			console.error('[Webhook] 組織情報取得エラー:', orgFetchError);
+			logger.error('[Webhook] 組織情報取得エラー:', orgFetchError);
 			throw new RetryableError(`組織情報取得エラー: ${orgFetchError.message}`);
 		}
 
 		// 削除されたサブスクリプションが組織の現在のサブスクリプションと一致する場合のみ降格
 		// アップグレード時は古いサブスクリプションが削除されるが、組織は新しいサブスクリプションを使用している
 		if (currentOrg?.stripe_subscription_id === subscription.id) {
-			console.log('[Webhook] 削除されたサブスクリプションは組織の現在のサブスクリプションです。フリープランに降格します。');
+			logger.debug('[Webhook] 削除されたサブスクリプションは組織の現在のサブスクリプションです。フリープランに降格します。');
 
 			// plan_limitsからフリープランのmax_membersを取得
 			const { data: planLimits, error: planLimitsError } = await supabaseAdmin
@@ -903,8 +904,8 @@ async function handleSubscriptionDeleted(subscription: any) {
 
 			if (planLimitsError) {
 				const errMsg = 'フリープランのplan_limitsが見つかりません';
-				console.error('[Webhook] plan_limits取得エラー:', planLimitsError);
-				console.error('[Webhook]', errMsg);
+				logger.error('[Webhook] plan_limits取得エラー:', planLimitsError);
+				logger.error('[Webhook]', errMsg);
 				throw new NonRetryableError(errMsg);
 			}
 
@@ -922,19 +923,19 @@ async function handleSubscriptionDeleted(subscription: any) {
 				.eq('id', organizationId);
 
 			if (orgUpdateError) {
-				console.error('[Webhook] organizations更新エラー:', orgUpdateError);
-				console.error('[Webhook] Organization ID:', organizationId);
+				logger.error('[Webhook] organizations更新エラー:', orgUpdateError);
+				logger.error('[Webhook] Organization ID:', organizationId);
 				throw new RetryableError(`organizations更新エラー: ${orgUpdateError.message}`);
 			}
 
-			console.log('[Webhook] organizations更新成功 - フリープランに降格:', { organizationId, max_members: maxMembers, stripe_subscription_id: 'cleared' });
+			logger.debug('[Webhook] organizations更新成功 - フリープランに降格:', { organizationId, max_members: maxMembers, stripe_subscription_id: 'cleared' });
 		} else {
-			console.log('[Webhook] 削除されたサブスクリプションは古いものです（アップグレード時の旧サブスクリプション）。組織は更新しません。');
-			console.log('[Webhook] 組織の現在のサブスクリプション:', currentOrg?.stripe_subscription_id);
-			console.log('[Webhook] 削除されたサブスクリプション:', subscription.id);
+			logger.debug('[Webhook] 削除されたサブスクリプションは古いものです（アップグレード時の旧サブスクリプション）。組織は更新しません。');
+			logger.debug('[Webhook] 組織の現在のサブスクリプション:', currentOrg?.stripe_subscription_id);
+			logger.debug('[Webhook] 削除されたサブスクリプション:', subscription.id);
 		}
 	} else {
-		console.log('[Webhook] organization_idが存在しないため、organizationsテーブルは更新しません（個人向けサブスクリプション）');
+		logger.debug('[Webhook] organization_idが存在しないため、organizationsテーブルは更新しません（個人向けサブスクリプション）');
 	}
 }
 
@@ -943,12 +944,12 @@ async function handleSubscriptionDeleted(subscription: any) {
  * 支払い成功時（更新時）
  */
 async function handlePaymentSucceeded(invoice: any) {
-	console.log('[Webhook] 支払い成功:', invoice.id);
+	logger.debug('[Webhook] 支払い成功:', invoice.id);
 
 	const subscriptionId = getInvoiceSubscriptionId(invoice);
 
 	if (!subscriptionId) {
-		console.log('[Webhook] サブスクリプションIDがありません（単発支払い？）');
+		logger.debug('[Webhook] サブスクリプションIDがありません（単発支払い？）');
 		return;
 	}
 
@@ -965,7 +966,7 @@ async function handlePaymentSucceeded(invoice: any) {
 
 		if (fetchError && fetchError.code !== 'PGRST116') {
 			// PGRST116 = レコードが見つからない（新規作成の場合は問題ない）
-			console.error('[Webhook] 現在のsubscription取得エラー:', fetchError);
+			logger.error('[Webhook] 現在のsubscription取得エラー:', fetchError);
 			throw new RetryableError(`subscription取得エラー: ${fetchError.message}`);
 		}
 
@@ -978,9 +979,9 @@ async function handlePaymentSucceeded(invoice: any) {
 			const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
 
 			if (eventPeriodEndTime < currentPeriodEnd) {
-				console.log('[Webhook] 古いイベントを検出 - 更新をスキップ');
-				console.log('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
-				console.log('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+				logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
+				logger.debug('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
+				logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
 				return; // T13: 古いイベントはスキップ
 			}
 
@@ -990,7 +991,7 @@ async function handlePaymentSucceeded(invoice: any) {
 				currentSub.status === 'active' &&
 				currentSub.cancel_at_period_end === subscription.cancel_at_period_end
 			) {
-				console.log('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
+				logger.debug('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
 				return;
 			}
 		}
@@ -1007,13 +1008,13 @@ async function handlePaymentSucceeded(invoice: any) {
 			.eq('stripe_subscription_id', subscriptionId);
 
 		if (updateError) {
-			console.error('[Webhook] subscriptions更新エラー:', updateError);
+			logger.error('[Webhook] subscriptions更新エラー:', updateError);
 			throw new RetryableError(`subscriptions更新エラー: ${updateError.message}`);
 		}
 
-		console.log('[Webhook] subscriptions更新成功 (支払い成功):', subscriptionId);
+		logger.debug('[Webhook] subscriptions更新成功 (支払い成功):', subscriptionId);
 	} catch (err: any) {
-		console.error('[Webhook] handlePaymentSucceeded エラー:', err);
+		logger.error('[Webhook] handlePaymentSucceeded エラー:', err);
 		// 既にカスタムエラーの場合はそのまま再throw
 		if (err instanceof NonRetryableError || err instanceof RetryableError) {
 			throw err;
@@ -1028,12 +1029,12 @@ async function handlePaymentSucceeded(invoice: any) {
  * 支払い失敗時
  */
 async function handlePaymentFailed(invoice: any) {
-	console.log('[Webhook] 支払い失敗:', invoice.id);
+	logger.debug('[Webhook] 支払い失敗:', invoice.id);
 
 	const subscriptionId = getInvoiceSubscriptionId(invoice);
 
 	if (!subscriptionId) {
-		console.log('[Webhook] サブスクリプションIDがありません');
+		logger.debug('[Webhook] サブスクリプションIDがありません');
 		return;
 	}
 
@@ -1049,7 +1050,7 @@ async function handlePaymentFailed(invoice: any) {
 			.single();
 
 		if (fetchError && fetchError.code !== 'PGRST116') {
-			console.error('[Webhook] 現在のsubscription取得エラー:', fetchError);
+			logger.error('[Webhook] 現在のsubscription取得エラー:', fetchError);
 			throw new RetryableError(`subscription取得エラー: ${fetchError.message}`);
 		}
 
@@ -1061,15 +1062,15 @@ async function handlePaymentFailed(invoice: any) {
 			const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
 
 			if (eventPeriodEndTime < currentPeriodEnd) {
-				console.log('[Webhook] 古いイベントを検出 - 更新をスキップ');
-				console.log('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
-				console.log('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+				logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
+				logger.debug('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
+				logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
 				return; // T13: 古いイベントはスキップ
 			}
 
 			// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
 			if (eventPeriodEndTime === currentPeriodEnd && currentSub.status === 'past_due') {
-				console.log('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
+				logger.debug('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
 				return;
 			}
 		}
@@ -1083,15 +1084,15 @@ async function handlePaymentFailed(invoice: any) {
 			.eq('stripe_subscription_id', subscriptionId);
 
 		if (updateError) {
-			console.error('[Webhook] subscriptions更新エラー:', updateError);
+			logger.error('[Webhook] subscriptions更新エラー:', updateError);
 			throw new RetryableError(`subscriptions更新エラー: ${updateError.message}`);
 		}
 
-		console.log('[Webhook] subscriptions更新成功 (支払い失敗):', subscriptionId);
+		logger.debug('[Webhook] subscriptions更新成功 (支払い失敗):', subscriptionId);
 
 		// TODO: ユーザーにメール通知を送る
 	} catch (err: any) {
-		console.error('[Webhook] handlePaymentFailed エラー:', err);
+		logger.error('[Webhook] handlePaymentFailed エラー:', err);
 		// 既にカスタムエラーの場合はそのまま再throw
 		if (err instanceof NonRetryableError || err instanceof RetryableError) {
 			throw err;
@@ -1117,7 +1118,7 @@ function getPlanTypeFromPrice(
 	if (!planType) {
 		// T2: 未知のprice IDは明示的にエラーとして扱う（誤った plan_type 保存を防止）
 		const errMsg = `未知のprice ID: ${priceId}。正しいプランタイプを判定できません`;
-		console.error('[Webhook]', errMsg);
+		logger.error('[Webhook]', errMsg);
 		throw new RetryableError(errMsg);
 	}
 

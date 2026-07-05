@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { error, redirect } from '@sveltejs/kit';
 import { getActiveOrgRole } from '$lib/server/orgAuth';
+import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
 	const { id: orgId } = params;
@@ -56,7 +57,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.order('deleted_at', { ascending: false });
 
 	if (sessionsError) {
-		console.error('Error fetching archived sessions:', sessionsError);
+		logger.error('Error fetching archived sessions:', sessionsError);
 		throw error(500, 'アーカイブセッションの取得に失敗しました');
 	}
 

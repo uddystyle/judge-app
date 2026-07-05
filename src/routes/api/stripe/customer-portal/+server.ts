@@ -4,6 +4,7 @@ import { stripe } from '$lib/server/stripe';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
+import { logger } from '$lib/server/logger';
 
 export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
@@ -32,7 +33,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// Security: Validate redirect URL to prevent Open Redirect attacks
 		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!returnValidation.valid) {
-			console.error('[Customer Portal] Invalid returnUrl:', returnUrl, 'Error:', returnValidation.error);
+			logger.error('[Customer Portal] Invalid returnUrl:', returnUrl, 'Error:', returnValidation.error);
 			throw error(400, `無効なreturnUrlです: ${returnValidation.error}`);
 		}
 
@@ -60,15 +61,15 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			return_url: sanitizedReturnUrl
 		});
 
-		console.log('[Customer Portal API] セッション作成成功:', session.id);
+		logger.debug('[Customer Portal API] セッション作成成功:', session.id);
 
 		// 5. Portal URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
 		// 詳細なエラーはログのみに出力（セキュリティ：情報漏洩防止）
-		console.error('[Customer Portal API] エラー:', err.message);
-		console.error('[Customer Portal API] エラータイプ:', err.type);
-		console.error('[Customer Portal API] エラーコード:', err.code);
+		logger.error('[Customer Portal API] エラー:', err.message);
+		logger.error('[Customer Portal API] エラータイプ:', err.type);
+		logger.error('[Customer Portal API] エラーコード:', err.code);
 		// T3: 4xxのHttpErrorはそのまま返す
 		if (err?.status && err.status >= 400 && err.status < 500) {
 			throw err;

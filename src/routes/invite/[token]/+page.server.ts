@@ -5,6 +5,7 @@ import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL, PUBLIC_SITE_URL } from '$env/static/public';
 import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
 import { checkCanAddMember } from '$lib/server/organizationLimits';
+import { logger } from '$lib/server/logger';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -19,7 +20,7 @@ function normalizeEmail(email: string): string {
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const token = params.token;
 
-	console.log('[Invite Page] Loading invitation with token:', token);
+	logger.debug('[Invite Page] Loading invitation with token:', token);
 
 	// 招待情報を取得（RLSをバイパスするためsupabaseAdminを使用）
 	const { data: invitation, error: inviteError} = await supabaseAdmin
@@ -38,16 +39,16 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		.single();
 
 	if (inviteError) {
-		console.error('[Invite Page] Error fetching invitation:', inviteError);
+		logger.error('[Invite Page] Error fetching invitation:', inviteError);
 		throw error(404, '招待が見つかりません');
 	}
 
 	if (!invitation) {
-		console.error('[Invite Page] No invitation found for token:', token);
+		logger.error('[Invite Page] No invitation found for token:', token);
 		throw error(404, '招待が見つかりません');
 	}
 
-	console.log('[Invite Page] Invitation found:', invitation);
+	logger.debug('[Invite Page] Invitation found:', invitation);
 
 	// 有効期限チェック
 	if (new Date(invitation.expires_at) < new Date()) {
@@ -155,7 +156,7 @@ export const actions: Actions = {
 		// 正規化して比較することで、大文字小文字の違いや空白による回避を防ぐ
 		// メール確認フローを使用しているが、事前チェックとして招待メールとの一致も必須
 		if (invitation.email && normalizeEmail(invitation.email) !== normalizedEmail) {
-			console.warn('[Invite Signup] Email mismatch detected:', {
+			logger.warn('[Invite Signup] Email mismatch detected:', {
 				invitationEmail: invitation.email,
 				inputEmail: email,
 				sanitizedEmail,
@@ -168,7 +169,7 @@ export const actions: Actions = {
 			});
 		}
 
-		console.log('[Invite Signup] Email validation passed:', {
+		logger.debug('[Invite Signup] Email validation passed:', {
 			hasInvitationEmail: !!invitation.email,
 			originalEmail: email,
 			sanitizedEmail,
@@ -195,7 +196,7 @@ export const actions: Actions = {
 			});
 
 			if (authError) {
-				console.error('[Invite Signup] signUp error:', {
+				logger.error('[Invite Signup] signUp error:', {
 					code: authError.code,
 					message: authError.message,
 					status: (authError as any).status
@@ -220,7 +221,7 @@ export const actions: Actions = {
 					if (message.includes('already registered') ||
 					    message.includes('already exists') ||
 					    message.includes('already been registered')) {
-						console.warn('[Invite Signup] Detected existing user via message fallback:', authError.message);
+						logger.warn('[Invite Signup] Detected existing user via message fallback:', authError.message);
 						return fail(409, {
 							error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 						});
@@ -228,7 +229,7 @@ export const actions: Actions = {
 				}
 
 				// その他の予期しないエラー
-				console.error('[Invite Signup] Unexpected error code:', authError.code);
+				logger.error('[Invite Signup] Unexpected error code:', authError.code);
 				return fail(500, { error: 'アカウントの作成に失敗しました' });
 			}
 
@@ -246,7 +247,7 @@ export const actions: Actions = {
 			// 【セキュリティチェック】session が null であることを確認
 			// session が存在する場合、Supabase設定でメール確認が無効になっている可能性がある
 			if (authData.session) {
-				console.error('[Invite Signup] SECURITY WARNING: Session was returned immediately after signup.', {
+				logger.error('[Invite Signup] SECURITY WARNING: Session was returned immediately after signup.', {
 					userId: authData.user.id,
 					email: authData.user.email,
 					emailConfirmedAt: authData.user.email_confirmed_at,
@@ -257,7 +258,7 @@ export const actions: Actions = {
 				});
 			}
 
-			console.log('[Invite Signup] User created, email confirmation required:', {
+			logger.debug('[Invite Signup] User created, email confirmation required:', {
 				hasSession: false,
 				emailConfirmedAt: authData.user.email_confirmed_at
 				// userId と email は個人情報のため出力しない（GDPR/プライバシー保護）
@@ -269,7 +270,7 @@ export const actions: Actions = {
 			if (isRedirect(err) || isHttpError(err)) {
 				throw err;
 			}
-			console.error('Signup error:', err);
+			logger.error('Signup error:', err);
 			return fail(500, { error: 'エラーが発生しました' });
 		}
 	},
@@ -314,7 +315,7 @@ export const actions: Actions = {
 		// complete フロー（メール確認経由）と同じガード）
 		const memberLimitCheck = await checkCanAddMember(supabaseAdmin, invitation.organization_id);
 		if (!memberLimitCheck.allowed) {
-			console.warn('[Invite Join] メンバー上限により参加拒否:', memberLimitCheck.reason);
+			logger.warn('[Invite Join] メンバー上限により参加拒否:', memberLimitCheck.reason);
 			return fail(403, {
 				error: memberLimitCheck.reason || '組織のメンバー数が上限に達しています。'
 			});
@@ -329,7 +330,7 @@ export const actions: Actions = {
 			});
 
 			if (memberError) {
-				console.error('Error adding member:', memberError);
+				logger.error('Error adding member:', memberError);
 				return fail(500, { error: '組織への追加に失敗しました' });
 			}
 
@@ -351,7 +352,7 @@ export const actions: Actions = {
 			if (isRedirect(err) || isHttpError(err)) {
 				throw err;
 			}
-			console.error('Join error:', err);
+			logger.error('Join error:', err);
 			return fail(500, { error: 'エラーが発生しました' });
 		}
 	}
