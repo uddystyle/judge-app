@@ -8,6 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
+	import { createRealtimeChannel, type RealtimeChannelHandle } from '$lib/realtime';
 	import * as m from '$lib/paraglide/messages.js';
 
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -15,61 +16,52 @@
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
 
-	// リアルタイム更新用
-	let realtimeChannel: any;
+	// リアルタイム更新用（バックオフ再購読つき共通ヘルパー）
+	let deleteChannelHandle: RealtimeChannelHandle | null = null;
+	let joinChannelHandle: RealtimeChannelHandle | null = null;
 
 	onMount(() => {
 		// セッションの削除を検知するリアルタイムリスナー
-		realtimeChannel = supabase
-			.channel('dashboard-sessions')
-			.on(
-				'postgres_changes',
-				{
-					event: 'DELETE',
-					schema: 'public',
-					table: 'sessions'
-				},
-				(payload) => {
-					console.log('[ダッシュボード] セッション削除を検知:', payload);
-					// 削除されたセッションをリストから除外
-					data.sessions = data.sessions.filter((s) => s.id !== payload.old.id);
-				}
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'INSERT',
-					schema: 'public',
-					table: 'session_participants',
-					filter: `user_id=eq.${data.profile?.id}`
-				},
-				async (payload) => {
-					console.log('[ダッシュボード] セッション参加を検知:', payload);
-					// 新しく参加したセッションの情報を取得
-					const { data: newSession } = await supabase
-						.from('sessions')
-						.select('*')
-						.eq('id', payload.new.session_id)
-						.single();
+		deleteChannelHandle = createRealtimeChannel(supabase, {
+			channelName: 'dashboard-sessions-delete',
+			table: 'sessions',
+			event: 'DELETE',
+			onPayload: (payload) => {
+				console.log('[ダッシュボード] セッション削除を検知:', payload);
+				// 削除されたセッションをリストから除外
+				data.sessions = data.sessions.filter((s) => s.id !== payload.old.id);
+			}
+		});
 
-					if (newSession) {
-						// リストに追加（重複チェック）
-						const exists = data.sessions.some((s) => s.id === newSession.id);
-						if (!exists) {
-							data.sessions = [...data.sessions, newSession];
-						}
+		// セッション参加を検知するリアルタイムリスナー
+		joinChannelHandle = createRealtimeChannel(supabase, {
+			channelName: 'dashboard-participants-insert',
+			table: 'session_participants',
+			event: 'INSERT',
+			filter: `user_id=eq.${data.profile?.id}`,
+			onPayload: async (payload) => {
+				console.log('[ダッシュボード] セッション参加を検知:', payload);
+				// 新しく参加したセッションの情報を取得
+				const { data: newSession } = await supabase
+					.from('sessions')
+					.select('*')
+					.eq('id', payload.new.session_id)
+					.single();
+
+				if (newSession) {
+					// リストに追加（重複チェック）
+					const exists = data.sessions.some((s) => s.id === newSession.id);
+					if (!exists) {
+						data.sessions = [...data.sessions, newSession];
 					}
 				}
-			)
-			.subscribe((status) => {
-				console.log('[ダッシュボード] Realtimeチャンネルの状態:', status);
-			});
+			}
+		});
 	});
 
 	onDestroy(() => {
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
-		}
+		deleteChannelHandle?.cleanup();
+		joinChannelHandle?.cleanup();
 	});
 
 	// プラン名の表示

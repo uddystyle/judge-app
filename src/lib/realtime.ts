@@ -13,7 +13,8 @@ export interface RealtimeChannelConfig {
 	table: string;
 	schema?: string;
 	event?: string; // default '*'
-	filter: string;
+	/** 省略時はテーブル全体を購読 */
+	filter?: string;
 	onPayload: (payload: any) => void;
 	/** Bounded exponential-backoff resubscribe attempts before giving up. Default 5. */
 	maxRetryCount?: number;
@@ -46,7 +47,7 @@ interface ManagedChannelOptions {
 	table: string;
 	schema?: string;
 	event?: string; // default '*'
-	filter: string;
+	filter?: string;
 	maxRetryCount: number;
 	onPayload: (payload: any) => void;
 	/** SUBSCRIBED 時の追加処理（コアが retryCount リセット・retryTimer クリアを済ませた後） */

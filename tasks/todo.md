@@ -1,5 +1,16 @@
 # Current Tasks
 
+## リファクタリング ステップ8: 手書き realtime チャネルのヘルパー移行（2026-07-05）— ✅ 2/3ページ完了
+
+- [x] **dashboard**: 1チャンネル2リスナー（sessions DELETE + session_participants INSERT）を `createRealtimeChannel` ×2 に分割移行（Supabase は同一 WebSocket に多重化するため実質差なし）。従来 no-op だった接続エラーがバックオフ再購読されるようになった。`filter` 無しの購読に対応するため `RealtimeChannelConfig.filter` をオプショナル化
+- [x] **検定 score ページ**（[discipline]/.../score）: 手書きの「エラー時のみ10秒ポーリング・再購読なし」約130行を `createSessionMonitorWithPolling`（complete ページと同方針）へ移行。チャンネル名 `session-end-score-{id}` を維持、ポーリング間隔10秒維持、realtime/polling 両ハンドラのナビ規則・ガード（マウント/パスチェック、previousIsActive シード）を移植。再購読を使い切っても reload せずポーリング継続（onError で明示）
+- [ ] **session/[id]/+page.svelte（保留・次ステップ）**: 手書き約270行 + `startFallbackPolling`/`checkSessionStatus`。調査の結果、`page.realtime.test.ts`（900行）はページを import しないシミュレーションテストで実装をロックしておらず、実質のロックは `page.component.test.ts`（$lib/supabaseClient をモックしてページを render）のみと判明。ただし subscribe コールバック内の分岐が複雑（複数ステータス×初期チェック×ポーリング開始条件）で、コンポーネントテストのモック改修込みの独立ステップが妥当
+
+### 検証
+- [x] vitest: 779 passed / 11 skipped 全緑
+- [x] svelte-check: 243 errors / 25 warnings（途中 +1 した sessionId 型エラーは non-null 明示で解消、最終的にベースライン維持）
+- [x] `npm run build` 成功、prettier クリーン、eslint 新規指摘なし（残りは HEAD から存在する既存分）
+
 ## リファクタリング ステップ7: realtime.ts 内部統合（2026-07-05）— ✅ 完了
 
 4つの公開ファクトリ（createRealtimeChannel / WithRetry / SessionMonitorChannel / SessionMonitorWithPolling）に4重コピーされていた「上限つき指数バックオフ再購読 + setupChannel + タイマー管理」を内部コア `createManagedChannel` に集約。各ファクトリは差分（フォールバックポーリング / 最終手段 reload / 常時ポーリング保険）だけを持つ薄いラッパーに。551行 → 452行。
