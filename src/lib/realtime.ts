@@ -30,6 +30,12 @@ export interface RealtimeChannelWithRetryConfig extends RealtimeChannelConfig {
 	pollingIntervalMs?: number;
 	pollingFn: () => Promise<void>;
 	onConnectionError?: (hasError: boolean) => void;
+	/** SUBSCRIBED 時の追加処理（リトライ状態リセット・ポーリング停止の後に呼ばれる） */
+	onSubscribed?: () => void;
+	/** true なら購読確立を待たずに直ちにフォールバックポーリングを開始する（取りこぼし対策） */
+	startPollingImmediately?: boolean;
+	/** true ならエラーステータス検知時点でポーリングを開始する（リトライ上限を待たない） */
+	startPollingOnErrorStatus?: boolean;
 }
 
 export interface RealtimeChannelWithRetryHandle extends RealtimeChannelHandle {
@@ -243,10 +249,14 @@ export function createRealtimeChannelWithRetry(
 			config.onConnectionError?.(false);
 			// realtime 接続中はフォールバックポーリング不要
 			stopFallbackPolling();
+			config.onSubscribed?.();
 		},
 		onErrorStatus: () => {
 			connectionError = true;
 			config.onConnectionError?.(true);
+			if (config.startPollingOnErrorStatus) {
+				startFallbackPolling();
+			}
 		},
 		onMaxRetriesExhausted: () => {
 			console.error(
@@ -257,6 +267,11 @@ export function createRealtimeChannelWithRetry(
 			startFallbackPolling();
 		}
 	});
+
+	// 取りこぼし対策: 購読確立を待たずにポーリングを開始（SUBSCRIBED で停止する）
+	if (config.startPollingImmediately) {
+		startFallbackPolling();
+	}
 
 	return {
 		cleanup: () => {

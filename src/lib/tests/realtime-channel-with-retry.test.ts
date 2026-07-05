@@ -898,3 +898,68 @@ describe('createRealtimeChannel - 自動再購読', () => {
 		expect(supabase._channels.length).toBe(1);
 	});
 });
+
+describe('createRealtimeChannelWithRetry - 取りこぼし対策オプション（session/[id] 待機画面向け）', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('onSubscribed がSUBSCRIBEDごとに呼ばれる（初回チェック用フック）', () => {
+		const supabase = createRetryTestSupabase();
+		const onSubscribed = vi.fn();
+		const handle = createRealtimeChannelWithRetry(supabase as any, makeConfig({ onSubscribed }));
+
+		supabase._fireStatus('SUBSCRIBED');
+		expect(onSubscribed).toHaveBeenCalledTimes(1);
+
+		// 再接続復帰でも呼ばれる
+		supabase._fireStatus('SUBSCRIBED');
+		expect(onSubscribed).toHaveBeenCalledTimes(2);
+
+		handle.cleanup();
+	});
+
+	it('startPollingImmediately: 購読確立前からポーリングし、SUBSCRIBEDで停止する', async () => {
+		const supabase = createRetryTestSupabase();
+		const config = makeConfig({ startPollingImmediately: true });
+		const handle = createRealtimeChannelWithRetry(supabase as any, config);
+
+		// まだステータスは来ていないが、ポーリングは動いている
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(config.pollingFn).toHaveBeenCalledTimes(2);
+
+		// SUBSCRIBED で停止
+		supabase._fireStatus('SUBSCRIBED');
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(config.pollingFn).toHaveBeenCalledTimes(2);
+
+		handle.cleanup();
+	});
+
+	it('startPollingOnErrorStatus: リトライ上限を待たず初回エラーでポーリングを開始する', async () => {
+		const supabase = createRetryTestSupabase();
+		const config = makeConfig({ startPollingOnErrorStatus: true });
+		const handle = createRealtimeChannelWithRetry(supabase as any, config);
+
+		supabase._fireStatus('SUBSCRIBED');
+		expect(config.pollingFn).not.toHaveBeenCalled();
+
+		// 初回エラーで即ポーリング開始（従来は maxRetry 到達後のみ）
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(config.pollingFn).toHaveBeenCalledTimes(1);
+
+		// 復帰したら停止
+		await vi.advanceTimersByTimeAsync(1000); // バックオフ再購読を発火させる
+		supabase._fireStatus('SUBSCRIBED');
+		const callsAtRecovery = vi.mocked(config.pollingFn).mock.calls.length;
+		await vi.advanceTimersByTimeAsync(3000);
+		expect(config.pollingFn).toHaveBeenCalledTimes(callsAtRecovery);
+
+		handle.cleanup();
+	});
+});

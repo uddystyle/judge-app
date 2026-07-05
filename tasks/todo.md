@@ -1,5 +1,18 @@
 # Current Tasks
 
+## リファクタリング ステップ8b: session/[id] 待機画面の移行（2026-07-05）— ✅ 完了
+
+手書きチャネル最後の1ページ（約270行 + startFallbackPolling）を `createRealtimeChannelWithRetry` へ移行。**手書きチャネルはゼロに**。
+
+- [x] ヘルパーに後方互換オプション3つを TDD（RED→GREEN、テスト3件）で追加: `onSubscribed`（SUBSCRIBED時の初回プロンプトチェック用フック）/ `startPollingImmediately`（購読確立前から取りこぼし対策ポーリング）/ `startPollingOnErrorStatus`（リトライ上限を待たず初回エラーで即ポーリング）
+- [x] ページ側: チャンネル名 `session-status-{id}`・3秒ポーリング・previousPromptId 巻き戻し防止・isSessionEnded/isPageActive ガード・終了時の監視停止をすべて維持。onPayload（終了検知＋新プロンプト遷移）と onSubscribed（既存プロンプト＋採点済みチェック）のロジックは無変更で移植。`startFallbackPolling` 関数と手動 status 分岐（CHANNEL_ERROR/TIMED_OUT/CLOSED）を削除
+- [x] 意図的改善: 従来はエラー後チャンネルが死んだまま（再購読なし・ポーリングのみ）だったが、バックオフ再購読が付いた
+- [x] **session/[id] の既存テスト4ファイル（64件）が無修正で全緑**（component テストのモックはヘルパーと同一のチェーン形状だったため改修不要だった）
+
+### 検証
+- [x] vitest: 782 passed / 11 skipped 全緑
+- [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン、eslint はページ 28→26（any 2件減・新規なし）
+
 ## リファクタリング ステップ8: 手書き realtime チャネルのヘルパー移行（2026-07-05）— ✅ 2/3ページ完了
 
 - [x] **dashboard**: 1チャンネル2リスナー（sessions DELETE + session_participants INSERT）を `createRealtimeChannel` ×2 に分割移行（Supabase は同一 WebSocket に多重化するため実質差なし）。従来 no-op だった接続エラーがバックオフ再購読されるようになった。`filter` 無しの購読に対応するため `RealtimeChannelConfig.filter` をオプショナル化

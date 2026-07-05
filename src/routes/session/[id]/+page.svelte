@@ -13,6 +13,10 @@
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
 	import { supabase } from '$lib/supabaseClient';
+	import {
+		createRealtimeChannelWithRetry,
+		type RealtimeChannelWithRetryHandle
+	} from '$lib/realtime';
 	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import * as m from '$lib/paraglide/messages.js';
@@ -20,10 +24,9 @@
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
 	export const form: ActionData = undefined;
-	let realtimeChannel: any;
+	let realtimeHandle: RealtimeChannelWithRetryHandle | null = null;
 	let previousStatus: string | null = null; // ポーリングで前回の状態を記憶
 	let isPageActive = true; // ページがアクティブかどうかを追跡
-	let fallbackPolling: any = null; // フォールバックポーリング用タイマー
 	let previousPromptId: string | null = null; // 前回の active_prompt_id を記憶
 
 	// URLパラメータで終了フラグをチェック（リアクティブに監視）
@@ -114,287 +117,260 @@
 			console.log('[一般検定員] current status:', data.sessionDetails.status);
 			console.log('[一般検定員] current is_active:', data.sessionDetails.is_active);
 
-			// Note: This page uses manual channel creation because the onSubscribed callback
-			// contains complex logic (checking existing prompts on initial connection)
-			realtimeChannel = supabase
-				.channel(`session-status-${sessionId}`)
-				.on(
-					'postgres_changes',
-					{
-						event: 'UPDATE',
-						schema: 'public',
-						table: 'sessions',
-						filter: `id=eq.${sessionId}`
-					},
-					async (payload) => {
-						console.log('[一般検定員/realtime] ========== Realtime更新検知 ==========');
-						console.log('[一般検定員/realtime] 時刻:', new Date().toISOString());
-						console.log('[一般検定員/realtime] payload:', payload);
-						const oldStatus = payload.old.status;
-						const newStatus = payload.new.status;
-						const oldIsActive = payload.old.is_active;
-						const newIsActive = payload.new.is_active;
-						const newPromptId = payload.new.active_prompt_id;
+			// ✅ previousPromptId を初期化（巻き戻し防止: null の場合のみ。
+			//    Realtimeで既に処理済みの prompt を上書きしない）
+			if (previousPromptId === null) {
+				previousPromptId = data.sessionDetails.active_prompt_id;
+				console.log('[fallback] previousPromptId を初期化:', previousPromptId);
+			}
 
-						console.log('[一般検定員/realtime] status変化:', oldStatus, '→', newStatus);
-						console.log('[一般検定員/realtime] is_active変化:', oldIsActive, '→', newIsActive);
-						console.log('[一般検定員/realtime] active_prompt_id:', newPromptId);
+			// 共通ヘルパーで sessions を監視:
+			// - バックオフ再購読つき realtime（従来は再購読なしでチャンネルが死んだままだった）
+			// - 取りこぼし対策として購読確立前から3秒ポーリング（SUBSCRIBED中は停止、エラー検知で即再開）。
+			//   realtime が瞬断すると主任の指示を取り逃すため、会場WiFi前提で短間隔にして
+			//   遷移の最悪待ち時間を抑える。active_prompt_id 未変化なら単一行 SELECT で早期 return＝軽量。
+			realtimeHandle = createRealtimeChannelWithRetry(supabase, {
+				channelName: `session-status-${sessionId}`,
+				table: 'sessions',
+				event: 'UPDATE',
+				filter: `id=eq.${sessionId}`,
+				pollingIntervalMs: 3000,
+				pollingFn: checkSessionStatus,
+				startPollingImmediately: true,
+				startPollingOnErrorStatus: true,
+				onPayload: async (payload) => {
+					console.log('[一般検定員/realtime] ========== Realtime更新検知 ==========');
+					console.log('[一般検定員/realtime] 時刻:', new Date().toISOString());
+					console.log('[一般検定員/realtime] payload:', payload);
+					const oldStatus = payload.old.status;
+					const newStatus = payload.new.status;
+					const oldIsActive = payload.old.is_active;
+					const newIsActive = payload.new.is_active;
+					const newPromptId = payload.new.active_prompt_id;
 
-						// 既に終了画面を表示している場合は、状態変更をスキップ
-						if (isSessionEnded) {
-							console.log('[一般検定員/realtime] ⚠️ 終了画面表示中のため、状態変更をスキップ');
+					console.log('[一般検定員/realtime] status変化:', oldStatus, '→', newStatus);
+					console.log('[一般検定員/realtime] is_active変化:', oldIsActive, '→', newIsActive);
+					console.log('[一般検定員/realtime] active_prompt_id:', newPromptId);
+
+					// 既に終了画面を表示している場合は、状態変更をスキップ
+					if (isSessionEnded) {
+						console.log('[一般検定員/realtime] ⚠️ 終了画面表示中のため、状態変更をスキップ');
+						return;
+					}
+
+					// セッションが終了した場合、検定終了画面に遷移
+					console.log('[一般検定員/realtime] ========== 終了検知チェック ==========');
+					console.log('[一般検定員/realtime] newStatus === "ended":', newStatus === 'ended');
+					if (newStatus === 'ended') {
+						console.log(
+							'[一般検定員/realtime] ✅✅✅ セッション終了を検知！終了画面に遷移します！'
+						);
+						if (!isPageActive) {
+							console.log('[一般検定員/realtime] ⚠️ ページが非アクティブのため、遷移をスキップ');
+							return;
+						}
+						// リソースをクリーンアップ（チャンネルとポーリングを停止。従来同様、
+						// 終了画面遷移後は監視しない。再訪時は onMount で再セットアップされる）
+						console.log('[一般検定員/realtime] リアルタイム接続を停止します');
+						realtimeHandle?.cleanup();
+						realtimeHandle = null;
+						isSessionEnded = true;
+						goto(`/session/${sessionId}?ended=true`);
+						return;
+					}
+
+					// 新しい採点指示IDがセットされたら
+					if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
+						console.log('[一般検定員] 新しい採点指示を検知:', newPromptId);
+						// 新しい指示の詳細をscoring_promptsテーブルから取得
+						const { data: promptData, error } = await supabase
+							.from('scoring_prompts')
+							.select('*')
+							.eq('id', newPromptId)
+							.single();
+
+						if (error) {
+							console.error('[一般検定員] ❌ 採点指示の取得に失敗:', error);
 							return;
 						}
 
-						// セッションが終了した場合、検定終了画面に遷移
-						console.log('[一般検定員/realtime] ========== 終了検知チェック ==========');
-						console.log('[一般検定員/realtime] newStatus === "ended":', newStatus === 'ended');
-						if (newStatus === 'ended') {
-							console.log(
-								'[一般検定員/realtime] ✅✅✅ セッション終了を検知！終了画面に遷移します！'
-							);
-							if (!isPageActive) {
-								console.log('[一般検定員/realtime] ⚠️ ページが非アクティブのため、遷移をスキップ');
-								return;
+						console.log('[一般検定員] 採点指示データ取得成功:', promptData);
+
+						if (promptData) {
+							// ストアにゼッケン番号を保存
+							currentBib.set(promptData.bib_number);
+
+							// discipline カラムの値でモードを判定
+							const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
+
+							if (mode === 'tournament' || mode === 'training') {
+								// 大会・研修モード: participantId を取得
+								const { data: participant } = await supabase
+									.from('participants')
+									.select('id')
+									.eq('session_id', sessionId)
+									.eq('bib_number', promptData.bib_number)
+									.maybeSingle();
+
+								if (participant) {
+									const eventId = promptData.level; // level カラムに eventId を保存している
+									if (mode === 'tournament') {
+										console.log(
+											'[一般検定員/大会] 採点画面に遷移:',
+											`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+										// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+										previousPromptId = newPromptId;
+										goto(
+											`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+									} else {
+										console.log(
+											'[一般検定員/研修] 採点画面に遷移:',
+											`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+										// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+										previousPromptId = newPromptId;
+										goto(
+											`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+									}
+								}
+							} else {
+								// 検定モード: /session/[id]/[discipline]/[level]/[event]/score
+								console.log('[一般検定員/検定] 採点画面に遷移:', {
+									sessionId,
+									discipline: promptData.discipline,
+									level: promptData.level,
+									event: promptData.event_name
+								});
+								// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+								previousPromptId = newPromptId;
+								goto(
+									`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+								);
 							}
-							// リソースをクリーンアップ
-							console.log('[一般検定員/realtime] リアルタイム接続を停止します');
-							if (realtimeChannel) {
-								supabase.removeChannel(realtimeChannel);
-								realtimeChannel = null;
-							}
-							isSessionEnded = true;
-							goto(`/session/${sessionId}?ended=true`);
-							return;
 						}
+					}
+				},
+				// 接続成功後、ページロード時に既にactive_prompt_idが設定されているかチェック
+				// （ポーリング停止・リトライ状態リセットはヘルパーが実施済み）
+				onSubscribed: async () => {
+					console.log('[一般検定員] ✅ リアルタイム接続成功');
 
-						// 新しい採点指示IDがセットされたら
-						if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
-							console.log('[一般検定員] 新しい採点指示を検知:', newPromptId);
-							// 新しい指示の詳細をscoring_promptsテーブルから取得
-							const { data: promptData, error } = await supabase
-								.from('scoring_prompts')
-								.select('*')
-								.eq('id', newPromptId)
-								.single();
+					// 初回参加画面（join=true）の場合はスキップ
+					const currentPromptId = data.sessionDetails.active_prompt_id;
+					if (currentPromptId && !shouldShowJoinUI) {
+						console.log('[一般検定員] 既存の採点指示を検知:', currentPromptId);
+						// 採点指示の詳細を取得
+						const { data: promptData, error } = await supabase
+							.from('scoring_prompts')
+							.select('*')
+							.eq('id', currentPromptId)
+							.single();
 
-							if (error) {
-								console.error('[一般検定員] ❌ 採点指示の取得に失敗:', error);
-								return;
-							}
-
+						if (!error && promptData) {
 							console.log('[一般検定員] 採点指示データ取得成功:', promptData);
 
-							if (promptData) {
-								// ストアにゼッケン番号を保存
-								currentBib.set(promptData.bib_number);
+							// discipline カラムの値でモードを判定
+							const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
 
-								// discipline カラムの値でモードを判定
-								const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
+							if (mode === 'tournament' || mode === 'training') {
+								// 大会・研修モード: participantId を取得
+								const { data: participant } = await supabase
+									.from('participants')
+									.select('id')
+									.eq('session_id', sessionId)
+									.eq('bib_number', promptData.bib_number)
+									.maybeSingle();
 
-								if (mode === 'tournament' || mode === 'training') {
-									// 大会・研修モード: participantId を取得
-									const { data: participant } = await supabase
-										.from('participants')
-										.select('id')
-										.eq('session_id', sessionId)
-										.eq('bib_number', promptData.bib_number)
-										.maybeSingle();
+								if (participant) {
+									const eventId = promptData.level; // level カラムに eventId を保存している
 
-									if (participant) {
-										const eventId = promptData.level; // level カラムに eventId を保存している
-										if (mode === 'tournament') {
-											console.log(
-												'[一般検定員/大会] 採点画面に遷移:',
-												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-											previousPromptId = newPromptId;
-											goto(
-												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-										} else {
-											console.log(
-												'[一般検定員/研修] 採点画面に遷移:',
-												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-											previousPromptId = newPromptId;
-											goto(
-												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-										}
+									// 既に採点済みかチェック
+									const scoreTable = mode === 'training' ? 'training_scores' : 'results';
+									let scoreQuery = supabase.from(scoreTable).select('id');
+
+									if (mode === 'training') {
+										scoreQuery = scoreQuery
+											.eq('event_id', eventId)
+											.eq('athlete_id', participant.id);
+									} else {
+										// 大会モード
+										scoreQuery = scoreQuery
+											.eq('session_id', sessionId)
+											.eq('bib', promptData.bib_number);
 									}
-								} else {
-									// 検定モード: /session/[id]/[discipline]/[level]/[event]/score
-									console.log('[一般検定員/検定] 採点画面に遷移:', {
-										sessionId,
-										discipline: promptData.discipline,
-										level: promptData.level,
-										event: promptData.event_name
-									});
-									// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-									previousPromptId = newPromptId;
-									goto(
-										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
-									);
-								}
-							}
-						}
-					}
-				)
-				.subscribe(async (status) => {
-					console.log('[一般検定員] Realtimeチャンネルの状態:', status);
-					if (status === 'SUBSCRIBED') {
-						console.log('[一般検定員] ✅ リアルタイム接続成功');
 
-						// Realtime接続成功時はフォールバックポーリングを停止（Realtimeを優先）
-						if (fallbackPolling) {
-							console.log('[一般検定員] Realtime接続成功のため、フォールバックポーリングを停止');
-							clearInterval(fallbackPolling);
-							fallbackPolling = null;
-						}
-
-						// 接続成功後、ページロード時に既にactive_prompt_idが設定されているかチェック
-						// ただし、初回参加画面（join=true）の場合はスキップ
-						const currentPromptId = data.sessionDetails.active_prompt_id;
-						if (currentPromptId && !shouldShowJoinUI) {
-							console.log('[一般検定員] 既存の採点指示を検知:', currentPromptId);
-							// 採点指示の詳細を取得
-							const { data: promptData, error } = await supabase
-								.from('scoring_prompts')
-								.select('*')
-								.eq('id', currentPromptId)
-								.single();
-
-							if (!error && promptData) {
-								console.log('[一般検定員] 採点指示データ取得成功:', promptData);
-
-								// discipline カラムの値でモードを判定
-								const mode = promptData.discipline; // 'tournament', 'training', または実際の discipline
-
-								if (mode === 'tournament' || mode === 'training') {
-									// 大会・研修モード: participantId を取得
-									const { data: participant } = await supabase
-										.from('participants')
-										.select('id')
-										.eq('session_id', sessionId)
-										.eq('bib_number', promptData.bib_number)
-										.maybeSingle();
-
-									if (participant) {
-										const eventId = promptData.level; // level カラムに eventId を保存している
-
-										// 既に採点済みかチェック
-										const scoreTable = mode === 'training' ? 'training_scores' : 'results';
-										let scoreQuery = supabase.from(scoreTable).select('id');
-
+									// ユーザーまたはゲストの採点をチェック
+									if (data.guestIdentifier) {
+										scoreQuery = scoreQuery.eq('guest_identifier', data.guestIdentifier);
+									} else if (data.user) {
 										if (mode === 'training') {
-											scoreQuery = scoreQuery
-												.eq('event_id', eventId)
-												.eq('athlete_id', participant.id);
+											// 研修モード: training_scores.judge_id (UUID)
+											scoreQuery = scoreQuery.eq('judge_id', data.user.id);
 										} else {
-											// 大会モード
-											scoreQuery = scoreQuery
-												.eq('session_id', sessionId)
-												.eq('bib', promptData.bib_number);
-										}
-
-										// ユーザーまたはゲストの採点をチェック
-										if (data.guestIdentifier) {
-											scoreQuery = scoreQuery.eq('guest_identifier', data.guestIdentifier);
-										} else if (data.user) {
-											if (mode === 'training') {
-												// 研修モード: training_scores.judge_id (UUID)
-												scoreQuery = scoreQuery.eq('judge_id', data.user.id);
-											} else {
-												// 大会モード: results.judge_name (text)
-												// ⚠️ CRITICAL: 保存時と同じフォールバックロジックを使用
-												// (input/+page.server.ts:372 と一致させる)
-												const judgeName = data.profile?.full_name || data.user.email || 'Unknown';
-												scoreQuery = scoreQuery.eq('judge_name', judgeName);
-											}
-										}
-
-										const { data: existingScore } = await scoreQuery.maybeSingle();
-
-										if (existingScore) {
-											console.log('[一般検定員] 既に採点済みのため、待機画面に留まります');
-											return;
-										}
-
-										// まだ採点していない場合のみ遷移
-										console.log('[一般検定員] まだ採点していないため、採点画面に遷移します');
-										currentBib.set(promptData.bib_number);
-
-										if (mode === 'tournament') {
-											console.log(
-												'[一般検定員/大会] 採点画面に遷移(既存):',
-												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-											previousPromptId = currentPromptId;
-											goto(
-												`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-										} else {
-											console.log(
-												'[一般検定員/研修] 採点画面に遷移(既存):',
-												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
-											// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-											previousPromptId = currentPromptId;
-											goto(
-												`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
-											);
+											// 大会モード: results.judge_name (text)
+											// ⚠️ CRITICAL: 保存時と同じフォールバックロジックを使用
+											// (input/+page.server.ts:372 と一致させる)
+											const judgeName = data.profile?.full_name || data.user.email || 'Unknown';
+											scoreQuery = scoreQuery.eq('judge_name', judgeName);
 										}
 									}
-								} else {
-									// 検定モード
-									// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
-									previousPromptId = currentPromptId;
-									goto(
-										`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
-									);
+
+									const { data: existingScore } = await scoreQuery.maybeSingle();
+
+									if (existingScore) {
+										console.log('[一般検定員] 既に採点済みのため、待機画面に留まります');
+										return;
+									}
+
+									// まだ採点していない場合のみ遷移
+									console.log('[一般検定員] まだ採点していないため、採点画面に遷移します');
+									currentBib.set(promptData.bib_number);
+
+									if (mode === 'tournament') {
+										console.log(
+											'[一般検定員/大会] 採点画面に遷移(既存):',
+											`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+										// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+										previousPromptId = currentPromptId;
+										goto(
+											`/session/${sessionId}/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+									} else {
+										console.log(
+											'[一般検定員/研修] 採点画面に遷移(既存):',
+											`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+										// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+										previousPromptId = currentPromptId;
+										goto(
+											`/session/${sessionId}/score/training/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+										);
+									}
 								}
+							} else {
+								// 検定モード
+								// ✅ 遷移成功確定時のみ previousPromptId を更新（取得失敗時の取りこぼし防止）
+								previousPromptId = currentPromptId;
+								goto(
+									`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+								);
 							}
 						}
-					} else if (status === 'CHANNEL_ERROR') {
-						console.error(
-							'[一般検定員] ❌ チャンネルエラー - フォールバックポーリングに切り替えます'
-						);
-						// フォールバックポーリング開始
-						startFallbackPolling();
-					} else if (status === 'TIMED_OUT') {
-						console.error('[一般検定員] ❌ タイムアウト - フォールバックポーリングに切り替えます');
-						// フォールバックポーリング開始
-						startFallbackPolling();
-					} else if (status === 'CLOSED') {
-						console.log(
-							'[一般検定員] リアルタイム接続が閉じられました - フォールバックポーリング確認'
-						);
-						// 念のためフォールバックポーリングを開始
-						startFallbackPolling();
 					}
-				});
-
-			// フォールバックポーリング開始（Realtimeのバックアップ）
-			// イベント取りこぼし対策として、Realtimeと並行してポーリングも実行
-			console.log('[一般検定員] フォールバックポーリングを開始（イベント取りこぼし対策）');
-			startFallbackPolling();
+				}
+			});
 		}
 	});
 
 	onDestroy(() => {
 		console.log('[DEBUG] onDestroy実行 - ページを離れます');
 		isPageActive = false; // ページを離れたことを記録
-		if (realtimeChannel) {
-			supabase.removeChannel(realtimeChannel);
-		}
-		if (fallbackPolling) {
-			clearInterval(fallbackPolling);
-			fallbackPolling = null;
-		}
+		realtimeHandle?.cleanup();
+		realtimeHandle = null;
 	});
 
 	// フォールバックポーリング: Realtime接続が失敗/停止した場合のバックアップ
@@ -516,29 +492,6 @@
 		}
 	}
 
-	function startFallbackPolling() {
-		if (fallbackPolling) {
-			console.log('[fallback] 既にポーリング開始済み');
-			return;
-		}
-
-		console.log('[fallback] フォールバックポーリングを開始（3秒ごと）');
-
-		// ✅ previousPromptId が null の場合のみ初期化（巻き戻し防止）
-		// Realtimeで既に処理済みの prompt を上書きしないようにする
-		if (previousPromptId === null) {
-			previousPromptId = data.sessionDetails.active_prompt_id;
-			console.log('[fallback] previousPromptId を初期化:', previousPromptId);
-		} else {
-			console.log('[fallback] previousPromptId を保持:', previousPromptId);
-		}
-
-		// Realtimeと並行する取りこぼし対策。realtime が瞬断すると主任の指示を取り逃すため、
-		// 会場WiFi前提で短間隔（3秒）にして遷移の最悪待ち時間を抑える。
-		// ポーリング自体は active_prompt_id 未変化なら sessions の単一行 SELECT で早期 return＝軽量。
-		fallbackPolling = setInterval(checkSessionStatus, 3000);
-	}
-
 	function selectDiscipline(discipline: string) {
 		// 次のステップ（級選択）のページへ移動
 		goto(`/session/${data.sessionDetails.id}/${discipline}`);
@@ -564,7 +517,11 @@
 	{#if isSessionExpired}
 		<!-- セッション期限切れメッセージ -->
 		<div class="alert warning" style="margin-bottom: 24px;">
-			<p><strong style="display: inline-flex; align-items: center; gap: 6px;"><Icon name="warning" size={18} />セッションの有効期限が切れました</strong></p>
+			<p>
+				<strong style="display: inline-flex; align-items: center; gap: 6px;"
+					><Icon name="warning" size={18} />セッションの有効期限が切れました</strong
+				>
+			</p>
 			<p>長時間操作がなかったため、セキュリティ上の理由でセッションが終了しました。</p>
 			<p>再度参加する場合は、招待リンクまたは参加コードを使用してください。</p>
 		</div>
