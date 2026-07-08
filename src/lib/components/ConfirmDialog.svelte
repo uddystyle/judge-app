@@ -3,11 +3,13 @@
 	import * as m from '$lib/paraglide/messages.js';
 
 	export let isOpen = false;
-	export let title = m.dialog_confirm();
+	export let title: string = m.dialog_confirm();
 	export let message = '';
-	export let confirmText = m.common_ok();
-	export let cancelText = m.common_cancel();
+	export let confirmText: string = m.common_ok();
+	export let cancelText: string = m.common_cancel();
 	export let variant: 'default' | 'danger' = 'default';
+	/** false にすると確認ボタンのみの通知ダイアログになる（AlertDialog が使用） */
+	export let showCancel = true;
 
 	const dispatch = createEventDispatcher();
 
@@ -23,14 +25,24 @@
 
 	function handleBackdropClick(event: MouseEvent) {
 		if (event.target === event.currentTarget) {
-			handleCancel();
+			// 通知ダイアログはキャンセル概念がないため、背景クリック＝確認（閉じる）
+			if (showCancel) {
+				handleCancel();
+			} else {
+				handleConfirm();
+			}
 		}
 	}
 </script>
 
 {#if isOpen}
 	<div class="dialog-backdrop" on:click={handleBackdropClick} role="presentation">
-		<div class="dialog-container" role="dialog" aria-labelledby="dialog-title" aria-modal="true">
+		<div
+			class="dialog-container"
+			role={showCancel ? 'dialog' : 'alertdialog'}
+			aria-labelledby="dialog-title"
+			aria-modal="true"
+		>
 			<div class="dialog-header">
 				<h2 id="dialog-title" class="dialog-title">{title}</h2>
 			</div>
@@ -38,10 +50,16 @@
 				<p class="dialog-message">{message}</p>
 			</div>
 			<div class="dialog-footer">
-				<button class="dialog-btn cancel-btn" on:click={handleCancel}>
-					{cancelText}
-				</button>
-				<button class="dialog-btn confirm-btn" class:danger={variant === 'danger'} on:click={handleConfirm}>
+				{#if showCancel}
+					<button class="dialog-btn cancel-btn" on:click={handleCancel}>
+						{cancelText}
+					</button>
+				{/if}
+				<button
+					class="dialog-btn confirm-btn"
+					class:danger={variant === 'danger'}
+					on:click={handleConfirm}
+				>
 					{confirmText}
 				</button>
 			</div>
@@ -108,6 +126,7 @@
 		line-height: 1.6;
 		margin: 0;
 		letter-spacing: -0.01em;
+		white-space: pre-line;
 	}
 
 	.dialog-footer {
@@ -127,6 +146,7 @@
 		transition: all 0.15s ease;
 		border: none;
 		letter-spacing: -0.01em;
+		min-width: 80px;
 	}
 
 	.cancel-btn {

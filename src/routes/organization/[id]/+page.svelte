@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import type { PageData, ActionData } from './$types';
 	import * as m from '$lib/paraglide/messages.js';
 	import { getLocale } from '$lib/paraglide/runtime.js';
@@ -174,7 +175,12 @@
 	}
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
 	<div class="page-header">
@@ -217,7 +223,12 @@
 					<button type="submit" class="save-btn" disabled={isSubmittingName}>
 						{isSubmittingName ? `${m.common_save()}...` : m.common_save()}
 					</button>
-					<button type="button" class="cancel-btn" on:click={cancelEditingName} disabled={isSubmittingName}>
+					<button
+						type="button"
+						class="cancel-btn"
+						on:click={cancelEditingName}
+						disabled={isSubmittingName}
+					>
 						{m.common_cancel()}
 					</button>
 				</div>
@@ -290,7 +301,10 @@
 				プランの詳細を確認
 			</NavButton>
 			{#if isAdmin}
-				<NavButton variant="primary" on:click={() => goto(`/organization/${data.organization.id}/change-plan`)}>
+				<NavButton
+					variant="primary"
+					on:click={() => goto(`/organization/${data.organization.id}/change-plan`)}
+				>
 					プランを変更
 				</NavButton>
 			{/if}
@@ -357,7 +371,9 @@
 							</NavButton>
 						</div>
 					{:else}
-						<p class="help-text">招待URLが生成されました。下記のURLをコピーして共有してください。</p>
+						<p class="help-text">
+							招待URLが生成されました。下記のURLをコピーして共有してください。
+						</p>
 						<div class="invite-url-container">
 							<input type="text" class="invite-url-input" value={inviteUrl} readonly />
 							<button class="copy-invite-btn" on:click={copyInviteUrl}>
@@ -382,7 +398,10 @@
 					組織を削除すると、すべてのデータが失われます。この操作は取り消せません。
 				</p>
 				<div class="nav-buttons" style="margin-top: 16px;">
-					<button class="danger-btn" on:click={() => goto(`/organization/${data.organization.id}/delete`)}>
+					<button
+						class="danger-btn"
+						on:click={() => goto(`/organization/${data.organization.id}/delete`)}
+					>
 						<Icon name="trash" size={16} />
 						組織を削除
 					</button>
@@ -417,36 +436,15 @@
 </div>
 
 <!-- メンバー削除確認ダイアログ -->
-{#if showDeleteConfirm && memberToDelete}
-	<div class="modal-overlay" on:click={cancelDeleteMember}>
-		<div class="modal-content" on:click|stopPropagation>
-			<h3 class="modal-title">メンバーを削除しますか？</h3>
-			<p class="modal-message">
-				<strong>{memberToDelete.profiles?.full_name || '名前未設定'}</strong> を組織から削除します。
-			</p>
-			<p class="modal-warning">
-				※ 過去のセッションデータは保持され、「退会済み」として表示されます。
-			</p>
-
-			<div class="modal-actions">
-				<button
-					class="modal-btn cancel-btn"
-					on:click={cancelDeleteMember}
-					disabled={deletingMember}
-				>
-					{m.common_cancel()}
-				</button>
-				<button
-					class="modal-btn delete-btn"
-					on:click={deleteMember}
-					disabled={deletingMember}
-				>
-					{deletingMember ? `${m.common_delete()}...` : m.common_delete()}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<ConfirmDialog
+	bind:isOpen={showDeleteConfirm}
+	title="メンバーを削除しますか？"
+	message={`「${memberToDelete?.profiles?.full_name || '名前未設定'}」を組織から削除します。\n\n※ 過去のセッションデータは保持され、「退会済み」として表示されます。`}
+	confirmText={m.common_delete()}
+	variant="danger"
+	on:confirm={deleteMember}
+	on:cancel={cancelDeleteMember}
+/>
 
 <Footer />
 
@@ -935,67 +933,7 @@
 		font-weight: 600;
 	}
 
-	/* モーダルダイアログ */
-	.modal-overlay {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		z-index: 1000;
-		padding: 20px;
-	}
-	.modal-content {
-		background: var(--bg-primary);
-		border-radius: 16px;
-		padding: 32px;
-		max-width: 480px;
-		width: 100%;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-	}
-	.modal-title {
-		font-size: 20px;
-		font-weight: 700;
-		color: var(--text-primary);
-		margin: 0 0 16px 0;
-	}
-	.modal-message {
-		font-size: 16px;
-		color: var(--text-primary);
-		margin: 0 0 12px 0;
-		line-height: 1.5;
-	}
-	.modal-warning {
-		font-size: 14px;
-		color: var(--text-secondary);
-		margin: 0 0 24px 0;
-		line-height: 1.5;
-		padding: 12px;
-		background: var(--bg-secondary);
-		border-radius: 8px;
-	}
-	.modal-actions {
-		display: flex;
-		gap: 12px;
-		justify-content: flex-end;
-	}
-	.modal-btn {
-		padding: 12px 24px;
-		font-size: 15px;
-		font-weight: 600;
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.modal-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
+	/* 名前編集のキャンセルボタン */
 	.cancel-btn {
 		background: var(--bg-secondary);
 		color: var(--text-primary);
@@ -1003,17 +941,6 @@
 	}
 	.cancel-btn:hover:not(:disabled) {
 		background: var(--bg-tertiary);
-	}
-	.delete-btn {
-		background: var(--color-error);
-		color: white;
-	}
-	.delete-btn:hover:not(:disabled) {
-		background: var(--color-error);
-		box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
-	}
-	.delete-btn:active:not(:disabled) {
-		transform: scale(0.98);
 	}
 
 	@media (min-width: 768px) {

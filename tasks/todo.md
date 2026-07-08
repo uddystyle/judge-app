@@ -1,5 +1,18 @@
 # Current Tasks
 
+## リファクタリング ステップ11: ダイアログ統合（2026-07-06）— ✅ 完了
+
+- [x] **AlertDialog を ConfirmDialog の薄いラッパー化**（172行→13行）: ConfirmDialog に `showCancel` プロパティを追加（false で通知ダイアログ: キャンセル非表示・背景クリック＝確認・role=alertdialog）。重複していた約130行の CSS を1本化。公開 API は両コンポーネントとも不変（利用側5ページ+ScoreInput は無修正）
+- [x] ConfirmDialog に AlertDialog 由来の改善を取り込み: `white-space: pre-line`（メッセージ内改行）と `min-width: 80px`
+- [x] `title`/`confirmText`/`cancelText` を `string` 型に明示 → paraglide の LocalizedString ブランド型による既存の型エラー5件がついでに解消
+- [x] **organization/[id] のメンバー削除モーダル**（手書き約35行+CSS約80行）を ConfirmDialog（variant=danger）に置換。※削除実行中の「削除...」表示は失われる（ダイアログは確認時に閉じる方式）が、二重確定はダイアログクローズで防止される
+- [x] 判断記録: archive ページの完全削除モーダルは**2段階確認ウィザード**（警告リスト付き）で ConfirmDialog の複製ではないため対象外として温存
+
+### 検証
+- [x] vitest: 811 passed / 11 skipped 全緑
+- [x] svelte-check: **238 errors / 21 warnings**（243/25 から改善: 型注釈で−5、手書きモーダル撤去で警告−4）
+- [x] `npm run build` 成功、prettier クリーン
+
 ## リファクタリング ステップ10: details アクションの分割（2026-07-05）— ✅ 完了
 
 `details/+page.server.ts`（1,089行・15アクション、12未テスト）を characterization テスト先行で move-only 分割。
