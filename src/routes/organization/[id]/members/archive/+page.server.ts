@@ -93,8 +93,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		profile,
 		organization,
 		removedMembers: membersWithProfiles,
-		userRole: membership.role
-	,
+		userRole,
 		hasOrganization: true
 	};
 };

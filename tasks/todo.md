@@ -1,5 +1,15 @@
 # Current Tasks
 
+## バグ修正: エクスポート不能（orgAuth 集約の回帰）（2026-07-08）— ✅ 完了
+
+**症状**: セッション詳細のエクスポートで常に「エクスポートするデータがありません。」
+**根本原因**: orgAuth 集約（0a9f9a3）で `membership` 変数を `userRole` に置換した際、Edit 範囲外にあった参照が3箇所残存。組織セッションでは認可チェック通過後に `ReferenceError: membership is not defined` → 500。クライアントは `!response.ok` を「データなし」と表示するため症状が化けていた。
+**svelte-check は検出していた**が、総件数の純減（249→243）に新規エラーが埋もれて見逃した（→ lessons.md に検証手順の教訓を記録済み）。
+
+- [x] `api/export/[sessionId]/+server.ts:76` — debug ログの `membership.role` → `userRole`（RED→GREEN、export テスト4件新規作成）
+- [x] 横断 grep で同クラスの残存を捜索 → **archive 2ページの load も `userRole: membership.role` で開くだけで500** → 修正（organization/[id]/archive、members/archive）
+- [x] 検証: vitest 815 passed 全緑、svelte-check 237→**235**、build 成功、`membership` 残存参照ゼロを grep 確認
+
 ## リファクタリング ステップ11: ダイアログ統合（2026-07-06）— ✅ 完了
 
 - [x] **AlertDialog を ConfirmDialog の薄いラッパー化**（172行→13行）: ConfirmDialog に `showCancel` プロパティを追加（false で通知ダイアログ: キャンセル非表示・背景クリック＝確認・role=alertdialog）。重複していた約130行の CSS を1本化。公開 API は両コンポーネントとも不変（利用側5ページ+ScoreInput は無修正）

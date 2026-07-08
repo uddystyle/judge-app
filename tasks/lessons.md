@@ -1078,3 +1078,15 @@ if (guestIdentifier) {
 
 - 2026-03-03 (Session 2): Added auth error code-based handling, invitation email confirmation security patterns, and URL parameter validation (UUID v4) patterns
 - 2026-03-03 (Session 1): Initial creation with SvelteKit redirect/error patterns, Supabase patterns, organization management, mode detection, and testing patterns
+
+## Refactoring verification
+
+### ✅ svelte-check は「件数比較」ではなく「触ったファイルのエラー内容」で検証する
+**Rule**: リファクタリング後の svelte-check 検証は、総件数の増減だけで判断しない。**変更したファイルを check 出力から grep して、新規エラーがゼロであることを直接確認**する。件数が純減していても、他所の改善に新規エラーが隠れる。
+
+**Why**: orgAuth 集約時（0a9f9a3）、export API の成功時デバッグログが削除済み変数 `membership` を参照したまま残った。svelte-check は当時から `Cannot find name 'membership'` を検出していたが、総件数が 249→243 と純減していたため（他所の修正−7 に新規+1 が埋もれ）見逃した。結果、組織セッションのエクスポートが全て ReferenceError → 500 になり、クライアントは `!response.ok` を「エクスポートするデータがありません。」と表示するため、ユーザー報告まで気づけなかった。
+
+**How to apply**:
+- リファクタ後は `npm run check 2>&1 | grep -A3 "<変更したファイルのパス>"` を必ず実行し、変更前（`git stash` 比較 or HEAD 時点の同 grep）と**エラー内容**を突き合わせる。
+- 変数を置換するリファクタでは、置換対象の**旧変数名を最後に grep**して参照ゼロを確認する（`grep -n "membership" <file>`）。Edit の old_string 範囲外に残った参照はこれで捕まえられる。
+- API がエラーでも、クライアントが `!response.ok` を「データなし」等の別メッセージに丸めている場合がある。「データがありません」系の報告は、まずエンドポイントが 4xx/5xx を返していないかを疑う。

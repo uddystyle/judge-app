@@ -73,7 +73,7 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 		logger.debug('[Export API] 組織メンバーシップ確認完了:', {
 			userId: user.id,
 			orgId: session.organization_id,
-			role: membership.role
+			role: userRole
 		});
 	}
 
