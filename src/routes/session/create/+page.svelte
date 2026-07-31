@@ -17,6 +17,9 @@
 	let isMultiJudge = false; // 複数検定員モードのデフォルト値
 	let selectedOrganization = data.organizations[0]?.id || ''; // デフォルトで最初の組織を選択
 	let isSubmitting = false;
+
+	// 大会モードはスポット販売（チケット制）。選択中の組織の未使用チケット残数
+	$: availableTickets = data.ticketCounts?.[selectedOrganization] ?? 0;
 </script>
 
 <div class="container">
@@ -100,6 +103,20 @@
 							/>{m.session_tournamentMode()}
 						</div>
 						<div class="mode-description">{m.session_tournamentModeDesc()}</div>
+						{#if selectedMode === 'tournament'}
+							{#if availableTickets > 0}
+								<div class="ticket-note has-tickets">
+									大会チケット残数: {availableTickets}枚（作成時に1枚消費されます）
+								</div>
+							{:else}
+								<div class="ticket-note no-tickets">
+									大会モードは1大会ごとのスポット販売です。ご利用には大会チケットが必要です（料金はお問い合わせください）。
+									<a href="/contact?category=tournament_quote" class="ticket-contact-link"
+										>お見積りを依頼する</a
+									>
+								</div>
+							{/if}
+						{/if}
 					</div>
 				</label>
 
@@ -179,6 +196,12 @@
 					{#if form?.upgradeUrl}
 						<button type="button" class="upgrade-btn" on:click={() => goto(form.upgradeUrl)}>
 							{m.session_upgradePlan()}
+						</button>
+					{/if}
+					{#if form && 'contactUrl' in form && form.contactUrl}
+						{@const contactUrl = String(form.contactUrl)}
+						<button type="button" class="upgrade-btn" on:click={() => goto(contactUrl)}>
+							お見積りを依頼する
 						</button>
 					{/if}
 				</div>
@@ -264,6 +287,28 @@
 	}
 	.upgrade-btn:hover {
 		opacity: 0.85;
+	}
+	/* 大会チケット案内 */
+	.ticket-note {
+		margin-top: 8px;
+		padding: 8px 12px;
+		border-radius: 8px;
+		font-size: 13px;
+		line-height: 1.6;
+	}
+	.ticket-note.has-tickets {
+		background: var(--mode-taikai-tint);
+		color: var(--mode-taikai);
+		font-weight: 600;
+	}
+	.ticket-note.no-tickets {
+		background: var(--bg-secondary);
+		color: var(--text-secondary);
+	}
+	.ticket-contact-link {
+		color: var(--accent);
+		font-weight: 600;
+		text-decoration: underline;
 	}
 	.mode-selection {
 		margin: 20px 0;

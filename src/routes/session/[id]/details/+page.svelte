@@ -12,9 +12,11 @@
 	import EventManagement from '$lib/components/EventManagement.svelte';
 	import TournamentSettings from '$lib/components/TournamentSettings.svelte';
 	import MultiJudgeSettings from '$lib/components/MultiJudgeSettings.svelte';
+	import SessionParticipants from '$lib/components/SessionParticipants.svelte';
+	import TrainingScoreboard from '$lib/components/TrainingScoreboard.svelte';
+	import { exportSessionResults } from '$lib/exportSessionResults';
 	import { onMount } from 'svelte';
 	import * as m from '$lib/paraglide/messages.js';
-	import { getLocale } from '$lib/paraglide/runtime.js';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -49,16 +51,6 @@
 	let deleteCertificationDataForm: HTMLFormElement;
 	let deleteTournamentDataForm: HTMLFormElement;
 	let deleteSessionForm: HTMLFormElement;
-
-	// ゲストユーザー削除確認ダイアログ
-	let showRemoveGuestDialog = false;
-	let guestToRemove: { identifier: string; name: string } | null = null;
-	let removeGuestForms: { [key: string]: HTMLFormElement } = {};
-
-	// 一般検定員削除確認ダイアログ
-	let showRemoveParticipantDialog = false;
-	let participantToRemove: { userId: string; name: string } | null = null;
-	let removeParticipantForms: { [key: string]: HTMLFormElement } = {};
 
 	// 採点データ削除確認ダイアログ
 	let showDeleteDataDialog = false;
@@ -118,49 +110,6 @@
 		);
 	}
 
-	function openRemoveGuestDialog(guestIdentifier: string, guestName: string) {
-		guestToRemove = { identifier: guestIdentifier, name: guestName };
-		showRemoveGuestDialog = true;
-	}
-
-	function handleRemoveGuestConfirm() {
-		if (guestToRemove && removeGuestForms[guestToRemove.identifier]) {
-			removeGuestForms[guestToRemove.identifier].requestSubmit();
-		}
-		showRemoveGuestDialog = false;
-		guestToRemove = null;
-	}
-
-	function handleRemoveGuestCancel() {
-		showRemoveGuestDialog = false;
-		guestToRemove = null;
-	}
-
-	function openRemoveParticipantDialog(userId: string, participantName: string) {
-		participantToRemove = { userId, name: participantName };
-		showRemoveParticipantDialog = true;
-	}
-
-	function handleRemoveParticipantConfirm() {
-		if (participantToRemove && removeParticipantForms[participantToRemove.userId]) {
-			removeParticipantForms[participantToRemove.userId].requestSubmit();
-		}
-		showRemoveParticipantDialog = false;
-		participantToRemove = null;
-	}
-
-	function handleRemoveParticipantCancel() {
-		showRemoveParticipantDialog = false;
-		participantToRemove = null;
-	}
-
-	// 参加者リスト更新
-	let isRefreshing = false;
-	function handleRefresh() {
-		isRefreshing = true;
-		window.location.reload();
-	}
-
 	// QRコード関連
 	let showQRModal = false;
 	let inviteUrl = '';
@@ -199,70 +148,25 @@
 	async function handleExport() {
 		exportLoading = true;
 		try {
-			// 1. Fetch data from our new server endpoint
-			const response = await fetch(`/api/export/${data.sessionDetails.id}`);
-			const jsonData = await response.json();
+			const result = await exportSessionResults(data.sessionDetails.id, data.sessionDetails.name);
 
-			if (!response.ok || !jsonData.results || jsonData.results.length === 0) {
-				alertMessage = m.details_noExportData();
+			if (!result.ok) {
+				alertMessage =
+					result.reason === 'no-data' ? m.details_noExportData() : m.details_exportError();
 				showAlert = true;
-				return;
 			}
-
-			// 2. Prepare the data for the Excel sheet
-			const exportData = jsonData.results.map((item: any) => ({
-				[m.details_exportDateTime()]: new Date(item.created_at).toLocaleString(getLocale()),
-				[m.details_exportBib()]: item.bib,
-				[m.details_exportScore()]: item.score,
-				[m.details_exportDiscipline()]: item.discipline,
-				[m.details_exportLevel()]: item.level,
-				[m.details_exportEvent()]: item.event_name,
-				[m.details_exportJudge()]: item.judge_name
-			}));
-
-			// 3. Create the Excel file in the browser
-			// xlsx は重い（~1MB）ため、エクスポート実行時にだけ遅延ロードする
-			const XLSX = await import('xlsx');
-			const worksheet = XLSX.utils.json_to_sheet(exportData);
-			const workbook = XLSX.utils.book_new();
-			XLSX.utils.book_append_sheet(workbook, worksheet, m.details_exportSheetName());
-
-			const fileName = `${data.sessionDetails.name}_${m.details_exportSheetName()}.xlsx`;
-
-			// 4. モバイル環境かどうかを判定（Web Share API対応 & 画面幅768px未満）
-			const isMobile = window.innerWidth < 768;
-			const canShare = navigator.share !== undefined;
-
-			if (isMobile && canShare) {
-				// モバイル環境: Web Share APIで共有
-				const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-				const blob = new Blob([excelBuffer], {
-					type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-				});
-				const file = new File([blob], fileName, {
-					type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-				});
-
-				await navigator.share({
-					title: m.details_exportShareTitle(),
-					text: m.details_exportShareText({ name: data.sessionDetails.name }),
-					files: [file]
-				});
-			} else {
-				// PC環境: ダウンロード
-				XLSX.writeFile(workbook, fileName);
-			}
-		} catch (err) {
-			console.error('Export failed:', err);
-			alertMessage = m.details_exportError();
-			showAlert = true;
 		} finally {
 			exportLoading = false;
 		}
 	}
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
 	<!-- セッション名ヘッダー -->
@@ -307,7 +211,12 @@
 					<button type="submit" class="save-btn" disabled={isSubmittingName}>
 						{isSubmittingName ? m.settings_saving() : m.common_save()}
 					</button>
-					<button type="button" class="cancel-btn" on:click={cancelEditingName} disabled={isSubmittingName}>
+					<button
+						type="button"
+						class="cancel-btn"
+						on:click={cancelEditingName}
+						disabled={isSubmittingName}
+					>
 						{m.common_cancel()}
 					</button>
 				</div>
@@ -317,7 +226,11 @@
 			<div class="name-display">
 				<h1 class="session-title">{data.sessionDetails.name}</h1>
 				{#if isCreator}
-					<button class="edit-name-btn" on:click={startEditingName} title={m.details_editSessionName()}>
+					<button
+						class="edit-name-btn"
+						on:click={startEditingName}
+						title={m.details_editSessionName()}
+					>
 						<Icon name="edit" size={16} />
 					</button>
 				{/if}
@@ -371,93 +284,12 @@
 	<hr class="divider" />
 
 	<div class="settings-section">
-		<div class="section-header-with-action">
-			<h3 class="settings-title"><Icon name="judges" size={20} />{m.details_activeJudges()}</h3>
-			<button class="refresh-btn-with-label" class:refreshing={isRefreshing} on:click={handleRefresh} title={m.details_refreshList()}>
-				<Icon name="refresh" size={18} />
-				<span class="refresh-label">{m.details_refreshList()}</span>
-			</button>
-		</div>
-		<div class="participants-container">
-			{#if data.participants && data.participants.length > 0}
-				{#each data.participants as p}
-					<div class="participant-item" class:removed={p.removed_at}>
-						<span class="participant-name">
-							{#if p.is_guest}
-								{p.guest_name}
-								<span class="guest-badge">{m.details_guest()}</span>
-							{:else}
-								{p.profiles?.full_name || m.details_profileNotSet()}
-								{#if data.sessionDetails.chief_judge_id === p.user_id}
-									<span class="chief-badge">{m.details_chief()}</span>
-								{/if}
-								{#if p.removed_at}
-									<span class="removed-badge">{m.details_removed()}</span>
-								{/if}
-							{/if}
-						</span>
-
-						<div class="participant-actions">
-							{#if !p.is_guest && data.currentUserId === data.sessionDetails.created_by}
-								<form method="POST" action="?/appointChief" use:enhance>
-									<input type="hidden" name="userId" value={p.user_id} />
-									<button
-										type="submit"
-										class="appoint-btn"
-									>
-										{#if data.sessionDetails.chief_judge_id === p.user_id}
-											{m.details_removeChief()}
-										{:else}
-											{m.details_appointChief()}
-										{/if}
-									</button>
-								</form>
-
-								{#if p.user_id !== data.currentUserId && p.user_id !== data.sessionDetails.chief_judge_id}
-									<form
-										bind:this={removeParticipantForms[p.user_id]}
-										method="POST"
-										action="?/removeParticipant"
-										use:enhance
-									>
-										<input type="hidden" name="userId" value={p.user_id} />
-										<button
-											type="button"
-											class="appoint-btn danger"
-											on:click={() => openRemoveParticipantDialog(p.user_id, p.profiles?.full_name || m.details_profileNotSet())}
-										>
-											<Icon name="trash" size={16} />
-											{m.common_delete()}
-										</button>
-									</form>
-								{/if}
-							{/if}
-
-							{#if p.is_guest && data.currentUserId === data.sessionDetails.created_by}
-								<form
-									bind:this={removeGuestForms[p.guest_identifier]}
-									method="POST"
-									action="?/removeGuest"
-									use:enhance
-								>
-									<input type="hidden" name="guestIdentifier" value={p.guest_identifier} />
-									<button
-										type="button"
-										class="appoint-btn danger"
-										on:click={() => openRemoveGuestDialog(p.guest_identifier, p.guest_name)}
-									>
-										<Icon name="trash" size={16} />
-										{m.common_delete()}
-									</button>
-								</form>
-							{/if}
-						</div>
-					</div>
-				{/each}
-			{:else}
-				<p>{m.details_noParticipants()}</p>
-			{/if}
-		</div>
+		<SessionParticipants
+			participants={data.participants}
+			currentUserId={data.currentUserId}
+			createdBy={data.sessionDetails.created_by}
+			chiefJudgeId={data.sessionDetails.chief_judge_id}
+		/>
 	</div>
 
 	<hr class="divider" />
@@ -510,29 +342,7 @@
 	{#if data.isTrainingMode && data.trainingScores && data.trainingScores.length > 0}
 		<div class="settings-section">
 			<h3 class="settings-title">{m.details_scoringResults()}</h3>
-			<div class="scoreboard">
-				<div class="scoreboard-header">
-					<div class="col-event">{m.details_event()}</div>
-					<div class="col-athlete">{m.details_athlete()}</div>
-					<div class="col-judge">{m.details_judge()}</div>
-					<div class="col-score">{m.details_score()}</div>
-				</div>
-				{#each data.trainingScores as score}
-					<div class="scoreboard-row">
-						<div class="col-event">{score.training_events?.name || '-'}</div>
-						<div class="col-athlete">
-							#{score.athlete?.bib_number || '-'}
-							{#if score.athlete?.profiles?.full_name}
-								<span class="athlete-name">{score.athlete.profiles.full_name}</span>
-							{/if}
-						</div>
-						<div class="col-judge">
-							{score.judge?.full_name || '-'}
-						</div>
-						<div class="col-score">{m.details_scorePoints({ score: String(score.score) })}</div>
-					</div>
-				{/each}
-			</div>
+			<TrainingScoreboard scores={data.trainingScores} />
 		</div>
 		<hr class="divider" />
 	{/if}
@@ -556,26 +366,17 @@
 						{exportLoading ? m.details_preparing() : m.details_exportResults()}
 					</NavButton>
 					{#if data.isTrainingMode}
-						<NavButton
-							variant="danger"
-							on:click={() => openDeleteDataDialog('training')}
-						>
+						<NavButton variant="danger" on:click={() => openDeleteDataDialog('training')}>
 							<Icon name="trash" size={18} />
 							{m.details_deleteScoreData()}
 						</NavButton>
 					{:else if data.sessionDetails.is_tournament_mode}
-						<NavButton
-							variant="danger"
-							on:click={() => openDeleteDataDialog('tournament')}
-						>
+						<NavButton variant="danger" on:click={() => openDeleteDataDialog('tournament')}>
 							<Icon name="trash" size={18} />
 							{m.details_deleteScoreData()}
 						</NavButton>
 					{:else}
-						<NavButton
-							variant="danger"
-							on:click={() => openDeleteDataDialog('certification')}
-						>
+						<NavButton variant="danger" on:click={() => openDeleteDataDialog('certification')}>
 							<Icon name="trash" size={18} />
 							{m.details_deleteScoreData()}
 						</NavButton>
@@ -597,17 +398,30 @@
 		<div class="nav-buttons">
 			<NavButton
 				variant="danger"
-				on:click={() => { showDeleteSessionDialog = true; }}
+				on:click={() => {
+					showDeleteSessionDialog = true;
+				}}
 			>
 				<Icon name="trash" size={18} />
-				{m.details_deleteSession({ mode: data.isTrainingMode ? m.mode_training() : data.sessionDetails.is_tournament_mode ? m.mode_tournament() : m.mode_certification() })}
+				{m.details_deleteSession({
+					mode: data.isTrainingMode
+						? m.mode_training()
+						: data.sessionDetails.is_tournament_mode
+							? m.mode_tournament()
+							: m.mode_certification()
+				})}
 			</NavButton>
 		</div>
 	{/if}
 </div>
 
 <!-- QRコードモーダル -->
-<QRInviteModal {inviteUrl} sessionName={data.sessionDetails.name} show={showQRModal} on:close={closeQRModal} />
+<QRInviteModal
+	{inviteUrl}
+	sessionName={data.sessionDetails.name}
+	show={showQRModal}
+	on:close={closeQRModal}
+/>
 
 <!-- 非表示フォーム: 採点データ削除 -->
 <form
@@ -690,8 +504,8 @@
 	message={deleteDataTarget === 'training'
 		? m.details_deleteScoreDataMessage({ mode: m.mode_training() })
 		: deleteDataTarget === 'tournament'
-		? m.details_deleteScoreDataMessage({ mode: m.mode_tournament() })
-		: m.details_deleteScoreDataMessage({ mode: m.mode_certification() })}
+			? m.details_deleteScoreDataMessage({ mode: m.mode_tournament() })
+			: m.details_deleteScoreDataMessage({ mode: m.mode_certification() })}
 	confirmText={m.details_deleteConfirm()}
 	cancelText={m.common_cancel()}
 	variant="danger"
@@ -699,34 +513,16 @@
 	on:cancel={handleDeleteDataCancel}
 />
 
-<!-- ゲストユーザー削除確認ダイアログ -->
-<ConfirmDialog
-	bind:isOpen={showRemoveGuestDialog}
-	title={m.details_removeGuest()}
-	message={guestToRemove ? m.details_removeGuestMessage({ name: guestToRemove.name }) : ''}
-	confirmText={m.common_delete()}
-	cancelText={m.common_cancel()}
-	variant="danger"
-	on:confirm={handleRemoveGuestConfirm}
-	on:cancel={handleRemoveGuestCancel}
-/>
-
-<!-- 一般検定員削除確認ダイアログ -->
-<ConfirmDialog
-	bind:isOpen={showRemoveParticipantDialog}
-	title={m.details_removeJudge()}
-	message={participantToRemove ? m.details_removeJudgeMessage({ name: participantToRemove.name }) : ''}
-	confirmText={m.common_delete()}
-	cancelText={m.common_cancel()}
-	variant="danger"
-	on:confirm={handleRemoveParticipantConfirm}
-	on:cancel={handleRemoveParticipantCancel}
-/>
-
 <!-- セッション削除確認ダイアログ -->
 <ConfirmDialog
 	bind:isOpen={showDeleteSessionDialog}
-	title={m.details_deleteSession({ mode: data.isTrainingMode ? m.mode_training() : data.sessionDetails.is_tournament_mode ? m.mode_tournament() : m.mode_certification() })}
+	title={m.details_deleteSession({
+		mode: data.isTrainingMode
+			? m.mode_training()
+			: data.sessionDetails.is_tournament_mode
+				? m.mode_tournament()
+				: m.mode_certification()
+	})}
 	message={m.details_deleteSessionMessage({ name: data.sessionDetails.name })}
 	confirmText={m.details_deleteConfirm()}
 	cancelText={m.common_cancel()}
@@ -788,56 +584,6 @@
 		gap: 8px;
 		text-align: left;
 	}
-	.section-header-with-action {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 0.5rem;
-	}
-	.section-header-with-action .settings-title {
-		margin-bottom: 0;
-	}
-	.refresh-btn-with-label {
-		background: var(--bg-primary);
-		border: 2px solid var(--border-light);
-		border-radius: 8px;
-		padding: 8px 12px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		cursor: pointer;
-		transition: all 0.2s ease;
-		color: var(--text-primary);
-		font-size: 14px;
-		font-weight: 500;
-	}
-	.refresh-btn-with-label:hover {
-		background: var(--bg-hover);
-		border-color: var(--border-medium);
-	}
-	.refresh-btn-with-label:active {
-		transform: scale(0.98);
-		opacity: 0.7;
-	}
-	.refresh-btn-with-label.refreshing {
-		pointer-events: none;
-		opacity: 0.7;
-	}
-	.refresh-btn-with-label.refreshing :global(svg) {
-		animation: spin 1s linear infinite;
-	}
-	.refresh-label {
-		white-space: nowrap;
-	}
-	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
 	input {
 		width: 100%;
 		padding: 12px;
@@ -850,56 +596,6 @@
 		border-top: 1px solid var(--separator-gray);
 		margin: 24px 0;
 	}
-	.participants-container {
-		background: white;
-		border-radius: 12px;
-		padding: 8px 16px;
-	}
-	.participant-item {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 12px 0;
-		border-bottom: 1px solid var(--separator-gray);
-	}
-	.participant-item:last-child {
-		border-bottom: none;
-	}
-	.participant-name {
-		font-weight: 500;
-	}
-	.participant-actions {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-	}
-	.chief-badge {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--color-success);
-		margin-left: 8px;
-	}
-	.guest-badge {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-secondary);
-		margin-left: 8px;
-	}
-	.removed-badge {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--text-muted);
-		background: var(--bg-tertiary);
-		padding: 2px 6px;
-		border-radius: 4px;
-		margin-left: 8px;
-	}
-	.participant-item.removed {
-		opacity: 0.6;
-	}
-	.participant-item.removed .participant-name {
-		color: var(--text-secondary);
-	}
 	.nav-buttons {
 		display: flex;
 		flex-direction: column;
@@ -908,39 +604,6 @@
 		max-width: 600px;
 		margin-left: auto;
 		margin-right: auto;
-	}
-	.appoint-btn {
-		background-color: var(--keypad-bg);
-		color: var(--primary-text);
-		border: none;
-		border-radius: 8px;
-		padding: 10px 16px;
-		font-size: 14px;
-		font-weight: 500;
-		cursor: pointer;
-		transition: background-color 0.2s;
-		min-height: 44px;
-	}
-	.appoint-btn:disabled {
-		background-color: var(--ios-blue);
-		color: white;
-		cursor: default;
-		opacity: 0.7;
-	}
-	.appoint-btn.danger {
-		background-color: transparent;
-		color: var(--color-error);
-		border: 1.5px solid var(--color-error);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-	}
-	.appoint-btn.danger:hover {
-		background-color: var(--color-error-tint);
-	}
-	.appoint-btn.danger:active {
-		background-color: var(--color-error-tint);
 	}
 	.settings-section {
 		text-align: left;
@@ -979,19 +642,6 @@
 			padding: 16px;
 			font-size: 18px;
 		}
-		.participants-container {
-			padding: 16px 24px;
-		}
-		.participant-item {
-			padding: 16px 0;
-		}
-		.participant-name {
-			font-size: 18px;
-		}
-		.appoint-btn {
-			padding: 8px 16px;
-			font-size: 16px;
-		}
 		.nav-buttons {
 			gap: 16px;
 		}
@@ -1002,59 +652,6 @@
 		.container {
 			max-width: 1000px;
 		}
-	}
-
-	/* 研修モード スコアボード */
-	.scoreboard {
-		background: white;
-		border-radius: 12px;
-		overflow: hidden;
-		border: 1px solid var(--separator-gray);
-	}
-
-	.scoreboard-header,
-	.scoreboard-row {
-		display: grid;
-		grid-template-columns: 2fr 2fr 2fr 1fr;
-		gap: 8px;
-		padding: 12px;
-		font-size: 14px;
-	}
-
-	.scoreboard-header {
-		background: var(--bg-secondary);
-		font-weight: 600;
-		border-bottom: 2px solid var(--separator-gray);
-	}
-
-	.scoreboard-row {
-		border-bottom: 1px solid var(--border-light);
-	}
-
-	.scoreboard-row:last-child {
-		border-bottom: none;
-	}
-
-	.col-event,
-	.col-athlete,
-	.col-judge,
-	.col-score {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.col-score {
-		text-align: right;
-		font-weight: 600;
-		color: var(--color-warning);
-	}
-
-	.athlete-name {
-		display: block;
-		font-size: 12px;
-		color: var(--text-secondary);
-		margin-top: 2px;
 	}
 
 	/* セッション名ヘッダー */
@@ -1313,20 +910,6 @@
 	@media (max-width: 480px) {
 		.mobile-break {
 			display: block;
-		}
-	}
-
-
-	@media (max-width: 768px) {
-		.scoreboard-header,
-		.scoreboard-row {
-			font-size: 12px;
-			padding: 10px;
-			gap: 6px;
-		}
-
-		.athlete-name {
-			font-size: 11px;
 		}
 	}
 </style>

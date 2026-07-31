@@ -1,5 +1,81 @@
 # Current Tasks
 
+## 大会モードのスポット販売化（チケット制）実装計画（2026-07-30）— ✅ 実装完了（DB適用・法務文言の最終確認待ち）
+
+**敵対的レビュー（ultracode 3レンズ+検証）の結果と修正**:
+- [x] 🔴致命: 1022 の消費トリガーが FK 即時検査で必ず 23503 失敗（レビュアーが pg16 で実証）→ session_id FK を `deferrable initially deferred` に修正（修正もレビュアーが実証済み）
+- [x] 🟠高: `$lib/plans.ts` の features 3件が未修正のまま（購入3画面に「検定・大会・研修モード」が残存）→ 「検定・研修モード」へ修正
+- [x] 🟡中: org FK が cascade で組織削除時に請求監査データ消失 → restrict へ変更+削除アクションに案内エラー+オペ手順追記
+- [x] 🟢低×2: contact の種別ヒントが手動選択で出ない（bind:value 化）／`.neq('mode','tournament')` が mode NULL 行を除外（`.or('mode.is.null,mode.neq.tournament')` へ、organizationLimits+account+テストモック）
+- [x] ui-copy レンズが API エラーで失敗 → 主要項目を自己検証（旧文言の消し残りゼロ・CSS変数実在・paraglide 生成確認）
+- [x] APPLIED.md の適用順を「DB先行」に訂正（1022: アプリ先行だと無消費窓が開く／1023: アプリ先行だと CHECK 違反）
+
+**残タスク（uchida さん側）**:
+- [x] dev: 1022 → 1023 適用済み・verify 全✅（2026-08-01。verify は自動選択版に改良済み）
+- [x] prod: 1022 → 1023 適用済み（2026-08-01 トリガー2本+制約を実測確認）・APPLIED.md 更新済み
+- [ ] TEST_CHECKLIST.md の「大会チケット手動検証」を dev で一巡
+- [ ] legal / terms の追記文言の最終確認（法務事項）
+- [ ] デプロイ順: **両DBに SQL 適用後に**アプリをデプロイ
+
+**決定済みの商品仕様**: 大会モードをプラン特典から切り出し、大会1回（=セッション1つ）ごとのスポット販売。価格は完全非公示（お問い合わせ→個別見積り）。決済は Stripe Invoice 等を手動発行（セルフサーブ決済なし）。既存有料ユーザーはゼロのためグランドファザー不要。
+**2026-07-30 に確定した4仕様**: ①大会セッションは検定員数上限（max_judges_per_session）の対象外 ②大会セッションは月間セッション数上限のカウント・チェック対象外 ③スコアボード公開は大会機能としてチケットに含める（プランゲート配線しない） ④データ保持は組織プラン準拠（Free は約30日で自動削除）とし、FAQ・案内で「大会終了後は Excel エクスポート推奨」を明記。
+
+**調査で確定した事実**（ultracode 調査 5 エージェント、file:line 裏取り済み）:
+- サーバー側ゲートは session/create の `checkCanUseTournamentMode`（plan_limits.has_tournament_mode 参照）の1箇所のみ。大会系ルートは全て `is_tournament_mode` によるセッション単位ガードで**変更不要**
+- Stripe 結合はゼロ（価格ID・webhook・checkout に大会関連なし）→ **Stripe コード無変更で成立**
+- ⚠️ **課金バイパス穴**: sessions の RLS INSERT ポリシー（018）は組織メンバーなら任意カラムで insert 可 → PostgREST 直叩きで `mode='tournament'` を作れる。UPDATE ポリシーでも既存セッションの大会化が可能。**DB 層での強制が必須**
+- ⚠️ 法務ページ矛盾: 特商法表記（/legal）に価格一覧のみでスポット販売の記載なし。利用規約第6条「支払方法はクレジットカード決済とします」が請求書払いと矛盾
+- contact_submissions.category に CHECK 制約あり（023）→ 見積カテゴリ追加には両DBマイグレーション必要
+
+### Phase 1: DB マイグレーション（手動適用: dev 先行 → prod、APPLIED.md 更新）
+- [x] `1022_add_tournament_tickets.sql`: tournament_tickets テーブル（id uuid PK / organization_id uuid FK cascade / session_id bigint FK **set null**（自動物理削除 cron と両立）/ note / granted_at / used_at、1セッション=1チケットの部分 unique、RLS はメンバー自組織 SELECT のみ・書込みは service role）
+- [x] 同 SQL 内に **BEFORE INSERT トリガー**: `is_tournament_mode=true` の insert 時に未使用チケットを `FOR UPDATE SKIP LOCKED` で原子的に消費、無ければ RAISE EXCEPTION（RLS 直叩きバイパスと消費の競合・非アトミック問題を DB 内で一挙に解決。1006 の会員上限トリガー前例に準拠）+ **BEFORE UPDATE トリガー**: authenticated ロールからの既存セッション大会化を拒否
+- [x] `1023_contact_category_tournament_quote.sql`: contact_submissions の CHECK 制約張り替え（023 は「要確認」ステータスのため両DBの実制約名確認手順を SQL 冒頭に記載）
+- [x] 各 rollback SQL + 検証 SELECT + APPLIED.md 行追加。plan_limits.has_tournament_mode は列・値とも残置（コード参照を全廃するため無害化）
+
+### Phase 2: サーバーコード
+- [x] `$lib/server/tournamentTickets.ts` 新設: `countAvailableTickets(supabase, orgId)`（UI 表示・事前チェック用。消費は DB トリガーが担う）+ ユニットテスト
+- [x] session/create アクション: mode==='tournament' 時 ①checkCanCreateSession をスキップ（月間上限対象外・確定）②チケット残の事前チェック→残0なら fail(403)「大会モードのご利用はお問い合わせください」+ /contact への導線 ③insert（トリガーが消費）。トリガー例外時のエラーハンドリング
+- [x] organizationLimits.ts: `checkCanUseTournamentMode` 削除、`checkCanUseScoreboard`（呼び出しゼロのデッドコード）削除、`getCurrentMonthSessionCount` に `.neq('mode','tournament')`、`checkCanAddJudgeToSession` を大会セッション免除（確定。session select に is_tournament_mode を追加して分岐、join/invite 両フロー+モックテスト追随）
+- [x] subscriptionLimits.ts + テストを削除（プロダクション import ゼロのデッドコード）
+- [x] account/+page.server.ts: 使用量カウントの大会除外 + 既存の deleted_at 不整合も同時修正
+
+### Phase 3: UI・文言
+- [x] `$lib/plans.ts`: features 3プランの「検定・大会・研修モード」→「検定・研修モード」（organization/create・change-plan・upgrade は自動追随）
+- [x] pricing: Free limitations「大会モード利用不可」削除、有料 features 修正、機能比較の大会行（モバイル/デスクトップ2箇所）削除、**「大会モード（スポット販売）」枠を新設**（"1大会ごとのご利用・料金はお問い合わせください" + /contact?category=tournament_quote CTA + スコアボード公開込みの旨）、プラン側の「スコアボード公開機能」表記は大会枠へ移動（確定）
+- [x] onboarding: 大会モード ✓/× 行削除
+- [x] landing: `landing_allModes`（ja/en）→「検定・研修モード」化、料金セクションに大会お問い合わせ注記
+- [x] FAQ: 「有料プランでは…大会モード…」回答修正、「スコアボード（Basic以上のプラン）」→大会機能に修正、大会利用方法の FAQ 追加（見積フロー+データ保持はプラン準拠・終了後エクスポート推奨を明記）
+- [x] session/create ページ: 大会選択時にチケット残数表示、残0時の案内+お問い合わせ導線（現行の change-plan 誘導を差し替え）
+- [x] contact: category「大会利用のお見積り」追加（+page.svelte の option / +page.server.ts の validCategories・categoryLabels）+ `?category=` プリセット実装（pricing からのディープリンク用）
+- [~] modes ページ: 注記は見送り（モード説明自体は不変のため。必要なら後日）
+
+### Phase 4: 法務ページ（実装するが最終文言は要ユーザー確認）
+- [x] legal（特商法）: 大会スポット販売の行（個別見積り・支払時期/方法（請求書払い）・役務提供時期（チケット付与）・返金条件）
+- [x] terms 第6条: 支払方法に請求書払いを追加、チケットの性質（有効期限・譲渡不可・大会中止時の扱い）条項
+
+### Phase 5: テスト・検証・運用
+- [x] organizationLimits.test.ts の文言アサート2件修正（「大会モードは有料プランでのみ〜」）
+- [x] session/create の大会ゲートのアクションテスト新設（残0拒否 / 消費成功 / 検定・研修は無影響）
+- [x] database/verify/ にトリガー検証 SQL（残0拒否・二重消費なし・authenticated 大会化拒否）
+- [x] docs/ にチケット付与オペ手順書（見積→ service role INSERT 雛形 → Stripe Invoice 発行 → 消費確認 SQL）
+- [x] TEST_CHECKLIST.md に手動検証手順追加
+- [x] チケット返却ポリシーの明文化: **soft delete では返却しない**（削除→返却→復元の抜け穴防止。中止時は運用で手動付与）
+
+## リファクタリング ステップ12: details/+page.svelte の分割（2026-07-14）— ✅ 完了
+
+1,332行のページを 915行 + 抽出3ファイルに分割（move-only、挙動不変）。
+
+- [x] `$lib/exportSessionResults.ts`（78行）: Excel エクスポートロジックを抽出。戻り値 `{ok}/{ok:false, reason:'no-data'|'error'}` でアラート表示は呼び出し側に分離。**ユニットテスト4件新規**（空データ/非2xx→no-data、整形+ファイル名、fetch例外→error）。xlsx 遅延ロード・モバイル共有分岐は維持
+- [x] `SessionParticipants.svelte`（360行）: 検定員リスト全体（主任任命/検定員・ゲスト削除フォーム、確認ダイアログ2つ、更新ボタン、CSS）を自己完結コンポーネント化。props: participants/currentUserId/createdBy/chiefJudgeId
+- [x] `TrainingScoreboard.svelte`（91行): 研修採点結果の表示専用コンポーネント
+- [x] ページ側から移動済み CSS を削除（境界アサート付きスクリプトで安全に削除）。`{#each}` キー追加で元コードの lint 違反も解消
+- 教訓の適用: svelte-check +3 を変更ファイル grep で即特定（新規テストの型付け）→ 修正。最終 235/21 でベースライン維持
+
+### 検証
+- [x] vitest: 819 passed / 11 skipped 全緑（+4件）
+- [x] svelte-check: 235 / 21（維持）、build 成功、新規4ファイル eslint/prettier クリーン
+
 ## バグ修正: エクスポート不能（orgAuth 集約の回帰）（2026-07-08）— ✅ 完了
 
 **症状**: セッション詳細のエクスポートで常に「エクスポートするデータがありません。」

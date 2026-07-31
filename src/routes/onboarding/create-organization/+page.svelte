@@ -27,16 +27,19 @@
 	let selectedPlan = 'free';
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
 	{#if step === 0}
 		<!-- Step 0: 選択画面 -->
 		<div class="header">
 			<h1 class="title welcome-title">TENTOへようこそ</h1>
-			<p class="subtitle">
-				次のステップを選択してください
-			</p>
+			<p class="subtitle">次のステップを選択してください</p>
 		</div>
 
 		<div class="choice-container">
@@ -95,10 +98,12 @@
 			{/if}
 
 			<div class="nav-buttons">
-				<NavButton variant="secondary" on:click={() => (step = 0)}>
-					戻る
-				</NavButton>
-				<NavButton variant="primary" on:click={() => (step = 2)} disabled={!organizationName.trim()}>
+				<NavButton variant="secondary" on:click={() => (step = 0)}>戻る</NavButton>
+				<NavButton
+					variant="primary"
+					on:click={() => (step = 2)}
+					disabled={!organizationName.trim()}
+				>
 					次へ進む
 				</NavButton>
 			</div>
@@ -171,10 +176,6 @@
 									</span>
 								</div>
 								<div class="feature">
-									<span class="feature-label">大会モード:</span>
-									<span class="feature-value">{plan.has_tournament_mode ? '✓' : '×'}</span>
-								</div>
-								<div class="feature">
 									<span class="feature-label">研修モード:</span>
 									<span class="feature-value">{plan.has_training_mode ? '✓' : '×'}</span>
 								</div>
@@ -198,7 +199,7 @@
 				{/if}
 
 				<div class="nav-buttons">
-					<NavButton variant="secondary" on:click={() => (step = 1)}> 組織名を変更 </NavButton>
+					<NavButton variant="secondary" on:click={() => (step = 1)}>組織名を変更</NavButton>
 					<NavButton variant="primary" type="submit">
 						{#if selectedPlan !== 'free'}
 							組織を作成して決済へ進む

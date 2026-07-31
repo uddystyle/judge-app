@@ -91,10 +91,13 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 				// プラン制限情報を取得
 				supabase.from('plan_limits').select('*').eq('plan_type', org.plan_type).single(),
 				// 組織のセッション数をカウント
+				// getCurrentMonthSessionCount と同条件（削除済み除外・チケット制の大会は上限対象外）
 				supabase
 					.from('sessions')
 					.select('*', { count: 'exact', head: true })
 					.eq('organization_id', org.id)
+					.is('deleted_at', null)
+					.or('mode.is.null,mode.neq.tournament')
 					.gte('created_at', currentMonthISO),
 				// 組織のメンバー数をカウント
 				supabase

@@ -99,9 +99,9 @@
 | 55 | `055_add_create_organization_with_subscription_function.sql` | 組織作成のトランザクション関数を追加 | 2026-01-22 | ✓ |  | ⚠️要確認 | ⚠️要確認 | **アプリ先行** create_organization_with_subscription をCREATE OR REPLACEで定義。header:次工程で /api/organization/create を改修・デプロイ必要 |
 | 56 | `056_make_create_organization_idempotent.sql` | 組織作成関数を冪等化 | 2026-01-22 | ✓ | 055 | ⚠️要確認 | ⚠️要確認 | 055のcreate_organization_with_subscriptionをCREATE OR REPLACEで置換。重複/再試行(UNIQUE違反)に安全な冪等版 |
 
-### 3.2 ロックダウンera（1000–1021・21本）
+### 3.2 ロックダウンera（1000–1023・23本）
 
-> 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1021`＋`052` は dev+prod 適用確認済み。
+> 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1023`＋`052` は dev+prod 適用確認済み。
 
 | # | ファイル | 概要 | 日付 | 冪等 | 関連/supersedes | dev | prod | 備考 |
 |---|---|---|---|:--:|---|:--:|:--:|---|
@@ -126,8 +126,10 @@
 | 1019 | `1019_organizations_admin_consolidate.sql` | organizations admin UPD/DEL を1013へ一本化 |  | ✓ | 020 inline admin UPDATE/DELETE | ✅ | ✅ | **DEV先行 破壊変更** 020由来のinline adminポリシー撤去（removed_at未チェック）。active adminは1013で可。DEV先行→prod。冪等 |
 | 1020 | `1020_profiles_drop_email.sql` | profiles.email 列を削除（PII保護） |  | ✓ | profiles.email (auth.users.email冗長コピー) | ✅ | ✅ | **DEV先行 アプリ先行 💥破壊的 破壊変更** 前提:email参照全廃アプリを先にデプロイ。auth.users.emailへ一本化。列ごと削除でデータ喪失。DEV先行→prod。冪等 |
 | 1021 | `1021_sessions_dedupe_own_policies.sql` | sessions の public own 重複ポリシー撤去 |  | ✓ |  | —(対象無/no-op) | ✅ | **DEV先行** 「DBのみ・冪等・DEV 先行→prod」。authed 等価版が残り挙動ゼロ変化。dev は対象なし no-op。末尾に検証SELECT |
+| 1022 | `1022_add_tournament_tickets.sql` | 大会スポット販売チケット + DB層強制 | 2026-07-30 | ✓ | 018 の直叩き穴 / 1006 トリガー前例 | ✅(2026-08-01 verify全✅) | ✅(2026-08-01 トリガー2本確認) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリ先行だとチケット無消費で大会作成できる窓が開く。DB先行なら旧アプリの大会作成はトリガーが拒否=安全側）。tournament_tickets新設(RLS: メンバーSELECTのみ・書込みservice role、org FKはrestrict=請求監査保全)+sessions BEFORE INSERTでチケット原子消費(FOR UPDATE SKIP LOCKED、session_id FKはdeferrable initially deferred必須)+BEFORE UPDATEでauthed大会化拒否。適用後はチケット無しで大会作成不可(service role含む)。検証: verify/1022_verify_tournament_tickets.sql。冪等 |
+| 1023 | `1023_contact_category_tournament_quote.sql` | contact category に tournament_quote 追加 | 2026-07-30 | ✓ | 023 (⚠️要確認) | ✅(2026-08-01 制約確認済) | ✅(2026-08-01 制約確認済) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリ先行だと tournament_quote 送信が CHECK 違反で失敗）。category CHECK制約を定義文で特定してdrop→named制約で再作成。023の実在を冒頭(0)で事前確認のこと。冪等 |
 
-## 4. ロールバック対応表（17本）
+## 4. ロールバック対応表（19本）
 
 > rollback は通常運用では実行しない（緊急時のみ）。`database/migrations/rollbacks/` に格納。複数適用済みの場合は**番号の大きい方から**戻す（各 rollback ヘッダの指示に従う）。
 
@@ -150,6 +152,8 @@
 | `1019_rollback.sql` | `1019_organizations_admin_consolidate.sql` | ✓ | 緊急時のみ。soft-removed adminが改変/削除できる緩い状態へ。1013は触らない。冪等 |
 | `1020_rollback.sql` | `1020_profiles_drop_email.sql` | ✓ | 緊急時のみ。auth.users.emailからbackfill。冪等 |
 | `1021_rollback.sql` | `1021_sessions_dedupe_own_policies.sql` | ✓ | 1021 の rollback。緊急時のみ。drop if exists→create で冪等。通常は authed 版が own を担保するため不要 |
+| `1022_rollback.sql` | `1022_add_tournament_tickets.sql` | ✓ | **💥破壊的** テーブルDROPでチケット付与/消費履歴(請求監査データ)喪失。撤去後は大会作成が無条件可能に戻る。緊急時のみ。冪等 |
+| `1023_rollback.sql` | `1023_contact_category_tournament_quote.sql` | ✓ | tournament_quote 行が存在すると失敗（先に category を UPDATE）。緊急時のみ。冪等 |
 
 ## 5. 非マイグレーション（検証/診断 4本・破壊的データ削除 2本）
 
@@ -192,7 +196,7 @@ ORDER BY table_name, ordinal_position;
 
 ## 付録: 集計
 
-- 総ファイル: **106**（forward 81 ／ rollback 17 ／ verify·診断 4 ／ cleanup 2 ／ deprecated 1 ／ planned 1）
+- 総ファイル: **111**（forward 83 ／ rollback 19 ／ verify·診断 5 ／ cleanup 2 ／ deprecated 1 ／ planned 1）
 - dev+prod 適用確認済み: **17**（1007–1021 ＋ 052 ＋ `001_add_session_security`〔2026-06-29 実測〕）
 - 適用状況 要確認: forward のうち上記・実行禁止を除く残り
 

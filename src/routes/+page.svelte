@@ -36,7 +36,9 @@
 					<button class="btn btn-primary" on:click={() => goto('/signup')}>
 						{m.auth_signup()}
 					</button>
-					<button class="btn btn-secondary" on:click={() => goto('/login')}>{m.common_login()}</button>
+					<button class="btn btn-secondary" on:click={() => goto('/login')}
+						>{m.common_login()}</button
+					>
 				{/if}
 			</div>
 		</div>
@@ -156,7 +158,9 @@
 					<div class="recommended-badge">{m.landing_recommended()}</div>
 					<h3 class="plan-name">{m.landing_planStandard()}</h3>
 					<p class="plan-subtitle">{m.landing_planStandardSubtitle()}</p>
-					<div class="plan-price">¥24,800<span class="price-unit">{m.landing_perMonth()}</span></div>
+					<div class="plan-price">
+						¥24,800<span class="price-unit">{m.landing_perMonth()}</span>
+					</div>
 					<ul class="plan-features">
 						<li>{m.landing_orgMembers({ count: '30' })}</li>
 						<li>{m.landing_judges({ count: '50' })}</li>
@@ -169,7 +173,9 @@
 				<div class="pricing-card">
 					<h3 class="plan-name">{m.landing_planPremium()}</h3>
 					<p class="plan-subtitle">{m.landing_planPremiumSubtitle()}</p>
-					<div class="plan-price">¥49,800<span class="price-unit">{m.landing_perMonth()}</span></div>
+					<div class="plan-price">
+						¥49,800<span class="price-unit">{m.landing_perMonth()}</span>
+					</div>
 					<ul class="plan-features">
 						<li>{m.landing_orgMembers({ count: '100' })}</li>
 						<li>{m.landing_judges({ count: '100' })}</li>
@@ -180,6 +186,8 @@
 					</ul>
 				</div>
 			</div>
+
+			<p class="pricing-tournament-note">{m.landing_tournamentSpotNote()}</p>
 
 			<div class="pricing-cta">
 				<button class="btn btn-secondary" on:click={() => goto('/pricing')}>
@@ -194,7 +202,9 @@
 			<div class="container">
 				<h2 class="cta-title">{m.landing_ctaTitle()}</h2>
 				<p class="cta-description">{m.landing_ctaDescription()}</p>
-				<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}>{m.landing_ctaButton()}</button>
+				<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}
+					>{m.landing_ctaButton()}</button
+				>
 			</div>
 		</div>
 	{/if}
@@ -228,7 +238,15 @@
 	}
 
 	.title {
-		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+		font-family:
+			'M PLUS Rounded 1c',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Hiragino Sans',
+			'Hiragino Kaku Gothic ProN',
+			'Yu Gothic',
+			Meiryo,
+			sans-serif;
 		font-size: 56px;
 		font-weight: 800;
 		margin-bottom: 20px;
@@ -312,7 +330,15 @@
 	}
 
 	.section-title {
-		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+		font-family:
+			'M PLUS Rounded 1c',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Hiragino Sans',
+			'Hiragino Kaku Gothic ProN',
+			'Yu Gothic',
+			Meiryo,
+			sans-serif;
 		font-size: 42px;
 		font-weight: 700;
 		text-align: center;
@@ -402,6 +428,13 @@
 		line-height: 1.6;
 		color: var(--text-secondary);
 		letter-spacing: -0.01em;
+	}
+
+	.pricing-tournament-note {
+		text-align: center;
+		font-size: 14px;
+		color: var(--text-secondary);
+		margin: 24px 0 0;
 	}
 
 	.pricing-section {
@@ -523,7 +556,15 @@
 	}
 
 	.cta-title {
-		font-family: 'M PLUS Rounded 1c', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+		font-family:
+			'M PLUS Rounded 1c',
+			-apple-system,
+			BlinkMacSystemFont,
+			'Hiragino Sans',
+			'Hiragino Kaku Gothic ProN',
+			'Yu Gothic',
+			Meiryo,
+			sans-serif;
 		font-size: 40px;
 		font-weight: 700;
 		margin-bottom: 20px;

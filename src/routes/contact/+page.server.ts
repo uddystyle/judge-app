@@ -9,7 +9,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const { supabase } = locals;
 
 	// getUser()を使用してセキュアにユーザー情報を取得
-	const { data: { user } } = await supabase.auth.getUser();
+	const {
+		data: { user }
+	} = await supabase.auth.getUser();
 
 	let profile = null;
 	if (user) {
@@ -70,7 +72,14 @@ export const actions = {
 		const subject = subjectValidation.sanitized || '';
 
 		// カテゴリのホワイトリスト検証
-		const validCategories = ['general', 'technical', 'billing', 'feature', 'other'];
+		const validCategories = [
+			'general',
+			'technical',
+			'billing',
+			'feature',
+			'tournament_quote',
+			'other'
+		];
 		if (!category || !validCategories.includes(category)) {
 			errors.category = 'お問い合わせ種別を選択してください。';
 		}
@@ -132,6 +141,7 @@ export const actions = {
 						technical: '技術的な問題',
 						billing: '料金・請求について',
 						feature: '機能に関する要望',
+						tournament_quote: '大会利用のお見積り',
 						other: 'その他'
 					};
 

@@ -4,10 +4,8 @@ import {
 	getCurrentMonthSessionCount,
 	checkCanAddMember,
 	checkCanCreateSession,
-	checkCanUseTournamentMode,
 	checkCanUseTrainingMode,
-	checkCanAddJudgeToSession,
-	checkCanUseScoreboard
+	checkCanAddJudgeToSession
 } from './organizationLimits';
 import { createMockSupabaseClient } from './test-utils';
 
@@ -101,10 +99,12 @@ describe('organizationLimits', () => {
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						is: vi.fn().mockReturnValue({
-							gte: vi.fn().mockResolvedValue({
-								count: 5,
-								data: null,
-								error: null
+							or: vi.fn().mockReturnValue({
+								gte: vi.fn().mockResolvedValue({
+									count: 5,
+									data: null,
+									error: null
+								})
 							})
 						})
 					})
@@ -121,10 +121,12 @@ describe('organizationLimits', () => {
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						is: vi.fn().mockReturnValue({
-							gte: vi.fn().mockResolvedValue({
-								count: 0,
-								data: null,
-								error: null
+							or: vi.fn().mockReturnValue({
+								gte: vi.fn().mockResolvedValue({
+									count: 0,
+									data: null,
+									error: null
+								})
 							})
 						})
 					})
@@ -166,25 +168,28 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-			mocks.from.mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnValue({
-					eq: vi.fn().mockReturnValue({
-						is: vi.fn().mockResolvedValue({
-							count: 10,
-							data: null,
-							error: null
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnValue({
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockResolvedValue({
+								count: 10,
+								data: null,
+								error: null
+							})
 						})
 					})
-				})
-			});
+				});
 
 			const result = await checkCanAddMember(mockSupabase, 'org-123');
 
@@ -209,25 +214,28 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-			mocks.from.mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnValue({
-					eq: vi.fn().mockReturnValue({
-						is: vi.fn().mockResolvedValue({
-							count: 5,
-							data: null,
-							error: null
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnValue({
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockResolvedValue({
+								count: 5,
+								data: null,
+								error: null
+							})
 						})
 					})
-				})
-			});
+				});
 
 			const result = await checkCanAddMember(mockSupabase, 'org-123');
 
@@ -250,29 +258,29 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-
-		// Query execution order: 1) organizations, 2) plan_limits, 3) organization_members count
-		mocks.from.mockReturnValueOnce({
-			select: vi.fn().mockReturnThis(),
-			eq: vi.fn().mockReturnThis(),
-			single: mocks.single
-		}).mockReturnValueOnce({
-			select: vi.fn().mockReturnThis(),
-			eq: vi.fn().mockReturnThis(),
-			single: mocks.single
-		}).mockReturnValueOnce({
-			select: vi.fn().mockReturnValue({
-				eq: vi.fn().mockReturnValue({
-					is: vi.fn().mockResolvedValue({
-						count: 10,
-						data: null,
-						error: null
-					})
+			// Query execution order: 1) organizations, 2) plan_limits, 3) organization_members count
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
 				})
-			})
-		});
-
-
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnValue({
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockResolvedValue({
+								count: 10,
+								data: null,
+								error: null
+							})
+						})
+					})
+				});
 
 			const result = await checkCanAddMember(mockSupabase, 'org-123');
 
@@ -309,27 +317,32 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-			mocks.from.mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnValue({
-					eq: vi.fn().mockReturnValue({
-						is: vi.fn().mockReturnValue({
-							gte: vi.fn().mockResolvedValue({
-								count: 10,
-								data: null,
-								error: null
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnValue({
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								or: vi.fn().mockReturnValue({
+									gte: vi.fn().mockResolvedValue({
+										count: 10,
+										data: null,
+										error: null
+									})
+								})
 							})
 						})
 					})
-				})
-			});
+				});
 
 			const result = await checkCanCreateSession(mockSupabase, 'org-123');
 
@@ -354,27 +367,32 @@ describe('organizationLimits', () => {
 					error: null
 				});
 
-			mocks.from.mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnValue({
-					eq: vi.fn().mockReturnValue({
-						is: vi.fn().mockReturnValue({
-							gte: vi.fn().mockResolvedValue({
-								count: 0,
-								data: null,
-								error: null
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnValue({
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								or: vi.fn().mockReturnValue({
+									gte: vi.fn().mockResolvedValue({
+										count: 0,
+										data: null,
+										error: null
+									})
+								})
 							})
 						})
 					})
-				})
-			});
+				});
 
 			const result = await checkCanCreateSession(mockSupabase, 'org-123');
 
@@ -382,51 +400,7 @@ describe('organizationLimits', () => {
 		});
 	});
 
-	describe('checkCanUseTournamentMode', () => {
-		it('大会モードが利用不可の場合はfalseを返す', async () => {
-			const mockOrganization = { plan_type: 'basic' };
-			const mockPlanLimits = {
-				has_tournament_mode: false
-			};
-
-			mocks.single
-				.mockResolvedValueOnce({
-					data: mockOrganization,
-					error: null
-				})
-				.mockResolvedValueOnce({
-					data: mockPlanLimits,
-					error: null
-				});
-
-			const result = await checkCanUseTournamentMode(mockSupabase, 'org-123');
-
-			expect(result.allowed).toBe(false);
-			expect(result.reason).toBe('大会モードは有料プランでのみ利用できます。');
-			expect(result.upgradeUrl).toBe('/organization/org-123/change-plan');
-		});
-
-		it('大会モードが利用可能な場合はtrueを返す', async () => {
-			const mockOrganization = { plan_type: 'premium' };
-			const mockPlanLimits = {
-				has_tournament_mode: true
-			};
-
-			mocks.single
-				.mockResolvedValueOnce({
-					data: mockOrganization,
-					error: null
-				})
-				.mockResolvedValueOnce({
-					data: mockPlanLimits,
-					error: null
-				});
-
-			const result = await checkCanUseTournamentMode(mockSupabase, 'org-123');
-
-			expect(result.allowed).toBe(true);
-		});
-	});
+	// checkCanUseTournamentMode は廃止（大会はチケット制。tournamentTickets.ts + DB トリガー 1022 が担当）
 
 	describe('checkCanUseTrainingMode', () => {
 		it('研修モードが利用不可の場合はfalseを返す', async () => {
@@ -473,52 +447,28 @@ describe('organizationLimits', () => {
 		});
 	});
 
-	describe('checkCanUseScoreboard', () => {
-		it('スコアボードが利用不可の場合はfalseを返す', async () => {
-			const mockOrganization = { plan_type: 'free' };
-			const mockPlanLimits = {
-				has_scoreboard: false
-			};
-
-			mocks.single
-				.mockResolvedValueOnce({
-					data: mockOrganization,
-					error: null
-				})
-				.mockResolvedValueOnce({
-					data: mockPlanLimits,
-					error: null
-				});
-
-			const result = await checkCanUseScoreboard(mockSupabase, 'org-123');
-
-			expect(result.allowed).toBe(false);
-			expect(result.reason).toBe('スコアボード公開機能は有料プランでのみ利用できます。');
-		});
-
-		it('スコアボードが利用可能な場合はtrueを返す', async () => {
-			const mockOrganization = { plan_type: 'basic' };
-			const mockPlanLimits = {
-				has_scoreboard: true
-			};
-
-			mocks.single
-				.mockResolvedValueOnce({
-					data: mockOrganization,
-					error: null
-				})
-				.mockResolvedValueOnce({
-					data: mockPlanLimits,
-					error: null
-				});
-
-			const result = await checkCanUseScoreboard(mockSupabase, 'org-123');
-
-			expect(result.allowed).toBe(true);
-		});
-	});
+	// checkCanUseScoreboard は削除（呼び出しゼロのデッドコード。スコアボードは大会機能としてチケットに含む）
 
 	describe('checkCanAddJudgeToSession', () => {
+		it('大会セッションは検定員数上限を免除する（チケット制）', async () => {
+			mocks.maybeSingle.mockResolvedValue({
+				data: { organization_id: 'org-123', is_tournament_mode: true },
+				error: null
+			});
+
+			mocks.from.mockReturnValueOnce({
+				select: vi.fn().mockReturnThis(),
+				eq: vi.fn().mockReturnThis(),
+				maybeSingle: mocks.maybeSingle
+			});
+
+			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
+
+			// プラン制限の取得（plan_limits）に到達せず、無条件で許可される
+			expect(result.allowed).toBe(true);
+			expect(result.reason).toBeUndefined();
+		});
+
 		it('セッション情報が取得できない場合はfalseを返す', async () => {
 			mocks.maybeSingle.mockResolvedValue({
 				data: null,
@@ -560,39 +510,31 @@ describe('organizationLimits', () => {
 				});
 
 			// 4回のfrom呼び出し: 1) sessions (maybeSingle), 2-3) getOrganizationPlanLimits (single), 4) session_participants (count)
-			mocks.from.mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				maybeSingle: mocks.maybeSingle
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-
-		}).mockReturnValueOnce({
-			select: vi.fn().mockReturnValue({
-				eq: vi.fn().mockResolvedValue({
-					count: 5,
-					data: null,
-					error: null
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					maybeSingle: mocks.maybeSingle
 				})
-			})
-		});
-
-
-
-
-
-
-
-
-
-
-
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnValue({
+						eq: vi.fn().mockResolvedValue({
+							count: 5,
+							data: null,
+							error: null
+						})
+					})
+				});
 
 			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
 
@@ -623,19 +565,22 @@ describe('organizationLimits', () => {
 			});
 
 			// 3回のfrom呼び出し: 1) sessions (maybeSingle), 2-3) getOrganizationPlanLimits (single)
-			mocks.from.mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				maybeSingle: mocks.maybeSingle
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			}).mockReturnValueOnce({
-				select: vi.fn().mockReturnThis(),
-				eq: vi.fn().mockReturnThis(),
-				single: mocks.single
-			});
+			mocks.from
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					maybeSingle: mocks.maybeSingle
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				})
+				.mockReturnValueOnce({
+					select: vi.fn().mockReturnThis(),
+					eq: vi.fn().mockReturnThis(),
+					single: mocks.single
+				});
 
 			const result = await checkCanAddJudgeToSession(mockSupabase, 'session-123');
 

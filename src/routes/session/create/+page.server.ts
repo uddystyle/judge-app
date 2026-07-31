@@ -1,11 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { checkCanCreateSession, checkCanUseTrainingMode } from '$lib/server/organizationLimits';
 import {
-	checkCanCreateSession,
-	checkCanUseTournamentMode,
-	checkCanUseTrainingMode
-} from '$lib/server/organizationLimits';
+	countAvailableTickets,
+	TOURNAMENT_CONTACT_URL,
+	TOURNAMENT_TICKET_REQUIRED_MESSAGE
+} from '$lib/server/tournamentTickets';
 import { validateSessionName, validateUUID } from '$lib/server/validation';
 import { randomBytes } from 'crypto';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
@@ -48,9 +49,22 @@ export const load: PageServerLoad = async ({ locals }) => {
 		userRole: m.role
 	}));
 
+	// 各組織の大会チケット残数（未使用）を取得
+	// RLS により自組織分のみ読める。テーブル未作成等のエラー時は 0 扱い（表示用）。
+	const { data: tickets } = await locals.supabase
+		.from('tournament_tickets')
+		.select('organization_id')
+		.is('used_at', null);
+
+	const ticketCounts: Record<string, number> = {};
+	(tickets || []).forEach((t: { organization_id: string }) => {
+		ticketCounts[t.organization_id] = (ticketCounts[t.organization_id] || 0) + 1;
+	});
+
 	return {
 		user,
-		organizations
+		organizations,
+		ticketCounts
 	};
 };
 
@@ -163,23 +177,27 @@ export const actions: Actions = {
 		// ============================================================
 
 		// 1. セッション作成可否をチェック（組織ベース）
-		const canCreateSession = await checkCanCreateSession(supabase, organizationId);
-		if (!canCreateSession.allowed) {
-			return fail(403, {
-				sessionName,
-				error: canCreateSession.reason || 'セッションを作成できません。',
-				upgradeUrl: canCreateSession.upgradeUrl
-			});
-		}
-
-		// 2. 大会モード利用可否をチェック（組織ベース）
-		if (mode === 'tournament') {
-			const canUseTournament = await checkCanUseTournamentMode(supabase, organizationId);
-			if (!canUseTournament.allowed) {
+		// 大会セッションはチケット制（スポット販売）のため月間セッション数上限の対象外
+		if (mode !== 'tournament') {
+			const canCreateSession = await checkCanCreateSession(supabase, organizationId);
+			if (!canCreateSession.allowed) {
 				return fail(403, {
 					sessionName,
-					error: canUseTournament.reason || '大会モードを利用できません。',
-					upgradeUrl: canUseTournament.upgradeUrl
+					error: canCreateSession.reason || 'セッションを作成できません。',
+					upgradeUrl: canCreateSession.upgradeUrl
+				});
+			}
+		}
+
+		// 2. 大会モードはチケット残数を事前チェック（案内用。最終判定と消費は
+		//    DB トリガー（migration 1022）が insert 時に原子的に行う）
+		if (mode === 'tournament') {
+			const availableTickets = await countAvailableTickets(supabase, organizationId);
+			if (availableTickets <= 0) {
+				return fail(403, {
+					sessionName,
+					error: TOURNAMENT_TICKET_REQUIRED_MESSAGE,
+					contactUrl: TOURNAMENT_CONTACT_URL
 				});
 			}
 		}
@@ -222,7 +240,7 @@ export const actions: Actions = {
 		}
 
 		// Insert the new session into the 'sessions' table
-		const { data: sessionData, error: sessionError} = await supabase
+		const { data: sessionData, error: sessionError } = await supabase
 			.from('sessions')
 			.insert({
 				name: sessionName,
@@ -242,6 +260,14 @@ export const actions: Actions = {
 			.single();
 
 		if (sessionError) {
+			// DB トリガー（1022）によるチケット拒否（事前チェック後の同時消費レース等）
+			if (sessionError.message?.includes('TOURNAMENT_TICKET_REQUIRED')) {
+				return fail(403, {
+					sessionName,
+					error: TOURNAMENT_TICKET_REQUIRED_MESSAGE,
+					contactUrl: TOURNAMENT_CONTACT_URL
+				});
+			}
 			logger.error('Failed to create session:', sessionError);
 			return fail(500, {
 				sessionName,

@@ -4,10 +4,7 @@ import { logger } from '$lib/server/logger';
 /**
  * 組織の現在のプラン制限を取得
  */
-export async function getOrganizationPlanLimits(
-	supabase: SupabaseClient,
-	organizationId: string
-) {
+export async function getOrganizationPlanLimits(supabase: SupabaseClient, organizationId: string) {
 	// 組織のプランタイプを取得
 	const { data: organization } = await supabase
 		.from('organizations')
@@ -50,6 +47,8 @@ export async function getOrganizationPlanLimits(
 
 /**
  * 今月の組織のセッション数をカウント
+ * 大会セッションはチケット（スポット販売）で対価を得ているため、
+ * 月間セッション数の上限からは除外する。
  */
 export async function getCurrentMonthSessionCount(
 	supabase: SupabaseClient,
@@ -64,6 +63,7 @@ export async function getCurrentMonthSessionCount(
 		.select('*', { count: 'exact', head: true })
 		.eq('organization_id', organizationId)
 		.is('deleted_at', null) // 削除済みセッションを除外
+		.or('mode.is.null,mode.neq.tournament') // 大会はチケット制のため月間上限の対象外（mode 未設定の旧行は数える）
 		.gte('created_at', currentMonth.toISOString());
 
 	return count || 0;
@@ -95,7 +95,10 @@ export async function checkCanAddMember(
 	const currentMemberCount = count || 0;
 
 	// 3. 制限チェック（無制限の場合は -1）
-	if (limits.max_organization_members !== -1 && currentMemberCount >= limits.max_organization_members) {
+	if (
+		limits.max_organization_members !== -1 &&
+		currentMemberCount >= limits.max_organization_members
+	) {
 		return {
 			allowed: false,
 			reason: `組織メンバー数の上限（${limits.max_organization_members}人）に達しています。`,
@@ -140,31 +143,9 @@ export async function checkCanCreateSession(
 	return { allowed: true };
 }
 
-/**
- * 大会モード利用可否をチェック（組織ベース）
- */
-export async function checkCanUseTournamentMode(
-	supabase: SupabaseClient,
-	organizationId: string
-): Promise<{ allowed: boolean; reason?: string; upgradeUrl?: string }> {
-	const planLimits = await getOrganizationPlanLimits(supabase, organizationId);
-	if (!planLimits) {
-		return {
-			allowed: false,
-			reason: '組織情報の取得に失敗しました。'
-		};
-	}
-
-	if (!planLimits.has_tournament_mode) {
-		return {
-			allowed: false,
-			reason: '大会モードは有料プランでのみ利用できます。',
-			upgradeUrl: `/organization/${organizationId}/change-plan`
-		};
-	}
-
-	return { allowed: true };
-}
+// 大会モードのプランゲート（checkCanUseTournamentMode）は廃止した。
+// 大会はプラン特典ではなくチケット制（スポット販売）になり、
+// 判定は $lib/server/tournamentTickets.ts + DB トリガー（migration 1022）が担う。
 
 /**
  * 研修モード利用可否をチェック（組織ベース）
@@ -204,7 +185,7 @@ export async function checkCanAddJudgeToSession(
 	// 1. セッションの組織とプランを取得
 	const { data: session, error: sessionError } = await supabase
 		.from('sessions')
-		.select('organization_id')
+		.select('organization_id, is_tournament_mode')
 		.eq('id', sessionId)
 		.maybeSingle();
 
@@ -227,6 +208,13 @@ export async function checkCanAddJudgeToSession(
 	}
 
 	logger.debug('[checkCanAddJudgeToSession] 組織ID:', session.organization_id);
+
+	// 大会セッションはチケット（スポット販売）で対価を得ており、
+	// 規模もチケット価格に織り込む商品設計のため、プランの検定員数上限を適用しない
+	if (session.is_tournament_mode) {
+		logger.debug('[checkCanAddJudgeToSession] 大会セッションのため検定員数上限を免除');
+		return { allowed: true };
+	}
 
 	// 2. プラン制限を取得
 	const limits = await getOrganizationPlanLimits(supabase, session.organization_id);
@@ -264,28 +252,5 @@ export async function checkCanAddJudgeToSession(
 	return { allowed: true };
 }
 
-/**
- * スコアボード公開可否をチェック（組織ベース）
- */
-export async function checkCanUseScoreboard(
-	supabase: SupabaseClient,
-	organizationId: string
-): Promise<{ allowed: boolean; reason?: string; upgradeUrl?: string }> {
-	const planLimits = await getOrganizationPlanLimits(supabase, organizationId);
-	if (!planLimits) {
-		return {
-			allowed: false,
-			reason: '組織情報の取得に失敗しました。'
-		};
-	}
-
-	if (!planLimits.has_scoreboard) {
-		return {
-			allowed: false,
-			reason: 'スコアボード公開機能は有料プランでのみ利用できます。',
-			upgradeUrl: `/organization/${organizationId}/change-plan`
-		};
-	}
-
-	return { allowed: true };
-}
+// checkCanUseScoreboard（呼び出しゼロのデッドコード）は削除した。
+// スコアボード公開は大会モードの一機能としてチケットに含まれる。

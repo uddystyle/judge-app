@@ -267,6 +267,13 @@ export const actions: Actions = {
 			.eq('id', organizationId);
 
 		if (orgDeleteError) {
+			// 大会チケット（請求監査データ）を持つ組織は FK restrict で削除不可（migration 1022）
+			if (orgDeleteError.message?.includes('tournament_tickets')) {
+				return fail(400, {
+					error:
+						'大会チケットのご利用履歴がある組織のため、削除にはお手続きが必要です。お問い合わせください。'
+				});
+			}
 			logger.error('Failed to delete organization:', orgDeleteError);
 			return fail(500, { error: '組織の削除に失敗しました。' });
 		}

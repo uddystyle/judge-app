@@ -35,11 +35,11 @@
 				'組織メンバー: 1名のみ',
 				'検定員: 3名まで',
 				'月間セッション: 3個まで',
-				'検定モードのみ',
+				'検定モード',
 				'Excelエクスポート',
 				'メールサポート'
 			],
-			limitations: ['大会モード利用不可', '研修モード利用不可'],
+			limitations: ['研修モード利用不可'],
 			color: 'gray'
 		},
 		{
@@ -53,8 +53,7 @@
 				`組織メンバー: ${ORG_PLANS.basic.maxMembers}名まで`,
 				`検定員: ${ORG_PLANS.basic.maxJudges}名まで`,
 				'月間セッション: 無制限',
-				'検定・大会・研修モード',
-				'スコアボード公開機能',
+				'検定・研修モード',
 				'Excelエクスポート',
 				'メールサポート'
 			],
@@ -71,8 +70,7 @@
 				`組織メンバー: ${ORG_PLANS.standard.maxMembers}名まで`,
 				`検定員: ${ORG_PLANS.standard.maxJudges}名まで`,
 				'月間セッション: 無制限',
-				'検定・大会・研修モード',
-				'スコアボード公開機能',
+				'検定・研修モード',
 				'Excelエクスポート',
 				'メールサポート'
 			],
@@ -90,8 +88,7 @@
 				`組織メンバー: ${ORG_PLANS.premium.maxMembers}名まで`,
 				`検定員: ${ORG_PLANS.premium.maxJudges}名まで`,
 				'月間セッション: 無制限',
-				'検定・大会・研修モード',
-				'スコアボード公開機能',
+				'検定・研修モード',
 				'Excelエクスポート',
 				'優先サポート'
 			],
@@ -148,7 +145,12 @@
 	}
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
 	<!-- プラン変更の成功メッセージ -->
@@ -194,7 +196,11 @@
 			{@const isSamePlan = data.user && data.currentPlan === plan.id}
 			{@const isSameInterval = String(data.currentBillingInterval) === String(billingInterval)}
 			{@const isCurrentPlanAndInterval = isSamePlan && (plan.id === 'free' || isSameInterval)}
-			<div class="plan-card" class:recommended={plan.recommended} class:current={isCurrentPlanAndInterval}>
+			<div
+				class="plan-card"
+				class:recommended={plan.recommended}
+				class:current={isCurrentPlanAndInterval}
+			>
 				{#if plan.recommended}
 					<div class="recommended-badge">{m.landing_recommended()}</div>
 				{/if}
@@ -235,6 +241,30 @@
 		{/each}
 	</div>
 
+	<!-- 大会モード（スポット販売） -->
+	<div class="tournament-spot-section">
+		<div class="tournament-spot-card">
+			<div class="tournament-spot-header">
+				<h2 class="tournament-spot-title">大会モード</h2>
+				<span class="tournament-spot-badge">スポット販売</span>
+			</div>
+			<p class="tournament-spot-text">
+				大会モードは月額プランに含まれず、<strong>1大会ごとのスポット販売</strong>です。
+				大会の規模（参加人数・検定員数）に応じて個別にお見積りいたします。
+			</p>
+			<ul class="tournament-spot-features">
+				<li>✓ 5審3採・3審3採、点差コントロールなどの大会向け採点</li>
+				<li>✓ スコアボード公開機能（URL 共有）</li>
+				<li>✓ 検定員数の制限なし（大会セッションはプラン上限の対象外）</li>
+				<li>✓ 参加者 CSV 一括登録・Excel エクスポート</li>
+			</ul>
+			<p class="tournament-spot-price">料金はお問い合わせください</p>
+			<a href="/contact?category=tournament_quote" class="tournament-spot-cta">
+				大会利用のお見積りを依頼する
+			</a>
+		</div>
+	</div>
+
 	<!-- 機能比較表 -->
 	<div class="comparison-section">
 		<h2 class="comparison-title">詳細な機能比較</h2>
@@ -247,15 +277,33 @@
 					<div class="card-features">
 						<div class="card-feature-row">
 							<span class="card-label">月額料金</span>
-							<span class="card-value">{plan.id === 'free' ? '¥0' : `¥${plan.monthlyPrice.toLocaleString()}`}</span>
+							<span class="card-value"
+								>{plan.id === 'free' ? '¥0' : `¥${plan.monthlyPrice.toLocaleString()}`}</span
+							>
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">組織メンバー</span>
-							<span class="card-value">{plan.id === 'free' ? '1名' : plan.id === 'basic' ? '10名' : plan.id === 'standard' ? '30名' : '100名'}</span>
+							<span class="card-value"
+								>{plan.id === 'free'
+									? '1名'
+									: plan.id === 'basic'
+										? '10名'
+										: plan.id === 'standard'
+											? '30名'
+											: '100名'}</span
+							>
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">検定員数</span>
-							<span class="card-value">{plan.id === 'free' ? '3名' : plan.id === 'basic' ? '15名' : plan.id === 'standard' ? '50名' : '100名'}</span>
+							<span class="card-value"
+								>{plan.id === 'free'
+									? '3名'
+									: plan.id === 'basic'
+										? '15名'
+										: plan.id === 'standard'
+											? '50名'
+											: '100名'}</span
+							>
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">月間セッション</span>
@@ -266,15 +314,7 @@
 							<span class="card-value">✓</span>
 						</div>
 						<div class="card-feature-row">
-							<span class="card-label">大会モード</span>
-							<span class="card-value">{plan.id === 'free' ? '✗' : '✓'}</span>
-						</div>
-						<div class="card-feature-row">
 							<span class="card-label">研修モード</span>
-							<span class="card-value">{plan.id === 'free' ? '✗' : '✓'}</span>
-						</div>
-						<div class="card-feature-row">
-							<span class="card-label">スコアボード</span>
 							<span class="card-value">{plan.id === 'free' ? '✗' : '✓'}</span>
 						</div>
 						<div class="card-feature-row">
@@ -283,7 +323,15 @@
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">保存期間</span>
-							<span class="card-value">{plan.id === 'free' ? '3ヶ月' : plan.id === 'basic' ? '12ヶ月' : plan.id === 'standard' ? '24ヶ月' : '無制限'}</span>
+							<span class="card-value"
+								>{plan.id === 'free'
+									? '3ヶ月'
+									: plan.id === 'basic'
+										? '12ヶ月'
+										: plan.id === 'standard'
+											? '24ヶ月'
+											: '無制限'}</span
+							>
 						</div>
 						<div class="card-feature-row">
 							<span class="card-label">サポート</span>
@@ -343,21 +391,7 @@
 						<td>✓</td>
 					</tr>
 					<tr>
-						<td>大会モード</td>
-						<td>✗</td>
-						<td>✓</td>
-						<td>✓</td>
-						<td>✓</td>
-					</tr>
-					<tr>
 						<td>研修モード</td>
-						<td>✗</td>
-						<td>✓</td>
-						<td>✓</td>
-						<td>✓</td>
-					</tr>
-					<tr>
-						<td>スコアボード</td>
 						<td>✗</td>
 						<td>✓</td>
 						<td>✓</td>
@@ -396,13 +430,14 @@
 				<!-- フリープランのユーザー: プラン変更ページへ -->
 				{#if data.organizations && data.organizations.length > 0}
 					{@const targetOrgId = orgId || data.organizations[0].organization_id}
-					<button class="back-btn" on:click={() => goto(`/organization/${targetOrgId}/change-plan`)}>
+					<button
+						class="back-btn"
+						on:click={() => goto(`/organization/${targetOrgId}/change-plan`)}
+					>
 						プランを変更する
 					</button>
 				{:else}
-					<button class="back-btn" on:click={() => goto('/organizations')}>
-						組織を作成する
-					</button>
+					<button class="back-btn" on:click={() => goto('/organizations')}> 組織を作成する </button>
 				{/if}
 			{:else}
 				<!-- 有料プランのユーザー: Stripe Customer Portalへ -->
@@ -871,5 +906,77 @@
 			grid-template-columns: repeat(4, 1fr);
 			max-width: 1400px;
 		}
+	}
+
+	/* 大会モード（スポット販売） */
+	.tournament-spot-section {
+		margin: 40px auto 0;
+		max-width: 720px;
+	}
+	.tournament-spot-card {
+		background: white;
+		border: 2px solid var(--mode-taikai);
+		border-radius: 16px;
+		padding: 32px 24px;
+	}
+	.tournament-spot-header {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: 12px;
+	}
+	.tournament-spot-title {
+		font-size: 22px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0;
+	}
+	.tournament-spot-badge {
+		display: inline-flex;
+		align-items: center;
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--mode-taikai);
+		background: var(--mode-taikai-tint);
+		padding: 4px 12px;
+		border-radius: 6px;
+	}
+	.tournament-spot-text {
+		font-size: 15px;
+		color: var(--text-primary);
+		line-height: 1.7;
+		margin: 0 0 16px;
+	}
+	.tournament-spot-features {
+		list-style: none;
+		padding: 0;
+		margin: 0 0 20px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		font-size: 14px;
+		color: var(--text-primary);
+	}
+	.tournament-spot-price {
+		font-size: 18px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0 0 16px;
+	}
+	.tournament-spot-cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--accent);
+		color: white;
+		font-size: 15px;
+		font-weight: 600;
+		padding: 12px 24px;
+		border-radius: 10px;
+		text-decoration: none;
+		transition: background 0.2s;
+	}
+	.tournament-spot-cta:hover {
+		background: var(--accent-hover);
 	}
 </style>

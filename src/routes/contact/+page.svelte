@@ -5,12 +5,17 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { goto } from '$app/navigation';
 	import { enhance } from '$app/forms';
+	import { page } from '$app/stores';
 	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
 	export let form: ActionData;
 
 	let isSubmitting = false;
+
+	// お問い合わせ種別。URL パラメータでプリセット（例: /contact?category=tournament_quote）し、
+	// 送信エラー時はサーバーが返した再表示値を優先。手動選択は bind で追従する
+	let selectedCategory = form?.category ?? $page.url.searchParams.get('category') ?? '';
 </script>
 
 <svelte:head>
@@ -119,19 +124,22 @@
 						name="category"
 						class="input select"
 						class:error={form?.errors?.category}
+						bind:value={selectedCategory}
 						required
 					>
 						<option value="">選択してください</option>
-						<option value="general" selected={form?.category === 'general'}>一般的な質問</option>
-						<option value="technical" selected={form?.category === 'technical'}>技術的な問題</option
-						>
-						<option value="billing" selected={form?.category === 'billing'}
-							>料金・請求について</option
-						>
-						<option value="feature" selected={form?.category === 'feature'}>機能に関する要望</option
-						>
-						<option value="other" selected={form?.category === 'other'}>その他</option>
+						<option value="general">一般的な質問</option>
+						<option value="technical">技術的な問題</option>
+						<option value="billing">料金・請求について</option>
+						<option value="tournament_quote">大会利用のお見積り</option>
+						<option value="feature">機能に関する要望</option>
+						<option value="other">その他</option>
 					</select>
+					{#if selectedCategory === 'tournament_quote'}
+						<p class="category-hint">
+							大会の規模（参加人数・検定員数）と開催予定日をお問い合わせ内容にご記入ください。個別にお見積りいたします。
+						</p>
+					{/if}
 					{#if form?.errors?.category}
 						<p class="error-text">{form.errors.category}</p>
 					{/if}
@@ -164,7 +172,9 @@
 					<button type="submit" class="submit-btn" disabled={isSubmitting}>
 						{isSubmitting ? '送信中...' : '送信する'}
 					</button>
-					<button type="button" class="cancel-btn" on:click={() => goto('/')}> {m.common_cancel()} </button>
+					<button type="button" class="cancel-btn" on:click={() => goto('/')}>
+						{m.common_cancel()}
+					</button>
 				</div>
 			</form>
 		</div>
@@ -313,6 +323,16 @@
 		color: var(--accent-primary);
 		font-size: 14px;
 		margin-top: 6px;
+	}
+
+	.category-hint {
+		background: var(--bg-secondary);
+		color: var(--text-secondary);
+		font-size: 13px;
+		line-height: 1.6;
+		padding: 8px 12px;
+		border-radius: 8px;
+		margin-top: 8px;
 	}
 
 	.error-message {
