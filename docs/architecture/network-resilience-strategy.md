@@ -1,7 +1,7 @@
 # tento.app ネットワーク耐性・オフライン対応戦略
 
 作成日: 2026-07-31
-更新日: 2026-08-01
+更新日: 2026-08-01（コードベース・公式ドキュメントとの突き合わせ検証を反映）
 
 ## 目的
 
@@ -47,6 +47,10 @@ tento.app は野外・山岳・会場Wi-Fi混雑環境で使われる可能性�
 - `dashboard` が購読している `session_participants` は現状 publication に含まれておらず、イベントを受信できない
 - そのため「オンライン前提では比較的強い」は、採点・待機・スコアボードの主要導線に限定した評価である
 
+実 DB の publication はリポジトリからは確認できないため、`database/diagnostics/realtime_setup_check.sql` を dev/prod で実行して実測確認する。`session_participants` は「publication に追加する」か「dashboard の購読を削除する」かをロードマップ Step 0 で決める。
+
+なお Supabase 公式の明言どおり、postgres_changes は切断中の変更を再送しない（キューも読み取り位置の追跡もない）。再接続後の状態はポーリング/再取得で補う現行実装の方針は正しい。
+
 一方で、以下はまだ見当たらない。
 
 - IndexedDB / Dexie による採点のローカル永続化
@@ -73,14 +77,14 @@ Supabase に保存
 
 ネットワーク対策の主な効果は、即時性の向上ではなく、採点業務の継続性と安心感の向上である。
 
-| 状況 | 現在 | 対策後 |
-|---|---|---|
-| 電波良好 | ほぼ問題なし | 状態表示により安心感が増える |
-| 一瞬の切断 | Realtime系は耐えるが、採点POSTは失敗し得る | 採点は端末保存され、復帰後同期 |
-| 数分間の圏外 | 採点送信できず進行が止まり得る | 採点を継続できる |
-| 送信中に圏外化 | 保存失敗・再入力リスク | ローカル保存済みとして扱える |
-| 会場Wi-Fi混雑 | POST遅延・失敗で不安 | 未同期表示で運用継続 |
-| 審判の心理 | 保存されたか不安 | 端末保存済みが明示される |
+| 状況           | 現在                                       | 対策後                         |
+| -------------- | ------------------------------------------ | ------------------------------ |
+| 電波良好       | ほぼ問題なし                               | 状態表示により安心感が増える   |
+| 一瞬の切断     | Realtime系は耐えるが、採点POSTは失敗し得る | 採点は端末保存され、復帰後同期 |
+| 数分間の圏外   | 採点送信できず進行が止まり得る             | 採点を継続できる               |
+| 送信中に圏外化 | 保存失敗・再入力リスク                     | ローカル保存済みとして扱える   |
+| 会場Wi-Fi混雑  | POST遅延・失敗で不安                       | 未同期表示で運用継続           |
+| 審判の心理     | 保存されたか不安                           | 端末保存済みが明示される       |
 
 体感改善の目安:
 
@@ -154,9 +158,9 @@ pending_score_mutations
 
 既存DBには、judge×対象の重複防止は既に存在する。
 
-| 対象 | 既存制約/インデックス | 役割 |
-|---|---|---|
-| 大会結果 `results` | `results_unique_owner_auth` / `results_unique_owner_guest`（migration 1009） | 同一 owner が同一対象へ複数行を作ることを防ぐ |
+| 対象                         | 既存制約/インデックス                                                                   | 役割                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 大会結果 `results`           | `results_unique_owner_auth` / `results_unique_owner_guest`（migration 1009）            | 同一 owner が同一対象へ複数行を作ることを防ぐ                  |
 | 研修スコア `training_scores` | `idx_training_scores_unique_auth` / `idx_training_scores_unique_guest`（migration 041） | 同一 judge/guest が同一 athlete/event へ複数行を作ることを防ぐ |
 
 ただし、これらは「採点結果の重複防止」であり、「同じクライアント操作をリトライで何度送っても1回だけ処理する」ための冪等性とは別である。
@@ -168,7 +172,8 @@ pending_score_mutations
 - `client_mutation_id` を必須にする
 - サーバー側で同じ mutation は1回だけ処理
 - `client_mutation_id` の処理済み記録をDBに保存する
-- 既存の権限・参加者・bib・score range・active prompt 検証は維持
+- 既存の権限・参加者・bib・score range・重複の検証は維持
+- active prompt 照合は**新設**する（現状は検定 multi-judge が bib を active_prompt から導出するのみで、大会/研修の採点アクションに active prompt 照合は存在しない。オフライン同期では古い prompt への採点が起きやすくなるため、同期 API では必須にする）
 - 古い prompt に対する同期をどう扱うかを明示する
 
 必要なスキーマ変更例:
@@ -290,9 +295,31 @@ POST /api/sync/scores
 
 ただし、Service Worker は採点データの正本管理には使わない。採点データは IndexedDB / 同期キューで扱う。
 
+## iOS Safari の制約（戦略の前提として重要）
+
+「採点が端末に確実に残る」という本戦略の根幹には、iOS Safari 固有の制約が直接影響する（2026-08 時点、WebKit 公式ドキュメント・MDN で確認済み）。
+
+1. **ITP による7日削除**: ホーム画面に追加していない Web サイトは、最終利用から7日で
+   IndexedDB を含むスクリプト書き込みストレージが削除されうる。免除されるのは
+   **ホーム画面に追加した場合のみ**。`navigator.storage.persist()` は iOS では
+   削除免除の効果が公式に確認されていない（Android Chrome では有効）。
+2. **バックグラウンド同期不可**: Background Sync API / Periodic Background Sync は
+   iOS では未実装（ホーム画面 PWA でも同じ）。同期はアプリがフォアグラウンドの間のみ。
+
+含意:
+
+- iOS では**ホーム画面追加（PWA インストール）の誘導が実質必須**。PWA 対応は
+  Phase 5 に置いているが、iOS の永続性確保の観点では Phase 1 と並行して
+  「ホーム画面追加の案内」だけでも先行させる価値がある。
+- 「端末保存済み」の表示は、iOS 非インストール利用では「7日以内の同期が前提」で
+  あることを運用上理解しておく（大会当日〜翌日同期なら実害はない）。
+- 同期はフォアグラウンド時に自動実行する設計とし、バックグラウンド同期には依存しない。
+
 ## Supabase と Firestore の比較
 
 ネットワーク不安定対応だけを見ると、Firestore が優位である。Firestore はオフライン永続化、ローカル書き込み、復帰時同期、リアルタイム listener の再接続が SDK 標準で提供されている。
+
+ただし Web SDK ではオフライン永続化は**デフォルト無効**で、`persistentLocalCache` の明示有効化が必要（デフォルト有効なのはモバイル SDK のみ）。Web 前提の tento.app では「SDK 標準」の恩恵はモバイルほど大きくない。
 
 一方で tento.app では、Supabase/Postgres の優位性が大きい。
 
@@ -339,7 +366,7 @@ PowerSync Backend Connector / API
 Supabase Postgres
 ```
 
-PowerSync が担当するのは主にサーバーからクライアントへの read path。クライアントからサーバーへの write path は `uploadData()` から自分たちの API へ送る設計が必要。
+PowerSync が担当するのは主にサーバーからクライアントへの read path。クライアントからサーバーへの write path は `uploadData()` に実装する。Supabase 連携の公式標準は `uploadData()` 内で supabase-js により Postgres へ直接書き込む構成（RLS が守る）で、**自前 API は必須ではなく選択肢**。tento.app は mutation log・冪等性・active prompt 検証を挟みたいため、自前の同期 API 経由を選ぶ。
 
 Web では PowerSync のローカル SQLite は WASM SQLite として動作し、VFS によって IndexedDB または OPFS に永続化される。デフォルトは IndexedDB ベースで、Safari/iOS やマルチタブ要件では OPFS 系 VFS の選定が重要になる。
 
@@ -358,8 +385,8 @@ tento.app での PoC 最小スコープ:
 
 注意点:
 
-- Sync Streams / Sync Rules の設計が必要
-- RLS と同期対象条件を揃える必要がある
+- Sync Streams の設計が必要（Sync Rules はレガシー扱いで、新規は Sync Streams が公式推奨）
+- RLS と同期対象条件を揃える必要がある（read path のレプリケーションは RLS を通らないため、Sync Streams 側で RLS と同等の絞り込みを定義する）
 - 書き込みAPIの冪等性が必要
 - `client_mutation_id` を保存するためのスキーマ変更が必要
 - 競合解決ルールが必要
@@ -382,13 +409,13 @@ tento.app での PoC 最小スコープ:
 
 tento.app への適用:
 
-| ゲームの考え方 | tento.app での適用 |
-|---|---|
-| アセット事前取得 | イベントデータ・地図・資料の事前ダウンロード |
-| 重要度で通信を分ける | 採点は確実保存、スコアボードは遅延許容 |
-| サーバー権威型 | 最終採点・権限・active prompt はサーバー検証 |
-| 差分通信 | score mutation だけ同期 |
-| UX表示 | 未同期件数・最終同期時刻を表示 |
+| ゲームの考え方       | tento.app での適用                           |
+| -------------------- | -------------------------------------------- |
+| アセット事前取得     | イベントデータ・地図・資料の事前ダウンロード |
+| 重要度で通信を分ける | 採点は確実保存、スコアボードは遅延許容       |
+| サーバー権威型       | 最終採点・権限・active prompt はサーバー検証 |
+| 差分通信             | score mutation だけ同期                      |
+| UX表示               | 未同期件数・最終同期時刻を表示               |
 
 採点データは「落としてはいけない」。スコアボードやオンライン人数は「遅れてもよい」。この分離が重要。
 
@@ -456,6 +483,20 @@ Android:
 
 この判断には `created_at_local` だけでなく、active prompt の version / sequence を持たせるとよい。
 
+### ゲスト（匿名認証）とオフラインの相互作用
+
+ゲスト検定員は Supabase の匿名認証 JWT でセッションに紐づく。現行実装は JWT 失効
+（SIGNED_OUT）を検知するとセッション再参加画面へ誘導する（`$lib/supabaseClient` の
+onAuthStateChange）。
+
+オフライン運用では「圏外の間に JWT が失効し、未同期キューだけが端末に残る」ケースが
+起きる。同期 API の設計では以下を明示する必要がある。
+
+- 失効した匿名 JWT での同期要求の扱い（再参加 → 新しい guest_identifier になるのか、
+  元の identifier を引き継ぐのか）
+- 未同期キューと guest_identifier の対応関係の保持
+- 再参加後に旧キューを新しい認証で送信してよいかのサーバー側判定
+
 ### 端末時刻を信用しすぎない
 
 端末時刻はずれる。最終判断はサーバー時刻と server-side state で行う。
@@ -464,9 +505,16 @@ Android:
 
 ## 推奨ロードマップ
 
+### Step 0
+
+実 DB の realtime publication を `database/diagnostics/realtime_setup_check.sql` で
+実測確認し、`session_participants` を「publication に追加する」か「dashboard の
+購読を削除する」か決める。
+
 ### Step 1
 
-採点画面に IndexedDB 保存を追加する。
+採点画面に IndexedDB 保存を追加する。あわせて iOS 向けにホーム画面追加の案内を
+検討する（ITP の7日削除対策。上記「iOS Safari の制約」参照）。
 
 ### Step 2
 
