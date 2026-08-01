@@ -3,6 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { navigating } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient';
+	import { startOfflineSync } from '$lib/offline/syncStatus';
 	import '../app.css';
 
 	// ブラウザ用Supabaseクライアントは $lib/supabaseClient の1箇所でのみ生成する
@@ -21,6 +22,11 @@
 		}
 	}
 
+	// オフライン採点の自動同期をアプリ全体で常駐させる。
+	// 採点画面を離れた後（status/complete/ダッシュボード等）に回線が復帰しても
+	// pending の採点が送信されるようにする（バッジ表示は採点画面のみ）
+	onMount(() => startOfflineSync());
+
 	// サーバーからのセッション情報と、クライアントの認証状態を同期させる
 	onMount(() => {
 		const {
@@ -30,8 +36,8 @@
 			// onAuthStateChangeから返されるsessionパラメータは使用しない（セキュリティ警告を回避）
 
 			// ゲストユーザーの場合はSIGNED_OUTイベントを無視
-			const isGuestUser = typeof window !== 'undefined' &&
-				new URL(window.location.href).searchParams.has('guest');
+			const isGuestUser =
+				typeof window !== 'undefined' && new URL(window.location.href).searchParams.has('guest');
 
 			if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
 				invalidateAll();

@@ -100,9 +100,27 @@ export interface EnqueueInput {
 	guest_identifier?: string | null;
 }
 
+/** 同一の採点対象（このキーが全て一致する mutation は同じ1枠の採点）かどうか */
+function isSameTarget(a: PendingScoreMutation, b: PendingScoreMutation): boolean {
+	return (
+		a.session_id === b.session_id &&
+		a.mode_type === b.mode_type &&
+		a.event_id === b.event_id &&
+		a.discipline === b.discipline &&
+		a.level === b.level &&
+		a.event_name === b.event_name &&
+		a.bib_number === b.bib_number &&
+		a.guest_identifier === b.guest_identifier
+	);
+}
+
 /**
  * 採点をローカルキューへ保存する（=「端末保存済み」）。
  * 戻り値の client_mutation_id が同期の冪等キーになる。
+ *
+ * 同一対象の古い pending / rejected は削除してから追加する（supersede）。
+ * これで「古い pending がオンライン保存済みの新しい点数へ自動同期で巻き戻す」
+ * 経路が構造的に消える（対象ごとに未同期は常に最新1件）。
  */
 export async function enqueueScoreMutation(input: EnqueueInput): Promise<PendingScoreMutation> {
 	const mutation: PendingScoreMutation = {
@@ -123,7 +141,15 @@ export async function enqueueScoreMutation(input: EnqueueInput): Promise<Pending
 		synced_at: null
 	};
 
-	const id = await getOfflineDb().pending_score_mutations.add(mutation);
+	const db = getOfflineDb();
+	const id = await db.transaction('rw', db.pending_score_mutations, async () => {
+		await db.pending_score_mutations
+			.where('session_id')
+			.equals(mutation.session_id)
+			.filter((m) => m.sync_status !== 'synced' && isSameTarget(m, mutation))
+			.delete();
+		return db.pending_score_mutations.add(mutation);
+	});
 	return { ...mutation, id };
 }
 
@@ -135,6 +161,28 @@ export async function getPendingCount(): Promise<number> {
 /** 恒久的拒否の件数（UI の「同期失敗」表示用） */
 export async function getRejectedCount(): Promise<number> {
 	return getOfflineDb().pending_score_mutations.where('sync_status').equals('rejected').count();
+}
+
+/**
+ * オンライン経路（既存 action POST）が成功した mutation を synced にする。
+ * サーバーには action 側で保存済みのため、同期 API へは送らない。
+ */
+export async function markMutationSynced(clientMutationId: string): Promise<void> {
+	await getOfflineDb()
+		.pending_score_mutations.where('client_mutation_id')
+		.equals(clientMutationId)
+		.modify({ sync_status: 'synced', last_error: null, synced_at: new Date().toISOString() });
+}
+
+/**
+ * オンライン経路がサーバー検証で拒否（fail 4xx）した mutation をキューから取り除く。
+ * サーバーが権威的に拒否した内容を再送しても同じ拒否になるだけのため。
+ */
+export async function removeMutation(clientMutationId: string): Promise<void> {
+	await getOfflineDb()
+		.pending_score_mutations.where('client_mutation_id')
+		.equals(clientMutationId)
+		.delete();
 }
 
 export interface SyncResult {
@@ -296,17 +344,33 @@ async function purgeOldSynced(db: OfflineScoreDb): Promise<void> {
 
 const AUTO_SYNC_INTERVAL_MS = 30_000;
 
+export interface AutoSyncOptions {
+	fetchFn?: typeof fetch;
+	/** 同期の開始時に呼ばれる（UI の「同期中…」表示用） */
+	onSyncStart?: () => void;
+	/** 各同期の完了時に結果つきで呼ばれる */
+	onSyncResult?: (result: SyncResult) => void;
+	/** 同期が例外で終わった時（IndexedDB 読み取り失敗等）。UI の「同期中…」解除用 */
+	onSyncError?: (error: unknown) => void;
+}
+
 /**
  * 自動同期を開始する（online イベント + 定期実行。フォアグラウンド時のみ動作 —
  * iOS は Background Sync 非対応のためこれが前提。戦略文書「iOS Safari の制約」参照）。
  * pending が無いときはネットワークアクセスは発生しない（doSync が即 return）。
  * 戻り値の関数で停止する。
  */
-export function startAutoSync(fetchFn: typeof fetch = fetch): () => void {
+export function startAutoSync(options: AutoSyncOptions = {}): () => void {
+	const fetchFn = options.fetchFn ?? fetch;
 	const safeSync = () => {
-		syncPendingMutations(fetchFn).catch(() => {
-			// doSync 内で捕捉済みのため通常到達しないが、unhandled rejection は防ぐ
-		});
+		options.onSyncStart?.();
+		syncPendingMutations(fetchFn)
+			.then((result) => options.onSyncResult?.(result))
+			.catch((error) => {
+				// IndexedDB 読み取り失敗（ITP による削除等）で doSync 自体が reject するケース。
+				// 通知しないと「同期中…」表示が固まる
+				options.onSyncError?.(error);
+			});
 	};
 
 	const onOnline = () => {

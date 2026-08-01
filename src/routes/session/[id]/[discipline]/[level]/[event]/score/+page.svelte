@@ -1,6 +1,15 @@
 <script lang="ts">
 	import ScoreInput from '$lib/components/ScoreInput.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import SyncStatusBadge from '$lib/components/SyncStatusBadge.svelte';
+	import IosInstallHint from '$lib/components/IosInstallHint.svelte';
+	import {
+		enqueueScoreMutation,
+		markMutationSynced,
+		removeMutation
+	} from '$lib/offline/scoreQueue';
+	import { startOfflineSync, pendingCount, isOffline } from '$lib/offline/syncStatus';
+	import { isPermanentActionFailureStatus } from '$lib/syncContract';
 	import * as m from '$lib/paraglide/messages.js';
 	import { page } from '$app/stores';
 	import { getContext, onMount, onDestroy } from 'svelte';
@@ -30,6 +39,15 @@
 
 	let loading = false;
 
+	// オフライン採点: 送信前に端末へ保存し、通信失敗時はキューに残して自動同期する
+	let offlineSaved = false;
+	let stopOfflineSync: (() => void) | null = null;
+
+	// キューが空になった（自動同期が送信し終えた）ら「保存済み・同期待ち」表示を下ろす
+	$: if (offlineSaved && !$isOffline && $pendingCount === 0) {
+		offlineSaved = false;
+	}
+
 	$: isChief = data.isChief;
 	$: isMultiJudge = data.isMultiJudge;
 	// 主任検定員または複数検定員モードOFFの場合にボタンを表示
@@ -48,8 +66,7 @@
 
 			if (error) {
 				console.error('Failed to clear active_prompt_id:', error);
-				alertMessage = 'エラーが発生しました。';
-				showAlert = true;
+				alert('エラーが発生しました。');
 				return;
 			}
 		}
@@ -78,8 +95,28 @@
 		}
 
 		const guestIdentifier = $page.url.searchParams.get('guest');
+		offlineSaved = false;
 
-		// サーバーアクションを呼び出す
+		// 1. まず端末に保存（=「端末保存済み」。POST が失敗しても採点は失われない）
+		let pendingMutationId: string | null = null;
+		try {
+			const queued = await enqueueScoreMutation({
+				session_id: Number.parseInt(id ?? '', 10),
+				mode_type: 'certification',
+				discipline: discipline ?? null,
+				level: level ?? null,
+				event_name: eventParam ?? null,
+				bib_number: Number(bib),
+				score,
+				guest_identifier: guestIdentifier
+			});
+			pendingMutationId = queued.client_mutation_id;
+		} catch (err) {
+			// IndexedDB 不可（プライベートブラウズ等）でも従来どおりオンライン送信は続行
+			console.error('[offline] 端末保存に失敗:', err);
+		}
+
+		// 2. サーバーアクションを呼び出す
 		const formData = new FormData();
 		formData.append('score', score.toString());
 		formData.append('bib', bib.toString());
@@ -94,10 +131,16 @@
 
 			if (result.type === 'failure') {
 				console.error('Failed to submit score:', result.data?.error);
-				// エラーメッセージを表示する場合はここで処理
+				if (pendingMutationId && isPermanentActionFailureStatus(result.status)) {
+					// サーバーが検証拒否: 再送しても同じ拒否のためキューから除去し、従来どおりエラー表示
+					await removeMutation(pendingMutationId).catch(() => {});
+				}
+				// 401/408/429/5xx は一時的失敗: キューに保持し自動同期の再送に委ねる
 				alert(result.data?.error || '採点の保存に失敗しました。');
 				loading = false;
-			} else if (result.type === 'success') {
+			} else if (result.type === 'success' || result.type === 'redirect') {
+				// サーバー保存成功: キュー側は synced 扱い（同期 API へは送らない）
+				if (pendingMutationId) await markMutationSynced(pendingMutationId).catch(() => {});
 				if (isMultiJudge) {
 					goto(`/session/${id}/${discipline}/${level}/${eventParam}/score/status?bib=${bib}`);
 				} else {
@@ -105,16 +148,31 @@
 						`/session/${id}/${discipline}/${level}/${eventParam}/score/complete?bib=${bib}&score=${score}`
 					);
 				}
+			} else {
+				// 'error' 等: action 内の例外。キューに保持して自動同期に委ね、画面は操作可能に戻す
+				console.error('Score action returned error result:', result);
+				if (pendingMutationId) {
+					offlineSaved = true;
+				} else {
+					alert('採点の送信中にエラーが発生しました。');
+				}
+				loading = false;
 			}
 		} catch (error) {
-			console.error('Error submitting score:', error);
-			alert('採点の送信中にエラーが発生しました。');
+			// ネットワーク到達失敗: キューに保持（自動同期が復帰後に送る）
+			console.error('Error submitting score (offline?):', error);
+			if (pendingMutationId) {
+				offlineSaved = true;
+			} else {
+				alert('採点の送信中にエラーが発生しました。');
+			}
 			loading = false;
 		}
 	}
 
 	// セッション終了を監視
 	onMount(() => {
+		stopOfflineSync = startOfflineSync();
 		// このルート（/session/[id]/...）では params.id は必ず存在する
 		const sessionId = $page.params.id!;
 		const { discipline, level, event } = $page.params;
@@ -206,6 +264,7 @@
 		console.log('[採点画面] onDestroy実行 - ページを離れます');
 		isPageMounted = false; // ページを離れたことを記録
 		sessionMonitorHandle?.cleanup();
+		stopOfflineSync?.();
 	});
 
 	// ゲスト情報を取得（URLから）
@@ -219,6 +278,12 @@
 	guestName={data.guestParticipant?.guest_name || null}
 />
 
+<SyncStatusBadge />
+
+{#if offlineSaved}
+	<div class="offline-saved-message">端末に保存済みです。通信が復帰すると自動同期されます。</div>
+{/if}
+
 <ScoreInput
 	minScore={0}
 	maxScore={99}
@@ -228,3 +293,17 @@
 	on:submit={handleSubmit}
 	on:back={handleEditBib}
 />
+
+<IosInstallHint />
+
+<style>
+	.offline-saved-message {
+		background: var(--color-success-tint);
+		border: 1px solid var(--color-success);
+		color: var(--color-success);
+		padding: 12px;
+		border-radius: 8px;
+		margin: 20px;
+		text-align: center;
+	}
+</style>

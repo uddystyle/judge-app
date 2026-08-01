@@ -28,8 +28,40 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] `$lib/offline/scoreQueue.ts`: IndexedDB `pending_score_mutations`（文書のスキーマ準拠）。enqueue / syncPendingMutations（accepted→synced・rejected→理由記録・ネットワーク失敗→retry_count++で保持）/ getPendingCount / startAutoSync（online イベント+間隔）
 - [x] テスト: fake-indexeddb で enqueue→sync 成功/失敗/拒否の状態遷移
 
-### インクリメント2（次回）
-- 採点画面2系統への配線（ローカル保存ファースト+送信失敗時キュー投入）、同期状態UI（Phase 3）、iOS ホーム画面追加案内
+## オフライン対応 インクリメント2: 採点画面配線 + 状態UI（2026-08-01）
+
+**方針（Option A）**: 既存 action POST を主経路のまま維持し、送信前に IndexedDB へ enqueue（=端末保存）。POST 結果でキューを整合（success→synced / failure=検証拒否→キューから除去 / ネットワーク失敗→pending 保持で自動同期に委譲）。オンライン成功分は同期 API へ送らない（mutation log は オフライン再送の冪等性用）。
+
+### 採点画面2系統への配線
+- [x] `scoreQueue.ts` 拡張: `markMutationSynced` / `removeMutation` / `startAutoSync` を options 化（onSyncStart/onSyncResult コールバック）
+- [x] input 画面（大会/研修、use:enhance）: enqueue→requestSubmit、enhance コールバックで result.type により整合。error 時は「端末に保存済み」表示
+- [x] 検定画面（raw fetch + deserialize）: enqueue→fetch、success→synced+遷移 / failure→除去+従来 alert / catch→キュー保持+保存済み表示（従来の alert を置換）
+- [x] IndexedDB 不可（プライベートブラウズ等）でも従来どおりオンライン送信は続行（enqueue 失敗を握って catch 時のみ alert）
+
+### 同期状態UI（Phase 3）+ iOS 案内
+- [x] `$lib/offline/syncStatus.ts`: liveQuery ベースの pendingCount/rejectedCount + syncing/lastSyncedAt/isOffline ストア、参照カウント式 `startOfflineSync`（online/offline リスナー + 自動同期）
+- [x] `SyncStatusBadge.svelte`: 異常時のみ表示（オフライン / 同期中 / 未同期 N件+最終同期時刻 / 同期失敗 N件）
+- [x] `IosInstallHint.svelte`: iOS Safari 非 standalone のみ表示、localStorage で dismiss 永続化（ITP 7日削除対策の案内）
+
+### 敵対的レビュー（3レンズ+反証エージェント）の結果と修正 — 15所見→確定12件（反証0）、全て修正
+- [x] 🔴高: 古い pending mutation が自動同期でオンライン保存済みの新しい点数を巻き戻す（オンライン経路は mutation log 未記録のため冪等チェック素通り）→ **enqueue 時に同一対象（session/mode/event/discipline/level/event_name/bib/guest）の pending/rejected を削除してから追加（supersede）**。対象ごとに未同期は常に最新1件になり構造的に解消
+- [x] 🔴高: fail(401)/fail(500) など一時的失敗でも removeMutation され端末コピー喪失（サーバーの retryable 分類と矛盾）→ `isPermanentActionFailureStatus`（$lib/syncContract.ts）で status 分岐。恒久=4xx（401/408/429除く）のみ除去、それ以外は pending 保持
+- [x] 🟡中: input 画面の error result で update() が +error ページへ置換し「端末に保存済み」が見えない → error+enqueue済みのときは update() を呼ばず画面に留まる（enqueue 失敗時のみ従来動作）
+- [x] 🟡中: 検定画面が result.type 'error' 未処理で loading 固着 → else 分岐追加（保持+offlineSaved 表示 / enqueue不可なら従来 alert）。'redirect' は success 扱いに
+- [x] 🟡中: 自動同期が採点画面マウント中しか動かない → ルート +layout.svelte で startOfflineSync 常駐（参照カウント式なので採点画面側の呼び出しはそのまま）
+- [x] 🟢低: 同期の例外で「同期中…」固着 → startAutoSync に onSyncError 追加し syncing 解除／offlineSaved が同期完了後も残る → pending 0 かつオンラインで自動クリア（両画面）／既存バグ: handleEditBib の未宣言 alertMessage/showAlert（ReferenceError）→ alert() に修正（svelte-check 既存エラー2件も解消）
+- [x] 未検証1件を自己裏取り: 「ゲストの匿名 JWT 失効後は同期不能」→ 実在（authenticateAction は JWT の is_guest 必須）。データは端末保持+バッジ可視のため喪失ではない。ゲスト再認証フローが必要でインクリメント3以降の課題
+
+### 検証
+- [x] vitest 840 passed（ベースライン832 + キューテスト8件: markMutationSynced/removeMutation 3 + supersede 3 + status分類 2）
+- [x] svelte-check 233 errors / 21 warnings（ベースライン235から既存2件解消。新規エラーなし）
+- [x] build 成功・prettier 済み・eslint は HEAD と同一の既存18件のみ（新規ファイルはクリーン）
+- [x] TEST_CHECKLIST.md に「オフライン採点の手動検証」追加（オンライン非回帰 / オフライン→復帰同期 / iOS 固有）
+
+### 今後のインクリメント（戦略ロードマップ）
+- Phase 4: 種目データの事前ダウンロード / Phase 5: PWA・Service Worker / Step 6: PowerSync PoC
+- ゲスト再認証: 匿名 JWT 失効後の pending 同期経路（現状は auth_required で保持し続ける。再参加時に新 guest_identifier へ付け替わる問題も含めて設計が必要）
+- action フォームに client_mutation_id を渡してオンライン成功時も mutation log に記録（再送が冪等チェックに命中する二重防御。supersede 導入により緊急度は低）
 
 ## 大会モードのスポット販売化（チケット制）実装計画（2026-07-30）— ✅ 実装完了（DB適用・法務文言の最終確認待ち）
 
