@@ -1,5 +1,35 @@
 # Current Tasks
 
+## オフライン対応 インクリメント3: 事前ダウンロード + オフライン継続採点（2026-08-02）
+
+戦略文書 Phase 4（Step 4）。オフライン採点が「画面表示中の1選手」で止まる問題（次選手への遷移がサーバー load 依存）を、データの事前キャッシュ + 画面内継続で解消する。
+
+### 設計判断（偵察2エージェントで確定した事実に基づく）
+- **継続採点は単独審判のみ**: 多審制は prompt 進行（setPrompt/submitBib→scoring_prompts insert→realtime 配布）がサーバー必須。大会モードは常に多審制のため対象外、対象は「検定・単独」「研修・単独」
+- **検定は任意ゼッケン可**（同期 API が ensureParticipantExists で自動作成）。**大会/研修はキャッシュ済み参加者のみ**（同期 API が participant_not_found で恒久拒否するため、送れない採点を作らない = requireRegistered）
+- **ScoreInput は submit 後も入力値が残り親からのリセット不可** → `{#key scoreResetKey}` で再マウント
+- 単独検定の bib はストア（$currentBib）のみでサーバー強制なし → 継続はストア更新で完結。input 画面は load 由来の bib/participantId をローカル override
+
+### 実装
+- [x] Dexie v2: `cached_session_bundles`（主キー session_id）を追加（v1 の採点キューと共存、アップグレードテスト付き）
+- [x] `$lib/offline/sessionCache.ts`: refreshSessionCache（失敗時は既存キャッシュ維持で null）/ getCachedSessionBundle / findCachedParticipant
+- [x] `GET /api/sessions/[sessionId]/offline-bundle`: authenticateAction（ゲスト対応）+ rateLimiters.api。participants + モード別種目（training_events / custom_events）のみ返す（採点結果・個人情報は含めない）。モード判定は scoreSync.ts と同一
+- [x] `OfflineReadyCard.svelte`: セッション入口ページ（session/[id]）に「オフライン利用の準備」カード（マウント時オンラインなら自動更新 + 手動ボタン、保存時刻・参加者数表示）
+- [x] `OfflineNextBibForm.svelte`: 「次の選手を採点する」→ ゼッケン入力 → キャッシュ照合（requireRegistered で未登録拒否）→ confirm イベント
+- [x] 採点2画面: 端末保存済みメッセージ内に継続フォーム（単独のみ表示）、confirm で bib/participantId を差し替え + ScoreInput 再マウント。onMount で refreshSessionCache（fire-and-forget）
+
+### 敵対的レビュー（3レンズ+反証）の結果と修正 — 10所見→確定6件（反証4）、全て修正
+- [x] 🟡中: 継続採点後も URL が古い ?bib= のままでリロード/タブ復元後に前の選手へ誤採点 → handleNextBib で replaceState（shallow routing）により ?bib=/?participantId= を書き換え
+- [x] 🟡中×2（両画面）: 同期完了の offlineSaved 自動クリアが「次の選手」フォームを入力途中で消し旧ゼッケンへの誤採点を誘発 → OfflineNextBibForm の open を bind で親に持ち上げ、フォーム展開中は自動クリアを抑止
+- [x] 🟢低: 継続採点のオンライン送信がキャッシュ由来の古い participantId で 400 → removeMutation で同期APIなら救えた採点まで削除 → override 有効時は 4xx でもキュー保持（bib 解決の同期 API に委ねる）
+- [x] 🟢低: cached_session_bundles に TTL 無し（名簿 PII が無期限残存）→ 同期時に 30 日超のバンドルを purge（テスト付き）
+- [x] 🟢低: OfflineReadyCard が終了画面にも表示 → isSessionEnded で非表示
+- 反証4件（妥当）: バンドル API の認可は RLS + 既存エンドポイントと同水準／requireRegistered の古キャッシュ拒否は保守的側の挙動で許容／SW 無しのため load 失敗シナリオ不成立 等
+
+### 検証
+- [x] vitest 853 passed（+13: sessionCache 8 / offline-bundle API 5）
+- [x] svelte-check 233 / build 成功 / prettier 済み / eslint 新規エラーなし（replaceState の no-navigation-without-resolve はクエリのみ書き換えの誤検知で理由付き disable）
+
 ## オフライン対応 インクリメント1: 同期基盤（2026-08-01）— ✅ 完了（1024 は dev/prod 適用済み 2026-08-01）
 
 **敵対的レビュー（3レンズ）の結果と修正**（検証エージェント一部はセッション上限で失敗→未検証分は自分でコード裏取りして全て確認）:

@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { isRetryableReason } from '$lib/syncContract';
+import type { CachedSessionBundle } from '$lib/offline/sessionCache';
 
 /**
  * オフライン採点キュー（network-resilience-strategy.md Phase 1）
@@ -43,15 +44,23 @@ const MAX_BATCH_SIZE = 50;
 const MAX_BATCHES_PER_SYNC = 10;
 /** synced 行を保持する日数（監査・表示用。経過後に purge） */
 const SYNCED_RETENTION_DAYS = 7;
+/** セッションバンドル（名簿キャッシュ）を保持する日数。経過後に purge（PII を無期限に残さない） */
+const BUNDLE_RETENTION_DAYS = 30;
 
 class OfflineScoreDb extends Dexie {
 	pending_score_mutations!: Table<PendingScoreMutation, number>;
+	cached_session_bundles!: Table<CachedSessionBundle, number>;
 
 	constructor() {
 		super('tento-offline');
 		this.version(1).stores({
 			// インデックス: 主キー(auto) / 一意な mutation id / 状態 / セッション
 			pending_score_mutations: '++id, &client_mutation_id, sync_status, session_id'
+		});
+		// v2: セッションデータの事前ダウンロード（戦略文書 Phase 4）。session_id が主キー
+		this.version(2).stores({
+			pending_score_mutations: '++id, &client_mutation_id, sync_status, session_id',
+			cached_session_bundles: '&session_id'
 		});
 	}
 }
@@ -236,6 +245,7 @@ async function doSync(fetchFn: typeof fetch): Promise<SyncResult> {
 	}
 
 	await purgeOldSynced(db);
+	await purgeOldBundles(db);
 
 	return {
 		synced: totalSynced,
@@ -330,6 +340,12 @@ async function bumpRetry(db: OfflineScoreDb, pending: PendingScoreMutation[]): P
 	for (const m of pending) {
 		await db.pending_score_mutations.update(m.id!, { retry_count: m.retry_count + 1 });
 	}
+}
+
+/** 保持期限切れのセッションバンドルを削除する */
+async function purgeOldBundles(db: OfflineScoreDb): Promise<void> {
+	const cutoff = Date.now() - BUNDLE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+	await db.cached_session_bundles.filter((b) => Date.parse(b.cached_at) < cutoff).delete();
 }
 
 /** synced 行の保持期限切れを削除する（同期時刻基準。旧データは enqueue 時刻でフォールバック） */

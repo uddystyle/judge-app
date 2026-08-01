@@ -9,7 +9,9 @@
 		removeMutation
 	} from '$lib/offline/scoreQueue';
 	import { startOfflineSync, pendingCount, isOffline } from '$lib/offline/syncStatus';
+	import { refreshSessionCache } from '$lib/offline/sessionCache';
 	import { isPermanentActionFailureStatus } from '$lib/syncContract';
+	import OfflineNextBibForm from '$lib/components/OfflineNextBibForm.svelte';
 	import * as m from '$lib/paraglide/messages.js';
 	import { page } from '$app/stores';
 	import { getContext, onMount, onDestroy } from 'svelte';
@@ -43,9 +45,19 @@
 	let offlineSaved = false;
 	let stopOfflineSync: (() => void) | null = null;
 
-	// キューが空になった（自動同期が送信し終えた）ら「保存済み・同期待ち」表示を下ろす
-	$: if (offlineSaved && !$isOffline && $pendingCount === 0) {
+	// キューが空になった（自動同期が送信し終えた）ら「保存済み・同期待ち」表示を下ろす。
+	// ただし「次の選手」フォームの入力途中は消さない（旧ゼッケンへの誤採点を防ぐ）
+	$: if (offlineSaved && !$isOffline && $pendingCount === 0 && !nextBibFormOpen) {
 		offlineSaved = false;
+	}
+
+	// オフライン中の「次の選手」継続（単独検定員のみ。検定は未知ゼッケンも同期側で自動作成される）
+	let scoreResetKey = 0;
+	let nextBibFormOpen = false;
+	function handleNextBib(event: CustomEvent<{ bib: number }>) {
+		currentBib.set(event.detail.bib);
+		offlineSaved = false;
+		scoreResetKey += 1;
 	}
 
 	$: isChief = data.isChief;
@@ -173,6 +185,10 @@
 	// セッション終了を監視
 	onMount(() => {
 		stopOfflineSync = startOfflineSync();
+		// オフライン継続用にセッションデータを事前ダウンロード（失敗しても採点は阻害しない）
+		void refreshSessionCache(Number.parseInt($page.params.id ?? '', 10), {
+			guestIdentifier: $page.url.searchParams.get('guest')
+		});
 		// このルート（/session/[id]/...）では params.id は必ず存在する
 		const sessionId = $page.params.id!;
 		const { discipline, level, event } = $page.params;
@@ -281,18 +297,29 @@
 <SyncStatusBadge />
 
 {#if offlineSaved}
-	<div class="offline-saved-message">端末に保存済みです。通信が復帰すると自動同期されます。</div>
+	<div class="offline-saved-message">
+		端末に保存済みです。通信が復帰すると自動同期されます。
+		{#if !isMultiJudge}
+			<OfflineNextBibForm
+				sessionId={Number.parseInt($page.params.id ?? '', 10)}
+				bind:open={nextBibFormOpen}
+				on:confirm={handleNextBib}
+			/>
+		{/if}
+	</div>
 {/if}
 
-<ScoreInput
-	minScore={0}
-	maxScore={99}
-	maxDigits={2}
-	{loading}
-	showBackButton={showBibEditButton}
-	on:submit={handleSubmit}
-	on:back={handleEditBib}
-/>
+{#key scoreResetKey}
+	<ScoreInput
+		minScore={0}
+		maxScore={99}
+		maxDigits={2}
+		{loading}
+		showBackButton={showBibEditButton}
+		on:submit={handleSubmit}
+		on:back={handleEditBib}
+	/>
+{/key}
 
 <IosInstallHint />
 

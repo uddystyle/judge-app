@@ -9,6 +9,7 @@
 	import type { PageData, ActionData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import OfflineReadyCard from '$lib/components/OfflineReadyCard.svelte';
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
@@ -792,6 +793,13 @@
 			</div>
 		{/if}
 	{/if}
+	{#if !isSessionEnded}
+		<OfflineReadyCard
+			sessionId={Number(data.sessionDetails.id)}
+			guestIdentifier={data.guestIdentifier ?? null}
+		/>
+	{/if}
+
 	{#if !data.guestIdentifier}
 		<div class="nav-buttons">
 			<NavButton on:click={() => goto('/dashboard')}>

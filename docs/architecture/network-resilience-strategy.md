@@ -49,7 +49,7 @@ tento.app は野外・山岳・会場Wi-Fi混雑環境で使われる可能性�
 
 実 DB の publication はリポジトリからは確認できないため、`database/diagnostics/realtime_setup_check.sql` を dev/prod で実行して実測確認する。`session_participants` は「publication に追加する」か「dashboard の購読を削除する」かをロードマップ Step 0 で決める。
 
-なお Supabase 公式の明言どおり、postgres_changes は切断中の変更を再送しない（キューも読み取り位置の追跡もない）。再接続後の状態はポーリング/再取得で補う現行実装の方針は正しい。
+なお Supabase Realtime / Postgres Changes は、採点正本の確実配送やクライアント別の未受信キューとして扱うべきではない。切断・再接続後の状態はポーリング/再取得で補う現行実装の方針が妥当である。
 
 一方で、以下はまだ見当たらない。
 
@@ -173,7 +173,8 @@ pending_score_mutations
 - サーバー側で同じ mutation は1回だけ処理
 - `client_mutation_id` の処理済み記録をDBに保存する
 - 既存の権限・参加者・bib・score range・重複の検証は維持
-- active prompt 照合は**新設**する（現状は検定 multi-judge が bib を active_prompt から導出するのみで、大会/研修の採点アクションに active prompt 照合は存在しない。オフライン同期では古い prompt への採点が起きやすくなるため、同期 API では必須にする）
+- active prompt 照合は、既存の multi-judge 非主任・非ゲスト向け採点 action にある検証を共通化して同期 API でも維持する
+- 主任・ゲスト・遅延同期時に active prompt の扱いをどうするかを明示する
 - 古い prompt に対する同期をどう扱うかを明示する
 
 必要なスキーマ変更例:
@@ -315,13 +316,11 @@ POST /api/sync/scores
   あることを運用上理解しておく（大会当日〜翌日同期なら実害はない）。
 - 同期はフォアグラウンド時に自動実行する設計とし、バックグラウンド同期には依存しない。
 
-## Supabase と Firestore の比較
+## Supabase 継続前提の技術判断
 
-ネットワーク不安定対応だけを見ると、Firestore が優位である。Firestore はオフライン永続化、ローカル書き込み、復帰時同期、リアルタイム listener の再接続が SDK 標準で提供されている。
+tento.app では Firestore は採用しない。正本DB、認証、権限、集計は Supabase/Postgres を前提にする。
 
-ただし Web SDK ではオフライン永続化は**デフォルト無効**で、`persistentLocalCache` の明示有効化が必要（デフォルト有効なのはモバイル SDK のみ）。Web 前提の tento.app では「SDK 標準」の恩恵はモバイルほど大きくない。
-
-一方で tento.app では、Supabase/Postgres の優位性が大きい。
+Supabase/Postgres を維持する理由:
 
 - SQL集計
 - RLS
@@ -330,17 +329,19 @@ POST /api/sync/scores
 - エクスポート
 - 既存実装の継続
 
+この前提では、ネットワーク耐性は Firestore への移行ではなく、Supabase の外側にローカル保存・同期キュー・同期基盤を追加して実現する。
+
 判断:
 
 ```text
-オフラインSDK体験のみ重視:
-  Firestore が優位
-
-既存tento.appを堅実に強化:
+短期:
   Supabase + IndexedDB が妥当
 
-本格的なlocal-first化:
+中期:
   Supabase + PowerSync を検証
+
+長期:
+  Supabase/Postgres を正本DBにしたまま、現地採点アプリをネイティブ化
 ```
 
 ## PowerSync の位置付け
@@ -542,7 +543,6 @@ PowerSync PoC を1セッション・1採点フローに限定して実施する�
 
 ## 参考資料
 
-- [Firestore offline data](https://firebase.google.com/docs/firestore/manage-data/enable-offline)
 - [Supabase Realtime](https://supabase.com/docs/guides/realtime)
 - [Supabase Realtime database changes](https://supabase.com/docs/guides/realtime/subscribing-to-database-changes)
 - [Supabase Storage resumable uploads](https://supabase.com/docs/guides/storage/uploads/resumable-uploads)
