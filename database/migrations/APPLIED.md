@@ -101,7 +101,7 @@
 
 ### 3.2 ロックダウンera（1000–1024・24本）
 
-> 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1023`＋`052` は dev+prod 適用確認済み。
+> 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1024`＋`052` は dev+prod 適用確認済み。
 
 | # | ファイル | 概要 | 日付 | 冪等 | 関連/supersedes | dev | prod | 備考 |
 |---|---|---|---|:--:|---|:--:|:--:|---|
@@ -128,7 +128,7 @@
 | 1021 | `1021_sessions_dedupe_own_policies.sql` | sessions の public own 重複ポリシー撤去 |  | ✓ |  | —(対象無/no-op) | ✅ | **DEV先行** 「DBのみ・冪等・DEV 先行→prod」。authed 等価版が残り挙動ゼロ変化。dev は対象なし no-op。末尾に検証SELECT |
 | 1022 | `1022_add_tournament_tickets.sql` | 大会スポット販売チケット + DB層強制 | 2026-07-30 | ✓ | 018 の直叩き穴 / 1006 トリガー前例 | ✅(2026-08-01 verify全✅) | ✅(2026-08-01 トリガー2本確認) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリ先行だとチケット無消費で大会作成できる窓が開く。DB先行なら旧アプリの大会作成はトリガーが拒否=安全側）。tournament_tickets新設(RLS: メンバーSELECTのみ・書込みservice role、org FKはrestrict=請求監査保全)+sessions BEFORE INSERTでチケット原子消費(FOR UPDATE SKIP LOCKED、session_id FKはdeferrable initially deferred必須)+BEFORE UPDATEでauthed大会化拒否。適用後はチケット無しで大会作成不可(service role含む)。検証: verify/1022_verify_tournament_tickets.sql。冪等 |
 | 1023 | `1023_contact_category_tournament_quote.sql` | contact category に tournament_quote 追加 | 2026-07-30 | ✓ | 023 (⚠️要確認) | ✅(2026-08-01 制約確認済) | ✅(2026-08-01 制約確認済) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリ先行だと tournament_quote 送信が CHECK 違反で失敗）。category CHECK制約を定義文で特定してdrop→named制約で再作成。023の実在を冒頭(0)で事前確認のこと。冪等 |
-| 1024 | `1024_add_score_mutations.sql` | オフライン採点同期の mutation log | 2026-08-01 | ✓ | network-resilience-strategy Phase 2 | ⚠️未適用 | ⚠️未適用 | **DEV先行** client_mutation_id unique が冪等性の要。RLS有効・ポリシー無し=service role専用。未適用でも同期APIは save_failed を返すだけでクライアントはキュー保持（採点は失われない）が、アプリより先の適用を推奨。冪等 |
+| 1024 | `1024_add_score_mutations.sql` | オフライン採点同期の mutation log | 2026-08-01 | ✓ | network-resilience-strategy Phase 2 | ✅(2026-08-01 index3本+RLS確認) | ✅(2026-08-01 RLS確認) | **DEV先行** client_mutation_id unique が冪等性の要。RLS有効・ポリシー無し=service role専用。未適用でも同期APIは save_failed を返すだけでクライアントはキュー保持（採点は失われない）が、アプリより先の適用を推奨。冪等 |
 
 ## 4. ロールバック対応表（20本）
 
