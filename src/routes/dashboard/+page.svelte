@@ -18,7 +18,6 @@
 
 	// リアルタイム更新用（バックオフ再購読つき共通ヘルパー）
 	let deleteChannelHandle: RealtimeChannelHandle | null = null;
-	let joinChannelHandle: RealtimeChannelHandle | null = null;
 
 	onMount(() => {
 		// セッションの削除を検知するリアルタイムリスナー
@@ -33,35 +32,14 @@
 			}
 		});
 
-		// セッション参加を検知するリアルタイムリスナー
-		joinChannelHandle = createRealtimeChannel(supabase, {
-			channelName: 'dashboard-participants-insert',
-			table: 'session_participants',
-			event: 'INSERT',
-			filter: `user_id=eq.${data.profile?.id}`,
-			onPayload: async (payload) => {
-				console.log('[ダッシュボード] セッション参加を検知:', payload);
-				// 新しく参加したセッションの情報を取得
-				const { data: newSession } = await supabase
-					.from('sessions')
-					.select('*')
-					.eq('id', payload.new.session_id)
-					.single();
-
-				if (newSession) {
-					// リストに追加（重複チェック）
-					const exists = data.sessions.some((s) => s.id === newSession.id);
-					if (!exists) {
-						data.sessions = [...data.sessions, newSession];
-					}
-				}
-			}
-		});
+		// 注: session_participants の INSERT 購読（参加検知）は削除した。
+		// 同テーブルは realtime publication に含まれておらず一度も発火していなかった
+		// （network-resilience-strategy.md Step 0）。参加の反映はページ更新で行う。
+		// 復活させる場合は publication へのテーブル追加が必要。
 	});
 
 	onDestroy(() => {
 		deleteChannelHandle?.cleanup();
-		joinChannelHandle?.cleanup();
 	});
 
 	// プラン名の表示

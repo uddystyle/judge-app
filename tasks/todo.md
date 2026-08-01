@@ -1,5 +1,36 @@
 # Current Tasks
 
+## オフライン対応 インクリメント1: 同期基盤（2026-08-01）— ✅ 実装完了（migration 1024 の適用待ち）
+
+**敵対的レビュー（3レンズ）の結果と修正**（検証エージェント一部はセッション上限で失敗→未検証分は自分でコード裏取りして全て確認）:
+- [x] 🔴致命: 一時的失敗（save_failed/auth_required）が mutation log に記録され、冪等チェックが拒否を永久リプレイ→再送が二度と適用されない無限ループ → recordOutcome が RETRYABLE_REASONS を記録しないよう修正
+- [x] 🟠高: 参照クエリの一時的エラーが not_found と区別されず恒久拒否として記録（有効な採点の恒久喪失）→ 全参照サイトで error を検査し save_failed（未記録・再送可）に
+- [x] 🟠高: tournament/training 同期経路に多審制 prompt ゲートが無く #4.5 をバイパス可能 → 全モードに prompt 所属チェックを実装（検定は M3 と同じ4項目照合に修正）
+- [x] 🟡中: 大会の未登録 bib 検証欠落（→participant_not_found）／検定の参加者自動作成欠落（→kentei と同じ自動作成）／検定範囲 0-99 化／session_not_found は FK により記録不能→未記録に変更し契約を明文化／response.json() の未ガード→全件保持＋offline扱い／RETRYABLE_REASONS の二重定義→ $lib/syncContract.ts に共有化／バッチ継続ループ（最大10バッチ・進捗ゼロで停止）
+- [x] 🟢低: synced_at 基準の purge、crypto.randomUUID の非 secure context フォールバック
+- 回帰防止テスト8件追加（計30件: scoreSync 19 / queue 8 / API 4 — 全シナリオ緑）
+
+docs/architecture/network-resilience-strategy.md（検証済み）のロードマップ Step 0〜2 の基盤部分。
+**今回のスコープ**: Step 0 + サーバー同期基盤 + クライアント採点キュー（採点画面への配線・状態UIはインクリメント2）。
+
+### Step 0: dashboard の死んだ購読の整理
+- [x] `session_participants` は realtime publication に含まれず dashboard の参加検知購読は一度も発火していない → 購読を削除（将来必要なら publication 追加+復元。戦略文書 Step 0 の「実測確認」は uchida さん側の diagnostics 実行で完結）
+
+### サーバー同期基盤（Step 2 の中核）
+- [x] migration 1024: `score_mutations`（mutation log。client_mutation_id unique・status・rejection_reason・payload、RLS 有効/ポリシー無し=service role 専用）+ rollback + APPLIED.md
+- [x] `$lib/server/scoreSync.ts`: mutation 1件の検証+適用+記録。既存アクションと同じ検証（authenticateAction/validateBib/validateScoreRange/モード整合）と同じ保存セマンティクス（owner ベース upsert）。冪等: client_mutation_id 既処理なら記録済み結果を返す
+- [x] `POST /api/sync/scores`: バッチ受付（上限50件）→ 件別に accepted/rejected を返す。レート制限
+- [x] 古い prompt の方針（MVP）: セッションに属する prompt なら受理（同期遅延は受理、という文書の方針。sequence 列は将来）。ゲストは JWT 有効時のみ（401 はバッチごと失敗=キュー保持）
+- [x] テスト: 冪等リプレイ・両モード保存・検証拒否・認証失敗
+
+### クライアント採点キュー（Step 1 の中核）
+- [x] 依存追加: dexie（runtime）+ fake-indexeddb（dev）
+- [x] `$lib/offline/scoreQueue.ts`: IndexedDB `pending_score_mutations`（文書のスキーマ準拠）。enqueue / syncPendingMutations（accepted→synced・rejected→理由記録・ネットワーク失敗→retry_count++で保持）/ getPendingCount / startAutoSync（online イベント+間隔）
+- [x] テスト: fake-indexeddb で enqueue→sync 成功/失敗/拒否の状態遷移
+
+### インクリメント2（次回）
+- 採点画面2系統への配線（ローカル保存ファースト+送信失敗時キュー投入）、同期状態UI（Phase 3）、iOS ホーム画面追加案内
+
 ## 大会モードのスポット販売化（チケット制）実装計画（2026-07-30）— ✅ 実装完了（DB適用・法務文言の最終確認待ち）
 
 **敵対的レビュー（ultracode 3レンズ+検証）の結果と修正**:
