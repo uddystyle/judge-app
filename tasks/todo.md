@@ -5,12 +5,14 @@
 戦略文書 Phase 4（Step 4）。オフライン採点が「画面表示中の1選手」で止まる問題（次選手への遷移がサーバー load 依存）を、データの事前キャッシュ + 画面内継続で解消する。
 
 ### 設計判断（偵察2エージェントで確定した事実に基づく）
+
 - **継続採点は単独審判のみ**: 多審制は prompt 進行（setPrompt/submitBib→scoring_prompts insert→realtime 配布）がサーバー必須。大会モードは常に多審制のため対象外、対象は「検定・単独」「研修・単独」
 - **検定は任意ゼッケン可**（同期 API が ensureParticipantExists で自動作成）。**大会/研修はキャッシュ済み参加者のみ**（同期 API が participant_not_found で恒久拒否するため、送れない採点を作らない = requireRegistered）
 - **ScoreInput は submit 後も入力値が残り親からのリセット不可** → `{#key scoreResetKey}` で再マウント
 - 単独検定の bib はストア（$currentBib）のみでサーバー強制なし → 継続はストア更新で完結。input 画面は load 由来の bib/participantId をローカル override
 
 ### 実装
+
 - [x] Dexie v2: `cached_session_bundles`（主キー session_id）を追加（v1 の採点キューと共存、アップグレードテスト付き）
 - [x] `$lib/offline/sessionCache.ts`: refreshSessionCache（失敗時は既存キャッシュ維持で null）/ getCachedSessionBundle / findCachedParticipant
 - [x] `GET /api/sessions/[sessionId]/offline-bundle`: authenticateAction（ゲスト対応）+ rateLimiters.api。participants + モード別種目（training_events / custom_events）のみ返す（採点結果・個人情報は含めない）。モード判定は scoreSync.ts と同一
@@ -19,6 +21,7 @@
 - [x] 採点2画面: 端末保存済みメッセージ内に継続フォーム（単独のみ表示）、confirm で bib/participantId を差し替え + ScoreInput 再マウント。onMount で refreshSessionCache（fire-and-forget）
 
 ### 敵対的レビュー（3レンズ+反証）の結果と修正 — 10所見→確定6件（反証4）、全て修正
+
 - [x] 🟡中: 継続採点後も URL が古い ?bib= のままでリロード/タブ復元後に前の選手へ誤採点 → handleNextBib で replaceState（shallow routing）により ?bib=/?participantId= を書き換え
 - [x] 🟡中×2（両画面）: 同期完了の offlineSaved 自動クリアが「次の選手」フォームを入力途中で消し旧ゼッケンへの誤採点を誘発 → OfflineNextBibForm の open を bind で親に持ち上げ、フォーム展開中は自動クリアを抑止
 - [x] 🟢低: 継続採点のオンライン送信がキャッシュ由来の古い participantId で 400 → removeMutation で同期APIなら救えた採点まで削除 → override 有効時は 4xx でもキュー保持（bib 解決の同期 API に委ねる）
@@ -27,12 +30,14 @@
 - 反証4件（妥当）: バンドル API の認可は RLS + 既存エンドポイントと同水準／requireRegistered の古キャッシュ拒否は保守的側の挙動で許容／SW 無しのため load 失敗シナリオ不成立 等
 
 ### 検証
+
 - [x] vitest 853 passed（+13: sessionCache 8 / offline-bundle API 5）
 - [x] svelte-check 233 / build 成功 / prettier 済み / eslint 新規エラーなし（replaceState の no-navigation-without-resolve はクエリのみ書き換えの誤検知で理由付き disable）
 
 ## オフライン対応 インクリメント1: 同期基盤（2026-08-01）— ✅ 完了（1024 は dev/prod 適用済み 2026-08-01）
 
 **敵対的レビュー（3レンズ）の結果と修正**（検証エージェント一部はセッション上限で失敗→未検証分は自分でコード裏取りして全て確認）:
+
 - [x] 🔴致命: 一時的失敗（save_failed/auth_required）が mutation log に記録され、冪等チェックが拒否を永久リプレイ→再送が二度と適用されない無限ループ → recordOutcome が RETRYABLE_REASONS を記録しないよう修正
 - [x] 🟠高: 参照クエリの一時的エラーが not_found と区別されず恒久拒否として記録（有効な採点の恒久喪失）→ 全参照サイトで error を検査し save_failed（未記録・再送可）に
 - [x] 🟠高: tournament/training 同期経路に多審制 prompt ゲートが無く #4.5 をバイパス可能 → 全モードに prompt 所属チェックを実装（検定は M3 と同じ4項目照合に修正）
@@ -44,9 +49,11 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 **今回のスコープ**: Step 0 + サーバー同期基盤 + クライアント採点キュー（採点画面への配線・状態UIはインクリメント2）。
 
 ### Step 0: dashboard の死んだ購読の整理
+
 - [x] `session_participants` は realtime publication に含まれず dashboard の参加検知購読は一度も発火していない → 購読を削除（将来必要なら publication 追加+復元。戦略文書 Step 0 の「実測確認」は uchida さん側の diagnostics 実行で完結）
 
 ### サーバー同期基盤（Step 2 の中核）
+
 - [x] migration 1024: `score_mutations`（mutation log。client_mutation_id unique・status・rejection_reason・payload、RLS 有効/ポリシー無し=service role 専用）+ rollback + APPLIED.md
 - [x] `$lib/server/scoreSync.ts`: mutation 1件の検証+適用+記録。既存アクションと同じ検証（authenticateAction/validateBib/validateScoreRange/モード整合）と同じ保存セマンティクス（owner ベース upsert）。冪等: client_mutation_id 既処理なら記録済み結果を返す
 - [x] `POST /api/sync/scores`: バッチ受付（上限50件）→ 件別に accepted/rejected を返す。レート制限
@@ -54,6 +61,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] テスト: 冪等リプレイ・両モード保存・検証拒否・認証失敗
 
 ### クライアント採点キュー（Step 1 の中核）
+
 - [x] 依存追加: dexie（runtime）+ fake-indexeddb（dev）
 - [x] `$lib/offline/scoreQueue.ts`: IndexedDB `pending_score_mutations`（文書のスキーマ準拠）。enqueue / syncPendingMutations（accepted→synced・rejected→理由記録・ネットワーク失敗→retry_count++で保持）/ getPendingCount / startAutoSync（online イベント+間隔）
 - [x] テスト: fake-indexeddb で enqueue→sync 成功/失敗/拒否の状態遷移
@@ -63,17 +71,20 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 **方針（Option A）**: 既存 action POST を主経路のまま維持し、送信前に IndexedDB へ enqueue（=端末保存）。POST 結果でキューを整合（success→synced / failure=検証拒否→キューから除去 / ネットワーク失敗→pending 保持で自動同期に委譲）。オンライン成功分は同期 API へ送らない（mutation log は オフライン再送の冪等性用）。
 
 ### 採点画面2系統への配線
+
 - [x] `scoreQueue.ts` 拡張: `markMutationSynced` / `removeMutation` / `startAutoSync` を options 化（onSyncStart/onSyncResult コールバック）
 - [x] input 画面（大会/研修、use:enhance）: enqueue→requestSubmit、enhance コールバックで result.type により整合。error 時は「端末に保存済み」表示
 - [x] 検定画面（raw fetch + deserialize）: enqueue→fetch、success→synced+遷移 / failure→除去+従来 alert / catch→キュー保持+保存済み表示（従来の alert を置換）
 - [x] IndexedDB 不可（プライベートブラウズ等）でも従来どおりオンライン送信は続行（enqueue 失敗を握って catch 時のみ alert）
 
 ### 同期状態UI（Phase 3）+ iOS 案内
+
 - [x] `$lib/offline/syncStatus.ts`: liveQuery ベースの pendingCount/rejectedCount + syncing/lastSyncedAt/isOffline ストア、参照カウント式 `startOfflineSync`（online/offline リスナー + 自動同期）
 - [x] `SyncStatusBadge.svelte`: 異常時のみ表示（オフライン / 同期中 / 未同期 N件+最終同期時刻 / 同期失敗 N件）
 - [x] `IosInstallHint.svelte`: iOS Safari 非 standalone のみ表示、localStorage で dismiss 永続化（ITP 7日削除対策の案内）
 
 ### 敵対的レビュー（3レンズ+反証エージェント）の結果と修正 — 15所見→確定12件（反証0）、全て修正
+
 - [x] 🔴高: 古い pending mutation が自動同期でオンライン保存済みの新しい点数を巻き戻す（オンライン経路は mutation log 未記録のため冪等チェック素通り）→ **enqueue 時に同一対象（session/mode/event/discipline/level/event_name/bib/guest）の pending/rejected を削除してから追加（supersede）**。対象ごとに未同期は常に最新1件になり構造的に解消
 - [x] 🔴高: fail(401)/fail(500) など一時的失敗でも removeMutation され端末コピー喪失（サーバーの retryable 分類と矛盾）→ `isPermanentActionFailureStatus`（$lib/syncContract.ts）で status 分岐。恒久=4xx（401/408/429除く）のみ除去、それ以外は pending 保持
 - [x] 🟡中: input 画面の error result で update() が +error ページへ置換し「端末に保存済み」が見えない → error+enqueue済みのときは update() を呼ばず画面に留まる（enqueue 失敗時のみ従来動作）
@@ -83,12 +94,14 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] 未検証1件を自己裏取り: 「ゲストの匿名 JWT 失効後は同期不能」→ 実在（authenticateAction は JWT の is_guest 必須）。データは端末保持+バッジ可視のため喪失ではない。ゲスト再認証フローが必要でインクリメント3以降の課題
 
 ### 検証
+
 - [x] vitest 840 passed（ベースライン832 + キューテスト8件: markMutationSynced/removeMutation 3 + supersede 3 + status分類 2）
 - [x] svelte-check 233 errors / 21 warnings（ベースライン235から既存2件解消。新規エラーなし）
 - [x] build 成功・prettier 済み・eslint は HEAD と同一の既存18件のみ（新規ファイルはクリーン）
 - [x] TEST_CHECKLIST.md に「オフライン採点の手動検証」追加（オンライン非回帰 / オフライン→復帰同期 / iOS 固有）
 
 ### 今後のインクリメント（戦略ロードマップ）
+
 - Phase 4: 種目データの事前ダウンロード / Phase 5: PWA・Service Worker / Step 6: PowerSync PoC
 - ゲスト再認証: 匿名 JWT 失効後の pending 同期経路（現状は auth_required で保持し続ける。再参加時に新 guest_identifier へ付け替わる問題も含めて設計が必要）
 - action フォームに client_mutation_id を渡してオンライン成功時も mutation log に記録（再送が冪等チェックに命中する二重防御。supersede 導入により緊急度は低）
@@ -96,6 +109,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 ## 大会モードのスポット販売化（チケット制）実装計画（2026-07-30）— ✅ 実装完了（DB適用・法務文言の最終確認待ち）
 
 **敵対的レビュー（ultracode 3レンズ+検証）の結果と修正**:
+
 - [x] 🔴致命: 1022 の消費トリガーが FK 即時検査で必ず 23503 失敗（レビュアーが pg16 で実証）→ session_id FK を `deferrable initially deferred` に修正（修正もレビュアーが実証済み）
 - [x] 🟠高: `$lib/plans.ts` の features 3件が未修正のまま（購入3画面に「検定・大会・研修モード」が残存）→ 「検定・研修モード」へ修正
 - [x] 🟡中: org FK が cascade で組織削除時に請求監査データ消失 → restrict へ変更+削除アクションに案内エラー+オペ手順追記
@@ -104,6 +118,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] APPLIED.md の適用順を「DB先行」に訂正（1022: アプリ先行だと無消費窓が開く／1023: アプリ先行だと CHECK 違反）
 
 **残タスク（uchida さん側）**:
+
 - [x] dev: 1022 → 1023 適用済み・verify 全✅（2026-08-01。verify は自動選択版に改良済み）
 - [x] prod: 1022 → 1023 適用済み（2026-08-01 トリガー2本+制約を実測確認）・APPLIED.md 更新済み
 - [ ] TEST_CHECKLIST.md の「大会チケット手動検証」をアプリ画面から一巡（本番デプロイ後のスモークを兼ねて実施推奨）
@@ -114,6 +129,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 **2026-07-30 に確定した4仕様**: ①大会セッションは検定員数上限（max_judges_per_session）の対象外 ②大会セッションは月間セッション数上限のカウント・チェック対象外 ③スコアボード公開は大会機能としてチケットに含める（プランゲート配線しない） ④データ保持は組織プラン準拠（Free は約30日で自動削除）とし、FAQ・案内で「大会終了後は Excel エクスポート推奨」を明記。
 
 **調査で確定した事実**（ultracode 調査 5 エージェント、file:line 裏取り済み）:
+
 - サーバー側ゲートは session/create の `checkCanUseTournamentMode`（plan_limits.has_tournament_mode 参照）の1箇所のみ。大会系ルートは全て `is_tournament_mode` によるセッション単位ガードで**変更不要**
 - Stripe 結合はゼロ（価格ID・webhook・checkout に大会関連なし）→ **Stripe コード無変更で成立**
 - ⚠️ **課金バイパス穴**: sessions の RLS INSERT ポリシー（018）は組織メンバーなら任意カラムで insert 可 → PostgREST 直叩きで `mode='tournament'` を作れる。UPDATE ポリシーでも既存セッションの大会化が可能。**DB 層での強制が必須**
@@ -121,12 +137,14 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - contact_submissions.category に CHECK 制約あり（023）→ 見積カテゴリ追加には両DBマイグレーション必要
 
 ### Phase 1: DB マイグレーション（手動適用: dev 先行 → prod、APPLIED.md 更新）
+
 - [x] `1022_add_tournament_tickets.sql`: tournament_tickets テーブル（id uuid PK / organization_id uuid FK cascade / session_id bigint FK **set null**（自動物理削除 cron と両立）/ note / granted_at / used_at、1セッション=1チケットの部分 unique、RLS はメンバー自組織 SELECT のみ・書込みは service role）
 - [x] 同 SQL 内に **BEFORE INSERT トリガー**: `is_tournament_mode=true` の insert 時に未使用チケットを `FOR UPDATE SKIP LOCKED` で原子的に消費、無ければ RAISE EXCEPTION（RLS 直叩きバイパスと消費の競合・非アトミック問題を DB 内で一挙に解決。1006 の会員上限トリガー前例に準拠）+ **BEFORE UPDATE トリガー**: authenticated ロールからの既存セッション大会化を拒否
 - [x] `1023_contact_category_tournament_quote.sql`: contact_submissions の CHECK 制約張り替え（023 は「要確認」ステータスのため両DBの実制約名確認手順を SQL 冒頭に記載）
 - [x] 各 rollback SQL + 検証 SELECT + APPLIED.md 行追加。plan_limits.has_tournament_mode は列・値とも残置（コード参照を全廃するため無害化）
 
 ### Phase 2: サーバーコード
+
 - [x] `$lib/server/tournamentTickets.ts` 新設: `countAvailableTickets(supabase, orgId)`（UI 表示・事前チェック用。消費は DB トリガーが担う）+ ユニットテスト
 - [x] session/create アクション: mode==='tournament' 時 ①checkCanCreateSession をスキップ（月間上限対象外・確定）②チケット残の事前チェック→残0なら fail(403)「大会モードのご利用はお問い合わせください」+ /contact への導線 ③insert（トリガーが消費）。トリガー例外時のエラーハンドリング
 - [x] organizationLimits.ts: `checkCanUseTournamentMode` 削除、`checkCanUseScoreboard`（呼び出しゼロのデッドコード）削除、`getCurrentMonthSessionCount` に `.neq('mode','tournament')`、`checkCanAddJudgeToSession` を大会セッション免除（確定。session select に is_tournament_mode を追加して分岐、join/invite 両フロー+モックテスト追随）
@@ -134,6 +152,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] account/+page.server.ts: 使用量カウントの大会除外 + 既存の deleted_at 不整合も同時修正
 
 ### Phase 3: UI・文言
+
 - [x] `$lib/plans.ts`: features 3プランの「検定・大会・研修モード」→「検定・研修モード」（organization/create・change-plan・upgrade は自動追随）
 - [x] pricing: Free limitations「大会モード利用不可」削除、有料 features 修正、機能比較の大会行（モバイル/デスクトップ2箇所）削除、**「大会モード（スポット販売）」枠を新設**（"1大会ごとのご利用・料金はお問い合わせください" + /contact?category=tournament_quote CTA + スコアボード公開込みの旨）、プラン側の「スコアボード公開機能」表記は大会枠へ移動（確定）
 - [x] onboarding: 大会モード ✓/× 行削除
@@ -144,10 +163,12 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [~] modes ページ: 注記は見送り（モード説明自体は不変のため。必要なら後日）
 
 ### Phase 4: 法務ページ（実装するが最終文言は要ユーザー確認）
+
 - [x] legal（特商法）: 大会スポット販売の行（個別見積り・支払時期/方法（請求書払い）・役務提供時期（チケット付与）・返金条件）
 - [x] terms 第6条: 支払方法に請求書払いを追加、チケットの性質（有効期限・譲渡不可・大会中止時の扱い）条項
 
 ### Phase 5: テスト・検証・運用
+
 - [x] organizationLimits.test.ts の文言アサート2件修正（「大会モードは有料プランでのみ〜」）
 - [x] session/create の大会ゲートのアクションテスト新設（残0拒否 / 消費成功 / 検定・研修は無影響）
 - [x] database/verify/ にトリガー検証 SQL（残0拒否・二重消費なし・authenticated 大会化拒否）
@@ -166,6 +187,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - 教訓の適用: svelte-check +3 を変更ファイル grep で即特定（新規テストの型付け）→ 修正。最終 235/21 でベースライン維持
 
 ### 検証
+
 - [x] vitest: 819 passed / 11 skipped 全緑（+4件）
 - [x] svelte-check: 235 / 21（維持）、build 成功、新規4ファイル eslint/prettier クリーン
 
@@ -188,6 +210,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] 判断記録: archive ページの完全削除モーダルは**2段階確認ウィザード**（警告リスト付き）で ConfirmDialog の複製ではないため対象外として温存
 
 ### 検証
+
 - [x] vitest: 811 passed / 11 skipped 全緑
 - [x] svelte-check: **238 errors / 21 warnings**（243/25 から改善: 型注釈で−5、手書きモーダル撤去で警告−4）
 - [x] `npm run build` 成功、prettier クリーン
@@ -202,6 +225,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] load は意図的に無変更（authenticateSession への寄せは挙動変更を伴うため見送り）
 
 ### 検証
+
 - [x] vitest: 811 passed / 11 skipped 全緑（+29件）
 - [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン
 - [x] eslint: 新規指摘なし（残る2件は load の既存 `any`）
@@ -218,6 +242,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] webhook テスト66件（冪等性・リプレイ・T番号エッジケース含む）が**無修正で全緑** — POST 経由の E2E アサーションのため分割の影響を受けない
 
 ### 検証
+
 - [x] vitest: 782 passed / 11 skipped 全緑
 - [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン
 - [x] eslint: 24件全て移動元から持ち越した既存 `any`（新規カテゴリなし）
@@ -232,6 +257,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] **session/[id] の既存テスト4ファイル（64件）が無修正で全緑**（component テストのモックはヘルパーと同一のチェーン形状だったため改修不要だった）
 
 ### 検証
+
 - [x] vitest: 782 passed / 11 skipped 全緑
 - [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン、eslint はページ 28→26（any 2件減・新規なし）
 
@@ -242,6 +268,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [ ] **session/[id]/+page.svelte（保留・次ステップ）**: 手書き約270行 + `startFallbackPolling`/`checkSessionStatus`。調査の結果、`page.realtime.test.ts`（900行）はページを import しないシミュレーションテストで実装をロックしておらず、実質のロックは `page.component.test.ts`（$lib/supabaseClient をモックしてページを render）のみと判明。ただし subscribe コールバック内の分岐が複雑（複数ステータス×初期チェック×ポーリング開始条件）で、コンポーネントテストのモック改修込みの独立ステップが妥当
 
 ### 検証
+
 - [x] vitest: 779 passed / 11 skipped 全緑
 - [x] svelte-check: 243 errors / 25 warnings（途中 +1 した sessionId 型エラーは non-null 明示で解消、最終的にベースライン維持）
 - [x] `npm run build` 成功、prettier クリーン、eslint 新規指摘なし（残りは HEAD から存在する既存分）
@@ -256,6 +283,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - 残: 3ページ（session/[id]、検定 score、dashboard）の手書きチャネル約270行のヘルパー移行は**未着手**（session/[id] は4テストファイルが手書き実装をロックしており、テスト改修込みの別ステップとする）
 
 ### 検証
+
 - [x] realtime 関連47テスト全緑（32 + score-monitoring 15）、vitest 全体 779 passed / 11 skipped
 - [x] svelte-check: 243 errors / 25 warnings（増加なし）、`npm run build` 成功、prettier クリーン
 
@@ -266,14 +294,15 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] `logger.ts` を可変長引数 API に刷新（プレフィックス引数を廃止、`unknown` 型で lint クリーン、配列レダクション時の型も整理）+ ユニットテスト4件（環境別出力・再帰レダクション）
 - [x] 変換規則: console.log→logger.debug / info→info / warn→warn / error→error（スクリプトで機械的置換 + import 自動挿入、残存ゼロを機械検証）
 - [x] 対象: src/lib/server（テスト除く）、routes の +server.ts / +page.server.ts / +layout.server.ts、hooks.server.ts。クライアントサイドは対象外
-- [x] **errors.ts の採用は見送り（判断記録）**: paraglide の error_* 文言が現行ハードコード文言と不一致（例:「この組織のメンバーではありません」vs error_notOrgMember「組織のメンバーではありません」）のため、採用＝ユーザー向け文言と応答形状の変更になり characterization テストとも矛盾する。文言統一はプロダクト判断が必要。errors.ts は新規コード用に温存
+- [x] **errors.ts の採用は見送り（判断記録）**: paraglide の error\_\* 文言が現行ハードコード文言と不一致（例:「この組織のメンバーではありません」vs error_notOrgMember「組織のメンバーではありません」）のため、採用＝ユーザー向け文言と応答形状の変更になり characterization テストとも矛盾する。文言統一はプロダクト判断が必要。errors.ts は新規コード用に温存
 - 運用上の注意: 本番ログから旧 console.log 相当の情報ログは消える（意図どおり）。本番で詳細ログが必要になったら logger.ts の1箇所でポリシー変更可能
 
 ### 検証
+
 - [x] vitest: 779 passed / 11 skipped 全緑（webhook 66・checkout 28 など全既存テスト通過）
 - [x] svelte-check: 243 errors / 25 warnings（増加なし）
 - [x] `npm run build` 成功、logger.ts / logger.test.ts は eslint/prettier クリーン
-- [x] サーバーコードの生 console.* 残存は logger.ts 内部のみであることを grep 確認
+- [x] サーバーコードの生 console.\* 残存は logger.ts 内部のみであることを grep 確認
 
 ## リファクタリング ステップ5: orgAuth 集約（2026-07-05）— ✅ 完了
 
@@ -286,6 +315,7 @@ org-admin/メンバーシップ認可チェックのコピペ 17箇所+member �
 - 差分: 既存13ファイルで +65 / −177 行、新規テスト3ファイル+ヘルパー
 
 ### 検証
+
 - [x] vitest: 775 passed / 11 skipped 全緑（新規テスト19件含む。change-plan アクション・stripe checkout の既存テストも全緑）
 - [x] svelte-check: 243 errors / 25 warnings（ベースライン 249 から6件改善）
 - [x] `npm run build` 成功、新規4ファイルは eslint/prettier クリーン
@@ -301,6 +331,7 @@ tournament-setup / training-setup の participants・events 4ページ（ほぼ�
 - 差分: 既存8ファイルで **+24 / −2,704 行**（新規4ファイル分を含めても正味 約1,300行削減）
 
 ### 検証
+
 - [x] characterization 30テスト: リファクタ前後どちらも全緑（挙動不変の証明）
 - [x] vitest 全体: 756 passed / 11 skipped 全緑
 - [x] svelte-check: 249 errors / 25 warnings（ベースライン 252/25 から3件改善）
@@ -310,11 +341,13 @@ tournament-setup / training-setup の participants・events 4ページ（ほぼ�
 ## リファクタリング ステップ3: 純関数抽出 + プラン一元化（2026-07-04）— ✅ 完了
 
 ### 3-1. スコアボードランキングの純関数抽出
+
 - [x] `$lib/scoreboard.ts` に `computeScoreboardRankings()` を抽出（認証版/公開版で文字単位一致していた集計約75行×2を置換）
 - [x] ユニットテスト8件を新規作成（`src/lib/tests/scoreboard.test.ts`）— 複数検定員の合算、総合/種目別ランキング、同点連番、null 耐性。テストゼロだった領域に初の安全網
 - [x] ついで修正: 認証版の未使用 `redirect` import 除去（HEAD 時点から未使用）
 
 ### 3-2. プラン/価格マッピングの一元化
+
 - [x] `$lib/plans.ts`（表示用カタログ: 価格/上限/機能、`getPlanPrice`/`formatPrice`）を新規作成
 - [x] `$lib/server/plans.ts`（Stripe Price ID マッピング、`MAX_MEMBERS` は表示カタログから導出、`findPlanTypeByPriceId`）を新規作成
 - [x] 配線: `create-organization-checkout` / `upgrade-organization`（PRICE_IDS+MAX_MEMBERS 削除）、`api/organization/create`（MAX_MEMBERS 削除）、webhook（`getPlanTypeFromPrice` が共有関数を参照、T2 の RetryableError 変換は webhook 側に維持）
@@ -323,6 +356,7 @@ tournament-setup / training-setup の participants・events 4ページ（ほぼ�
 - 効果: プラン↔価格↔上限の定義箇所が **7箇所 → 2ファイル**（表示=`$lib/plans.ts`、Stripe対応=`$lib/server/plans.ts`）
 
 ### 検証
+
 - [x] vitest: 726 passed / 11 skipped 全緑（スコアボード8件追加）
 - [x] svelte-check: 252 errors / 25 warnings（ベースライン維持、増加なし）
 - [x] `npm run build` 成功、新規ファイルは eslint/prettier クリーン
@@ -333,6 +367,7 @@ tournament-setup / training-setup の participants・events 4ページ（ほぼ�
 ベースライン: vitest 749 passed / 11 skipped(全緑)、svelte-check 256 errors(増やさないこと)
 
 ### ステップ1: 死コード削除
+
 - [x] `.bak` ファイル6個を削除(legal/privacy/terms 配下)
 - [x] `src/routes/score/+page.svelte`(孤児ルート)を削除
 - [x] `/invite/[token]` join アクションにメンバー上限チェックを移植(TDD: RED→GREEN、テスト2件追加)
@@ -342,10 +377,12 @@ tournament-setup / training-setup の participants・events 4ページ（ほぼ�
 - [x] `errors.ts`/`logger.ts` は温存(後続で「採用」予定)
 
 ### ステップ2: 潜在バグ修正
+
 - [x] 得点計算の乖離: complete ページのインライン `slice(1,-1)` を `calculateFinalScore()`(中央3人合計)に置換。6人以上採点時に status ページと結果が食い違うバグを修正。3審3採・5人未満のフォールバック挙動は維持
 - [x] ブラウザ Supabase クライアント: 調査の結果 `@supabase/ssr` の `createBrowserClient` はブラウザではシングルトンキャッシュを返すため二重接続は実害なしと判明。生成箇所を `$lib/supabaseClient` の1箇所に統一(layout は import + setContext のみ)、layout.server の不要な supabaseUrl/AnonKey 返却も削除
 
 ### 検証(レビュー)
+
 - [x] vitest: 718 passed / 11 skipped 全緑(削除テスト33件減・join テスト2件増)
 - [x] svelte-check: 252 errors / 25 warnings(ベースライン 256/25 → エラー4減、警告同数)
 - [x] `npm run build` 成功
@@ -355,6 +392,7 @@ tournament-setup / training-setup の participants・events 4ページ（ほぼ�
 ## TENTO Web カラーパレット全面適用 + UI改善（2026-07-03）— ✅ 完了
 
 Claude Design プロジェクトの新パレット（`カラーパレット Web版` / `Before-After`）を全面適用し、UIを分かりやすく改善。
+
 - **app.css**: iOSモノクロ → Web版パレット（意味色/モード色/リンク/focus/elevation トークン化）。主操作=ブランドブルー `#005AB5`。submit 総称ルールは `:where()` でゼロ詳細度の既定にし、danger 等コンポーネント色を常に優先（`.delete-btn` 赤を維持）。
 - **主操作の青化**: NavButton / ConfirmDialog / AlertDialog / NumericKeypad / landing の墨グラデーション → `var(--accent)`（hover→`--accent-hover`、active→`--accent-active`）。
 - **一括トークン化（workflow 54ファイル 339置換 + 手動3）**: ハードコード意味色/中立色を `--color-*` / `--mode-*` / neutral トークンへ。app全体で意味色ハードコード0。shadow/白/透過は維持。
@@ -362,11 +400,13 @@ Claude Design プロジェクトの新パレット（`カラーパレット Web�
 - **モードカードのアイコン着色**: `/modes`・`セッション作成` を検定=青/大会=橙/研修=緑。
 
 ### 検証
+
 - `npm run build` 成功 ／ `npm run check` **256（既存ベースライン・新規0）**。
 - 実ページ（ログイン画面）で主操作=青・リンク=青・中立色を確認。ダッシュボードカードは標準レンダリングで Before-After AFTER と一致を確認。
 - 2回の `/code-review`（xhigh）で検出のバグを修正済み: (1) global submit ルールが `.delete-btn` を青く上書き → `:where()` で根治、(2) 4ボタンの `:active` が `--accent`→`--accent-active` に。
 
 ### フォローアップ（任意）
+
 - 意味色の hover 濃淡トークン（`--color-error-hover` 等）追加で押下感を戻す（現状 lift+影で代替）。
 - 一部 input の `:focus{outline:none}` がグローバル `:focus-visible` を上書き（a11y、恒久はコンポーネント個別）。
 
@@ -398,11 +438,12 @@ Claude Design プロジェクトの新パレット（`カラーパレット Web�
   - create-portal-session / customer-portal の 500 応答を汎用メッセージに統一（詳細はログのみ）
   - 既存 T3/T12 テスト（×10）を「汎用メッセージ＋内部詳細を含まない」契約に更新（意図的変更）
 - [x] 5.【低】checkout の `payment_method_types: ['card']` 明示指定を削除（動的支払い方法が有効に。
-  Dashboard の支払い方法設定が反映されるようになる点に注意）
+      Dashboard の支払い方法設定が反映されるようになる点に注意）
 
 スコープ外（報告済み・別対応）: 個人プラン Price ID の env 化 / Customer 重複作成 / メンバー追加失敗の監視 / APIバージョン更新 / RAK・IP許可リスト
 
 ### レビュー（検証結果）
+
 - 新規テスト17件追加（SEC-1×4 / SEC-2 checkout×7 / SEC-2 load×3 / SEC-3 action×3）。全てRED→GREENを確認
 - `npx vitest run src/`: **748 passed / 0 failed**（47 files）
 - `npm run check`: **256 errors / 25 warnings ＝ 修正前ベースラインと完全一致**（stashで前後比較し新規エラー0を確認。
@@ -414,6 +455,7 @@ Claude Design プロジェクトの新パレット（`カラーパレット Web�
 ## アイコン適用拡大バッチ（2026-06-30）— ✅ 完了
 
 新規 TENTO `Icon.svelte`（dd4e708 で導入、5ファイルのみ利用）を、適用可能な箇所へ展開した。
+
 - [x] 1. アイコンデータ把握（catalog 41種・利用5ファイル→13箇所のみ）
 - [x] 2. 全 .svelte（73ファイル）を並列監査（workflow 73 agents）→ 候補171件（過剰生成）
 - [x] 3. ユーザー判断「高価値セット」で厳選 → 約99件に絞る（back×34・キーパッド・cancel→close 等を除外）
@@ -421,6 +463,7 @@ Claude Design プロジェクトの新パレット（`カラーパレット Web�
 - [x] 5. 検証完了
 
 ### 実施した変更
+
 - `NavButton.svelte`：`.nav-btn` に `display:inline-flex; align-items:center; justify-content:center; gap:8px` を追加（中核の有効化。テキストのみのボタンは見た目不変、アイコン+ラベルが正しく整列）。
 - インラインSVG置換（`session/[id]/+page.svelte`）：自作チェック→`ready`、アニメ時計→`waiting`（色 var(--ios-blue) をラッパへ移し、`spin` で回転を維持）。死んだCSS/keyframes を除去。
 - 絵文字→アイコン（マークアップのみ）：⚠️→warning、🔄→refresh、✓/✅→ready、→→forward。**console.log/文字列内の絵文字・🥇🥈🥉/🎉/🎟 は一切触らず**。
@@ -431,6 +474,7 @@ Claude Design プロジェクトの新パレット（`カラーパレット Web�
 - 配置規約：アイコンはラベル前・装飾扱い（aria-hidden 自動）・色は currentColor 継承（danger は白/赤を継承）。各ボタン/見出しに flex 整列（gap 6〜8px）を付与、中央寄せは justify-content:center で保持。
 
 ### 検証
+
 - [x] `npm run check`：**256 errors / 25 warnings = 既存ベースラインと同一（新規エラー0・新規警告0）**。変更ファイルの指摘行は全て既存（多くは追加行で行ズレ）でアイコン挿入箇所ではない。
 - [x] `npx vitest run src/`：**731 passed / 0 failed**（45 files）。
 - [x] `npm run build`：成功（`✓ built`）。警告は既存の resend/@react-email のみ（無関係）。
@@ -438,6 +482,7 @@ Claude Design プロジェクトの新パレット（`カラーパレット Web�
 - [ ] 実機の目視確認（任意・推奨）：`npm run dev` でアイコンの見た目・整列・色を確認。
 
 ### 意図的に除外（高価値セット方針）
+
 back×34・home・forward の大量ナビ付与、キーパッドの C/確定、cancel→close、view→eye、pricing 比較表の ✓/✗、faq の details マーカー、TournamentSettings の小見出し。再度広げたい場合は監査結果（workflow icon-audit）に候補あり。
 
 ## dev でボタン/リンクが効かない（Chrome）修正（2026-06-30・ユーザー報告）— ✅ 完了
@@ -445,20 +490,25 @@ back×34・home・forward の大量ナビ付与、キーパッドの C/確定、
 症状: セッション詳細ページ等で「戻る」「エクスポート」等の遷移が効かない。**dev のみ・Chrome のみ・Safari/本番はOK**。アイコン展開とは無関係。
 
 ### 真因（Chrome コンソールで確定）
+
 Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically imported module: .../client/app.js` → **ハイドレーション不成立 → 全 `on:click`/`goto` が死亡**。
+
 - `src/routes/session/[id]/details/+page.svelte:11` が `import * as XLSX from 'xlsx'`（重いCJS）を**トップレベル static import**。`xlsx`/`qrcode`(QRInviteModal) は起動時に事前バンドルされていないため、**details を初回表示した時に Vite がオンデマンド再最適化**→最適化チャンクの `?v=` ハッシュが変わり、既読み込みの古いチャンクが 504。`app.js` の動的 import が失敗してページが hydrate しない。
 - **ブラウザ依存の理由**: Chrome が古いハッシュのチャンク URL をキャッシュ→504 を引き続き要求。Safari は新しく取得できて動作（コンソールに 504 なし）。
 - **本番OKの理由**: 本番は Rollup ビルド済みで dev の optimize 機構を使わない。
 
 ### 修正（恒久）
+
 - `vite.config.ts` に `optimizeDeps.include: ['xlsx', 'qrcode']` を追加 → dev 起動時に事前バンドルし、セッション途中の再最適化＝504 を根絶。
 - 検証: `rm -rf node_modules/.vite` → 起動で `node_modules/.vite/deps/` に `xlsx.js`/`qrcode.js` が生成されることを確認。headless Chrome で `/` を読み込み 504/`Failed to fetch`/pageerror = 0。
 
 ### ⚠️ ユーザー側の手当て（古いキャッシュを一掃）
+
 1. dev サーバ停止 → `rm -rf node_modules/.vite .svelte-kit` → `npm run dev`（**config 変更は再起動必須**）
 2. Chrome DevTools を開いた状態でリロードボタン右クリック →「**キャッシュの消去とハード再読み込み**」（または Network タブの Disable cache を ON）
 
 ### 関連（別件・この不具合の原因ではない）
+
 - CSP `block-all-mixed-content` を hooks.server.ts で https 限定に gate 済（以前 Safari を固めた `upgrade-insecure-requests` と同系統の潜在バグ。有効な改善として残置）。lessons「CSP / Dev environment」参照。
 - Vercel Speed Insights (`va.vercel-scripts.com`) が script-src 未許可で全環境ブロック＝計測未送信（任意で script-src 追加）。
 - ✅ 追加実施: `xlsx` を `handleExport` 内 `await import('xlsx')` の**遅延ロード**化（トップレベル static import を削除）。details 初期ロードから xlsx(~417KB) を除外し、エクスポート押下時のみ取得。ビルドで dynamic chunk 化を確認（details node は `import("../chunks/…")` のみ・eager 参照なし）、svelte-check 256（新規0）。`optimizeDeps.include` と併用で dev の再最適化も防止。
@@ -477,6 +527,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - [x] **#4** アカウント削除の孤児化（削除をブロック）→ `api/delete-user`：唯一管理者の有料組織で409、個人サブスク解約後に削除 + UI文言整合
 
 ## レビュー（2026-06-09）
+
 - 型チェック: `npm run check` → 既存306エラーのまま（**自分の変更で新規エラー0件**、stash比較で確認）。残存は既存の Stripe Basil 型 vs acacia ランタイム等。
 - テスト: `npx vitest run src/` → **662 passed (38 files)**。
   - `session/join`・`session/invite` のアクションテストは `locals.supabaseAdmin` を追加して実態に整合。
@@ -485,6 +536,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - ⚠️ **#3 要確認**: Stripeダッシュボードの webhook エンドポイントAPIバージョン。コードは両形状対応にしたが、Basil形状の実イベントでの疎通確認を推奨。
 
 ### 監査 — クイックウィン（Medium/Low）— ✅ 完了（2026-06-09）
+
 - [x] **guest-join-6** 参加コード入力 `maxlength` 6→8（`session/join/+page.svelte`）
 - [x] **guest-join-3** ゲスト名を `validateName` でサニタイズ（`session/join`・`session/invite/[token]`、INSERT＋JWTメタデータ両方）
 - [x] **signup-1** 既存ユーザーも新規と同一応答（303 → /signup/success）に統一（列挙対策）。`signup.test.ts` も更新
@@ -495,6 +547,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 注記: `signup/+page.svelte` の `{#if form?.success}` は応答統一で未到達（無害・任意で除去可）。
 
 ### 監査 — レート制限クラスタ #2（login-hooks-1 / ratelimit-5）— ✅ 完了（2026-06-09）
+
 - [x] ログインをクライアント側 `signInWithPassword` から**サーバー form action**へ移行し `checkRateLimit(auth)` を適用（signup/reset と同パターン）
   - `login/+page.server.ts`：`actions.default`（レート制限→正規化→signInWithPassword→成功時 `redirect(303, 検証済みnext)`、エラーは fail で i18n メッセージ）
   - `login/+page.svelte`：`<form method=POST use:enhance>` + hidden `next`、クライアント側 signIn と onMount 認証チェックを削除（load がSSRでリダイレクト）
@@ -505,19 +558,22 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - 未実装（#2の残り・未選択）: ratelimit-2(userIdキー), ratelimit-3(fail-closed)。
 
 ### 監査 — レート制限クラスタ #2b（ratelimit-1 / login-hooks-2）— ✅ 完了（2026-06-09）
+
 - [x] `getClientIdentifier` のIP導出を「x-real-ip 優先 → x-forwarded-for 右端ホップ」に変更（左端=クライアント詐称可能を使わない）。`rateLimit.ts` のみ・呼び出し20箇所は無変更
 - [x] `rateLimit.test.ts` 新規6件（user:id優先、x-real-ip優先、右端ホップ、左端偽値でバイパス不可、単一ホップ、unknown）
 - レビュー: `npx vitest run src/` → **676 passed**。`npm run check` → 306（新規0）。アプリ層のみ・低リスク。
 
 ### 監査 — 決済の堅牢性 #3 — ✅ 完了（2026-06-09）
+
 - [x] **stripe-webhook-4** subscription/created・updated でマッピング行が未作成（順序レース）の場合、`NonRetryableError(400)`→`RetryableError(500)` に変更。Stripeが再送し恒久ドロップを回避（`webhook/+server.ts`）。テスト1件を新挙動(500)に更新
 - [x] **limits-4** `handleSubscriptionUpdated`：非課金ステータス（unpaid/canceled 等）では org を free 制限に降格。past_due は猶予として現プラン維持。`getOrganizationPlanLimits` は org.plan_type 参照のまま（RLS安全）
-- [x] **limits-3** organization_members の上限を **DBトリガー**でアトミック強制（新マイグレ `1006_*`、org行を FOR UPDATE ロック→再カウント→超過は例外）。アプリ層 checkCanAddMember は維持（通常時メッセージ用）
+- [x] **limits-3** organization*members の上限を **DBトリガー**でアトミック強制（新マイグレ `1006*\*`、org行を FOR UPDATE ロック→再カウント→超過は例外）。アプリ層 checkCanAddMember は維持（通常時メッセージ用）
 - レビュー: `npx vitest run src/` → **676 passed**（webhook/limits テスト更新含む）。`npm run check` → 306（新規0）。
 - ⚠️ **要デプロイ**: webhook-4 / limits-4 はアプリ層（feature→main→デプロイ）。**1006 トリガーは本番/開発DBへ手動適用が必要**（アプリ無変更でも安全に先行適用可）。
-- 残（follow-up）: 検定員(session_participants)の TOCTOU トリガーは未対応（cap算出がアプリ logic と乖離しやすく要慎重・影響小）。stripe-webhook の retrieve由来の current_period_* 型エラーは既存（acacia ランタイムでは安全）。
+- 残（follow-up）: 検定員(session*participants)の TOCTOU トリガーは未対応（cap算出がアプリ logic と乖離しやすく要慎重・影響小）。stripe-webhook の retrieve由来の current_period*\* 型エラーは既存（acacia ランタイムでは安全）。
 
 ### 監査 — 優先順クリーン修正（グループ1〜3, 7件）— ✅ 完了（2026-06-10・未コミット）
+
 - [x] **guest-core-4** 大会スコアの judge_name を素の guest_name で保存（`addGuestSuffix` 除去）→ RLS(1000/1001)拒否＝保存不可の可用性バグ解消（`input/+page.server.ts`）
 - [x] **guest-core-3** スコア保存に生の `?guest=` でなく JWT検証済み `guestParticipant.guest_identifier` を使用（同セッションのスコア偽造をアプリ側で防止）
 - [x] **account-2** パスワード変更に現PWでの再認証を必須化＋成功時 global signOut（セッション奪取での乗っ取り固定化を防止、`account/+page.svelte`）
@@ -529,6 +585,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - 注: account-2/3 はクライアント側。account-3 の完全な保証はDB CHECK制約（任意マイグレ）。
 
 ## グループ4の判断結果（2026-06-10）
+
 - **ratelimit-2** → **見送り（C）**。ratelimit-1(XFF信頼IP化)済みでIPベースが堅牢になり、getUser再順序のトレードオフ＋15ファイル変更に見合わないため。
 - **広いSELECT（session_participants）** → **据え置き（既知Low）**。調査(workflow)結果＝「絞り込みは可能だが前提あり」:
   - 公開スコアボードは session_participants を読まない（最大懸念はクリア）。リアルタイムも無関係。
@@ -537,11 +594,13 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
   - 結論: 採点フローへのリグレッションリスク＋本番検証必須 vs 低機微PII(ゲスト名＋参加関係)のため据え置き。再開する場合の段階案は会話ログ参照（Stage1=カウントをsupabaseAdmin化、Stage2=scoped SELECTマイグレ＋本番2クエリ検証）。
 
 ## 未着手で残っている項目
+
 - **ratelimit-3**（fail-closed・可用性トレードオフ＋監視(Sentry等)未配線）— 未相談
 - **検定員TOCTOU**（session_participants 検定員上限の原子化。cap算出がアプリlogicと乖離しやすく要慎重・影響小）
 - **広いSELECT**（上記・据え置き）
 
 ## 中断時点のブランチ/デプロイ状態（2026-06-10）
+
 - `main`（本番デプロイ対象）: High6件 + session_participants RLS(1002/1004/1005) + クイックウィン + ログインサーバ化 + XFF + 決済堅牢性 まで取り込み済み。
 - `feature` は `a944a17`（優先クラスタ7件: guest-core-3/4, account-2/3, login-hooks-3, callback-1, stripe-webhook-6）が main より1コミット先（**未マージ・未デプロイ**）。
 - DBマイグレ適用済み（両DB）: 1002/1004/1005/1006。
@@ -550,6 +609,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 ## Completed
 
 ### 2026-03-04 (Session 3)
+
 - [x] 研修モードエクスポートのゲスト検定員名表示を修正
   - ゲストユーザーの検定員名が「不明」と表示される問題を修正
   - `session_participants` テーブルから `guest_name` を取得するように改善
@@ -675,6 +735,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
     - 保守性: バリデーションロジックを一箇所で管理、変更が容易
 
 ### 2026-03-03 (Session 2)
+
 - [x] 招待サインアップのメールアドレス照合を必須化（セキュリティ修正）
   - `invitation.email`と入力`email`の一致チェックを追加
   - テストカバレッジを追加（7テスト、全合格）
@@ -705,6 +766,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
     - 招待トークンの特殊文字、長さ制限を検証
 
 ### 2026-03-03 (Session 1)
+
 - [x] 研修モードのゼッケン入力画面に「結果を見る」ボタンを追加
 - [x] サインアップのメール送信診断ログを追加
 - [x] auth/callbackテストのURL encoding問題を修正
@@ -715,6 +777,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 ## Review
 
 ### Latest Session Summary (2026-03-03 Session 2)
+
 - **重大なセキュリティ改善**: 招待サインアップをメール確認フローに変更
 - **第1の脆弱性（修正済み）**: `admin.createUser({ email_confirm: true })`使用時、招待トークンを知っていれば誰でも任意のメールアドレスでアカウント作成が可能だった
 - **第2の脆弱性（修正済み）**: メール所有の確認をスキップしていたため、攻撃者が他人のメールアドレスで組織に参加できた
@@ -728,6 +791,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - **テストカバレッジ**: 20テストケース（招待8件、認証コールバック20件）で全セキュリティ修正を保護
 
 ### Key Changes (Session 2)
+
 1. `/src/routes/invite/[token]/+page.server.ts`
    - 招待メールと入力メールの一致チェックを追加
    - `admin.createUser({ email_confirm: true })`から`supabase.auth.signUp()`に変更
@@ -789,6 +853,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
     - **全20テスト合格**（13 → 20テスト）
 
 ### Previous Session Summary (2026-03-03 Session 1)
+
 - **研修モードUI改善**: ゼッケン入力画面から結果画面へのアクセスを追加
 - **認証フロー修正**: SvelteKitの`redirect()`/`error()`の正しい処理を実装
 - **組織プラン機能**: upgradeUrlを動的組織IDベースに修正
@@ -812,6 +877,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 本番RLSドリフトや所有権キー設計を要する項目（#1,#6〜#10,A/B）は **バッチ2** に分離（未着手）。
 
 ### 実施した修正
+
 - [x] **#2 eventInfo=null で500クラッシュ** — `input/+page.server.ts` の `load` に `if (!eventInfo) throw error(404, …)` を追加（participantガードと対称）。あわせて `status/+page.server.ts` の大会モードクエリを `eventInfo?.discipline/level/event_name` に（completeページと対称化）。
 - [x] **#3 失敗submit後にキーパッドが固まる** — `input/+page.svelte` の `use:enhance` を `async ({ update }) => { await update({ reset:false }); loading=false; }` に変更。失敗時も再入力可能に。
 - [x] **#4 空入力の確定で幻の0点** — `ScoreInput.svelte` の `handleConfirm` 先頭で `currentScore===''` を弾く（`m.score_inputError()` / `m.score_enterScore()` 再利用、新規i18nキー無し）。
@@ -820,6 +886,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - [x] **#12 PII/capabilityログ削減** — `input/+page.server.ts`・`results/+page.server.ts` から guest_identifier・guest_name・フルURL・score・judge_name のinfoログを除去。
 
 ### 検証
+
 - [x] 新規 `src/lib/components/ScoreInput.test.ts`（4テスト）: 空確定→アラート/未送信、通常値→送信、明示的0→送信、範囲外→範囲エラー。
 - [x] 既存 `scoreActions.test.ts` を更新: 生DBメッセージ非開示を検証（`not.toContain('RLS policy violation')`）。
 - [x] **全テスト 680 passed / 0 failed**（+4、11 skipped）。
@@ -827,6 +894,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - [ ] 手動E2E（稼働中Supabase必要）: 種目不正ID→404、失敗submit後の再入力、空確定の警告、研修結果表示 — 未実施（要ステージング）。
 
 ### バッチ2（第1次・未着手・要設計判断/DB変更）
+
 #1 ゲスト判定のJWT化（`+layout.svelte`/`supabaseClient.ts`）、#7 `results` 所有者列＋RLS/onConflict（同名なりすまし上書き）、#8 `training_events` anon SELECT migration、#9 join rate-limit、#10 旧検定フロー是正、A（横断SELECT `USING(true)`）、B（マルチ審判 requiredJudges 算出）。
 
 ---
@@ -837,6 +905,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 判定: #2=誤り(006が judge_id を uuid 化済・対応不要)、#8(同名delete) と #7(results judge_id) はDB変更要件のため次バッチへ。
 
 ### 実施した修正（DB/RLS変更なし）
+
 - [x] **#4 採点入力ページの認可（Med・実在）** — `input/+page.server.ts` の `load`/`submitScore` に、`isMultiJudge && !isChief && !guestParticipant` のとき **主任が指定した active prompt の bib のみ**許可するガードを追加（不一致は load=redirect / submit=403）。主任・ゲストは従来どおり制約せず採点フローを壊さない。共通ヘルパ `fetchActivePrompt`（`sessionHelpers.ts`）を新設。
 - [x] **#6 navigationMonitor 停滞（Med・confirmed）** — `sessionNavigationMonitor.ts`：participant 未解決時は bib のみで input へ、prompt 取得失敗時はスコアベースへフォールバック遷移（無音no-op廃止）。`input/+page.server.ts` load：`participantId` 欠落時に bib から解決し着地できるように。
 - [x] **#1 研修保存の競合（Low）** — INSERT が `23505`（並行重複）なら同一アイデンティティで UPDATE にフォールバックし 500 を返さない（得点は1件目で保存済み）。
@@ -844,12 +913,14 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - [x] **#3 finalizeScore 冪等化（Low）** — `status/+page.server.ts`：`fetchActivePrompt` で今回の bib の prompt が active な場合のみ compare-and-swap で `active_prompt_id` をクリア（二度押し/次滑走者 prompt を誤消去しない）。
 
 ### 検証
+
 - [x] 新規 `sessionHelpers.test.ts`（fetchActivePrompt 4件）＋ `input/page.server.test.ts` に #1 冪等ロジックミラー4件。
 - [x] **全テスト 688 passed / 0 failed**（+8、11 skipped）。
 - [x] 型チェック **256（新規エラー0）**、eslint 新規エラー0、prettier整形済み。
 - [ ] 手動E2E（要稼働Supabase）: 一般審判が直URLで別bib→403／主任が次滑走者へ進めると審判が遷移（participant解決失敗でもフォールバック）／研修二重送信で500なし／submitBib失敗でエラー表示／確定二度押しで次prompt不消去 — 未実施（ステージング推奨）。
 
 ### 次バッチ（要DB/設計）
+
 #2(対応不要)、#7 `results` judge_id 列＋RLS/onConflict、#8 delete-user 主任ガード＋`sessions.chief_judge_id` FK整備＋base sessions schema 収録、本番スキーマ/RLSドリフト突合。第1次バッチ2残件も継続。
 
 ---
@@ -859,21 +930,25 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 ユーザー判断によりアプリのみ（DB/FK/スキーマ変更なし）で実装。#7 は「アプリ暫定ガード」として次バッチへ分離、sessions の FK 移行も別途。
 
 ### 調査で確定した前提
+
 - `sessions` の UPDATE RLS は **org メンバーシップ基準**（030 "Organization members can manage sessions" FOR ALL）。→ `chief_judge_id` がダングリング/NULL でも org メンバーが `appointChief` で再任命可能（chief は回復可能）。
 - `removeParticipant`/`removeGuest` は **`created_by === user.id` をアプリ層で必須** → `created_by` がダングリング/NULL だと検定員管理が恒久不能（再任命でしか回復しない）。
 - `sessions.chief_judge_id`/`created_by` は FK 喪失（030でdrop・再追加なし）、base sessions schema はリポジトリ未収録。
 
 ### 実施した修正（#8）
+
 - [x] `src/routes/api/delete-user/+server.ts`：`deleteUser` 直前に **service role で所有権を残存メンバーへ引き継ぐ**処理を追加（全ガード通過後）。対象セッションを `.or(chief_judge_id.eq / created_by.eq)` で取得→各セッションの残存非ゲストメンバー1名へ `chief_judge_id`/`created_by` を再任命。置換者なしは chief のみ NULL（created_by は NOT NULL 回避のため不変）。**best-effort**（失敗してもアカウント削除は継続）。
 - [x] 純ロジックを `src/lib/server/sessionOwnership.ts` の `computeOwnershipReassign` に分離（env/stripe を import せずテスト可能に）。
 
 ### 検証
+
 - [x] 新規 `sessionOwnership.test.ts`（6件）：置換者あり→両方再任命／なし→chief NULL・created_by不変／chief のみ・creator のみ・対象外・null セッション。
 - [x] **全テスト 694 passed / 0 failed**（+6、11 skipped）。
 - [x] 型チェック **256（新規エラー0）**、eslint 新規エラー0（残り1件は既存 Stripe catch の any）、prettier整形済み。
 - [ ] 手動E2E（要稼働Supabase）: (a) 複数メンバーで chief 兼 creator を削除→別メンバーへ引き継ぎ・管理継続／(b) 単独作成者を削除→chief NULL（appointChief 可）・削除成功／(c) org sole-admin・Stripe 失敗時は従来どおりブロック — 未実施（ステージング推奨）。
 
 ### 次バッチ（要DB/設計・継続）
+
 #7 アプリ暫定ガード（join名前一意化＋自名義以外採点拒否）／results owner 列移行は将来。sessions の FK 移行（chief_judge_id/created_by に ON DELETE SET NULL）は base sessions schema 突合の上で。第1次バッチ2残件（JWTゲスト判定・training_events anon・join rate-limit・旧フロー・横断SELECT・requiredJudges）。
 
 ---
@@ -883,10 +958,12 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 ユーザー判断によりアプリのみ（results owner 列移行＝恒久対策は将来）。「自名義以外での採点拒否」は `getJudgeName` のサーバ側導出＋RLS(1000/1001) で**既に成立**しているため、本バッチの追加変更は join 名前一意化のみ。
 
 ### 実施した修正
+
 - [x] `src/lib/server/sessionHelpers.ts`：`normalizeJudgeName`（trim+NFC+小文字）＋ `isJudgeNameTakenInSession(admin, sessionId, name)` を追加。セッション内の既存 guest_name と、認証メンバーの profiles.full_name を正規化一致で照合（ゲストが既存メンバー名を騙るのも防止）。
 - [x] `src/routes/session/join/+page.server.ts`（ゲスト分岐）＋ `src/routes/session/invite/[token]/+page.server.ts`：insert 直前に一意チェックを追加、衝突は **409**（ハードコード文言）。
 
 ### 検証
+
 - [x] `sessionHelpers.test.ts` に `isJudgeNameTakenInSession` の6ケース（完全一致／空白・大小無視／メンバー名なりすまし／不一致／空候補／guest_name null）。
 - [x] join action test に「同名は409・INSERTしない」配線テストを追加。既存 join/invite action test の supabaseAdmin モックに `session_participants.select().eq()` を補い回帰修復。
 - [x] **全テスト 701 passed / 0 failed**（+7、11 skipped）。
@@ -894,6 +971,7 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 - [ ] 手動E2E（要稼働Supabase）: 既存 '田中'/認証 '山田太郎' のセッションに同名（'田中'/' 田中 '/'TANAKA'/'山田太郎'）でゲスト join→409・未登録／新規名は従来どおり join 可 — 未実施（ステージング推奨）。
 
 ### 既知の残課題（DB/RLS 必要・将来）
+
 - TOCTOU（同名同時 join）：DB ユニーク制約が無いため best-effort。将来 `UNIQUE(session_id, guest_name) WHERE is_guest` で根治。
 - 認証 vs 認証の同名（profiles.full_name はグローバル）＋ 999 の authed INSERT RLS に judge_name チェック無し疑い → results owner 列（judge_id）＋RLS 改修（恒久 #7）で対応。
 - sessions FK 移行、本番スキーマ/RLS 突合、第1次バッチ2残件。
@@ -905,13 +983,16 @@ Vite dev の **`504 (Outdated Optimize Dep)`** → `Failed to fetch dynamically 
 DB/RLS の残作業は全て破壊的変更だが本番が手動適用でドリフトしており repo migration は正本でない。推測での migration 化を避けるため、まず実態を吸い出す read-only 診断を用意（ユーザー判断）。
 
 ### 成果物
+
 - [x] `database/diagnostics/audit_schema_rls.sql`（新規・**READ-ONLY**）。対象10テーブルについて 5クエリ：(1)列定義 (2)制約+FK ON DELETE (3)索引(部分/unique含む) (4)RLS有効フラグ (5)全ポリシー。
 - [x] read-only 検証：非コメント行に CREATE/ALTER/DROP/INSERT/UPDATE/DELETE/TRUNCATE/GRANT/REVOKE/MERGE 無し。SELECT×5。
 
 ### 運用（ユーザー実行）
+
 - [x] Supabase SQL Editor で prod・dev 両方に実行し結果を受領（2026-06-27）。突合結果は memory [prod-schema-rls-drift] に記録。
 
 ### 突合で判明した重大所見（再優先順位）
+
 - 🔴 **CRIT（本番のみ）**: `results` に `authenticated_users_{insert,select,update}_results = true` ポリシー → 任意の認証ユーザーが**全org/全セッションの results を読取・改変**可能。スコープ付き正ポリシーを OR で無効化。dev には無い。
 - 🟠 **HIGH（両環境）**: `sessions` anon SELECT `USING true` → anon が全セッション＝**join_code / invite_token を読める**（参加コードゲート実質バイパス）。prod に "Temporary realtime test" USING true も残存。
 - 🟠 **HIGH（本番）**: `scoring_prompts` anon INSERT/UPDATE `true` → 越境プロンプト改ざん。
@@ -921,10 +1002,11 @@ DB/RLS の残作業は全て破壊的変更だが本番が手動適用でドリ�
 - results 恒久#7 用：judge_id/guest_identifier **列なし**、score=bigint、UNIQUE名 prod=`results_unique_score_entry`+`unique_result_per_judge` / dev=`results_unique_score`+`unique_result_per_judge`、results.id は prod=bigint/dev=uuid。
 
 ### 次バッチの推奨順（結果を踏まえ再優先）
+
 1. **RLS ロックダウン（最優先）**: results の `authenticated_users_*=true` を削除し owner/セッション基準へ；sessions の anon `USING true`＋"Temporary realtime test" を JWT/セッション参加スコープへ；scoring_prompts の anon write 制限；participants/session_participants の横断SELECT締め直し。prod/dev 差を吸収する冪等 migration。
 2. **#7 恒久**: results に owner 列（judge_id/guest_identifier）＋ owner 基準の UNIQUE/onConflict、既存二重UNIQUEを置換、アプリ write/read 改修。
 3. **#8 仕上げ**: sessions.chief_judge_id に FK(ON DELETE SET NULL)、created_by の prod CASCADE 方針確認、base sessions schema を repo 収録。
-※ いずれも prod/dev 双方へ手動適用する numbered migration＋ロールバック手順付きで設計。
+   ※ いずれも prod/dev 双方へ手動適用する numbered migration＋ロールバック手順付きで設計。
 
 ---
 
@@ -933,6 +1015,7 @@ DB/RLS の残作業は全て破壊的変更だが本番が手動適用でドリ�
 ユーザー判断により4テーブル（results/scoring_prompts/participants/session_participants）の RLS のみ。sessions は次バッチ（join/invite の service-role 化を要する）。
 
 ### 成果物（DBのみ・アプリ変更なし）
+
 - [x] `database/migrations/1007_rls_lockdown_cross_session.sql`（冪等・名前指定 DROP IF EXISTS で prod/dev 差吸収・末尾に検証スナップショット）
   - results: `authenticated_users_{select,insert,update}_results`(=true) を撤去（スコープ付き正ポリシーは維持）。
   - scoring_prompts: 全 true を撤去→ anon=JWT(session_id)／authed=参加スコープ（FOR ALL）。
@@ -946,6 +1029,7 @@ DB/RLS の残作業は全て破壊的変更だが本番が手動適用でドリ�
   - `session_participants` の authed `=true` SELECT がポリシー名で環境差（prod=`"Authenticated users can view participants"` / dev=`"... session participants"`）→ 両名を DROP。
 
 ### 運用（ユーザー実行・完了）
+
 - [x] **DEV 適用 → over-broad(true)=0 確認**（2026-06-27）。
 - [x] **PROD 適用 → over-broad(true)=0 確認**（2026-06-27）。results の chief 削除ポリシーは正しく残存。
 - [ ] 機能 E2E（DEV/PROD・推奨）：ゲスト join→大会/研修採点→status realtime→scoreboard／認証 審判・主任の bib確定(prompt+participant自動作成)→採点(upsert)→finalize。越境読取が不可になったこと。
@@ -953,6 +1037,7 @@ DB/RLS の残作業は全て破壊的変更だが本番が手動適用でドリ�
 - 問題時は `1007_rollback_rls_lockdown.sql`。
 
 ### 次バッチ
+
 sessions anon ロックダウン（join/invite の supabaseAdmin 化＋anon SELECT を JWT スコープ＋"Temporary realtime test"/authed `auth.role()='authenticated'` 撤去）、#7 恒久（results owner 列）、#8 sessions FK。
 
 ---
@@ -962,6 +1047,7 @@ sessions anon ロックダウン（join/invite の supabaseAdmin 化＋anon SELE
 anon の sessions 全読み（join_code/invite_token 漏洩＝参加コード/招待ゲート実質バイパス）＋公開スコアボードの `select('*')` 機微列露出を封鎖。**アプリ変更＋RLS migration の組み合わせ**で、**アプリを先にデプロイ→migration を DEV→prod** の順。
 
 ### 実施した変更
+
 - [x] アプリ（事前認証/公開の sessions 参照を service-role 化）:
   - `session/join/+page.server.ts`：参加コード照合を `supabaseAdmin` に＋ガード、`checkCanAddJudgeToSession(supabaseAdmin,…)`。
   - `session/invite/[token]/+page.server.ts`：load/action の invite_token 照合を `supabaseAdmin` に＋ガード、`checkCanAddJudgeToSession(supabaseAdmin,…)`。
@@ -971,12 +1057,14 @@ anon の sessions 全読み（join_code/invite_token 漏洩＝参加コード/�
 - [x] 回帰：`npm run test` 701 passed／型 256（新規0）／eslint・prettier 新規問題なし（join 266/271・scoreboard `_` は既存）。
 
 ### 運用（ユーザー実行・未実施／順序厳守）
+
 - [ ] **アプリを先にデプロイ**（service-role 参照）。この時点では旧 RLS でも動く。
 - [ ] **DEV に 1008 適用** → 末尾 `Remaining broad ... : 0` 確認。
 - [ ] DEV 手動E2E：参加コードjoin（未ログイン＆ログイン非メンバー）／招待リンク表示＋join／ゲスト在席（採点・active_prompt_id realtime・status・complete）／公開 `/scoreboard/[sessionId]` が未ログインで表示＆ join_code/invite_token がレスポンスに無い／anon が他セッションの sessions を列挙できない。
 - [ ] DEV 通過後に **prod 適用**。問題時は 1008_rollback。
 
 ### 次バッチ
+
 #7 恒久（results owner 列）、#8 sessions FK＋base sessions schema 収録、ダッシュボードの sessions DELETE 無フィルタ購読（authed スコープ化で自然縮小・必要なら別途）、第1次バッチ2残件。
 
 ---
@@ -986,6 +1074,7 @@ anon の sessions 全読み（join_code/invite_token 漏洩＝参加コード/�
 `results` を judge_name だけでなく owner（authed=`judge_id` / guest=`guest_identifier`）で識別し、同名審判の相互上書き／なりすましを根治。`training_scores` と同方式（部分一意索引＋SELECT→write＋23505フォールバック）。uniqueness/RLS を変えるため **2段階・無停止**。
 
 ### 成果物
+
 - [x] `1009_results_owner_add.sql`（phase1・追加のみ／旧アプリ互換）＋ `1009_rollback.sql`
   - judge_id(uuid,FK auth.users)・guest_identifier(text) を nullable 追加、CHECK（両セット禁止）、best-effort backfill（session 内で judge_name が一意に解決する行のみ）、部分一意索引 `results_unique_owner_auth/guest`。旧 name-unique/旧RLS は維持。
 - [x] アプリ（owner を書く/読む）:
@@ -997,10 +1086,12 @@ anon の sessions 全読み（join_code/invite_token 漏洩＝参加コード/�
 - [x] 回帰：`npm run test` 701／型 256（新規0）／eslint 新規0／.ts prettier 整形済（.sql は parser 無し）。
 
 ### 運用（ユーザー実行・未実施／順序厳守＝無停止）
+
 - [ ] **DEV に 1009 適用** → 旧アプリ互換確認 → アプリ（本バッチ）を DEV で動かし、**1010 も DEV 適用**して新アプリ E2E（同名2審判が別行で残る・myScores・集計・同時採点で500なし）。
 - [ ] **本番ロールアウト**: ①prod に **1009**（旧アプリ稼働OK）→ ②アプリを main にマージ＝本番デプロイ＆稼働確認 → ③prod に **1010**。問題時は 1010_rollback → 1009_rollback。
 
 ### スコープ外（残）
+
 - requestCorrection の大会削除は judge_name のまま（owner ids が tournament status load/フォーム に未連携のため。join 一意化で緩和済の Low 残。owner 連携は別途 UI 込みで）。
 - backfill 不能な legacy null-owner 行は owner 一意の対象外（再採点で二重行になり得る稀ケース）。
 - #8 sessions FK＋base schema 収録、第1次バッチ2残件。
@@ -1012,6 +1103,7 @@ anon の sessions 全読み（join_code/invite_token 漏洩＝参加コード/�
 ユーザー判断：`chief_judge_id`/`created_by` とも `auth.users(id) ON DELETE SET NULL` に統一（退会してもセッション/results/得点を保持し、両カラムだけ NULL）。DBのみ・アプリ無変更・デプロイ順序制約なし。
 
 ### 成果物
+
 - [x] `database/migrations/1011_sessions_fk_owner_delete.sql`（冪等・begin/commit）＋ `1011_rollback.sql`。
   - ダングリング参照を NULL 化（FK 前提）→ chief_judge_id/created_by を `auth.users SET NULL` で（再）作成。prod の created_by CASCADE / dev の profiles NO ACTION を置換。末尾に FK 検証。
 - [x] 回帰：`npm run test` 701（アプリ無変更）。静的：DROP TABLE/TRUNCATE 無し、FK add×2（SET NULL）。
@@ -1019,12 +1111,14 @@ anon の sessions 全読み（join_code/invite_token 漏洩＝参加コード/�
 - [x] 1011 を dev・prod 両方に適用済み（両 FK が auth.users SET NULL を検証）。
 
 ### 🔴 新発見（base schema 収録で判明）— 参加コード join が prod で壊れている可能性
+
 - prod sessions に `failed_join_attempts`/`is_locked` が**存在しない**＝migration `001_add_session_security.sql` が **prod 未適用**。
 - join アクション（`session/join/+page.server.ts` L74 select / L92,106,115-116,132 で使用）はこの2列に依存 → **参加コード join が prod で 500 になっている可能性**（招待リンク join は無影響なので気づきにくい）。
 - 修正：**`001_add_session_security.sql` を dev/prod に適用**（冪等・`ADD COLUMN IF NOT EXISTS`×2＋部分索引・アプリ変更不要）。dev の有無も要確認。
 - [ ] dev で `001` 適用→参加コード join をE2E（失敗カウント/10回ロック含む）→ prod 適用。
 
 ### 残
+
 requestCorrection 大会削除の owner 化（Low）、第1次バッチ2残件（join rate-limit／旧フロー是正／requiredJudges）、batch6 既知エッジ監視。
 
 ---
@@ -1034,14 +1128,17 @@ requestCorrection 大会削除の owner 化（Low）、第1次バッチ2残件�
 `session/join` は先頭で `auth` リミッタ（IP単位 15分5回）を全 join に適用 → 会場の同一NAT IPで6人目以降が429になり一斉参加が破綻していた。加えて `failed_join_attempts`/`is_locked` の自動ロックは**デッドコード**（`sessionData.join_code !== joinCode` は取得条件上つねに偽）。
 
 ### 方針：失敗のみIP単位で制限・成功は無制限
+
 総当たりは「誤った well-formed コードの大量試行」＝失敗が出る。正規参加者は正しいコードで成功。よって**失敗（404）だけ**を IP 単位で計上すれば、総当たり抑止と会場の一斉 join 両立。コード空間 36^8≈2.8e12 で緩い閾値でも総当たりは非現実的。
 
 ### 変更
+
 - [x] `src/lib/server/rateLimit.ts`：`joinFail`（slidingWindow(20,'10 m')・IP単位・prefix `ratelimit:joinfail`）追加。
 - [x] `session/join/+page.server.ts`：先頭 `checkRateLimit(auth)` 撤去 → **404 分岐で `checkRateLimit(joinFail)` を計上**（上限超過で 429）。デッドな失敗カウント/自動ロック block 撤去。`is_locked` 手動ロック確認は残置（運用キルスイッチ）。SELECT を `id, is_accepting_participants, organization_id, is_locked` に整理。
 - [x] テスト追加（成功 join は計上しない／誤コードは計上し上限内404／上限超過429）。`npm run test` 704（+3）、型 256（新規0）、lint/prettier 新規0。
 
 ### スコープ外
+
 `failed_join_attempts` 列は DB 残置（無害）。アプリのみの変更＝デプロイで反映、DB 操作なし。
 
 ---
@@ -1051,11 +1148,13 @@ requestCorrection 大会削除の owner 化（Low）、第1次バッチ2残件�
 監査トリアージ Med 2件。finalize がサーバ側で人数未検証（chief が直POST/realtime一瞬で1人確定可）＋ `required_judges` が finalize で未使用（検定は 3/5 ハードコードで 1〜2人検定が永久確定不可）。
 
 ### 必要審判数の単一ルール（ユーザー判断）
+
 - 大会(tournament): `exclude_extremes ? 5 : 3`（3審3採/5審3採）
 - 検定(certification): `isMultiJudge ? (required_judges || 1) : 1`（主任設定・≤参加者数で検証済）
 - 研修(training)は対象外（M4 別途）
 
 ### 変更（アプリのみ・DB操作なし）
+
 - [x] 大会 finalize（新フロー `score/[modeType]/[eventId]/status/+page.server.ts`）に `scores.length < (exclude_extremes?5:3)` ゲート追加。
 - [x] 検定 finalize（旧フロー `[discipline]/[level]/[event]/score/status/+page.server.ts`）に `scores.length < requiredCount` ゲート追加。同 load の必要数を `exclude_extremes?5:3` → `required_judges || 1` に修正（1〜2人検定が確定不可だったバグ解消）。
 - [x] `scoreStatusManager.ts`：realtime の `requiredJudges = excludeExtremes?5:3` 上書きを撤去し API の値を信頼（API は既にモード別＝大会3/5・検定required_judges）。検定の realtime も正しくなる。
@@ -1063,9 +1162,11 @@ requestCorrection 大会削除の owner 化（Low）、第1次バッチ2残件�
 - [x] テスト `finalizeRequiredJudges.test.ts`（8件・logic-mirror）。`npm run test` 712（+8）、型 256（新規0）、lint/prettier 新規0（既存の未使用 `error` import は別件）。
 
 ### UI 変更不要（精査で確認）
+
 大会=TournamentSettings(exclude_extremes)、検定=MultiJudgeSettings(required_judges・検定のみ表示) で既にモード別に正しい。create も変更不要。
 
 ### 残（Out of scope）
+
 M4 training 必要数（全参加者カウント・凍結）、M3 旧フロー active-prompt 認可ゲート（+L1 エラー隠蔽）、Low 群（L2 CAS/L3 大会削除 owner化/L4 participant自動生成）、prod RLS 最終監査。
 
 ---
@@ -1075,15 +1176,18 @@ M4 training 必要数（全参加者カウント・凍結）、M3 旧フロー a
 監査 M3：新フローの「多審制では非主任・非ゲストの審判は主任指定の active prompt の選手/種目のみ採点可」ゲート（#4）が**検定 legacy フローに欠落** → 一般審判が任意 bib/種目へ得点注入可。L1：legacy setPrompt が生 DB エラーをクライアントに露出。
 
 ### 変更（アプリのみ・DB操作なし）
+
 - [x] `sessionHelpers.fetchActivePrompt`：`event_name` を select+戻り型に追加（additive・新フロー無影響）。
 - [x] legacy `submitScore`（`[discipline]/[level]/[event]/score/+page.server.ts`）：score 検証直後・**participant 自動作成より前**に認可ゲート挿入。多審制 && 非主任 && 非ゲスト のとき active prompt の (bib_number, discipline, level, event_name) 完全一致のみ許可、外れは 403。`fetchActivePrompt` を import。
 - [x] legacy `setPrompt`（`[discipline]/[level]/[event]/+page.server.ts:125`）：生エラー → generic（console.error は維持）。
 - [x] テスト `certificationScoreGate.test.ts`（7件・logic-mirror）。`npm run test` 719（+7）、型 256（新規0）、lint/prettier 新規0（既存の未使用 redirect/participantError は別件）。
 
 ### 副次効果
+
 ゲートを participant 自動作成の前に置いたことで、多審制で非主任が任意 bib の participant を量産する経路（L4）も併せて抑止。
 
 ### 残（Out of scope）
+
 M4 training 必要数、Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner 化／L4 単独・chief 経路は仕様）、prod RLS 最終監査。
 
 ---
@@ -1095,6 +1199,7 @@ M4 training 必要数、Low 群（L2 旧 active_prompt CAS／L3 大会 requestCo
 ユーザー判断＝**ソフトゲート**（人数ハードゲート撤去・主任がいつでも確定可・「X/N 名 採点済」をライブ表示）。
 
 ### 変更（アプリのみ・DB操作なし）
+
 - [x] status `+page.svelte` canSubmit：研修は `scores>=1`、大会/検定は従来 `>=requiredJudges`（`data.isTrainingMode` 分岐）。
 - [x] status `+page.svelte` ボタン：研修は進捗「X / N 名 採点済」表示＋「この内容で送信する」（1件以上で有効。「N人必要」メッセージは出さない）。大会/検定は不変。
 - [x] `scoreStatusManager.ts` 研修ブランチ：`session_participants` 件数を `count:exact, head:true` で再取得し N をライブ化（凍結 config 値の代替）。
@@ -1102,6 +1207,7 @@ M4 training 必要数、Low 群（L2 旧 active_prompt CAS／L3 大会 requestCo
 - [x] テスト `status/canSubmit.test.ts`（7件）。`npm run test` 726（+7）、型 256（新規0）、lint/prettier 新規0（既存の svelte goto/reactive-loop 警告は別件）。
 
 ### 残（Out of scope）
+
 Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner 化）、prod RLS 最終監査、`max_judges` 未使用フィールドの整理。
 
 ---
@@ -1109,6 +1215,7 @@ Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner
 ## prod RLS 最終監査（2026-06-28）
 
 `database/diagnostics/audit_rls_overbroad.sql` を prod+dev 実行。
+
 - ✅ results / session_participants クリーン（owner/membership 基準・=true 無し）。RLS 全テーブル有効。
 - ✅ **1008（sessions ロックダウン）を本日 dev+prod 適用**：broad anon SELECT＋`Temporary realtime test` 撤去 → `anon_sessions_select_by_jwt` のみ。join_code/invite_token 漏洩クローズ。
 - 🔴 新規発見（既存ドリフト）: custom_events authed write/delete=true・anon SELECT=true、organizations authed update/delete=true・SELECT=true、organization_members `select_all_memberships`=true、profiles read-all=true。→ HIGH（write/delete）を次バッチで対応。
@@ -1120,6 +1227,7 @@ Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner
 監査で判明した HIGH（越境 write/delete）を org ロールへスコープ。ドリフト（repo は 020/052 で修正済だが prod/dev は 010/017/029 の over-broad のまま）。
 
 ### 成果物（DBのみ・アプリ無変更）
+
 - [x] `1012_custom_events_rls_lockdown.sql`＋rollback：authed INSERT/UPDATE/DELETE を `session の creator/chief/org-member`（`is_organization_member` SECURITY DEFINER 経由）にスコープ。anon SELECT を JWT session_id に。authed SELECT(true) は別バッチ。
 - [x] `1013_organizations_write_lockdown.sql`＋rollback：authed UPDATE/DELETE を `is_organization_admin(id)`（admin かつ removed_at IS NULL）にスコープ。SELECT(true)/INSERT(true) は別バッチ。
 - [x] ヘルパーは **create-if-absent（DO ブロック・名前判定）＋ 位置引数呼び出し**で 1007 の param-drift(42P13) を回避。
@@ -1127,10 +1235,12 @@ Low 群（L2 旧 active_prompt CAS／L3 大会 requestCorrection 削除の owner
 - [x] 静的：破壊的 DDL 無し（1012=4create/4drop、1013=2create/2drop）。`npm run test` 726（アプリ無変更）。
 
 ### 運用（ユーザー実行・未実施／DEV 先行厳守）
+
 - [ ] **DEV に 1012/1013 適用 → 機能E2E**（chief/org-admin が種目管理可・別org は不可／ゲスト採点で種目読める／org admin が org 更新削除可・別org/非admin 不可）→ 監査 query1 で当該が =true で出ないこと。
 - [ ] DEV 通過後に **prod 適用**。問題時は 1012_rollback/1013_rollback。
 
 ### 残（別バッチ）
+
 READ Med 群（custom_events authed SELECT/organizations SELECT/organization_members select_all_memberships/profiles read-all=true）、organizations INSERT(true)、sessions 重複/旧ポリシー整理、Low（L2/L3）。
 
 ---
@@ -1140,18 +1250,22 @@ READ Med 群（custom_events authed SELECT/organizations SELECT/organization_mem
 READ Med 4件のうち最も安全な custom_events authed SELECT を対応。`Authenticated users can view custom events`(=true) → 越境で全種目閲覧可。
 
 ### 成果物（DBのみ・アプリ無変更）
+
 - [x] `1014_custom_events_select_lockdown.sql`＋rollback：authed SELECT を `is_session_member(session_id) OR (session の org メンバー)` に限定。判定員＋org管理者をカバー、越境閲覧不可。ヘルパー(1007/1012)既存。
 - [x] 静的：破壊的DDL無し（1 create/1 drop）。`npm run test` 726（アプリ無変更）。
 
 ### 運用（ユーザー実行・未実施／DEV 先行）
+
 - [ ] DEV に 1014 適用 → 機能E2E（判定員/org管理者が種目読める・別orgは不可・ゲスト採点/公開scoreboard 不変）→ 監査query1で custom_events SELECT が =true で出ないこと → prod 適用。
 
 ### READ Med 残り（前提が異なる・別バッチ）
+
 - organization_members SELECT：052 helper パターンで scope 可だが**RLS再帰の歴史** → 適用前に org_members 全SELECTポリシーの snapshot を取り旧再帰ポリシーを確実にDROP。
 - organizations SELECT：メンバースコープ化は `organization/join`（招待コードで非メンバーorg読取）を壊す → 当該参照の **service-role 化アプリ変更が必要**（batch7 型）。
 - profiles SELECT：判定員名表示が他者 profiles を読む → `can_view_profile()` helper＋`scoreActions.ts:40` 無スコープ検索是正＋性能確認。**最も app-break リスク高**・専用バッチ。
 
 ### Low（既知）
+
 L2 active_prompt CAS／L3 大会 requestCorrection 削除 owner化／organizations INSERT(true)／020 admin の removed_at 未チェック。
 
 ---
@@ -1161,13 +1275,16 @@ L2 active_prompt CAS／L3 大会 requestCorrection 削除 owner化／organizatio
 org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SELECT（own/member/admin・SECURITY DEFINER ヘルパー）は**既に prod/dev に適用済み**で**自己参照の再帰ポリシーは無い**。残る過剰は `select_all_memberships`(=true, 016) のみ。
 
 ### 成果物（DBのみ・アプリ無変更）
+
 - [x] `1015_org_members_drop_overbroad_select.sql`＋rollback：`select_all_memberships`(=true) を DROP するだけ（scoped 群が既存＝coverage 維持・再帰なし）。
 - [x] 静的：破壊的DDL無し（1 drop / 0 create）。`npm run test` 726（アプリ無変更）。
 
 ### 運用（ユーザー実行・未実施／DEV 先行）
+
 - [ ] DEV に 1015 適用 → org メンバー一覧/上限カウント/ダッシュボードが正常 → 監査query1 で organization_members が =true で出ないこと → prod 適用。
 
 ### READ Med 残り
+
 - organizations SELECT：service-role アプリ変更が必要（batch7型）。
 - profiles SELECT：can_view_profile helper＋scoreActions.ts:40 是正＋性能・最も app-break リスク高。
 
@@ -1178,15 +1295,18 @@ org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SEL
 `organizations` の `Anyone can view organizations for sessions`(public=true)＋`select_organization`(authed=true) → 全組織越境閲覧。member スコープ化に伴い、非メンバーが org を読む2経路を service-role 化。
 
 ### 成果物
+
 - [x] アプリ（先デプロイ）: `organization/join`（invite_code org 検索→supabaseAdmin＋guard）、`onboarding/create-organization`（org の insert().select() を supabaseAdmin＋guard。membership挿入は authed のまま）。
 - [x] `1016_organizations_select_lockdown.sql`＋rollback：broad 2件を DROP → `authed_organizations_select_by_member`（is_organization_member(id,auth.uid())）。helper create-if-absent。
 - [x] 静的：破壊的DDL無し（1 create/2 drop）。`npm run test` 726／型 256（新規0）／eslint 新規0（join:29 の any は既存）／prettier 整形。
 
 ### デプロイ順序（厳守・batch7型）＋運用（未実施）
+
 - [ ] アプリ（join/onboarding の service-role 化）を **main へ push＝本番デプロイ → 反映確認** → **その後** `1016` を DEV→prod 適用。
 - [ ] DEV E2E：org メンバー閲覧／招待コード参加／新規org作成／別org越境不可／監査query1 で organizations SELECT が =true で出ない。問題時 1016_rollback。
 
 ### READ Med 残り（最後の1件）
+
 - profiles SELECT：`can_view_profile()` helper＋`scoreActions.ts:40` 是正＋per-row 性能・最も app-break リスク高（専用バッチ）。
 
 ---
@@ -1196,26 +1316,30 @@ org_members 全ポリシー snapshot（prod+dev）で判明：052 の scoped SEL
 `Allow users to read all profiles`(authed=true) → 全ユーザー profiles 越境閲覧。cross-user read は shares-session（判定員名）と shares-org（メンバー名・archive）のみと判明 → `can_view_profile(uuid)`（own ∨ 同一session ∨ 同一org・SECURITY DEFINER・非再帰）で行スコープ化。scoreActions:40 の full_name 逆引きは新 RLS で自動スコープ＝コード変更不要＝**DBのみ**。
 
 ### 成果物（DBのみ・アプリ無変更）
+
 - [x] `1017_profiles_select_scope.sql`＋rollback：`can_view_profile()` 作成、`Allow users to read all profiles` を DROP → `profiles_select_visible`(can_view_profile(id))。
 - [x] 静的：破壊的DDL無し（1 func/1 policy/1 drop）。`npm run test` 726（アプリ無変更）。
 
 ### 運用（ユーザー実行・未実施／DEV 先行・E2E 厚め）
+
 - [ ] 適用前に profiles 全ポリシー snapshot（=true は当該1件のみか確認）。
 - [ ] DEV 適用 → **判定員名表示中心の E2E**（status/complete/details で他判定員名・参加者名／org メンバー名・archive 削除済メンバー名／採点書込み／越境不可／own 可／性能）→ profiles snapshot 再取得で =true 無し → prod 適用。問題時 1017_rollback。
 
 ### 既知の残
-profiles の email 列レベル保護（行スコープのみ）、Low（L2/L3/orgs INSERT/020 removed_at/sessions 重複）。
----
+
+## profiles の email 列レベル保護（行スコープのみ）、Low（L2/L3/orgs INSERT/020 removed_at/sessions 重複）。
 
 ## 検定/待機ページの遷移遅延を修正（realtime 瞬断時のフォールバック間隔短縮）バッチ（2026-06-28）
 
 症状: 検定(複数検定員)で主任がゼッケン入力 → 検定員の得点画面遷移が「とても時間がかかる」。調査（コンソール）で realtime は SUBSCRIBED するが瞬断（CLOSED→retry）あり、取りこぼし時に **30秒間隔のフォールバックポーリング**で拾う設計 → 最悪30秒待ち。publication/RLS は問題なし（sessions は publication 在・authed=048/guest=1008 で SELECT 可）。
 
 ### 修正（アプリのみ）
+
 - [x] `session/[id]/+page.svelte` の `startFallbackPolling` 間隔を **30000ms → 3000ms**（realtime と並行・active_prompt_id 未変化なら単一行 SELECT で早期 return＝軽量）。realtime 正常時は従来どおり即時、瞬断時も最悪3秒で遷移。
 - [x] 型 256（新規0）／eslint 新規0（既存の goto/each-key 警告のみ）／`npm run test` 726。
 
 ### 残（別件・低優先）
+
 - `scoreStatusManager.ts:75` の name キャッシュ埋め込みクエリ `session_participants?select=judge_id,profiles:judge_id(full_name)` が **400**（PostgREST の関係解決エラー・恐らく既存。session_participants.judge_id→profiles の FK 無し）。判定員名は fetchStatus 側の `.in(id, judgeIds)` フォールバックで表示されるため実害小。将来 profiles を別取得に整理。
 - realtime チャンネルが CLOSED 後に自動再購読しない（nav チャンネルは手動・retry 無し）。3秒ポーリングで実用上カバー。必要なら再購読を追加。
 
@@ -1226,15 +1350,18 @@ profiles の email 列レベル保護（行スコープのみ）、Low（L2/L3/o
 症状: 主任が「次の滑走者」に進めた後、検定員が得点入力しても保存されず遷移しない。根因: 旧検定の得点入力が送信 bib を揮発性 `$currentBib` のみから取得（次の滑走者で null=無音ドロップ or stale=batch12 M3ゲート403）＋ status ページに realtime フォールバック無しで瞬断時に次の滑走者へ遷移できない。M3ゲートはもろさを露呈しただけ（ゲート自体は正しい）。
 
 ### 修正（アプリのみ・DBなし）
+
 - [x] `[discipline]/[level]/[event]/score/+page.server.ts` load: 複数検定員時に active_prompt から `activeBib` を権威導出して返す。
 - [x] `.../score/+page.svelte`: handleSubmit の bib を `data.isMultiJudge ? (data.activeBib ?? $currentBib) : $currentBib` に。onMount で複数検定員時 `currentBib` を activeBib に同期。→ 常に現在の滑走者を採点＝M3ゲート必ず一致。
 - [x] `.../score/status/+page.svelte`: realtime のバックアップに 3秒ポーリング（active_prompt 変化→次の滑走者へ goto、null→待機）。onDestroy で clearInterval。瞬断でも確実に遷移。
 - [x] 型 256（新規0）／`npm run test` 726／prettier 整形。eslint の goto-resolve はコードベース既存の共通パターン（当該ルール未採用・全 goto が該当）。
 
 ### 検証（DEV・Chrome・要 E2E）
+
 - [ ] 検定・複数検定員・滑走者2人以上で、次の滑走者を採点→反映＆遷移すること（再発しない）。単独検定員/大会/研修は不変。
 
 ### Out of scope
+
 scoreStatusManager:75 の name キャッシュ 400（実害小）、realtime CLOSED 自動再購読、profiles(1017) prod 適用、Low 群。
 
 ---
@@ -1244,10 +1371,12 @@ scoreStatusManager:75 の name キャッシュ 400（実害小）、realtime CLO
 最終監査で残った唯一の =true（`Authenticated users can create organizations` authed INSERT）を撤去。org 作成は全て service-role（onboarding=supabaseAdmin/有料=RPC/webhook）でアプリ未使用＝安全。
 
 ### 成果物（DBのみ・アプリなし）
+
 - [x] `1018_organizations_drop_authed_insert.sql`＋rollback：当該 INSERT(=true) を DROP（置換なし＝org INSERT は service-role のみ）。静的：破壊的DDLなし。`npm run test` 726。
 - [ ] DEV→prod 適用 → 最終監査クエリで機微テーブルの =true が **0件** になること（org 作成が通常どおり動くことも確認）。問題時 1018_rollback。
 
 ### RLS ロックダウン総括（全完了見込み）
+
 results/session_participants/sessions(1008)/custom_events(1012/1014)/organizations(1013/1016/1018)/organization_members(1015)/profiles(1017) — 機微テーブルの越境 read/write/delete/insert の =true を一掃。
 
 ---
@@ -1257,7 +1386,8 @@ results/session_participants/sessions(1008)/custom_events(1012/1014)/organizatio
 020 由来の inline admin UPDATE/DELETE（removed_at 未チェック）→ ソフト削除済み元 admin が同org を改変/削除できる緩み。1013 の is_organization_admin(removed_at込み) があるので冗長な inline を撤去し一本化。
 
 ### 成果物（DBのみ・アプリなし）
-- [x] `1019_organizations_admin_consolidate.sql`＋rollback：`Admins can update their organization`/`Organization admins can update their organization`/`Admins can delete their organization` を DROP（1013 の authed_organizations_{update,delete}_by_admin を維持）。静的：破壊的DDLなし（3 drop）。`npm run test` 726。
+
+- [x] `1019_organizations_admin_consolidate.sql`＋rollback：`Admins can update their organization`/`Organization admins can update their organization`/`Admins can delete their organization` を DROP（1013 の authed*organizations*{update,delete}\_by_admin を維持）。静的：破壊的DDLなし（3 drop）。`npm run test` 726。
 - [ ] DEV→prod 適用 → 現役 admin が org 更新/削除でき、UPDATE/DELETE が is_organization_admin ベースのみになること。問題時 1019_rollback。
 
 ---
@@ -1267,11 +1397,13 @@ results/session_participants/sessions(1008)/custom_events(1012/1014)/organizatio
 旧検定 finalizeScore（status:214）の `active_prompt_id` クリアが無条件（`.eq(id)` のみ）→ 二度押しや次の滑走者の prompt 既設時にそれを誤って消す競合。新フロー #3 と同じ compare-and-swap に。
 
 ### 修正（アプリのみ・DBなし）
+
 - [x] `.../score/status/+page.server.ts` finalizeScore: `fetchActivePrompt` で現在の prompt を取得し、今確定する bib の prompt が依然 active な時のみ `.eq(active_prompt_id, activePrompt.id)` 付きでクリア。fetchActivePrompt を import。
 - [x] complete の changeEvent/endSession は据え置き（主任の意図的なナビ/終了・active_prompt は通常 null・競合小）。
 - [x] 型 256（新規0）／`npm run test` 726／prettier。eslint の未使用 error import は既存。
 
 ### 残（Low/別件）
+
 L3 大会削除 owner化／profiles email 列保護／complete の changeEvent CAS（任意）／name キャッシュ400／realtime 自動再購読／Safari-dev。
 
 ---
@@ -1281,12 +1413,14 @@ L3 大会削除 owner化／profiles email 列保護／complete の changeEvent C
 大会(新フロー)の修正要求削除が judge_name 基準 → 同名審判で誤削除の恐れ。UI(ScoresTable)は既に judgeId/guestIdentifier を送信・アクションも読取済 → tournament の results 読取が owner 列を載せていないだけが欠落。
 
 ### 修正（アプリのみ・DBなし・3箇所）
+
 - [x] status load 大会分岐: `.select(judge_name, score)` → `+ judge_id, guest_identifier`。
 - [x] score-status API: `.select(judge_name, score)` → `+ judge_id, guest_identifier`（live スコアにも owner・manager は透過）。
 - [x] requestCorrection 大会分岐: judge_name 削除 → owner 基準（formGuestIdentifier→guest_identifier / judgeId→judge_id / 無ければ judge_name 後方互換）。RLS chief_judge_can_delete_results 不変。
 - [x] 型 256（新規0）／`npm run test` 726／prettier。eslint 未使用 error import は既存。
 
 ### Out of scope
+
 旧検定(certification)の correction owner 化（フォーム未連携・別途）、profiles email 列保護、別件（name キャッシュ400／realtime 自動再購読／Safari-dev）。
 
 ---
@@ -1296,12 +1430,14 @@ L3 大会削除 owner化／profiles email 列保護／complete の changeEvent C
 1017 で行スコープ化しても email 列が session/org 共有者に読めた。email は auth.users.email の冗長コピー。signup トリガー handle_new_user は email を入れていない（prod/dev 確認）ので列削除が安全。
 
 ### 変更（アプリ先デプロイ → DB）
+
 - [x] profiles INSERT 3箇所から email 除去（account/onboarding/invite-complete の create-if-absent）。
 - [x] Stripe 2箇所: `select(full_name, email)`→`select(full_name)`、customer email を `user.email || undefined` に（profiles.email 不参照）。
-- [x] select(*) 16箇所は不変（列消滅で返らないだけ・無エラー）。
+- [x] select(\*) 16箇所は不変（列消滅で返らないだけ・無エラー）。
 - [x] `1020_profiles_drop_email.sql`＋rollback（add column＋auth から backfill）。型 256（新規0）／test 726／eslint 新規0／drop column のみ。
 
 ### デプロイ順序（厳守・batch7型）
+
 - [ ] アプリ（email 参照全廃）を main push＝本番デプロイ → 反映確認 → 1020 を DEV→prod 適用。逆順だと旧アプリ insert(email)/select(email) が落ちる。
 - [ ] DEV E2E: 新規 signup/onboarding/招待受諾で profile 作成（email無し）、account の email 表示（user.email）、Stripe checkout/upgrade、直 PostgREST で profiles?select=email がエラー/無。
 
@@ -1312,6 +1448,7 @@ L3 大会削除 owner化／profiles email 列保護／complete の changeEvent C
 initializeNameCache が PostgREST 埋め込み `profiles:judge_id(full_name)` を使用 → session_participants→profiles の FK が無く 400。名前はフォールバックで出るが毎回エラーログ＋realtime 到着スコアが一時 不明 になる。
 
 ### 修正（アプリのみ・DBなし）
+
 - [x] `src/lib/scoreStatusManager.ts` initializeNameCache: 埋め込みを廃し、judge_id を取得→profiles を IN 句で引く方式に統一（研修パスと同じ）。400 解消・judgeNameCache が正しく埋まる。
 - [x] 型 256（新規0）／test 726／prettier。eslint は file 既存の any のみ（追加分も同 file の同一パターンに一致・新規 non-any 0）。テスト(N+1 検証)は手書きシミュレーションで本関数を呼ばないため不変。
 
@@ -1322,12 +1459,14 @@ initializeNameCache が PostgREST 埋め込み `profiles:judge_id(full_name)` �
 realtime ヘルパーの CLOSED/エラー挙動がバラバラ（withRetry のみ堅牢、SessionMonitor は即 reload、RealtimeChannel は no-op）。上限つきバックオフ再購読に統一し、reload/give-up を最終手段に。新フロー nav に取りこぼし回帰が出ないようポーリング予備を付与。
 
 ### 変更（アプリのみ・DBなし）
+
 - [x] `src/lib/realtime.ts`: createRealtimeChannel / createSessionMonitorChannel / createSessionMonitorWithPolling に上限つき(既定5・1/2/4/8/16s)バックオフ再購読を追加。SUBSCRIBED で retry リセット。createSessionMonitorChannel/WithPolling は再購読を使い切った後のみ onError/2秒 reload。WithPolling はエラー中もポーリング継続（取りこぼし保険）。config に maxRetryCount?。
 - [x] `src/lib/sessionNavigationMonitor.ts`: createSessionMonitorChannel → createSessionMonitorWithPolling に変更し、onPollingData で active_prompt 変化を検知して遷移（lastActivePromptId 追跡・初回はシードのみ）。realtime 瞬断でも次の滑走者へ確実遷移＝reload 不要に。
 - [x] `src/lib/scoreStatusManager.ts`: initializeNameCache の壊れた埋め込み(profiles:judge_id)を judge_id→profiles IN 句に修正（400 解消）。
 - [x] `realtime-channel-with-retry.test.ts`: SessionMonitor 系を新セマンティクス（再購読→最終手段）に更新、createRealtimeChannel 再購読テスト4件追加。型 256（新規0）／test 731（+5）／prettier。
 
 ### Verification（要 DEV 手動・任意）
+
 - [ ] 検定 status / scoreboard で realtime を一時切断 → 数秒で自動復帰・ページ reload されない。新フロー大会の次の滑走者遷移も瞬断耐性。
 
 ---
@@ -1337,11 +1476,13 @@ realtime ヘルパーの CLOSED/エラー挙動がバラバラ（withRetry の�
 旧ルート(検定)の修正要求削除が judge_name 基準 → 同名検定員で誤削除の恐れ（L3 の大会版を旧ルートにも適用）。ScoresTable は既に judgeId/guestIdentifier を送信、score-status API も owner 返却済(batch20)。旧 load が owner 列を載せていなかっただけ。
 
 ### 修正（アプリのみ・DBなし・2箇所）
+
 - [x] 旧 status load: results select に judge_id, guest_identifier を追加（初期 scores に owner→ScoresTable が hidden 送信）。
 - [x] 旧 requestCorrection: judgeId/guestIdentifier を formData から読み、owner 基準で削除（guest_identifier→judge_id→judge_name 後方互換）。count チェックは維持。
 - [x] 型 256（新規0）／test 731／prettier。eslint 未使用 error import は既存。
 
 ### 完了
+
 大会(L3・batch20)＋旧検定(本バッチ)とも correction 削除は owner 基準に統一。
 
 ---
@@ -1349,6 +1490,7 @@ realtime ヘルパーの CLOSED/エラー挙動がバラバラ（withRetry の�
 ## Safari(dev) 画面遷移不可の修正バッチ（2026-06-29・ユーザー対応）
 
 原因: CSP の `upgrade-insecure-requests` が localhost(http) でも HTTP→HTTPS アップグレードを強制し、Safari が厳格に適用 → dev で遷移/リクエストが失敗（Chrome/本番は影響なし）。
+
 - [x] `svelte.config.js`: `upgrade-insecure-requests` を `NODE_ENV === production` の時のみ付与（dev では外す）。connect-src は整形のみ。config ロード/prettier/svelte-check 確認済。
 
 ---
@@ -1356,6 +1498,7 @@ realtime ヘルパーの CLOSED/エラー挙動がバラバラ（withRetry の�
 ## sessions 重複ポリシー整理（最小・安全）バッチ（2026-06-29）
 
 prod の sessions に残る public ロール own 重複2本（DELETE/UPDATE・authed版と完全等価／get_current_user_id()=auth.uid() 確認済）を撤去。挙動ゼロ変化。
+
 - [x] `1021_sessions_dedupe_own_policies.sql`＋rollback。drop policy のみ・冪等（dev は対象無し no-op）。
 - [ ] DEV→prod 適用。own の DELETE/UPDATE が authed 版で維持されること。
 - 注: INSERT/SELECT の重複は dev で load-bearing（prod の Allow.../participants 系を dev が持たない）ため本バッチ非対象。完全整合は別途 dev 整合タスク（任意）。
