@@ -1,5 +1,39 @@
 # Current Tasks
 
+## オフライン対応 インクリメント5: ゲスト整合性の安全網 P1+P2（2026-08-02）
+
+調査（3エージェント）で判明した再フレーミング: 「JWT失効後の再認証」の大半は Supabase の自動 refresh（クライアントのクッキー書き戻し + サーバー getUser のオンデマンド refresh）で**自動回復する非問題**。恒久失敗はリフレッシュトークン喪失（クッキー消失/ITP 7日/匿名ユーザー削除）時のみ。ユーザー選択スコープ = **P1+P2（整合性の安全網）**。P3（identity 復元）は今回見送り。
+
+### P1: owner 帰属ガード（サイレントなクロス帰属データ破損の根絶）
+
+現状バグ: 端末単位キューは identity スコープが無く、保存 owner は JWT 由来の guest_identifier で mutation の guest_identifier は無視される。→ G1 がオフライン採点→失効→別名再参加(G2)→古いキューが G2 名義で保存（誤owner）。共有端末でも同様。
+
+- [ ] `scoreSync.ts` processScoreMutation: 認証後、`mutation.guest_identifier`（guestIdentifierRaw）と認証済み owner（`guestParticipant?.guest_identifier ?? null`）が不一致なら **恒久拒否 `guest_identity_mismatch`**（recordOutcome で記録＝再送しても同結果）。これによりクロス帰属を「サイレント誤保存」から「明示的な拒否＋表面化」に変える
+- [ ] 正常系（guest 一致 / authed judge は両者 null）は素通り。online の form action 経路は processScoreMutation を通らないため無影響
+- [ ] scoreSync.test.ts: 不一致→guest_identity_mismatch（記録・非retryable）、authed user + guest mutation→拒否、一致→従来通り受理
+
+### P2: リトライ上限 + 表面化（無限 pending の打ち切り）
+
+現状バグ: 別セッション残留 mutation / トークン喪失は auth_required（retryable）で pending 無限リトライ、retry_count は増えるだけで上限なし・失敗として表面化されない。
+
+- [ ] `scoreQueue.ts`: `server_retry_count`（サーバー到達済みの per-mutation retryable 拒否のみカウント。ネットワーク/5xx の bumpRetry では増やさない）を追加。`>= MAX_SERVER_REJECTS(10)` かつ 作成から `MIN_STUCK_AGE_MS(6h)` 経過で `sync_status='rejected'` `last_error='retry_exhausted:...'` に落とす → 「同期失敗 N件」バッジで表面化。長期オフライン（bumpRetry）では発火しない
+- [ ] scoreQueue.test.ts: 古い+多retryable→rejected、新しい mutation の auth_required 連続→pending 維持（早期 give-up しない）
+
+### 敵対的レビュー（2レンズ+反証、8エージェント）の結果と修正 — 確定3件（反証3）、全て修正
+
+- [x] 🔴高（自分が入れたリグレッション）: P1 ガードが正当なゲストのオフライン採点を全滅させる。クライアントは enqueue の guest_identifier を URL の ?guest= から取るが、通常フローでは ?guest= が URL から除去され null になる一方、同期時の owner は JWT 由来（G1）→ `null !== G1` で全件 guest_identity_mismatch 拒否 → データ損失 → **両採点ページで enqueue の guest_identifier を `data.guestParticipant?.guest_identifier`（JWT 検証済み）から積むよう修正**。正当なゲストは一致、失効→別名再参加の古いキューだけが不一致で正しく拒否される
+- [x] 🟢低: owner ガードを session 存在確認の前に置いたため、削除済みセッション向け mismatch の記録が score_mutations の session_id FK 違反（23503）に → **ガードを session 存在確認の後（4.5）へ移動**（session_not_found と同じく FK 安全に）
+- [x] 🟡中: P2 の 6h stuck 判定を「作成時刻」基準にしていたため、長期オフライン後の復帰時の一過性障害で正当な採点が恒久拒否されうる → **`first_server_reject_at`（失敗開始時刻）を追加し give-up を「失敗開始から6h継続」で判定**。一過性の瞬断では発火しない
+- 反証3件（妥当）: is_guest=true かつ guest_identifier 空の JWT（実運用で発生しない）／save_failed の give-up（AND 条件で防がれる）／応答欠落 mutation のカウント（プロトコル上到達しない）
+
+### 検証
+
+- [x] vitest 867 passed（+7: owner ガード3 + リトライ上限3 ほか）/ svelte-check 233 / build 成功 / prettier・eslint 新規エラーなし
+
+### 見送り（記録）
+
+- P3（ゲスト identity 復元 = 真の再認証フロー）: guest_identifier をローカル永続化し再参加時に同一 identity へ再バインド。今回のスコープ外。P1 により、復元できないゲストのオフライン採点は「クリーンに拒否＆表面化」（誤保存はしないが復元もしない）。将来 P3 を入れる場合は guest_identity_mismatch を rejected にせず保持する方向へ変更する。invite ページの死んだ localStorage 復元コードも P3 とあわせて対応。
+
 ## オフライン対応 インクリメント4: PWA / Service Worker（2026-08-02）
 
 戦略文書 Phase 5（Step 5）。目的は「アプリ本体の読み込み失敗を減らす」ことのみ。SW は採点データの正本管理には使わない（IndexedDB / 同期キューのまま）。

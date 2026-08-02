@@ -34,6 +34,18 @@ export interface PendingScoreMutation {
 	sync_status: SyncStatus;
 	last_error: string | null;
 	retry_count: number;
+	/**
+	 * サーバーに到達したうえで per-mutation の retryable 拒否（auth_required 等）を
+	 * 受けた回数。ネットワーク/5xx のバッチ失敗（bumpRetry）ではカウントしない。
+	 * これが上限に達し十分な時間が経過したら、無限リトライを打ち切り rejected にする。
+	 */
+	server_retry_count?: number;
+	/**
+	 * 最初にサーバー到達済みの retryable 拒否を受けた時刻。give-up 判定はこの「失敗開始」
+	 * からの経過で測る（作成時刻ではない）。長期オフライン後の復帰時に一過性障害が起きても、
+	 * 失敗が継続していなければ打ち切らない（正当な採点を誤って捨てない）ため。
+	 */
+	first_server_reject_at?: string | null;
 	/** サーバー受理時刻（synced 行の保持期限判定に使う） */
 	synced_at?: string | null;
 }
@@ -46,6 +58,14 @@ const MAX_BATCHES_PER_SYNC = 10;
 const SYNCED_RETENTION_DAYS = 7;
 /** セッションバンドル（名簿キャッシュ）を保持する日数。経過後に purge（PII を無期限に残さない） */
 const BUNDLE_RETENTION_DAYS = 30;
+/**
+ * サーバー到達済みの retryable 拒否がこの回数に達し、かつ「失敗開始」から MIN_STUCK_AGE_MS
+ * 継続したら、無限リトライを打ち切って rejected にする（別セッション残留・トークン喪失で
+ * 二度と解けない mutation を「同期失敗」として表面化）。両条件 AND かつ経過は失敗開始基準
+ * なので、一過性の DB エラー・長期オフライン・復帰時の瞬断では発火しない。
+ */
+const MAX_SERVER_REJECTS = 10;
+const MIN_STUCK_AGE_MS = 6 * 60 * 60 * 1000;
 
 class OfflineScoreDb extends Dexie {
 	pending_score_mutations!: Table<PendingScoreMutation, number>;
@@ -147,6 +167,8 @@ export async function enqueueScoreMutation(input: EnqueueInput): Promise<Pending
 		sync_status: 'pending',
 		last_error: null,
 		retry_count: 0,
+		server_retry_count: 0,
+		first_server_reject_at: null,
 		synced_at: null
 	};
 
@@ -325,11 +347,32 @@ async function sendBatch(
 			});
 			rejectedCount++;
 		} else {
-			// 再送可能（auth_required / save_failed / 応答に含まれない）: pending のまま
-			await db.pending_score_mutations.update(m.id!, {
-				last_error: reason ?? null,
-				retry_count: m.retry_count + 1
-			});
+			// 再送可能（auth_required / save_failed / 応答に含まれない）
+			const serverRejects = (m.server_retry_count ?? 0) + 1;
+			// 失敗開始時刻（初回のサーバー到達拒否時に確定し、以後は保持）
+			const firstRejectAt = m.first_server_reject_at ?? new Date().toISOString();
+			const stuckMs = Date.now() - Date.parse(firstRejectAt);
+			if (serverRejects >= MAX_SERVER_REJECTS && stuckMs >= MIN_STUCK_AGE_MS) {
+				// サーバーに到達しても retryable 拒否が「失敗開始から継続」し、上限も超えた
+				// → これ以上ループさせず恒久失敗として表面化する（別セッション残留・トークン
+				// 喪失など再送では解けないケース。「同期失敗 N件」バッジに出る）
+				await db.pending_score_mutations.update(m.id!, {
+					sync_status: 'rejected',
+					last_error: `retry_exhausted:${reason ?? 'unknown'}`,
+					server_retry_count: serverRejects,
+					first_server_reject_at: firstRejectAt,
+					retry_count: m.retry_count + 1
+				});
+				rejectedCount++;
+			} else {
+				// pending のまま次回再送
+				await db.pending_score_mutations.update(m.id!, {
+					last_error: reason ?? null,
+					server_retry_count: serverRejects,
+					first_server_reject_at: firstRejectAt,
+					retry_count: m.retry_count + 1
+				});
+			}
 		}
 	}
 

@@ -207,6 +207,8 @@ export async function processScoreMutation(
 
 	const eventIdNum = input.event_id != null ? Number.parseInt(String(input.event_id), 10) : null;
 
+	const authGuestIdentifier = guestParticipant ? guestParticipant.guest_identifier : null;
+
 	const record: MutationRecord = {
 		client_mutation_id: clientMutationId,
 		session_id: sessionIdNum,
@@ -215,7 +217,7 @@ export async function processScoreMutation(
 		bib_number: bibNumber,
 		score,
 		judge_id: guestParticipant ? null : (user?.id ?? null),
-		guest_identifier: guestParticipant ? guestParticipant.guest_identifier : null,
+		guest_identifier: authGuestIdentifier,
 		created_at_local: createdAtLocal,
 		payload: input as unknown
 	};
@@ -236,6 +238,21 @@ export async function processScoreMutation(
 	}
 	if (!session) {
 		return recordOutcome(supabaseAdmin, record, reject('session_not_found'));
+	}
+
+	// ============================================================
+	// 4.5 owner 帰属ガード（クロス帰属の防止）
+	// mutation が主張する owner（guestIdentifierRaw = enqueue 時に採点者本人の
+	// JWT 検証済み guest_identifier）と、同期時に認証された principal の owner
+	// （authGuestIdentifier）が一致しなければ恒久拒否する。端末単位キューには identity
+	// スコープが無いため、別 identity で再認証したゲスト（失効→別名再参加）や共有端末では、
+	// 古いキューが別人 owner で保存されてしまう。保存 owner は常に認証側=権威なので、
+	// 食い違う採点はサイレント誤保存せず明示拒否し「同期失敗」として表面化させる
+	// （guest 不一致・guest↔authed の取り違えを捕捉）。
+	// session 存在確認の後に置く（score_mutations.session_id FK を満たすため）。
+	// ============================================================
+	if (guestIdentifierRaw !== authGuestIdentifier) {
+		return recordOutcome(supabaseAdmin, record, reject('guest_identity_mismatch'));
 	}
 
 	const sessionMode: ModeType =

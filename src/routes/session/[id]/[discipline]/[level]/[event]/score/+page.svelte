@@ -120,7 +120,10 @@
 				event_name: eventParam ?? null,
 				bib_number: Number(bib),
 				score,
-				guest_identifier: guestIdentifier
+				// owner は URL の ?guest= ではなく JWT 検証済みの identity を積む。
+				// ?guest= は通常フローで URL から除去され null になるため、これを使うと
+				// 同期時の owner ガードが正当なゲスト採点を誤って弾く（データ損失）。
+				guest_identifier: data.guestParticipant?.guest_identifier ?? null
 			});
 			pendingMutationId = queued.client_mutation_id;
 		} catch (err) {

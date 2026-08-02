@@ -8,6 +8,7 @@ import Dexie from 'dexie';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
 	enqueueScoreMutation,
+	getOfflineDb,
 	getPendingCount,
 	getRejectedCount,
 	markMutationSynced,
@@ -102,6 +103,70 @@ describe('isPermanentActionFailureStatus（action fail の恒久/一時分類）
 		for (const status of [401, 408, 429, 500, 502, 503]) {
 			expect(isPermanentActionFailureStatus(status)).toBe(false);
 		}
+	});
+});
+
+describe('リトライ上限による打ち切り（P2: 無限 pending の表面化）', () => {
+	const authRejected = (id: string) =>
+		okResponse({ accepted: [], rejected: [{ client_mutation_id: id, reason: 'auth_required' }] });
+
+	it('サーバー拒否が失敗開始から6h継続し上限に達した mutation は rejected に落ちる', async () => {
+		const saved = await enqueueScoreMutation(baseInput);
+		// 失敗開始が7時間前、既に9回サーバー拒否済み（=次の1回で上限10到達）
+		const firstReject = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+		await getOfflineDb().pending_score_mutations.update(saved.id!, {
+			first_server_reject_at: firstReject,
+			server_retry_count: 9
+		});
+		const fetchFn = vi.fn(async () => authRejected(saved.client_mutation_id));
+
+		const result = await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		expect(result).toMatchObject({ synced: 0, rejected: 1, remaining: 0 });
+		expect(await getRejectedCount()).toBe(1);
+		expect(await getPendingCount()).toBe(0);
+		const row = await getOfflineDb().pending_score_mutations.get(saved.id!);
+		expect(row?.last_error).toBe('retry_exhausted:auth_required');
+	});
+
+	it('作成が古くても、サーバー拒否の開始から6h未満なら give-up しない（一過性障害でロストしない）', async () => {
+		const saved = await enqueueScoreMutation(baseInput);
+		// 3日前に作成された長期オフライン採点。だが失敗開始はまだ（first_server_reject_at=null）
+		const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+		await getOfflineDb().pending_score_mutations.update(saved.id!, {
+			created_at_local: old,
+			server_retry_count: 50 // 回数だけは多い
+		});
+		const fetchFn = vi.fn(async () => authRejected(saved.client_mutation_id));
+
+		const result = await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		// 失敗開始が今なので、作成が3日前でも give-up せず pending 維持
+		expect(result).toMatchObject({ rejected: 0, remaining: 1 });
+		expect(await getPendingCount()).toBe(1);
+		const row = await getOfflineDb().pending_score_mutations.get(saved.id!);
+		expect(row?.first_server_reject_at).toBeTruthy(); // 失敗開始が記録された
+	});
+
+	it('ネットワーク失敗（bumpRetry）では server_retry_count / first_server_reject_at を増やさず give-up の対象にしない', async () => {
+		const saved = await enqueueScoreMutation(baseInput);
+		const firstReject = new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString();
+		await getOfflineDb().pending_score_mutations.update(saved.id!, {
+			first_server_reject_at: firstReject,
+			server_retry_count: 9
+		});
+		const fetchFn = vi.fn(async () => {
+			throw new TypeError('Failed to fetch');
+		});
+
+		const result = await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		// 失敗開始が古くても回数上限でも、サーバー未到達（ネットワーク失敗）では落とさない
+		expect(result).toMatchObject({ offline: true, remaining: 1 });
+		expect(await getPendingCount()).toBe(1);
+		const row = await getOfflineDb().pending_score_mutations.get(saved.id!);
+		expect(row?.server_retry_count).toBe(9); // 据え置き
+		expect(row?.sync_status).toBe('pending');
 	});
 });
 
