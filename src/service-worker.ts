@@ -56,10 +56,14 @@ async function serveAsset(request: Request, pathname: string): Promise<Response>
 
 async function serveNavigation(request: Request): Promise<Response> {
 	try {
+		// オンライン時は常に最新（サーバーエラーもそのまま見せる）
 		return await fetch(request);
 	} catch {
-		// ネットワーク到達不能のときだけ offline ページ（サーバーエラーはそのまま見せる）
+		// ネットワーク到達不能。まず precache 済みの当該ページ（プリレンダー済みなら存在）、
+		// 無ければ汎用の /offline ページ
 		const cache = await caches.open(CACHE);
+		const cached = await cache.match(new URL(request.url).pathname);
+		if (cached) return cached;
 		const fallback = await cache.match(OFFLINE_FALLBACK);
 		return fallback ?? Response.error();
 	}

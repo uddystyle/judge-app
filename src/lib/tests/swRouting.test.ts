@@ -44,10 +44,9 @@ describe('decideRequest（SW の振り分け）', () => {
 		).toBe('passthrough');
 	});
 
-	it('プリキャッシュ対象（ビルド資産・静的・プリレンダー済み）は cache-first', () => {
+	it('不変サブリソース（ハッシュ名 JS/CSS・アイコン等）は cache-first', () => {
 		expect(decideRequest(req(`${ORIGIN}/_app/immutable/entry/app.js`), context)).toBe('asset');
 		expect(decideRequest(req(`${ORIGIN}/icons/icon-192.png`), context)).toBe('asset');
-		expect(decideRequest(req(`${ORIGIN}/offline`, 'GET', 'navigate'), context)).toBe('asset');
 	});
 
 	it('ページ遷移は navigation（network-first + オフライン fallback）', () => {
@@ -60,6 +59,19 @@ describe('decideRequest（SW の振り分け）', () => {
 				context
 			)
 		).toBe('navigation');
+	});
+
+	it('プリレンダー済みページへのナビゲーションは precache 対象でも network-first（法的ページの鮮度優先）', () => {
+		// /offline も isAsset=true だが、navigate では network-first にしてオンライン時は最新を取る
+		expect(decideRequest(req(`${ORIGIN}/offline`, 'GET', 'navigate'), context)).toBe('navigation');
+		// isAsset に含まれるプリレンダーページ（例: /faq）でも navigate なら navigation
+		const withFaq = {
+			...context,
+			isAsset: (p: string) => context.isAsset(p) || p === '/faq'
+		};
+		expect(decideRequest(req(`${ORIGIN}/faq`, 'GET', 'navigate'), withFaq)).toBe('navigation');
+		// 一方、ナビゲーションでない同ページ取得（サブリソース）は cache-first のまま
+		expect(decideRequest(req(`${ORIGIN}/offline`), context)).toBe('asset');
 	});
 
 	it('その他の同一オリジン GET（非資産・非遷移）は素通し', () => {

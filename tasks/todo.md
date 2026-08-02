@@ -26,6 +26,22 @@
 - [x] 自己レビューでの裏取り: SW 登録は SSR 挿入のインラインスクリプトで、プリレンダー HTML に register + CSP sha256 ハッシュが実在（本番出力で確認）／serviceWorker.files の .DS_Store 除外は**デフォルトに既に含まれる** → 自前フィルタ削除／アイコン実サイズ = manifest 記載と一致／navigate の fallback は URL を書き換えないため「再読み込み」で元ページに正しく復帰／SW 更新はブラウザが HTTP キャッシュをバイパス（updateViaCache 既定）+ vercel.json 後勝ちヘッダの二重防御／クライアント側遷移のオフライン失敗は SvelteKit がフル遷移にフォールバック → SW の /offline が受ける
 - [x] Chrome の apple-mobile-web-app-capable 非推奨警告対策に mobile-web-app-capable を併記
 
+### 敵対的レビュー再実行（上限リセット後、コミット 77e4ebf 対象）— 10エージェント完走、確定バグ 0（7所見すべて反証）
+
+反証された所見のうち、機構は正しいが「バグではない」とされた1件を、**本アプリ固有の事情（法的に有効な規約/特商法/プライバシーページを持つ課金アプリ）を踏まえ設計改善として対応**:
+
+- [x] プリレンダー済みページ（/faq /legal /privacy /terms /offline）が cache-first で配信され、`vercel.json` の SWR を無視して次の SW 世代まで古い規約が残りうる（2レンズが独立指摘）→ **swRouting で `mode==='navigate'` を `isAsset` より先に判定**。ナビゲーションは network-first（オンライン時は常に最新）、serveNavigation はオフライン時にまず precache 済み当該ページへフォールバック（無ければ /offline）。鮮度と**オフライン可用性の両方が改善**（オフラインでも実ページを表示）。テスト2件追加（計8件）
+
+対応を見送った反証所見（理由も記録）:
+
+- cache.addAll のアトミック性（1資産失敗で install 全滅）: 検証者いわく提案の allSettled 修正は**むしろ有害**（/offline 欠落のまま install 成功→ serveNavigation が Response.error）。ASSETS はビルド生成物と1:1で健全デプロイなら全 200、失敗は次ナビゲーションで自己回復 → 現状維持
+- 開発時に SW が localhost を制御: dev は build=[] のため全 passthrough（アプリコードに触れない）。無効化には prod 登録リスクを負う手動化が必要で便益が薄い → 現状維持
+- service-worker.ts が svelte-check 除外（SvelteKit デフォルト）: 危険な振り分けロジックは swRouting.ts（型チェック+テスト対象）に分離済み・SW 本体は薄いため実害なし → 現状維持
+
+### 検証（再レビュー後）
+
+- [x] vitest 861 passed（+8: swRouting）/ svelte-check 233 / build 成功 / prettier・eslint クリーン
+
 ## オフライン対応 インクリメント3: 事前ダウンロード + オフライン継続採点（2026-08-02）
 
 戦略文書 Phase 4（Step 4）。オフライン採点が「画面表示中の1選手」で止まる問題（次選手への遷移がサーバー load 依存）を、データの事前キャッシュ + 画面内継続で解消する。

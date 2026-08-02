@@ -10,9 +10,9 @@
 export type SwDecision =
 	/** SW は介入しない（ネットワークへ素通し） */
 	| 'passthrough'
-	/** ビルド資産・静的ファイル・プリレンダー済みページ: cache-first */
+	/** ハッシュ名で不変のサブリソース（JS/CSS/アイコン等）: cache-first */
 	| 'asset'
-	/** ページ遷移: network-first。失敗時のみオフライン fallback ページ */
+	/** ページ遷移: network-first。オフライン時のみ precache / fallback ページ */
 	| 'navigation';
 
 export interface SwRequestInfo {
@@ -47,12 +47,16 @@ export function decideRequest(request: SwRequestInfo, context: SwRoutingContext)
 	if (url.pathname.startsWith('/api/')) return 'passthrough';
 	if (url.pathname.endsWith('/__data.json')) return 'passthrough';
 
-	// プリキャッシュ済み資産（/_app/immutable/... はハッシュ名で不変）
-	if (context.isAsset(url.pathname)) return 'asset';
-
-	// ページ遷移: ネットワーク優先。SSR HTML はキャッシュしない
-	// （古い bib 等が埋まったページを再配信すると誤採点の温床になるため）
+	// ページ遷移は network-first。isAsset より先に判定するのが要点:
+	// プリレンダー済みページ（/faq /legal /privacy /terms /offline）も precache 対象だが、
+	// ナビゲーションではオンライン時に最新を取りに行く（法的ページ=規約/特商法/プライバシーの
+	// 更新が SW 世代まで遅延しないように）。オフライン時は serveNavigation が precache へ
+	// フォールバックするので可用性は保たれる。SSR HTML はそもそもキャッシュしない
+	// （古い bib 等が埋まったページの再配信は誤採点の温床）。
 	if (request.mode === 'navigate') return 'navigation';
+
+	// 不変サブリソース（/_app/immutable/... はハッシュ名、アイコン・manifest 等）: cache-first
+	if (context.isAsset(url.pathname)) return 'asset';
 
 	return 'passthrough';
 }
