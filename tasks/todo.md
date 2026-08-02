@@ -1,5 +1,41 @@
 # Current Tasks
 
+## オフライン対応 インクリメント6: ゲスト identity 復元 P3 + identity 層の完成（2026-08-02）— ✅ 完了（コミット e96be7d, main へ push 済み）
+
+増分5で見送った **P3（ゲスト identity 復元 = 真の再認証フロー）** を実装。あわせて identity ガードが対称化（認証審判も対象）+ クライアント側 identity フィルタが加わり、identity 層が完成した。
+
+### 調査で確定した設計（新サーバー認証コード不要）
+
+- `/session/[id]` の load に **既にサーバー側の再採用機構が存在**: `?guest=<guest_identifier>` 付き未認証訪問で session_participants 照合のうえ signInAnonymously により同一 guest_identifier で JWT を再発行する。P3 はこれを再利用し、欠けていた「クライアントが guest_identifier を端末に控える」だけを補う（死んでいた invite の localStorage 復元コードの正しい実装）。
+- 信頼モデル: guest_identifier はランダム UUID。所持=本人証明（既存の ?guest= 招待リンクと同一水準。新しい信頼モデルは導入しない）。
+- Supabase 匿名認証は「同一 identity へ戻る公式手段が無い」が、guest_identifier は **アプリ層**の概念（session_participants + JWT metadata）なので、新しい匿名ユーザーに旧 guest_identifier を metadata として載せれば同一 owner を再採用できる。
+
+### P3 実装
+
+- [x] `$lib/offline/guestIdentity.ts`（新規）: localStorage `tento-guest-<sessionId>` に {session_id, guest_identifier, guest_name} を persist/get/clear/list（SSR・プライベートブラウズ guard）
+- [x] セッション入口ページ: 認証ゲストなら identity を控え、rependMismatchedMutations→syncNow で救済。通常ユーザーなら保存 identity を消去（誤ゲスト降格防止）
+- [x] `supabaseClient.ts` SIGNED_OUT: 保存済み identity があれば `?guest=` で自動再採用（無ければ従来 ?expired=true）
+- [x] `rependMismatchedMutations`: 正しい identity 再採用時、guest_identity_mismatch で拒否された自分の mutation を pending へ戻す（P1 が拒否した採点の救済）
+- [x] join/invite ページ: 「〇〇として再開」ボタン（フルロードで ?guest= 移行を走らせる）、invite の死んだ localStorage コードを置換
+
+### identity 層の拡張（P1 の対称化 + クライアントフィルタ。P3 と同時に整備）
+
+- [x] クライアント identity フィルタ: `setCurrentSyncIdentity` + `doSync` の `mutationMatchesCurrentIdentity` で「現在の owner と一致する pending のみ送信」。app 全体の identity は `+layout` が認証状態から設定（一次防御）
+- [x] サーバー owner ガードの対称化: guest_identity_mismatch に加え認証審判版 `auth_identity_mismatch`（judge_id 一致で判定）。mutation に owner_type/judge_id 保持。→ 増分5 P1 で「対象外」とした共有端末の認証審判どうしのクロス帰属も閉じた
+
+### 敵対的レビュー（3レンズ+反証、12エージェント）の結果と修正 — 確定4件（反証5）、全て修正
+
+- [x] 🟡中: SIGNED_OUT 自動再採用が共有端末で認証ユーザー/別ゲストを保存済み別 identity に誤降格しうる（採点の誤帰属）→ **直前 active だったゲスト guest_identifier をメモリ保持し「本人の失効」時のみ自動再採用**。それ以外は ?expired=true
+- [x] 🟡中: 件数ストア（pendingCount/rejectedCount）が identity 非スコープで、別 owner の送信不能 pending が残ると「未同期N件」バッジと offlineSaved 解除が固着 → **両ストアを現在 identity の行のみ数えるよう変更**（IndexedDB 変更 + identity 変更で再計算）
+- [x] 🟢低: identity mismatch を永久記録していたため再採用後の再送が冪等チェックで弾かれ P3 救済が無効 → **mismatch 系を session_not_found 同様「記録しない」**ようにし owner ガードで再評価
+- [x] 🟡中: owner_type 導入前の旧 auth pending 行が identity フィルタで永久滞留（見えないデータ損失）→ **Dexie v3 マイグレーション**で整合（旧 guest は owner 補完、判別不能な旧 auth pending は `legacy_no_owner` で「同期失敗」表面化・purge 可能に）+ 回帰テスト
+- 反証5件（妥当）: join の再開一覧はベアラ等価で新規リスクなし／null identity 不変条件は既に成立／persist は全正常フローで root 経由のため漏れない 等
+
+### 検証
+
+- [x] vitest 880 passed（+guestIdentity 6 / repend 4 / v3 migration 1 ほか）/ svelte-check **0 errors**（セッション中の 233 ベースラインが並行クリーンアップで解消）/ build 成功 / prettier 済み
+- [x] コミット注記: 当初 `prettier --write` を src 全体に広く走らせ既存フォーマットドリフト約70ファイルを巻き込んだ（スコープ超過）→ 意図した62ファイル（変更59+新規3）に絞り込んで巻き戻し、その分だけコミット（e96be7d）
+
 ## オフライン対応 インクリメント5: ゲスト整合性の安全網 P1+P2（2026-08-02）
 
 調査（3エージェント）で判明した再フレーミング: 「JWT失効後の再認証」の大半は Supabase の自動 refresh（クライアントのクッキー書き戻し + サーバー getUser のオンデマンド refresh）で**自動回復する非問題**。恒久失敗はリフレッシュトークン喪失（クッキー消失/ITP 7日/匿名ユーザー削除）時のみ。ユーザー選択スコープ = **P1+P2（整合性の安全網）**。P3（identity 復元）は今回見送り。
@@ -8,16 +44,16 @@
 
 現状バグ: 端末単位キューは identity スコープが無く、保存 owner は JWT 由来の guest_identifier で mutation の guest_identifier は無視される。→ G1 がオフライン採点→失効→別名再参加(G2)→古いキューが G2 名義で保存（誤owner）。共有端末でも同様。
 
-- [ ] `scoreSync.ts` processScoreMutation: 認証後、`mutation.guest_identifier`（guestIdentifierRaw）と認証済み owner（`guestParticipant?.guest_identifier ?? null`）が不一致なら **恒久拒否 `guest_identity_mismatch`**（recordOutcome で記録＝再送しても同結果）。これによりクロス帰属を「サイレント誤保存」から「明示的な拒否＋表面化」に変える
-- [ ] 正常系（guest 一致 / authed judge は両者 null）は素通り。online の form action 経路は processScoreMutation を通らないため無影響
-- [ ] scoreSync.test.ts: 不一致→guest_identity_mismatch（記録・非retryable）、authed user + guest mutation→拒否、一致→従来通り受理
+- [x] `scoreSync.ts` processScoreMutation: 認証後、`mutation.guest_identifier`（guestIdentifierRaw）と認証済み owner（`guestParticipant?.guest_identifier ?? null`）が不一致なら **恒久拒否 `guest_identity_mismatch`**。これによりクロス帰属を「サイレント誤保存」から「明示的な拒否＋表面化」に変える（※増分6で記録しない方針に変更＝再採用で救済可能に）
+- [x] 正常系（guest 一致 / authed judge は両者 null）は素通り。online の form action 経路は processScoreMutation を通らないため無影響
+- [x] scoreSync.test.ts: 不一致→guest_identity_mismatch、authed user + guest mutation→拒否、一致→従来通り受理
 
 ### P2: リトライ上限 + 表面化（無限 pending の打ち切り）
 
 現状バグ: 別セッション残留 mutation / トークン喪失は auth_required（retryable）で pending 無限リトライ、retry_count は増えるだけで上限なし・失敗として表面化されない。
 
-- [ ] `scoreQueue.ts`: `server_retry_count`（サーバー到達済みの per-mutation retryable 拒否のみカウント。ネットワーク/5xx の bumpRetry では増やさない）を追加。`>= MAX_SERVER_REJECTS(10)` かつ 作成から `MIN_STUCK_AGE_MS(6h)` 経過で `sync_status='rejected'` `last_error='retry_exhausted:...'` に落とす → 「同期失敗 N件」バッジで表面化。長期オフライン（bumpRetry）では発火しない
-- [ ] scoreQueue.test.ts: 古い+多retryable→rejected、新しい mutation の auth_required 連続→pending 維持（早期 give-up しない）
+- [x] `scoreQueue.ts`: `server_retry_count`（サーバー到達済みの per-mutation retryable 拒否のみカウント。ネットワーク/5xx の bumpRetry では増やさない）を追加。`>= MAX_SERVER_REJECTS(10)` かつ `MIN_STUCK_AGE_MS(6h)` 経過で `sync_status='rejected'` `last_error='retry_exhausted:...'` に落とす → 「同期失敗 N件」バッジで表面化（※増分6で判定基準を作成時刻→失敗開始時刻 `first_server_reject_at` に変更）
+- [x] scoreQueue.test.ts: 古い+多retryable→rejected、新しい mutation の auth_required 連続→pending 維持（早期 give-up しない）
 
 ### 敵対的レビュー（2レンズ+反証、8エージェント）の結果と修正 — 確定3件（反証3）、全て修正
 
@@ -30,9 +66,9 @@
 
 - [x] vitest 867 passed（+7: owner ガード3 + リトライ上限3 ほか）/ svelte-check 233 / build 成功 / prettier・eslint 新規エラーなし
 
-### 見送り（記録）
+### 見送り（当時）→ ✅ 増分6で実装済み
 
-- P3（ゲスト identity 復元 = 真の再認証フロー）: guest_identifier をローカル永続化し再参加時に同一 identity へ再バインド。今回のスコープ外。P1 により、復元できないゲストのオフライン採点は「クリーンに拒否＆表面化」（誤保存はしないが復元もしない）。将来 P3 を入れる場合は guest_identity_mismatch を rejected にせず保持する方向へ変更する。invite ページの死んだ localStorage 復元コードも P3 とあわせて対応。
+- P3（ゲスト identity 復元 = 真の再認証フロー）: 増分5では見送ったが、増分6で実装完了（上記参照）。localStorage への guest_identifier 永続化 + 既存 ?guest= サーバー移行の再利用 + rependMismatchedMutations。invite の死んだ localStorage 復元コードも置換済み。
 
 ## オフライン対応 インクリメント4: PWA / Service Worker（2026-08-02）
 
