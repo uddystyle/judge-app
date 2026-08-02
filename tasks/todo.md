@@ -1,5 +1,31 @@
 # Current Tasks
 
+## オフライン対応 インクリメント4: PWA / Service Worker（2026-08-02）
+
+戦略文書 Phase 5（Step 5）。目的は「アプリ本体の読み込み失敗を減らす」ことのみ。SW は採点データの正本管理には使わない（IndexedDB / 同期キューのまま）。
+
+### 実装
+
+- [x] `src/service-worker.ts`: build/files/prerendered を precache し cache-first。ページ遷移は network-first（SSR HTML はキャッシュしない — 古い bib 埋め込みページの再配信は誤採点の温床）、到達不能時のみ /offline を返す。API・\_\_data.json・POST・他オリジンは一切介入しない。skipWaiting しない既定ライフサイクル（稼働中クライアントのチャンクを壊さない）
+- [x] `$lib/offline/swRouting.ts`: 振り分けを純粋関数に切り出し（テスト7件）
+- [x] `/offline` ページ: プリレンダー + precache。未同期件数（pendingCount）表示 + 再読み込み + 継続採点の案内
+- [x] `static/manifest.webmanifest`: TENTO、start_url '/'（ログイン済みは /dashboard へ既存リダイレクト）、standalone、theme #005AB5
+- [x] アイコン生成: `static/icons/`（192/512/maskable/apple-touch。--accent タイル + 白 T のプレースホルダー。正式ブランド素材が出来たら差し替え）※既存 `src/lib/assets/favicon.svg` は未使用の Svelte ボイラーで不採用
+- [x] `app.html`: manifest / theme-color / apple-touch-icon / apple-mobile-web-app-\* メタ追加
+- [x] `svelte.config.js`: prerender entries に '/offline'、serviceWorker.files で .DS_Store 除外（混入すると addAll が失敗し SW ごと死ぬ）
+- [x] `vercel.json`: /service-worker.js を max-age=0（拡張子ルールの immutable を後勝ちで上書き）
+- [x] CSP は変更不要（default-src 'self' が worker/manifest をカバー）
+
+### 検証
+
+- [x] vitest 860 passed（+7: swRouting）/ svelte-check 233 / build 成功（.vercel/output に service-worker.js・offline.html・manifest・icons を確認）
+
+### レビュー
+
+- 敵対的レビューWF（3レンズ）はサブエージェントのセッション上限（6:40 リセット）で3体とも実行不能 → **自己レビューで代替**（必要なら上限リセット後に ultracode レビューを再実行可）
+- [x] 自己レビューでの裏取り: SW 登録は SSR 挿入のインラインスクリプトで、プリレンダー HTML に register + CSP sha256 ハッシュが実在（本番出力で確認）／serviceWorker.files の .DS_Store 除外は**デフォルトに既に含まれる** → 自前フィルタ削除／アイコン実サイズ = manifest 記載と一致／navigate の fallback は URL を書き換えないため「再読み込み」で元ページに正しく復帰／SW 更新はブラウザが HTTP キャッシュをバイパス（updateViaCache 既定）+ vercel.json 後勝ちヘッダの二重防御／クライアント側遷移のオフライン失敗は SvelteKit がフル遷移にフォールバック → SW の /offline が受ける
+- [x] Chrome の apple-mobile-web-app-capable 非推奨警告対策に mobile-web-app-capable を併記
+
 ## オフライン対応 インクリメント3: 事前ダウンロード + オフライン継続採点（2026-08-02）
 
 戦略文書 Phase 4（Step 4）。オフライン採点が「画面表示中の1選手」で止まる問題（次選手への遷移がサーバー load 依存）を、データの事前キャッシュ + 画面内継続で解消する。
