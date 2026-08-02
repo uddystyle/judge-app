@@ -59,7 +59,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const mockInvitation = {
 				id: 'invite-123',
@@ -103,7 +103,8 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 409,
 				data: {
-					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+					error:
+						'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 				}
 			});
 		});
@@ -119,7 +120,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const mockInvitation = {
 				id: 'invite-123',
@@ -160,7 +161,8 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 409,
 				data: {
-					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+					error:
+						'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 				}
 			});
 		});
@@ -176,7 +178,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const mockInvitation = {
 				id: 'invite-123',
@@ -217,7 +219,8 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 409,
 				data: {
-					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+					error:
+						'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 				}
 			});
 		});
@@ -235,7 +238,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// 招待情報（メール指定あり）
 			const mockInvitation = {
@@ -293,7 +296,9 @@ describe('invite/[token] - signup action', () => {
 						full_name: 'Test User',
 						invitation_token: 'test-token'
 					},
-					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+					emailRedirectTo: expect.stringContaining(
+						'/auth/callback?next=/invite/test-token/complete'
+					)
 				}
 			});
 		});
@@ -309,7 +314,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// 招待情報（メール指定あり）
 			const mockInvitation = {
@@ -361,7 +366,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// 招待情報（メール指定なし）
 			const mockInvitation = {
@@ -417,7 +422,9 @@ describe('invite/[token] - signup action', () => {
 						full_name: 'Anyone',
 						invitation_token: 'test-token'
 					},
-					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+					emailRedirectTo: expect.stringContaining(
+						'/auth/callback?next=/invite/test-token/complete'
+					)
 				}
 			});
 		});
@@ -433,7 +440,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// 招待情報（小文字）
 			const mockInvitation = {
@@ -490,7 +497,9 @@ describe('invite/[token] - signup action', () => {
 						full_name: 'Test User',
 						invitation_token: 'test-token'
 					},
-					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+					emailRedirectTo: expect.stringContaining(
+						'/auth/callback?next=/invite/test-token/complete'
+					)
 				}
 			});
 		});
@@ -506,7 +515,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const mockInvitation = {
 				id: 'invite-123',
@@ -562,7 +571,9 @@ describe('invite/[token] - signup action', () => {
 						full_name: 'Test User',
 						invitation_token: 'test-token'
 					},
-					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+					emailRedirectTo: expect.stringContaining(
+						'/auth/callback?next=/invite/test-token/complete'
+					)
 				}
 			});
 		});
@@ -578,7 +589,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const mockInvitation = {
 				id: 'invite-123',
@@ -634,7 +645,9 @@ describe('invite/[token] - signup action', () => {
 						full_name: 'Test User',
 						invitation_token: 'test-token'
 					},
-					emailRedirectTo: expect.stringContaining('/auth/callback?next=/invite/test-token/complete')
+					emailRedirectTo: expect.stringContaining(
+						'/auth/callback?next=/invite/test-token/complete'
+					)
 				}
 			});
 		});
@@ -650,7 +663,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const mockInvitation = {
 				id: 'invite-123',
@@ -718,7 +731,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const result = await actions.signup(event);
 
@@ -741,7 +754,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const result = await actions.signup(event);
 
@@ -764,7 +777,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'test-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const result = await actions.signup(event);
 
@@ -789,7 +802,7 @@ describe('invite/[token] - signup action', () => {
 				request,
 				params: { token: 'expired-token' },
 				locals: { supabase: mockSupabase }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// 期限切れの招待
 			const mockInvitation = {
@@ -881,7 +894,7 @@ describe('invite/[token] - join action', () => {
 		({
 			params: { token: 'test-token' },
 			locals: { supabase: mockSupabase }
-		}) as unknown as RequestEvent;
+		}) as any;
 
 	it('メンバー上限に達している場合、403エラーを返しメンバー追加しない', async () => {
 		const { membersTable } = setupJoinMocks();

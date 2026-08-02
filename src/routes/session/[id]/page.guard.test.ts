@@ -92,7 +92,9 @@ describe('待機画面 - ガード条件', () => {
 
 						if (participant) {
 							const eventId = promptData.level;
-							mockGoto(`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+							mockGoto(
+								`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+							);
 						}
 					}
 				}
@@ -154,7 +156,9 @@ describe('待機画面 - ガード条件', () => {
 
 						if (participant) {
 							const eventId = promptData.level;
-							mockGoto(`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+							mockGoto(
+								`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+							);
 						}
 					}
 				}
@@ -219,7 +223,9 @@ describe('待機画面 - ガード条件', () => {
 
 							if (participant) {
 								const eventId = promptData.level;
-								mockGoto(`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+								mockGoto(
+									`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+								);
 							}
 						}
 					}
@@ -414,7 +420,9 @@ describe('待機画面 - ガード条件', () => {
 
 						if (participant) {
 							const eventId = promptData.level;
-							mockGoto(`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+							mockGoto(
+								`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+							);
 						}
 					}
 				}
@@ -465,7 +473,13 @@ describe('待機画面 - ガード条件', () => {
 				console.log('[ページ非アクティブ]');
 			}
 
-			if (!isSessionEnded && isPageActive && newPromptId && oldPromptId !== newPromptId && !shouldShowJoinUI) {
+			if (
+				!isSessionEnded &&
+				isPageActive &&
+				newPromptId &&
+				oldPromptId !== newPromptId &&
+				!shouldShowJoinUI
+			) {
 				const { data: promptData } = await mockSupabase
 					.from('scoring_prompts')
 					.select('*')
@@ -485,7 +499,9 @@ describe('待機画面 - ガード条件', () => {
 
 						if (participant) {
 							const eventId = promptData.level;
-							mockGoto(`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`);
+							mockGoto(
+								`/session/123/score/tournament/${eventId}/input?bib=${promptData.bib_number}&participantId=${participant.id}`
+							);
 						}
 					}
 				}
@@ -503,7 +519,7 @@ describe('待機画面 - ガード条件', () => {
 			const isSessionEnded = true;
 			const isPageActive = true;
 			const shouldShowJoinUI = false;
-			const newStatus = 'active';
+			const newStatus: 'active' | 'ended' = Math.random() < 1 ? 'active' : 'ended';
 			const newPromptId = 'prompt-123';
 
 			// ガード評価順序

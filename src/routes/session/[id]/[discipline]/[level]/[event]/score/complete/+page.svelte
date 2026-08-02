@@ -5,7 +5,13 @@
 	import * as m from '$lib/paraglide/messages.js';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { currentBib as bibStore, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
+	import {
+		currentBib as bibStore,
+		currentSession,
+		currentDiscipline,
+		currentLevel,
+		currentEvent
+	} from '$lib/stores';
 	import type { PageData } from './$types';
 	import { enhance } from '$app/forms';
 	import { getContext, onMount, onDestroy } from 'svelte';
@@ -18,6 +24,7 @@
 
 	$: guestIdentifier = data.guestIdentifier;
 	$: guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
+	$: averageScore = data.averageScore ?? '';
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
@@ -51,9 +58,9 @@
 		if (data.sessionDetails) {
 			currentSession.set(data.sessionDetails);
 		}
-		currentDiscipline.set($page.params.discipline);
-		currentLevel.set($page.params.level);
-		currentEvent.set($page.params.event);
+		currentDiscipline.set($page.params.discipline ?? null);
+		currentLevel.set($page.params.level ?? null);
+		currentEvent.set($page.params.event ?? null);
 
 		// 一般検定員の場合、セッション終了を監視
 		if (!data.isChief) {
@@ -80,7 +87,9 @@
 
 						if (!error && promptData) {
 							bibStore.set(promptData.bib_number);
-							goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
+							goto(
+								`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+							);
 						}
 					}
 				},
@@ -119,7 +128,9 @@
 
 						if (!error && promptData) {
 							bibStore.set(promptData.bib_number);
-							goto(`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`);
+							goto(
+								`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+							);
 							previousActivePromptId = activePromptId;
 							return;
 						}
@@ -165,16 +176,16 @@
 			<div class="average-score">
 				<strong>
 					{#if data.isTournamentMode}
-						{m.score_points({ score: data.averageScore })}
+						{m.score_points({ score: averageScore })}
 					{:else}
-						平均点: {m.score_points({ score: data.averageScore })}
+						平均点: {m.score_points({ score: averageScore })}
 					{/if}
 				</strong>
 			</div>
 		</div>
 	{:else}
 		<div class="single-score">
-			<strong>得点: {m.score_points({ score: data.averageScore })}</strong>
+			<strong>得点: {m.score_points({ score: averageScore })}</strong>
 		</div>
 	{/if}
 
@@ -184,17 +195,20 @@
 			<NavButton on:click={handleChangeEvent}>種目を変更する</NavButton>
 		{/if}
 		{#if data.isChief || !data.isMultiJudge}
-			<NavButton on:click={handleEndSession}>
-				セッションを終了する
-			</NavButton>
+			<NavButton on:click={handleEndSession}>セッションを終了する</NavButton>
 		{/if}
 	</div>
 
 	<!-- 非表示のフォーム -->
 	{#if typeof window !== 'undefined'}
 		{@const guestQuery = guestParam ? `` : ''}
-		<form bind:this={endSessionForm} method="POST" action="?/endSession{guestQuery}" use:enhance style="display: none;">
-		</form>
+		<form
+			bind:this={endSessionForm}
+			method="POST"
+			action="?/endSession{guestQuery}"
+			use:enhance
+			style="display: none;"
+		></form>
 		<form
 			bind:this={changeEventForm}
 			method="POST"

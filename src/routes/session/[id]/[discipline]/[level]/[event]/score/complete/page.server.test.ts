@@ -62,15 +62,11 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 				data: { error: '認証が必要です。' }
 			});
 			expect(fail).toHaveBeenCalledWith(401, { error: '認証が必要です。' });
-			expect(authenticateAction).toHaveBeenCalledWith(
-				mockSupabase,
-				'session-123',
-				'guest-123'
-			);
+			expect(authenticateAction).toHaveBeenCalledWith(mockSupabase, 'session-123', 'guest-123');
 		});
 
 		it('認証成功（ユーザー）かつ主任検定員の場合は種目変更できる', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -117,7 +113,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('認証成功（ユーザー）だが一般検定員で複数検定員モードの場合は403 failを返す', async () => {
-			const mockUser = { id: 'user-456', email: 'test@example.com' };
+			const mockUser = { id: 'user-456', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -248,7 +244,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('大会モードの場合は tournament-events にリダイレクトする', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -295,7 +291,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('セッション取得エラーの場合は404 failを返す', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -326,7 +322,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('sessions.update()が失敗した場合は500 failを返す', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -390,7 +386,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('認証成功（ユーザー）かつ主任検定員の場合はセッション終了できる', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -440,7 +436,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('認証成功（ユーザー）だが一般検定員で複数検定員モードの場合は403 failを返す', async () => {
-			const mockUser = { id: 'user-456', email: 'test@example.com' };
+			const mockUser = { id: 'user-456', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -530,7 +526,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('セッション取得エラーの場合は404 failを返す', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,
@@ -561,7 +557,7 @@ describe('ルートアクション統合テスト: complete/+page.server.ts', ()
 		});
 
 		it('sessions.update()が失敗した場合は500 failを返す', async () => {
-			const mockUser = { id: 'user-123', email: 'test@example.com' };
+			const mockUser = { id: 'user-123', email: 'test@example.com' } as any;
 
 			vi.mocked(authenticateAction).mockResolvedValue({
 				user: mockUser,

@@ -58,7 +58,9 @@
 	// フォーム送信後の処理
 	$: if (form?.success && form?.bibNumber && form?.participantId) {
 		// ゼッケン番号入力後は常に得点入力画面へ
-		goto(`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}`);
+		goto(
+			`/session/${sessionId}/score/${modeType}/${eventId}/input?bib=${form.bibNumber}&participantId=${form.participantId}`
+		);
 	}
 
 	// モードに応じた戻り先
@@ -96,16 +98,26 @@
 
 	<NumericKeypad on:input={handleInput} on:clear={handleClear} on:confirm={handleConfirm} />
 
-	<form id="bibForm" method="POST" action="?/submitBib{guestIdentifier ? `` : ''}" use:enhance style="display: none;">
+	<form
+		id="bibForm"
+		method="POST"
+		action="?/submitBib{guestIdentifier ? `` : ''}"
+		use:enhance
+		style="display: none;"
+	>
 		<input type="hidden" name="bibNumber" value={bibNumber} />
 	</form>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => goto(backUrl)}>
-			種目選択に戻る
-		</NavButton>
+		<NavButton on:click={() => goto(backUrl)}>種目選択に戻る</NavButton>
 		{#if isTrainingMode}
-			<NavButton variant="secondary" on:click={() => goto(`/session/${sessionId}/score/${modeType}/${eventId}/results${guestIdentifier ? `` : ''}`)}>
+			<NavButton
+				variant="secondary"
+				on:click={() =>
+					goto(
+						`/session/${sessionId}/score/${modeType}/${eventId}/results${guestIdentifier ? `` : ''}`
+					)}
+			>
 				結果を見る
 			</NavButton>
 		{/if}
@@ -133,39 +145,6 @@
 		font-weight: 700;
 		color: var(--text-primary);
 		margin-bottom: 28px;
-	}
-
-	.scoring-info {
-		margin-bottom: 20px;
-	}
-
-	.scoring-badge {
-		display: inline-block;
-		background: transparent;
-		color: var(--text-secondary);
-		padding: 4px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--border-medium);
-		font-size: 12px;
-		font-weight: 500;
-		margin-bottom: 8px;
-		letter-spacing: 0.01em;
-	}
-
-	.scoring-badge.advanced {
-		color: var(--text-secondary);
-		border-color: var(--border-medium);
-	}
-
-	.scoring-badge.training {
-		color: var(--text-secondary);
-		border-color: var(--border-medium);
-	}
-
-	.scoring-description {
-		font-size: 14px;
-		color: var(--secondary-text);
-		margin: 0;
 	}
 
 	.error-message {

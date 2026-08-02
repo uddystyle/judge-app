@@ -55,7 +55,7 @@
 </script>
 
 <h3 class="settings-title"><Icon name="score" size={20} />{m.score_judgeScores()}</h3>
-<div class="participants-container">
+<div class="participants-container" data-can-submit={canSubmit}>
 	{#if scores && scores.length > 0}
 		{#each scores as s}
 			<div class="participant-item">
@@ -91,7 +91,10 @@
 {#if isChief}
 	<div class="status-count">
 		<p>
-			{m.score_currentJudges({ current: String(scores?.length || 0), required: String(requiredJudges) })}
+			{m.score_currentJudges({
+				current: String(scores?.length || 0),
+				required: String(requiredJudges)
+			})}
 		</p>
 	</div>
 {/if}

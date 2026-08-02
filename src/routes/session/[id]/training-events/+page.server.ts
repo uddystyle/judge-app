@@ -61,6 +61,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 			// フリーモードでは種目選択可能
 		} else {
 			// 認証ユーザーの参加者チェック
+			if (!user) {
+				throw error(401, '認証が必要です。');
+			}
 			const { data: participant } = await supabase
 				.from('session_participants')
 				.select('user_id')

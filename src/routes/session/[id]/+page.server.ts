@@ -11,7 +11,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// URLパラメータでguest_identifierが渡された場合（レガシー方式からの移行）
 	if (guestParam) {
 		// 既にJWT認証されているか確認
-		const { data: { user } } = await supabase.auth.getUser();
+		const {
+			data: { user }
+		} = await supabase.auth.getUser();
 
 		// ✅ SECURITY: 通常ユーザー（認証済みでゲストではない）の場合、ゲスト移行をスキップ
 		// 通常ユーザーが誤ってゲストリンクを踏んでも、匿名JWTに置き換わらないようにする
@@ -100,11 +102,7 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 				.select('organization_id')
 				.eq('user_id', user.id)
 				.is('removed_at', null),
-			supabase
-				.from('profiles')
-				.select('*')
-				.eq('id', user.id)
-				.single()
+			supabase.from('profiles').select('*').eq('id', user.id).single()
 		]);
 
 		hasOrganization = (orgMembersResult.data || []).length > 0;
@@ -114,7 +112,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// セッションの詳細情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
-		.select('id, active_prompt_id, chief_judge_id, exclude_extremes, is_active, status, is_multi_judge, is_tournament_mode, mode, organization_id')
+		.select(
+			'id, active_prompt_id, chief_judge_id, exclude_extremes, is_active, status, is_multi_judge, is_tournament_mode, mode, organization_id'
+		)
 		.eq('id', sessionId)
 		.single();
 
@@ -157,7 +157,9 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	// ただし、ended=trueパラメータがある場合（終了画面表示中）は再開しない
 	const isEndedPage = url.searchParams.get('ended') === 'true';
 	if (isChief && sessionDetails.status === 'ended' && !isEndedPage) {
-		logger.debug('[Session Page] 主任検定員が終了したセッションを選択 - 自動的に再開します', { sessionId });
+		logger.debug('[Session Page] 主任検定員が終了したセッションを選択 - 自動的に再開します', {
+			sessionId
+		});
 		await supabase
 			.from('sessions')
 			.update({
@@ -183,23 +185,21 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 
 		// 研修セッション情報、種目数、参加者を並列取得（約200ms短縮）
 		const [trainingResult, eventsCountResult, participantsResult] = await Promise.all([
-			supabase
-				.from('training_sessions')
-				.select('*')
-				.eq('session_id', sessionId)
-				.maybeSingle(),
+			supabase.from('training_sessions').select('*').eq('session_id', sessionId).maybeSingle(),
 			supabase
 				.from('training_events')
 				.select('*', { count: 'exact', head: true })
 				.eq('session_id', sessionId),
 			supabase
 				.from('session_participants')
-				.select(`
+				.select(
+					`
 					user_id,
 					profiles:user_id (
 						full_name
 					)
-				`)
+				`
+				)
 				.eq('session_id', sessionId)
 		]);
 
@@ -209,7 +209,10 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 		const participants = participantsResult.data;
 		const participantsError = participantsResult.error;
 
-		logger.debug('[Session Page Load] training_sessions取得結果:', { trainingSession, trainingError });
+		logger.debug('[Session Page Load] training_sessions取得結果:', {
+			trainingSession,
+			trainingError
+		});
 		logger.debug('[Session Page Load] is_multi_judge:', trainingSession?.is_multi_judge);
 
 		if (trainingError) {
@@ -335,7 +338,8 @@ export const load: PageServerLoad = async ({ params, url, locals: { supabase } }
 	let disciplines: string[] | undefined = undefined;
 
 	// 大会モードは常に複数検定員モードON、それ以外はsessionDetailsの値を使用
-	const isTournamentMode = sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament';
+	const isTournamentMode =
+		sessionDetails.is_tournament_mode || sessionDetails.mode === 'tournament';
 	const isMultiJudge = isTournamentMode ? true : (sessionDetails.is_multi_judge ?? false);
 
 	if (!sessionDetails.is_tournament_mode && !isMultiJudge && sessionDetails.mode !== 'training') {
@@ -373,6 +377,9 @@ export const actions: Actions = {
 		}
 
 		const { user } = authResult;
+		if (!user) {
+			return fail(401, { error: '認証が必要です。' });
+		}
 		const formData = await request.formData();
 		const selectedUserId = formData.get('userId') as string;
 
@@ -552,7 +559,9 @@ export const actions: Actions = {
 		// 同じページにリダイレクト（終了フラグを削除）
 		// restart=true パラメータを付けて、誤った終了検知を防ぐ
 		// ゲストユーザーの場合もrestart=trueを追加して、isSessionEndedの判定が正しく動作するようにする
-		const guestParam = guestIdentifier ? `?guest=${guestIdentifier}&join=true&restart=true` : '?restart=true';
+		const guestParam = guestIdentifier
+			? `?guest=${guestIdentifier}&join=true&restart=true`
+			: '?restart=true';
 		throw redirect(303, `/session/${id}${guestParam}`);
 	}
 };

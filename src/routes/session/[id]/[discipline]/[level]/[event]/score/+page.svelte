@@ -6,7 +6,8 @@
 	import {
 		enqueueScoreMutation,
 		markMutationSynced,
-		removeMutation
+		removeMutation,
+		setCurrentSyncIdentity
 	} from '$lib/offline/scoreQueue';
 	import { startOfflineSync, pendingCount, isOffline } from '$lib/offline/syncStatus';
 	import { refreshSessionCache } from '$lib/offline/sessionCache';
@@ -123,6 +124,7 @@
 				// owner は URL の ?guest= ではなく JWT 検証済みの identity を積む。
 				// ?guest= は通常フローで URL から除去され null になるため、これを使うと
 				// 同期時の owner ガードが正当なゲスト採点を誤って弾く（データ損失）。
+				judge_id: data.guestParticipant ? null : (data.user?.id ?? null),
 				guest_identifier: data.guestParticipant?.guest_identifier ?? null
 			});
 			pendingMutationId = queued.client_mutation_id;
@@ -187,6 +189,17 @@
 
 	// セッション終了を監視
 	onMount(() => {
+		setCurrentSyncIdentity(
+			data.guestParticipant?.guest_identifier
+				? {
+						owner_type: 'guest',
+						judge_id: null,
+						guest_identifier: data.guestParticipant.guest_identifier
+					}
+				: data.user?.id
+					? { owner_type: 'auth', judge_id: data.user.id, guest_identifier: null }
+					: null
+		);
 		stopOfflineSync = startOfflineSync();
 		// オフライン継続用にセッションデータを事前ダウンロード（失敗しても採点は阻害しない）
 		void refreshSessionCache(Number.parseInt($page.params.id ?? '', 10), {
@@ -200,9 +213,9 @@
 		if (data.sessionDetails) {
 			currentSession.set(data.sessionDetails);
 		}
-		currentDiscipline.set(discipline);
-		currentLevel.set(level);
-		currentEvent.set(event);
+		currentDiscipline.set(discipline ?? null);
+		currentLevel.set(level ?? null);
+		currentEvent.set(event ?? null);
 		// 複数検定員: 表示と送信を確実に一致させるため、active_prompt 由来の権威 bib をストアへ同期。
 		// （ナビ時に currentBib が未設定でも、ここで現在の滑走者の bib に揃う）
 		if (data.isMultiJudge && data.activeBib != null) {

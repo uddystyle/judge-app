@@ -48,6 +48,9 @@ async function authorizeSetupAccess(supabase: SupabaseClient, sessionId: string,
 	const config = MODE_CONFIG[mode];
 
 	const { user } = await authenticateSession(supabase, sessionId, null);
+	if (!user) {
+		throw redirect(303, '/login');
+	}
 
 	const { data: sessionDetails, error: sessionError } = await supabase
 		.from('sessions')
@@ -462,7 +465,8 @@ export function createSetupEventsActions(mode: SetupMode) {
 				.limit(1)
 				.single();
 
-			const nextOrder = (maxOrderData?.[config.orderColumn] || 0) + 1;
+			const orderRow = maxOrderData as Record<string, number | null> | null;
+			const nextOrder = (orderRow?.[config.orderColumn] || 0) + 1;
 
 			// 種目を追加
 			const { error: insertError } = await supabase

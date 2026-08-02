@@ -1,5 +1,13 @@
 <script lang="ts">
-	import { currentUser, currentSession, userProfile, currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
+	import {
+		currentUser,
+		currentSession,
+		userProfile,
+		currentDiscipline,
+		currentLevel,
+		currentEvent,
+		currentBib
+	} from '$lib/stores';
 	import { goto } from '$app/navigation';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -12,6 +20,8 @@
 	export let showAppName = false; // 料金プランページなどで使用
 	export let pageUser: any = null; // ページから渡されるユーザー情報（料金ページなど）
 	export let pageProfile: any = null; // ページから渡されるプロフィール情報
+	export let hasOrganization: boolean = false; // 既存呼び出し互換（表示制御は呼び出し側で実施）
+	export let pageOrganizations: any[] = []; // 既存呼び出し互換（必要な画面のみで使用）
 	export let isGuest = false; // ゲストユーザーかどうか
 	export let guestName: string | null = null; // ゲストユーザーの名前
 
@@ -34,7 +44,13 @@
 	// 表示する情報を構築
 	$: infoText = buildInfoText(session, discipline, level, event, bib);
 
-	function buildInfoText(session: any, discipline: string | null, level: string | null, event: string | null, bib: number | null): string {
+	function buildInfoText(
+		session: any,
+		discipline: string | null,
+		level: string | null,
+		event: string | null,
+		bib: number | null
+	): string {
 		const parts: string[] = [];
 
 		if (session?.name) {
@@ -106,13 +122,15 @@
 
 <svelte:window on:click={handleClickOutside} />
 
-<div class="header">
+<div
+	class="header"
+	data-has-organization={hasOrganization}
+	data-organization-count={pageOrganizations.length}
+>
 	<div class="header-content">
 		<div class="info-display">
 			{#if showAppName}
-				<button class="app-name-button" on:click={handleAppNameClick}>
-					TENTO
-				</button>
+				<button class="app-name-button" on:click={handleAppNameClick}> TENTO </button>
 			{:else}
 				<span id="session-info">
 					{infoText}
@@ -121,63 +139,85 @@
 		</div>
 		<div class="header-actions">
 			<LanguageSwitcher />
-		{#if !showAppName || user}
-			<div class="account-menu-wrapper">
-				{#if isGuest}
-					<!-- ゲストユーザー: メニューなしの表示のみ -->
-					<div class="guest-label">
-						<span class="guest-badge">
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1"/>
-								<text x="8" y="11" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">G</text>
-							</svg>
-						</span>
-						{guestName || m.nav_guest()}
-					</div>
-				{:else}
-					<!-- 通常ユーザー: メニュー付き -->
-					<!-- モバイル: ハンバーガーメニュー -->
-					<button class="hamburger-button mobile-only" on:click={toggleMenu} class:active={showMenu} aria-label="メニューを開く">
-						<div class="hamburger-icon">
-							<span class="line line-1"></span>
-							<span class="line line-2"></span>
-							<span class="line line-3"></span>
+			{#if !showAppName || user}
+				<div class="account-menu-wrapper">
+					{#if isGuest}
+						<!-- ゲストユーザー: メニューなしの表示のみ -->
+						<div class="guest-label">
+							<span class="guest-badge">
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 16 16"
+									fill="none"
+									xmlns="http://www.w3.org/2000/svg"
+								>
+									<circle cx="8" cy="8" r="7.5" stroke="currentColor" stroke-width="1" />
+									<text
+										x="8"
+										y="11"
+										text-anchor="middle"
+										font-size="10"
+										font-weight="600"
+										fill="currentColor">G</text
+									>
+								</svg>
+							</span>
+							{guestName || m.nav_guest()}
 						</div>
-					</button>
+					{:else}
+						<!-- 通常ユーザー: メニュー付き -->
+						<!-- モバイル: ハンバーガーメニュー -->
+						<button
+							class="hamburger-button mobile-only"
+							on:click={toggleMenu}
+							class:active={showMenu}
+							aria-label="メニューを開く"
+						>
+							<div class="hamburger-icon">
+								<span class="line line-1"></span>
+								<span class="line line-2"></span>
+								<span class="line line-3"></span>
+							</div>
+						</button>
 
-					<!-- タブレット・PC: プロフィールボタン -->
-					<button class="account-button desktop-only" on:click={toggleMenu} aria-label="アカウントメニューを開く">
-						{profile?.full_name || m.nav_account()}
-						<span class="menu-icon" class:rotated={showMenu}>
-							<Icon name="chevron-down" size={12} stroke={3} />
-						</span>
-					</button>
+						<!-- タブレット・PC: プロフィールボタン -->
+						<button
+							class="account-button desktop-only"
+							on:click={toggleMenu}
+							aria-label="アカウントメニューを開く"
+						>
+							{profile?.full_name || m.nav_account()}
+							<span class="menu-icon" class:rotated={showMenu}>
+								<Icon name="chevron-down" size={12} stroke={3} />
+							</span>
+						</button>
 
-					{#if showMenu}
-						<div class="dropdown-menu">
-							<button class="menu-item" on:click={() => handleMenuClick('/account')}>
-								<Icon name="judge" size={16} />
-								<span class="menu-label">{m.nav_profile()}</span>
-							</button>
-							<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
-								<Icon name="organization" size={16} />
-								<span class="menu-label">{m.nav_organizations()}</span>
-							</button>
-							<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
-								<Icon name="home" size={16} />
-								<span class="menu-label">{m.nav_sessions()}</span>
-							</button>
-							{#if user}
-								<div class="menu-divider"></div>
-								<button class="menu-item logout" on:click={handleLogout}>
-									<Icon name="logout" size={16} />
-									<span class="menu-label">{m.common_logout()}</span>
+						{#if showMenu}
+							<div class="dropdown-menu">
+								<button class="menu-item" on:click={() => handleMenuClick('/account')}>
+									<Icon name="judge" size={16} />
+									<span class="menu-label">{m.nav_profile()}</span>
 								</button>
-							{/if}
-						</div>
+								<button class="menu-item" on:click={() => handleMenuClick('/organizations')}>
+									<Icon name="organization" size={16} />
+									<span class="menu-label">{m.nav_organizations()}</span>
+								</button>
+								<button class="menu-item" on:click={() => handleMenuClick('/dashboard')}>
+									<Icon name="home" size={16} />
+									<span class="menu-label">{m.nav_sessions()}</span>
+								</button>
+								{#if user}
+									<div class="menu-divider"></div>
+									<button class="menu-item logout" on:click={handleLogout}>
+										<Icon name="logout" size={16} />
+										<span class="menu-label">{m.common_logout()}</span>
+									</button>
+								{/if}
+							</div>
+						{/if}
 					{/if}
-				{/if}
-			</div>
+				</div>
 			{/if}
 		</div>
 	</div>

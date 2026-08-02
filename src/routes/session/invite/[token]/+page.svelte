@@ -6,7 +6,7 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { getSavedGuestIdentity, type SavedGuestIdentity } from '$lib/offline/guestIdentity';
 
 	export let data: PageData;
 	export let form: ActionData;
@@ -14,25 +14,26 @@
 	let guestName = '';
 	let isSubmitting = false;
 
-	// ゲスト情報をLocalStorageから復元
+	// P3: この端末に保存済みのゲスト identity があれば「再開」を提示する。
+	// 再採用は /session/[id]?guest= のサーバー移行が session_participants 照合のうえ行う。
+	let savedIdentity: SavedGuestIdentity | null = null;
+	$: sessionOrganization = data.session
+		? Array.isArray(data.session.organizations)
+			? data.session.organizations[0]
+			: data.session.organizations
+		: null;
+
 	onMount(() => {
 		if (data.session) {
-			const storageKey = `guest_${data.session.id}`;
-			const savedGuestData = localStorage.getItem(storageKey);
-
-			if (savedGuestData) {
-				try {
-					const guestData = JSON.parse(savedGuestData);
-					// 既にこのセッションに参加済みの場合、自動的にセッションページへ
-					console.log('[Guest] 保存されたゲスト情報を検出:', guestData);
-					goto(`/session/${data.session.id}`);
-				} catch (e) {
-					console.error('[Guest] ゲスト情報の復元に失敗:', e);
-					localStorage.removeItem(storageKey);
-				}
-			}
+			savedIdentity = getSavedGuestIdentity(data.session.id);
 		}
 	});
+
+	// フルロードで再開する（サーバーの ?guest= 移行が session_participants 照合のうえ
+	// 同一 identity で JWT を再発行し、クッキーを張り直す）。
+	function resumeGuest(sessionId: number, guestIdentifier: string) {
+		window.location.href = `/session/${sessionId}?guest=${encodeURIComponent(guestIdentifier)}`;
+	}
 </script>
 
 <Header showAppName={true} />
@@ -44,7 +45,7 @@
 			<h1 class="error-title"><Icon name="error" size={24} />招待リンクが無効です</h1>
 			<p class="error-message">{data.error}</p>
 			<div class="nav-buttons">
-				<NavButton variant="primary" on:click={() => window.location.href = '/'}>
+				<NavButton variant="primary" on:click={() => (window.location.href = '/')}>
 					トップページへ戻る
 				</NavButton>
 			</div>
@@ -57,7 +58,7 @@
 				<div class="session-details">
 					<div class="detail-item">
 						<span class="detail-label">主催:</span>
-						<span class="detail-value">{data.session.organizations?.name || '組織名不明'}</span>
+						<span class="detail-value">{sessionOrganization?.name || '組織名不明'}</span>
 					</div>
 					<div class="detail-item">
 						<span class="detail-label">モード:</span>
@@ -81,33 +82,33 @@
 					お名前を入力してください。
 				</p>
 
-				<form method="POST" action="?/join" use:enhance={() => {
-					isSubmitting = true;
-					return async ({ result, update }) => {
-						await update();
-						isSubmitting = false;
+				{#if savedIdentity}
+					<div class="resume-banner">
+						<p>この端末で前回「{savedIdentity.guest_name}」として参加しています。</p>
+						<button
+							type="button"
+							class="resume-btn"
+							on:click={() =>
+								savedIdentity && resumeGuest(data.session.id, savedIdentity.guest_identifier)}
+						>
+							「{savedIdentity.guest_name}」として再開
+						</button>
+					</div>
+				{/if}
 
-						// 参加成功時、LocalStorageにゲスト情報を保存
-						if (result.type === 'redirect' && data.session) {
-							// リダイレクトURLからguest_identifierを抽出
-							const redirectUrl = result.location;
-							const url = new URL(redirectUrl, window.location.origin);
-							const guestIdentifier = url.searchParams.get('guest');
-
-							if (guestIdentifier) {
-								const storageKey = `guest_${data.session.id}`;
-								const guestData = {
-									guest_identifier: guestIdentifier,
-									guest_name: guestName,
-									session_id: data.session.id,
-									joined_at: new Date().toISOString()
-								};
-								localStorage.setItem(storageKey, JSON.stringify(guestData));
-								console.log('[Guest] ゲスト情報を保存しました:', guestData);
-							}
-						}
-					};
-				}}>
+				<form
+					method="POST"
+					action="?/join"
+					use:enhance={() => {
+						isSubmitting = true;
+						return async ({ update }) => {
+							// 成功時はサーバーが /session/[id] へリダイレクトし、そのページで
+							// JWT 検証済みの identity が端末に保存される（P3: guestIdentity）。
+							await update();
+							isSubmitting = false;
+						};
+					}}
+				>
 					<div class="input-group">
 						<label for="guestName">お名前</label>
 						<input
@@ -302,6 +303,33 @@
 		font-size: 14px;
 		margin-bottom: 20px;
 		text-align: center;
+	}
+
+	.resume-banner {
+		background: var(--color-success-tint);
+		border: 1px solid var(--color-success);
+		border-radius: 10px;
+		padding: 16px;
+		margin-bottom: 20px;
+		text-align: center;
+	}
+	.resume-banner p {
+		font-size: 14px;
+		color: var(--text-primary);
+		margin-bottom: 12px;
+		line-height: 1.6;
+	}
+	.resume-btn {
+		display: inline-block;
+		padding: 12px 20px;
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--text-on-accent);
+		background: var(--color-success);
+		border: none;
+		border-radius: 10px;
+		text-decoration: none;
+		cursor: pointer;
 	}
 
 	.form-actions {

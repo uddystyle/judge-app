@@ -302,7 +302,7 @@ describe('Concurrent Scoring - Retry Logic', () => {
 			let insertError: any = null;
 
 			for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-				const { error } = await judgeSupabase.from('results').upsert({
+				const { error } = await ((judgeSupabase.from as any)('results').upsert as any)({
 					judge_name: judge.name
 				});
 
@@ -392,7 +392,7 @@ describe('judge_name Collision Prevention', () => {
 
 	it('プロフィール未設定のユーザーはemailが使用される', () => {
 		const user = { id: 'user-uuid', email: 'test@example.com' };
-		const profile = null; // プロフィール未設定
+		const profile = null as { full_name?: string } | null; // プロフィール未設定
 
 		let judgeName: string;
 		judgeName = profile?.full_name || user.email || 'Unknown';

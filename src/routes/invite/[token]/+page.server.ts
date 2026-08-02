@@ -18,12 +18,12 @@ function normalizeEmail(email: string): string {
 }
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	const token = params.token;
+	const token = params.token!;
 
 	logger.debug('[Invite Page] Loading invitation with token:', token);
 
 	// 招待情報を取得（RLSをバイパスするためsupabaseAdminを使用）
-	const { data: invitation, error: inviteError} = await supabaseAdmin
+	const { data: invitation, error: inviteError } = await supabaseAdmin
 		.from('invitations')
 		.select(
 			`
@@ -61,7 +61,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	// すでにログイン済みかチェック
-	const { data: { user } } = await locals.supabase.auth.getUser();
+	const {
+		data: { user }
+	} = await locals.supabase.auth.getUser();
 
 	// ユーザーのプロフィール情報を取得（ログイン済みの場合のみ）
 	let profile = null;
@@ -110,7 +112,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
 export const actions: Actions = {
 	signup: async ({ request, params, locals }) => {
-		const token = params.token;
+		const token = params.token!;
 		const formData = await request.formData();
 		const email = formData.get('email')?.toString();
 		const password = formData.get('password')?.toString();
@@ -183,7 +185,7 @@ export const actions: Actions = {
 			// 正規化後のメールアドレスを使用することで、データの一貫性を保つ
 			const { data: authData, error: authError } = await locals.supabase.auth.signUp({
 				email: normalizedEmail,
-				password,
+				password: password!,
 				options: {
 					data: {
 						full_name: sanitizedFullName,
@@ -204,11 +206,11 @@ export const actions: Actions = {
 
 				// エラーコードベースの判定（推奨）
 				// Supabase Auth Error Codes: https://supabase.com/docs/guides/auth/debugging/error-codes
-				if (authError.code === 'user_already_exists' ||
-				    authError.code === 'email_exists') {
+				if (authError.code === 'user_already_exists' || authError.code === 'email_exists') {
 					// 既存ユーザー: メールアドレスが既に登録されている
 					return fail(409, {
-						error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+						error:
+							'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 					});
 				}
 
@@ -218,12 +220,18 @@ export const actions: Actions = {
 					const message = authError.message?.toLowerCase() || '';
 
 					// 既存ユーザーを示す具体的なメッセージパターン
-					if (message.includes('already registered') ||
-					    message.includes('already exists') ||
-					    message.includes('already been registered')) {
-						logger.warn('[Invite Signup] Detected existing user via message fallback:', authError.message);
+					if (
+						message.includes('already registered') ||
+						message.includes('already exists') ||
+						message.includes('already been registered')
+					) {
+						logger.warn(
+							'[Invite Signup] Detected existing user via message fallback:',
+							authError.message
+						);
 						return fail(409, {
-							error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+							error:
+								'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 						});
 					}
 				}
@@ -234,9 +242,14 @@ export const actions: Actions = {
 			}
 
 			// Supabaseは既存ユーザーの場合、エラーなしで匿名化ユーザーを返す場合がある
-			if (authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+			if (
+				authData.user &&
+				Array.isArray(authData.user.identities) &&
+				authData.user.identities.length === 0
+			) {
 				return fail(409, {
-					error: 'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
+					error:
+						'このメールアドレスは既に登録されています。ログインしてから招待リンクを使用してください。'
 				});
 			}
 
@@ -247,12 +260,16 @@ export const actions: Actions = {
 			// 【セキュリティチェック】session が null であることを確認
 			// session が存在する場合、Supabase設定でメール確認が無効になっている可能性がある
 			if (authData.session) {
-				logger.error('[Invite Signup] SECURITY WARNING: Session was returned immediately after signup.', {
-					userId: authData.user.id,
-					email: authData.user.email,
-					emailConfirmedAt: authData.user.email_confirmed_at,
-					message: 'Supabase "Confirm email" setting may be disabled. Email ownership verification is required for security.'
-				});
+				logger.error(
+					'[Invite Signup] SECURITY WARNING: Session was returned immediately after signup.',
+					{
+						userId: authData.user.id,
+						email: authData.user.email,
+						emailConfirmedAt: authData.user.email_confirmed_at,
+						message:
+							'Supabase "Confirm email" setting may be disabled. Email ownership verification is required for security.'
+					}
+				);
 				return fail(500, {
 					error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
 				});
@@ -276,7 +293,7 @@ export const actions: Actions = {
 	},
 
 	join: async ({ params, locals }) => {
-		const token = params.token;
+		const token = params.token!;
 
 		// 認証チェック
 		const {

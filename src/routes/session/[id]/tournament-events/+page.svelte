@@ -4,7 +4,13 @@
 	import Header from '$lib/components/Header.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { currentSession, currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
+	import {
+		currentSession,
+		currentDiscipline,
+		currentLevel,
+		currentEvent,
+		currentBib
+	} from '$lib/stores';
 	import { onMount } from 'svelte';
 
 	export let data: PageData;
@@ -36,7 +42,7 @@
 	pageUser={data.user}
 	pageProfile={data.profile}
 	isGuest={!!data.guestIdentifier}
-	guestName={data.guestParticipant?.guest_name || null}
+	guestName={(data.guestParticipant as any)?.guest_name || null}
 />
 
 <div class="container">
@@ -59,9 +65,12 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton variant="secondary" on:click={() => {
-			goto(`/session/${sessionId}`);
-		}}>
+		<NavButton
+			variant="secondary"
+			on:click={() => {
+				goto(`/session/${sessionId}`);
+			}}
+		>
 			待機画面に戻る
 		</NavButton>
 	</div>

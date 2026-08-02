@@ -1,8 +1,10 @@
 import { createBrowserClient } from '@supabase/ssr';
 import { env } from '$env/dynamic/public';
+import { getSavedGuestIdentity } from '$lib/offline/guestIdentity';
 
 // Get environment variables with fallback
-const supabaseUrl = env.PUBLIC_SUPABASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+const supabaseUrl =
+	env.PUBLIC_SUPABASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 const supabaseAnonKey = env.PUBLIC_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -14,8 +16,22 @@ export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
 
 // JWT リフレッシュ監視（ブラウザ環境のみ）
 if (typeof window !== 'undefined') {
+	// 直前に active だったゲストの guest_identifier を記憶しておく。SIGNED_OUT では
+	// session が null になり「今失効したのが誰か」が分からないため、ここで捕捉する。
+	let lastKnownGuestIdentifier: string | null = null;
+
 	supabase.auth.onAuthStateChange((event, session) => {
 		console.log('[supabaseClient] Auth state changed:', event);
+
+		// 現在のセッションがゲストなら identity を控える（認証ユーザーなら null に戻す）
+		const sessionGuestIdentifier =
+			session?.user?.user_metadata?.is_guest === true &&
+			typeof session.user.user_metadata.guest_identifier === 'string'
+				? session.user.user_metadata.guest_identifier
+				: null;
+		if (session) {
+			lastKnownGuestIdentifier = sessionGuestIdentifier;
+		}
 
 		if (event === 'TOKEN_REFRESHED') {
 			console.log('[supabaseClient] ✅ JWT refreshed successfully');
@@ -31,10 +47,20 @@ if (typeof window !== 'undefined') {
 				const sessionIdMatch = currentPath.match(/\/session\/(\d+)/);
 				if (sessionIdMatch) {
 					const sessionId = sessionIdMatch[1];
-					console.log('[supabaseClient] Redirecting to rejoin session:', sessionId);
-					window.location.href = `/session/${sessionId}?expired=true`;
+					// P3: 端末保存済みの guest identity があり、かつ「今失効したのがその本人」の時だけ
+					// ?guest= で自動再採用する。共有端末で別ゲストや認証ユーザーが、前の利用者の
+					// 保存 identity に誤って降格・すり替わるのを防ぐ（別人の採点への誤帰属防止）。
+					const saved = getSavedGuestIdentity(sessionId);
+					if (saved && saved.guest_identifier === lastKnownGuestIdentifier) {
+						console.log('[supabaseClient] Auto-resuming guest identity for session:', sessionId);
+						window.location.href = `/session/${sessionId}?guest=${encodeURIComponent(saved.guest_identifier)}`;
+					} else {
+						console.log('[supabaseClient] Redirecting to rejoin session:', sessionId);
+						window.location.href = `/session/${sessionId}?expired=true`;
+					}
 				}
 			}
+			lastKnownGuestIdentifier = null;
 		} else if (event === 'USER_UPDATED') {
 			console.log('[supabaseClient] User metadata updated');
 		}

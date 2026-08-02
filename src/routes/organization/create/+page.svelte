@@ -15,11 +15,7 @@
 
 	// サブスクリプション済みかどうか
 	const hasSubscription = !!data.subscription;
-	const existingPlanType = data.subscription?.plan_type as
-		| 'basic'
-		| 'standard'
-		| 'premium'
-		| null;
+	const existingPlanType = data.subscription?.plan_type as 'basic' | 'standard' | 'premium' | null;
 
 	let organizationName = '';
 	let selectedPlan: 'basic' | 'standard' | 'premium' | null = existingPlanType || null;
@@ -108,7 +104,12 @@
 	}
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
 	<div class="instruction"><Icon name="plus" size={24} />組織を作成</div>
@@ -141,15 +142,13 @@
 
 		<hr class="divider" />
 
-		{#if hasSubscription}
+		{#if hasSubscription && existingPlanType}
 			<!-- サブスクリプション済みの場合：現在のプラン情報を表示 -->
 			<div class="form-section">
 				<h3 class="section-title">プラン</h3>
 				<div class="current-plan-info">
 					<div class="plan-badge">{plans[existingPlanType].name}</div>
-					<p class="plan-description">
-						現在のサブスクリプションを使用して組織を作成します。
-					</p>
+					<p class="plan-description">現在のサブスクリプションを使用して組織を作成します。</p>
 				</div>
 			</div>
 		{:else}
@@ -234,9 +233,7 @@
 					次へ（お支払いページへ）
 				{/if}
 			</NavButton>
-			<NavButton on:click={() => goto('/dashboard')} disabled={loading}>
-				キャンセル
-			</NavButton>
+			<NavButton on:click={() => goto('/dashboard')} disabled={loading}>キャンセル</NavButton>
 		</div>
 	</div>
 </div>

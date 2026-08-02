@@ -17,10 +17,18 @@ import type { CachedSessionBundle } from '$lib/offline/sessionCache';
  */
 
 export type SyncStatus = 'pending' | 'synced' | 'rejected';
+export type OwnerType = 'auth' | 'guest';
+
+export interface SyncIdentity {
+	owner_type: OwnerType;
+	judge_id: string | null;
+	guest_identifier: string | null;
+}
 
 export interface PendingScoreMutation {
 	id?: number;
 	client_mutation_id: string;
+	owner_type: OwnerType;
 	session_id: number;
 	mode_type: 'certification' | 'tournament' | 'training';
 	event_id: number | null;
@@ -29,6 +37,7 @@ export interface PendingScoreMutation {
 	event_name: string | null;
 	bib_number: number;
 	score: number;
+	judge_id: string | null;
 	guest_identifier: string | null;
 	created_at_local: string;
 	sync_status: SyncStatus;
@@ -82,10 +91,36 @@ class OfflineScoreDb extends Dexie {
 			pending_score_mutations: '++id, &client_mutation_id, sync_status, session_id',
 			cached_session_bundles: '&session_id'
 		});
+		// v3: owner_type/judge_id 導入。旧 v1/v2 行は owner_type を持たないため owner を
+		// 判別できず identity フィルタで永久に送信対象外になる。ここで一度だけ整合させる:
+		// guest 行は owner_type='guest'、判別不能な旧 auth pending 行（owner_type/guest_identifier
+		// 双方無し）は「同期失敗(legacy_no_owner)」として表面化させ purge 可能にする（見えない滞留を防ぐ）。
+		this.version(3)
+			.stores({
+				pending_score_mutations: '++id, &client_mutation_id, sync_status, session_id',
+				cached_session_bundles: '&session_id'
+			})
+			.upgrade(async (tx) => {
+				await tx
+					.table('pending_score_mutations')
+					.toCollection()
+					.modify((m: PendingScoreMutation) => {
+						if (m.owner_type) return;
+						if (m.guest_identifier) {
+							m.owner_type = 'guest';
+						} else if (m.sync_status === 'pending') {
+							m.sync_status = 'rejected';
+							m.last_error = 'legacy_no_owner';
+						} else {
+							m.owner_type = 'auth';
+						}
+					});
+			});
 	}
 }
 
 let dbInstance: OfflineScoreDb | null = null;
+let currentSyncIdentity: SyncIdentity | null = null;
 
 export function getOfflineDb(): OfflineScoreDb {
 	if (!dbInstance) {
@@ -98,6 +133,36 @@ export function getOfflineDb(): OfflineScoreDb {
 export function resetOfflineDbForTests(): void {
 	dbInstance?.close();
 	dbInstance = null;
+	currentSyncIdentity = null;
+}
+
+const identityListeners = new Set<() => void>();
+
+/**
+ * 現在このブラウザで同期してよい owner identity を設定する。
+ * 未設定時は owner 付き mutation を送信しない（別人Cookieでの誤同期を避ける）。
+ * 変更時にリスナーへ通知する（UI の identity スコープ件数を再計算させるため）。
+ */
+export function setCurrentSyncIdentity(identity: SyncIdentity | null): void {
+	currentSyncIdentity = identity;
+	for (const cb of identityListeners) {
+		try {
+			cb();
+		} catch {
+			// リスナー側のエラーは同期状態に影響させない
+		}
+	}
+}
+
+/** identity 変更を購読する（syncStatus の件数ストアが再計算に使う）。戻り値で解除 */
+export function subscribeSyncIdentity(cb: () => void): () => void {
+	identityListeners.add(cb);
+	return () => identityListeners.delete(cb);
+}
+
+/** mutation が現在の同期 identity に属するか（UI の件数スコープ用に公開） */
+export function matchesCurrentSyncIdentity(mutation: PendingScoreMutation): boolean {
+	return mutationMatchesCurrentIdentity(mutation);
 }
 
 /**
@@ -126,6 +191,7 @@ export interface EnqueueInput {
 	event_name?: string | null;
 	bib_number: number;
 	score: number;
+	judge_id?: string | null;
 	guest_identifier?: string | null;
 }
 
@@ -139,8 +205,35 @@ function isSameTarget(a: PendingScoreMutation, b: PendingScoreMutation): boolean
 		a.level === b.level &&
 		a.event_name === b.event_name &&
 		a.bib_number === b.bib_number &&
+		a.judge_id === b.judge_id &&
 		a.guest_identifier === b.guest_identifier
 	);
+}
+
+function resolveOwner(input: EnqueueInput): SyncIdentity {
+	const guestIdentifier = input.guest_identifier ?? null;
+	if (guestIdentifier) {
+		return { owner_type: 'guest', judge_id: null, guest_identifier: guestIdentifier };
+	}
+	return { owner_type: 'auth', judge_id: input.judge_id ?? null, guest_identifier: null };
+}
+
+function mutationMatchesCurrentIdentity(mutation: PendingScoreMutation): boolean {
+	if (!currentSyncIdentity) return false;
+
+	// v3 以前に owner_type が無い行の保険。guest_identifier があれば guest とみなすが、
+	// judge_id も guest_identifier も無い旧 auth 行は安全に送れないため対象外。
+	const ownerType = mutation.owner_type ?? (mutation.guest_identifier ? 'guest' : null);
+	if (!ownerType) return false;
+
+	if (ownerType !== currentSyncIdentity.owner_type) return false;
+	if (ownerType === 'guest') {
+		return (
+			!!mutation.guest_identifier &&
+			mutation.guest_identifier === currentSyncIdentity.guest_identifier
+		);
+	}
+	return !!mutation.judge_id && mutation.judge_id === currentSyncIdentity.judge_id;
 }
 
 /**
@@ -152,8 +245,10 @@ function isSameTarget(a: PendingScoreMutation, b: PendingScoreMutation): boolean
  * 経路が構造的に消える（対象ごとに未同期は常に最新1件）。
  */
 export async function enqueueScoreMutation(input: EnqueueInput): Promise<PendingScoreMutation> {
+	const owner = resolveOwner(input);
 	const mutation: PendingScoreMutation = {
 		client_mutation_id: generateMutationId(),
+		owner_type: owner.owner_type,
 		session_id: input.session_id,
 		mode_type: input.mode_type,
 		event_id: input.event_id ?? null,
@@ -162,7 +257,8 @@ export async function enqueueScoreMutation(input: EnqueueInput): Promise<Pending
 		event_name: input.event_name ?? null,
 		bib_number: input.bib_number,
 		score: input.score,
-		guest_identifier: input.guest_identifier ?? null,
+		judge_id: owner.judge_id,
+		guest_identifier: owner.guest_identifier,
 		created_at_local: new Date().toISOString(),
 		sync_status: 'pending',
 		last_error: null,
@@ -216,6 +312,35 @@ export async function removeMutation(clientMutationId: string): Promise<void> {
 		.delete();
 }
 
+/**
+ * ゲストが同一 identity を再採用した時に、その identity 宛てに
+ * guest_identity_mismatch で恒久拒否された mutation を pending へ戻す（再送可能化）。
+ * 別 identity で誤って再参加してキューが弾かれた後でも、正しい identity へ戻れば救済する。
+ * （P3: 再認証フロー。network-resilience-strategy.md）
+ * 戻り値は再 pending した件数。
+ */
+export async function rependMismatchedMutations(guestIdentifier: string): Promise<number> {
+	if (!guestIdentifier) return 0;
+	const db = getOfflineDb();
+	const rejected = await db.pending_score_mutations
+		.where('sync_status')
+		.equals('rejected')
+		.filter(
+			(m) => m.guest_identifier === guestIdentifier && m.last_error === 'guest_identity_mismatch'
+		)
+		.toArray();
+	for (const m of rejected) {
+		await db.pending_score_mutations.update(m.id!, {
+			sync_status: 'pending',
+			last_error: null,
+			server_retry_count: 0,
+			first_server_reject_at: null,
+			retry_count: 0
+		});
+	}
+	return rejected.length;
+}
+
 export interface SyncResult {
 	synced: number;
 	rejected: number;
@@ -250,12 +375,12 @@ async function doSync(fetchFn: typeof fetch): Promise<SyncResult> {
 		const pending = await db.pending_score_mutations
 			.where('sync_status')
 			.equals('pending')
-			.limit(MAX_BATCH_SIZE)
 			.toArray();
+		const syncable = pending.filter(mutationMatchesCurrentIdentity).slice(0, MAX_BATCH_SIZE);
 
-		if (pending.length === 0) break;
+		if (syncable.length === 0) break;
 
-		const batch = await sendBatch(db, fetchFn, pending);
+		const batch = await sendBatch(db, fetchFn, syncable);
 		totalSynced += batch.synced;
 		totalRejected += batch.rejected;
 
@@ -302,6 +427,8 @@ async function sendBatch(
 					event_name: m.event_name,
 					bib_number: m.bib_number,
 					score: m.score,
+					owner_type: m.owner_type,
+					judge_id: m.judge_id,
 					guest_identifier: m.guest_identifier,
 					created_at_local: m.created_at_local
 				}))

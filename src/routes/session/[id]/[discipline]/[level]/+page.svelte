@@ -4,7 +4,13 @@
 	import { goto } from '$app/navigation';
 	import Header from '$lib/components/Header.svelte';
 	import { page } from '$app/stores';
-	import { currentSession, currentDiscipline, currentLevel, currentEvent, currentBib } from '$lib/stores';
+	import {
+		currentSession,
+		currentDiscipline,
+		currentLevel,
+		currentEvent,
+		currentBib
+	} from '$lib/stores';
 	import { onMount } from 'svelte';
 
 	export let data: PageData;
@@ -19,8 +25,8 @@
 			currentSession.set(data.sessionDetails);
 		}
 		// 種別と級を設定、種目以降をクリア
-		currentDiscipline.set(discipline);
-		currentLevel.set(level);
+		currentDiscipline.set(discipline ?? null);
+		currentLevel.set(level ?? null);
 		currentEvent.set(null);
 		currentBib.set(null);
 	});
@@ -50,9 +56,11 @@
 	</div>
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => {
-			goto(`/session/${id}/${discipline}`);
-		}}>級選択に戻る</NavButton>
+		<NavButton
+			on:click={() => {
+				goto(`/session/${id}/${discipline}`);
+			}}>級選択に戻る</NavButton
+		>
 	</div>
 </div>
 

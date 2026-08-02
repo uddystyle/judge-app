@@ -1,5 +1,6 @@
 import { stripe } from '$lib/server/stripe';
 import { logger } from '$lib/server/logger';
+import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
 import {
 	supabaseAdmin,
 	RetryableError,
@@ -23,7 +24,9 @@ export async function handlePaymentSucceeded(invoice: any) {
 
 	try {
 		// Stripe Subscriptionの詳細を取得
-		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+		const subscription = withSubscriptionPeriods(
+			await stripe.subscriptions.retrieve(subscriptionId)
+		);
 
 		// T13: リプレイ防御 - 現在のDBの状態を取得
 		const { data: currentSub, error: fetchError } = await supabaseAdmin
@@ -108,7 +111,9 @@ export async function handlePaymentFailed(invoice: any) {
 
 	try {
 		// T13: Stripe Subscriptionの詳細を取得（期間情報のため）
-		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+		const subscription = withSubscriptionPeriods(
+			await stripe.subscriptions.retrieve(subscriptionId)
+		);
 
 		// T13: リプレイ防御 - 現在のDBの状態を取得
 		const { data: currentSub, error: fetchError } = await supabaseAdmin

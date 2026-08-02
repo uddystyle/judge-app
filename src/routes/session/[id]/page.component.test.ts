@@ -166,10 +166,10 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const PageComponent = (await import('./+page.svelte')).default;
 
 		// 実際にコンポーネントをレンダリング
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
 		// コンポーネントが非同期処理を完了するまで少し待機
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// 検証: supabase.channel() が呼ばれたか
 		expect(mockChannelFn).toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		unmount();
 
 		// 検証: アンマウント時に removeChannel() が呼ばれたか
-		await new Promise(resolve => setTimeout(resolve, 50));
+		await new Promise((resolve) => setTimeout(resolve, 50));
 		expect(mockSupabase.removeChannel).toHaveBeenCalled();
 	});
 
@@ -210,9 +210,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		});
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// 主任検定員の場合は Realtime 購読されない
 		expect(mockChannelFn).not.toHaveBeenCalled();
@@ -235,9 +235,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		});
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// チャンネル名は `session-status-${sessionId}` 形式
 		expect(mockChannelFn).toHaveBeenCalledWith('session-status-456');
@@ -249,13 +249,13 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const data = createMockData();
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// postgres_changes の設定を確認
 		const onCalls = mockOnFn.mock.calls;
-		const postgresChangesCall = onCalls.find(call => call[0] === 'postgres_changes');
+		const postgresChangesCall = onCalls.find((call) => call[0] === 'postgres_changes');
 
 		expect(postgresChangesCall).toBeDefined();
 		expect(postgresChangesCall![1]).toEqual(
@@ -274,9 +274,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const data = createMockData();
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// マウント時の呼び出し回数を記録
 		const subscribeCallCount = mockSubscribeFn.mock.calls.length;
@@ -286,7 +286,7 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		unmount();
 
 		// クリーンアップの完了を待つ
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// removeChannel が呼ばれたことを確認
 		expect(mockSupabase.removeChannel).toHaveBeenCalled();
@@ -300,9 +300,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const data = createMockData();
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// statusコールバックがキャプチャされていることを確認
 		expect(capturedStatusCallback).toBeDefined();
@@ -319,9 +319,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const data = createMockData();
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(capturedStatusCallback).toBeDefined();
 
@@ -337,9 +337,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const data = createMockData();
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(capturedStatusCallback).toBeDefined();
 
@@ -355,9 +355,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		const data = createMockData();
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		expect(capturedStatusCallback).toBeDefined();
 
@@ -383,9 +383,9 @@ describe('待機画面 - 実コンポーネント Realtime テスト', () => {
 		});
 
 		const PageComponent = (await import('./+page.svelte')).default;
-		const { unmount } = render(PageComponent, { props: { data } });
+		const { unmount } = render(PageComponent, { props: { data: data as any } });
 
-		await new Promise(resolve => setTimeout(resolve, 100));
+		await new Promise((resolve) => setTimeout(resolve, 100));
 
 		// postgres_changes コールバックがキャプチャされていることを確認
 		expect(capturedPostgresCallback).toBeDefined();

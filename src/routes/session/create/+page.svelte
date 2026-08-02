@@ -17,6 +17,9 @@
 	let isMultiJudge = false; // 複数検定員モードのデフォルト値
 	let selectedOrganization = data.organizations[0]?.id || ''; // デフォルトで最初の組織を選択
 	let isSubmitting = false;
+	$: formView = form as
+		| { sessionName?: string; error?: string; upgradeUrl?: string; contactUrl?: string }
+		| undefined;
 
 	// 大会モードはスポット販売（チケット制）。選択中の組織の未使用チケット残数
 	$: availableTickets = data.ticketCounts?.[selectedOrganization] ?? 0;
@@ -42,7 +45,7 @@
 				name="sessionName"
 				id="session-name-input"
 				placeholder={m.session_namePlaceholder()}
-				value={form?.sessionName ?? ''}
+				value={formView?.sessionName ?? ''}
 				disabled={isSubmitting}
 			/>
 
@@ -190,16 +193,16 @@
 				</div>
 			{/if}
 
-			{#if form?.error}
+			{#if formView?.error}
 				<div class="error-container">
-					<p class="error-message"><Icon name="error" size={18} />{form.error}</p>
-					{#if form?.upgradeUrl}
-						<button type="button" class="upgrade-btn" on:click={() => goto(form.upgradeUrl)}>
+					<p class="error-message"><Icon name="error" size={18} />{formView.error}</p>
+					{#if formView?.upgradeUrl}
+						<button type="button" class="upgrade-btn" on:click={() => goto(formView.upgradeUrl!)}>
 							{m.session_upgradePlan()}
 						</button>
 					{/if}
-					{#if form && 'contactUrl' in form && form.contactUrl}
-						{@const contactUrl = String(form.contactUrl)}
+					{#if formView?.contactUrl}
+						{@const contactUrl = String(formView.contactUrl)}
 						<button type="button" class="upgrade-btn" on:click={() => goto(contactUrl)}>
 							お見積りを依頼する
 						</button>

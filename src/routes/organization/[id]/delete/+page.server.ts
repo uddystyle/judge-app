@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { stripe } from '$lib/server/stripe';
+import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import { logger } from '$lib/server/logger';
 
@@ -53,8 +54,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		// 組織テーブルのstripe_subscription_idを確認
 		if (organization?.stripe_subscription_id) {
 			try {
-				const subscription = await stripe.subscriptions.retrieve(
-					organization.stripe_subscription_id
+				const subscription = withSubscriptionPeriods(
+					await stripe.subscriptions.retrieve(organization.stripe_subscription_id)
 				);
 				if (['active', 'trialing', 'past_due'].includes(subscription.status)) {
 					hasActiveSubscription = true;
@@ -74,7 +75,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 					limit: 10
 				});
 
-				for (const sub of subscriptions.data) {
+				for (const rawSub of subscriptions.data) {
+					const sub = withSubscriptionPeriods(rawSub);
 					if (['active', 'trialing', 'past_due'].includes(sub.status)) {
 						hasActiveSubscription = true;
 						subscriptionEndDate = new Date(sub.current_period_end * 1000).toISOString();

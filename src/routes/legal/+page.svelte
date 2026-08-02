@@ -355,13 +355,6 @@
 		margin-bottom: 8px;
 	}
 
-	.note {
-		font-size: 14px;
-		color: var(--secondary-text);
-		font-style: italic;
-		margin-top: 4px;
-	}
-
 	.note-small {
 		font-size: 13px;
 		color: var(--secondary-text);

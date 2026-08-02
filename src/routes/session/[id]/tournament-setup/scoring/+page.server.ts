@@ -8,6 +8,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	// セッション認証（ログインユーザー専用）
 	const { user } = await authenticateSession(supabase, sessionId, null);
+	if (!user) {
+		throw redirect(303, '/login');
+	}
 
 	// セッション情報を取得
 	const { data: sessionDetails, error: sessionError } = await supabase
@@ -27,8 +30,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 
 	// 作成者または主任検定員のみアクセス可能
 	const isAuthorized =
-		sessionDetails.created_by === user.id ||
-		sessionDetails.chief_judge_id === user.id;
+		sessionDetails.created_by === user.id || sessionDetails.chief_judge_id === user.id;
 
 	if (!isAuthorized) {
 		throw redirect(303, `/session/${sessionId}`);
@@ -93,11 +95,15 @@ export const actions: Actions = {
 
 		// 検定員数のバリデーション（厳密に一致する必要がある）
 		if (scoringMethod === '3judges' && judgeCount !== 3) {
-			return fail(400, { error: '3審3採を選択するには、検定員数がちょうど3人である必要があります。' });
+			return fail(400, {
+				error: '3審3採を選択するには、検定員数がちょうど3人である必要があります。'
+			});
 		}
 
 		if (scoringMethod === '5judges' && judgeCount !== 5) {
-			return fail(400, { error: '5審3採を選択するには、検定員数がちょうど5人である必要があります。' });
+			return fail(400, {
+				error: '5審3採を選択するには、検定員数がちょうど5人である必要があります。'
+			});
 		}
 
 		const excludeExtremes = scoringMethod === '5judges';

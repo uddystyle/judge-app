@@ -35,7 +35,10 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		.single();
 
 	// 組織データにプラン情報を追加
-	organization.plans = planData;
+	const organizationWithPlan = {
+		...organization,
+		plans: planData
+	};
 
 	// ユーザーがこの組織の管理者かチェック
 	const userRole = await getActiveOrgRole(supabase, orgId, user.id);
@@ -93,7 +96,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	return {
 		user,
 		profile,
-		organization,
+		organization: organizationWithPlan,
 		archivedSessions: sessionsWithProfiles,
 		userRole,
 		hasOrganization: true

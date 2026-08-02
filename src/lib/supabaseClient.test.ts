@@ -37,9 +37,6 @@ describe('JWT Expiration Handling', () => {
 		// supabaseClient.ts の処理をシミュレート
 		const onAuthStateChange = (callback: (event: string, session: any) => void) => {
 			authStateCallbacks.push(callback);
-			if (event === 'TOKEN_REFRESHED') {
-				console.log('[supabaseClient] ✅ JWT refreshed successfully');
-			}
 		};
 
 		// リスナーを登録

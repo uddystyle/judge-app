@@ -1,10 +1,10 @@
 <script lang="ts">
 	/**
 	 * ボタンの見た目を指定します。
-	 * 'primary' (青), 'danger' (赤), 'default' (グレー)
-	 * @type {'primary' | 'danger' | 'default'}
+	 * 'primary' (青), 'danger' (赤), 'default'/'secondary' (グレー)
+	 * @type {'primary' | 'danger' | 'default' | 'secondary'}
 	 */
-	export let variant: 'primary' | 'danger' | 'default' = 'default';
+	export let variant: 'primary' | 'danger' | 'default' | 'secondary' = 'default';
 
 	/**
 	 * ボタンを無効にするかどうかを指定します。

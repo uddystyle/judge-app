@@ -1,6 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, error, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
+import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import {
 	STRIPE_PRICE_BASIC_MONTH,
@@ -73,8 +74,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		profile,
 		organization,
 		subscription,
-		plans: plans || []
-	,
+		plans: plans || [],
 		hasOrganization: true
 	};
 };
@@ -354,9 +354,8 @@ export const actions: Actions = {
 			});
 
 			// サブスクリプションを更新
-			const updatedSubscription = await stripe.subscriptions.update(
-				subscription.stripe_subscription_id,
-				{
+			const updatedSubscription = withSubscriptionPeriods(
+				await stripe.subscriptions.update(subscription.stripe_subscription_id, {
 					items: [
 						{
 							id: subscriptionItemId,
@@ -365,7 +364,7 @@ export const actions: Actions = {
 					],
 					proration_behavior: prorationBehavior,
 					billing_cycle_anchor: billingCycleAnchor
-				}
+				})
 			);
 
 			logger.debug('[Change Plan] Stripeサブスクリプション更新完了:', {
@@ -407,9 +406,7 @@ export const actions: Actions = {
 					current_period_start: new Date(
 						updatedSubscription.current_period_start * 1000
 					).toISOString(),
-					current_period_end: new Date(
-						updatedSubscription.current_period_end * 1000
-					).toISOString()
+					current_period_end: new Date(updatedSubscription.current_period_end * 1000).toISOString()
 				})
 				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
 

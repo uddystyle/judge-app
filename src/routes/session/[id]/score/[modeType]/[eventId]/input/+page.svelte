@@ -12,7 +12,8 @@
 	import {
 		enqueueScoreMutation,
 		markMutationSynced,
-		removeMutation
+		removeMutation,
+		setCurrentSyncIdentity
 	} from '$lib/offline/scoreQueue';
 	import { startOfflineSync, pendingCount, isOffline } from '$lib/offline/syncStatus';
 	import { refreshSessionCache, type CachedParticipant } from '$lib/offline/sessionCache';
@@ -89,6 +90,17 @@
 		currentDiscipline.set(data.isTrainingMode ? m.mode_training() : m.mode_tournament());
 		currentEvent.set(eventName);
 		currentBib.set(bibNumber);
+		setCurrentSyncIdentity(
+			data.guestParticipant?.guest_identifier
+				? {
+						owner_type: 'guest',
+						judge_id: null,
+						guest_identifier: data.guestParticipant.guest_identifier
+					}
+				: data.user?.id
+					? { owner_type: 'auth', judge_id: data.user.id, guest_identifier: null }
+					: null
+		);
 		stopOfflineSync = startOfflineSync();
 		// オフライン継続用にセッションデータを事前ダウンロード（失敗しても採点は阻害しない）
 		void refreshSessionCache(Number.parseInt(sessionId ?? '', 10), {
@@ -116,6 +128,7 @@
 				// owner は URL の ?guest= ではなく JWT 検証済みの identity を積む。
 				// ?guest= は通常フローで URL から除去され null になるため、これを使うと
 				// 同期時の owner ガードが正当なゲスト採点を誤って弾く（データ損失）。
+				judge_id: data.guestParticipant ? null : (data.user?.id ?? null),
 				guest_identifier: data.guestParticipant?.guest_identifier ?? null
 			});
 			pendingMutationId = queued.client_mutation_id;

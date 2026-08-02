@@ -9,12 +9,15 @@
 
 	export let form: ActionData;
 	let loading = false;
+	$: formView = form as
+		| { success?: boolean; error?: string; email?: string; fullName?: string }
+		| undefined;
 </script>
 
 <Header showAppName={true} pageUser={null} />
 
 <div class="container">
-	{#if form?.success}
+	{#if formView?.success}
 		<div class="instruction">{m.auth_confirmEmailSent()}</div>
 		<div class="success-container">
 			<p class="success-message">

@@ -76,7 +76,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: null },
@@ -103,7 +103,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -130,7 +130,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -157,7 +157,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -186,7 +186,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: null },
@@ -213,7 +213,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -295,7 +295,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -322,7 +322,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -349,7 +349,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -387,7 +387,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: null },
@@ -411,7 +411,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -435,7 +435,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -473,7 +473,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -527,7 +527,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -581,7 +581,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -644,7 +644,7 @@ describe('Customer Portal API（P2-1）', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
 				data: { user: { id: 'user_123', email: 'test@example.com' } },
@@ -971,9 +971,21 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 	const createChainMock = (result: any) => {
 		const chain: any = {};
 		const methods = [
-			'select', 'update', 'upsert', 'insert', 'delete',
-			'eq', 'neq', 'in', 'is', 'not', 'or',
-			'single', 'maybeSingle', 'order', 'limit'
+			'select',
+			'update',
+			'upsert',
+			'insert',
+			'delete',
+			'eq',
+			'neq',
+			'in',
+			'is',
+			'not',
+			'or',
+			'single',
+			'maybeSingle',
+			'order',
+			'limit'
 		];
 		for (const m of methods) {
 			chain[m] = vi.fn(() => chain);
@@ -1114,9 +1126,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 				// organization_members（admin）
 				.mockReturnValueOnce(createChainMock({ data: { role: 'admin' }, error: null }))
 				// profiles
-				.mockReturnValueOnce(
-					createChainMock({ data: { full_name: 'Test User' }, error: null })
-				);
+				.mockReturnValueOnce(createChainMock({ data: { full_name: 'Test User' }, error: null }));
 
 			vi.mocked(stripe.checkout.sessions.create).mockResolvedValue({
 				id: 'cs_2',

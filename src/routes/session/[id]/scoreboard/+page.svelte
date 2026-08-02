@@ -66,13 +66,17 @@
 
 <div class="container">
 	<div class="header-section">
-		<h1 class="title">{data.sessionDetails.name}</h1>
+		<h1 class="title">{data.sessionDetails?.name ?? 'スコアボード'}</h1>
 		<p class="subtitle">スコアボード</p>
 	</div>
 
 	<!-- タブ -->
 	<div class="tabs">
-		<button class="tab" class:active={selectedTab === 'overall'} on:click={() => (selectedTab = 'overall')}>
+		<button
+			class="tab"
+			class:active={selectedTab === 'overall'}
+			on:click={() => (selectedTab = 'overall')}
+		>
 			総合
 		</button>
 		{#each data.events as event}
@@ -169,7 +173,9 @@
 
 	<div class="nav-buttons">
 		<NavButton on:click={refreshData}><Icon name="refresh" size={18} />最新データを取得</NavButton>
-		<NavButton on:click={() => goto(`/session/${sessionId}/details`)}>セッション詳細ページに戻る</NavButton>
+		<NavButton on:click={() => goto(`/session/${sessionId}/details`)}
+			>セッション詳細ページに戻る</NavButton
+		>
 	</div>
 </div>
 

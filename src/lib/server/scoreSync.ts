@@ -42,6 +42,8 @@ export interface ScoreMutationInput {
 	event_name?: unknown;
 	bib_number?: unknown;
 	score?: unknown;
+	owner_type?: unknown;
+	judge_id?: unknown;
 	guest_identifier?: unknown;
 	created_at_local?: unknown;
 }
@@ -71,10 +73,24 @@ interface MutationRecord {
 }
 
 /**
+ * mutation log に記録しない拒否理由。
+ * - session_not_found: sessions FK により記録不能
+ * - guest_identity_mismatch / auth_identity_mismatch: 記録すると冪等チェックが拒否を
+ *   永久に返し、正しい identity で再採用（P3）して再送しても評価されず救済不能になる。
+ *   これらは非 RETRYABLE（クライアントは自動再送しない）なので churn は起きず、
+ *   rependMismatchedMutations による意図的な再送のみが owner ガードで再評価される。
+ */
+const UNRECORDED_REJECT_REASONS = new Set([
+	'session_not_found',
+	'guest_identity_mismatch',
+	'auth_identity_mismatch'
+]);
+
+/**
  * 恒久的な結果のみを mutation log に記録する。
  * - 一時的失敗（RETRYABLE_REASONS）は記録しない（記録すると冪等チェックが
  *   その拒否を永久に返し、再送が二度と適用されなくなる）
- * - session_not_found は sessions FK により記録不能のため記録しない
+ * - UNRECORDED_REJECT_REASONS も記録しない（上記コメント参照）
  */
 async function recordOutcome(
 	supabaseAdmin: SupabaseClient,
@@ -83,7 +99,7 @@ async function recordOutcome(
 ): Promise<ScoreMutationOutcome> {
 	if (
 		!outcome.accepted &&
-		(isRetryableReason(outcome.reason) || outcome.reason === 'session_not_found')
+		(isRetryableReason(outcome.reason) || UNRECORDED_REJECT_REASONS.has(outcome.reason))
 	) {
 		return outcome;
 	}
@@ -171,6 +187,7 @@ export async function processScoreMutation(
 		typeof input.guest_identifier === 'string' && input.guest_identifier
 			? input.guest_identifier
 			: null;
+	const judgeIdRaw = typeof input.judge_id === 'string' && input.judge_id ? input.judge_id : null;
 	const createdAtLocal =
 		typeof input.created_at_local === 'string' && !Number.isNaN(Date.parse(input.created_at_local))
 			? input.created_at_local
@@ -208,6 +225,7 @@ export async function processScoreMutation(
 	const eventIdNum = input.event_id != null ? Number.parseInt(String(input.event_id), 10) : null;
 
 	const authGuestIdentifier = guestParticipant ? guestParticipant.guest_identifier : null;
+	const authJudgeId = guestParticipant ? null : (user?.id ?? null);
 
 	const record: MutationRecord = {
 		client_mutation_id: clientMutationId,
@@ -216,7 +234,7 @@ export async function processScoreMutation(
 		event_id: Number.isInteger(eventIdNum) ? eventIdNum : null,
 		bib_number: bibNumber,
 		score,
-		judge_id: guestParticipant ? null : (user?.id ?? null),
+		judge_id: authJudgeId,
 		guest_identifier: authGuestIdentifier,
 		created_at_local: createdAtLocal,
 		payload: input as unknown
@@ -242,17 +260,18 @@ export async function processScoreMutation(
 
 	// ============================================================
 	// 4.5 owner 帰属ガード（クロス帰属の防止）
-	// mutation が主張する owner（guestIdentifierRaw = enqueue 時に採点者本人の
-	// JWT 検証済み guest_identifier）と、同期時に認証された principal の owner
-	// （authGuestIdentifier）が一致しなければ恒久拒否する。端末単位キューには identity
-	// スコープが無いため、別 identity で再認証したゲスト（失効→別名再参加）や共有端末では、
-	// 古いキューが別人 owner で保存されてしまう。保存 owner は常に認証側=権威なので、
-	// 食い違う採点はサイレント誤保存せず明示拒否し「同期失敗」として表面化させる
-	// （guest 不一致・guest↔authed の取り違えを捕捉）。
+	// mutation が主張する owner（enqueue 時に採点者本人の JWT 検証済み
+	// judge_id / guest_identifier）と、同期時に認証された principal の owner が
+	// 一致しなければ恒久拒否する。保存 owner は常に認証側=権威なので、食い違う採点は
+	// サイレント誤保存せず明示拒否し「同期失敗」として表面化させる。
 	// session 存在確認の後に置く（score_mutations.session_id FK を満たすため）。
 	// ============================================================
-	if (guestIdentifierRaw !== authGuestIdentifier) {
-		return recordOutcome(supabaseAdmin, record, reject('guest_identity_mismatch'));
+	if (authGuestIdentifier) {
+		if (guestIdentifierRaw !== authGuestIdentifier || judgeIdRaw !== null) {
+			return recordOutcome(supabaseAdmin, record, reject('guest_identity_mismatch'));
+		}
+	} else if (!authJudgeId || judgeIdRaw !== authJudgeId || guestIdentifierRaw !== null) {
+		return recordOutcome(supabaseAdmin, record, reject('auth_identity_mismatch'));
 	}
 
 	const sessionMode: ModeType =

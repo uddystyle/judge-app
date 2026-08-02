@@ -6,10 +6,13 @@
 		currentLevel,
 		currentEvent
 	} from '$lib/stores';
-	import type { PageData, ActionData } from './$types';
+	import type { PageData } from './$types';
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import OfflineReadyCard from '$lib/components/OfflineReadyCard.svelte';
+	import { persistGuestIdentity, clearSavedGuestIdentity } from '$lib/offline/guestIdentity';
+	import { rependMismatchedMutations } from '$lib/offline/scoreQueue';
+	import { syncNow } from '$lib/offline/syncStatus';
 	import { goto } from '$app/navigation';
 	import { onDestroy, onMount } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
@@ -24,7 +27,6 @@
 
 	// サーバーから渡されたデータを受け取る
 	export let data: PageData;
-	export const form: ActionData = undefined;
 	let realtimeHandle: RealtimeChannelWithRetryHandle | null = null;
 	let previousStatus: string | null = null; // ポーリングで前回の状態を記憶
 	let isPageActive = true; // ページがアクティブかどうかを追跡
@@ -66,6 +68,23 @@
 	// このページが表示されたら、グローバルなストアを更新する
 	onMount(async () => {
 		currentSession.set(data.sessionDetails);
+
+		// P3: 再認証フロー。認証済みゲストなら identity を端末に控える（クッキー失効後に
+		// ?guest= で同一 identity を再採用するため）。あわせて、別 identity で弾かれていた
+		// 採点があれば救済して即同期する。通常ユーザーなら古い保存 identity は消す
+		// （SIGNED_OUT 時に誤ってゲストへ降格する再採用を防ぐ）。
+		const gp = data.guestParticipant;
+		const sid = Number(data.sessionDetails.id);
+		if (gp?.guest_identifier && gp?.guest_name) {
+			persistGuestIdentity(sid, gp.guest_identifier, gp.guest_name);
+			rependMismatchedMutations(gp.guest_identifier)
+				.then((n) => {
+					if (n > 0) syncNow().catch(() => {});
+				})
+				.catch(() => {});
+		} else if (data.user) {
+			clearSavedGuestIdentity(sid);
+		}
 
 		// セッション選択画面に戻ったので、種目情報をクリア
 		currentDiscipline.set(null);
@@ -701,7 +720,7 @@
 			<!-- 検定モード: 種別選択 -->
 			<div class="instruction">種別を選択してください</div>
 			<div class="list-keypad">
-				{#each data.disciplines as discipline}
+				{#each data.disciplines ?? [] as discipline}
 					<NavButton on:click={() => selectDiscipline(discipline)}>
 						{discipline}
 					</NavButton>

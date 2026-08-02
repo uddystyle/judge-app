@@ -4,6 +4,7 @@
 	import { navigating } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient';
 	import { startOfflineSync } from '$lib/offline/syncStatus';
+	import { setCurrentSyncIdentity } from '$lib/offline/scoreQueue';
 	import '../app.css';
 
 	// ブラウザ用Supabaseクライアントは $lib/supabaseClient の1箇所でのみ生成する
@@ -25,7 +26,36 @@
 	// オフライン採点の自動同期をアプリ全体で常駐させる。
 	// 採点画面を離れた後（status/complete/ダッシュボード等）に回線が復帰しても
 	// pending の採点が送信されるようにする（バッジ表示は採点画面のみ）
-	onMount(() => startOfflineSync());
+	onMount(() => {
+		let stopSync: (() => void) | null = null;
+		let cancelled = false;
+
+		async function updateIdentityAndStartSync() {
+			const {
+				data: { user }
+			} = await supabase.auth.getUser();
+			if (cancelled) return;
+			const guestIdentifier =
+				user?.user_metadata?.is_guest === true &&
+				typeof user.user_metadata.guest_identifier === 'string'
+					? user.user_metadata.guest_identifier
+					: null;
+			setCurrentSyncIdentity(
+				guestIdentifier
+					? { owner_type: 'guest', judge_id: null, guest_identifier: guestIdentifier }
+					: user?.id
+						? { owner_type: 'auth', judge_id: user.id, guest_identifier: null }
+						: null
+			);
+			stopSync ??= startOfflineSync();
+		}
+
+		void updateIdentityAndStartSync();
+		return () => {
+			cancelled = true;
+			stopSync?.();
+		};
+	});
 
 	// サーバーからのセッション情報と、クライアントの認証状態を同期させる
 	onMount(() => {
@@ -40,8 +70,21 @@
 				typeof window !== 'undefined' && new URL(window.location.href).searchParams.has('guest');
 
 			if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+				const guestIdentifier =
+					_session?.user?.user_metadata?.is_guest === true &&
+					typeof _session.user.user_metadata.guest_identifier === 'string'
+						? _session.user.user_metadata.guest_identifier
+						: null;
+				setCurrentSyncIdentity(
+					guestIdentifier
+						? { owner_type: 'guest', judge_id: null, guest_identifier: guestIdentifier }
+						: _session?.user?.id
+							? { owner_type: 'auth', judge_id: _session.user.id, guest_identifier: null }
+							: null
+				);
 				invalidateAll();
 			} else if (event === 'SIGNED_OUT' && !isGuestUser) {
+				setCurrentSyncIdentity(null);
 				invalidateAll();
 			}
 		});

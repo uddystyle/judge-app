@@ -35,7 +35,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// Supabaseが既存ユーザーに対して返すレスポンスをシミュレート
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
@@ -57,7 +57,7 @@ describe('signup action', () => {
 			});
 		});
 
-			it('identitiesが存在する場合、正常にサインアップ処理を継続', async () => {
+		it('identitiesが存在する場合、正常にサインアップ処理を継続', async () => {
 			const request = createMockRequest({
 				fullName: 'New User',
 				email: 'new@example.com',
@@ -67,7 +67,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// 新規ユーザーのレスポンス
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
@@ -92,7 +92,7 @@ describe('signup action', () => {
 			}
 		});
 
-			it('user_already_existsエラーの場合、セキュリティ対策として成功レスポンスを返す', async () => {
+		it('user_already_existsエラーの場合、セキュリティ対策として成功レスポンスを返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'error@example.com',
@@ -102,7 +102,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
 				data: { user: null, session: null },
@@ -113,14 +113,14 @@ describe('signup action', () => {
 				}
 			});
 
-				// 既存ユーザーも新規ユーザーと同一の応答（303 → /signup/success）を返す（ユーザー列挙対策）
-				await expect(actions.signup(event)).rejects.toMatchObject({
-					status: 303,
-					location: '/signup/success'
-				});
+			// 既存ユーザーも新規ユーザーと同一の応答（303 → /signup/success）を返す（ユーザー列挙対策）
+			await expect(actions.signup(event)).rejects.toMatchObject({
+				status: 303,
+				location: '/signup/success'
 			});
+		});
 
-			it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出し成功レスポンスを返す', async () => {
+		it('codeが設定されていない場合、messageフォールバックで既存ユーザーを検出し成功レスポンスを返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'existing@example.com',
@@ -130,7 +130,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// code が空で message に "already registered" が含まれるケース
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
@@ -159,7 +159,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// code が undefined で message に "already exists" が含まれるケース
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
@@ -188,7 +188,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			// code が空で message がマッチしないケース
 			mockSupabaseClient.auth.signUp.mockResolvedValue({
@@ -211,38 +211,38 @@ describe('signup action', () => {
 		});
 
 		it('sessionが返る場合（設定エラー）は500エラーを返す', async () => {
-				const request = createMockRequest({
-					fullName: 'Auto User',
-					email: 'auto@example.com',
-					password: 'password123'
-				});
-
-				const event = {
-					request,
-					locals: { supabase: mockSupabaseClient }
-				} as unknown as RequestEvent;
-
-				mockSupabaseClient.auth.signUp.mockResolvedValue({
-					data: {
-						user: {
-							id: 'user-auto-1',
-							email: 'auto@example.com',
-							identities: [{ provider: 'email' }]
-						},
-						session: { access_token: 'token' }
-					},
-					error: null
-				});
-
-				const result = await actions.signup(event);
-
-				expect(result).toMatchObject({
-					status: 500,
-					data: {
-						error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
-					}
-				});
+			const request = createMockRequest({
+				fullName: 'Auto User',
+				email: 'auto@example.com',
+				password: 'password123'
 			});
+
+			const event = {
+				request,
+				locals: { supabase: mockSupabaseClient }
+			} as any;
+
+			mockSupabaseClient.auth.signUp.mockResolvedValue({
+				data: {
+					user: {
+						id: 'user-auto-1',
+						email: 'auto@example.com',
+						identities: [{ provider: 'email' }]
+					},
+					session: { access_token: 'token' }
+				},
+				error: null
+			});
+
+			const result = await actions.signup(event);
+
+			expect(result).toMatchObject({
+				status: 500,
+				data: {
+					error: 'システム設定エラー: メール確認が必要です。管理者に連絡してください。'
+				}
+			});
+		});
 	});
 
 	describe('バリデーション', () => {
@@ -256,7 +256,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const result = await actions.signup(event);
 
@@ -278,7 +278,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const result = await actions.signup(event);
 
@@ -300,7 +300,7 @@ describe('signup action', () => {
 			const event = {
 				request,
 				locals: { supabase: mockSupabaseClient }
-			} as unknown as RequestEvent;
+			} as any;
 
 			const result = await actions.signup(event);
 

@@ -235,12 +235,6 @@
 		margin-bottom: 12px;
 	}
 
-	.app-name {
-		font-family: 'M PLUS Rounded 1c', sans-serif;
-		font-weight: 800;
-		letter-spacing: 0.05em;
-	}
-
 	.welcome-title {
 		font-family: 'M PLUS Rounded 1c', sans-serif;
 		font-weight: 800;
@@ -498,19 +492,6 @@
 		color: var(--text-secondary);
 		line-height: 1.6;
 		margin: 0;
-	}
-
-	.choice-badge {
-		position: absolute;
-		top: 16px;
-		right: 16px;
-		background: var(--ios-blue);
-		color: white;
-		font-size: 12px;
-		font-weight: 700;
-		padding: 4px 12px;
-		border-radius: 12px;
-		letter-spacing: 0.05em;
 	}
 
 	.info-note {

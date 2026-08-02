@@ -1,5 +1,6 @@
 import { stripe } from '$lib/server/stripe';
 import { logger } from '$lib/server/logger';
+import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
 import { supabaseAdmin, RetryableError, NonRetryableError, getPlanTypeFromPrice } from './shared';
 
 /**
@@ -39,7 +40,7 @@ export async function handleCheckoutCompleted(session: any) {
 	// Stripe Subscriptionの詳細を取得（リトライ可能なエラー）
 	let subscription;
 	try {
-		subscription = await stripe.subscriptions.retrieve(subscriptionId);
+		subscription = withSubscriptionPeriods(await stripe.subscriptions.retrieve(subscriptionId));
 	} catch (err: any) {
 		logger.error('[Webhook] Stripe API エラー:', err.message);
 		logger.error('[Webhook] Subscription ID:', subscriptionId);

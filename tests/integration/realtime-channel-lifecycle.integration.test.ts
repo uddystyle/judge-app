@@ -12,18 +12,19 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // テスト用の環境変数
 const SUPABASE_URL = process.env.TEST_SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.TEST_SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_ANON_KEY =
+	process.env.TEST_SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY;
 
 // テストをスキップするかどうか
 const SKIP_INTEGRATION_TESTS = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () => {
-	let supabase: SupabaseClient;
+	let supabase: any;
 	let channels: RealtimeChannel[] = [];
 
 	beforeAll(() => {
@@ -50,7 +51,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () =
 			const channel1 = supabase
 				.channel(channelName)
 				.on('postgres_changes', { event: '*', table: 'training_scores' }, () => {})
-				.subscribe((status) => {
+				.subscribe((status: any) => {
 					subscriptionStatuses.push(`channel1_${status}`);
 				});
 
@@ -76,7 +77,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () =
 			const channel2 = supabase
 				.channel(channelName)
 				.on('postgres_changes', { event: '*', table: 'training_scores' }, () => {})
-				.subscribe((status) => {
+				.subscribe((status: any) => {
 					subscriptionStatuses.push(`channel2_${status}`);
 				});
 
@@ -104,7 +105,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () =
 			const tab1Channel = supabase
 				.channel(channelName)
 				.on('postgres_changes', { event: '*', table: 'training_scores' }, () => {})
-				.subscribe((status) => {
+				.subscribe((status: any) => {
 					tab1Statuses.push(status);
 				});
 
@@ -112,7 +113,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () =
 			const tab2Channel = supabase
 				.channel(channelName)
 				.on('postgres_changes', { event: '*', table: 'training_scores' }, () => {})
-				.subscribe((status) => {
+				.subscribe((status: any) => {
 					tab2Statuses.push(status);
 				});
 
@@ -208,7 +209,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () =
 					},
 					() => {}
 				)
-				.subscribe((status) => {
+				.subscribe((status: any) => {
 					subscriptionStatus = status;
 				});
 
@@ -237,7 +238,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('Realtime Channel Lifecycle Tests', () =
 					},
 					() => {}
 				)
-				.subscribe((status) => {
+				.subscribe((status: any) => {
 					subscriptionStatus = status;
 				});
 

@@ -25,6 +25,7 @@ export const actions: Actions = {
 
 		// ゲストモードの場合は名前が必須、認証ユーザーの場合はユーザー情報が必須
 		let sanitizedGuestName = '';
+		const authUser = isGuestMode ? null : user;
 		if (isGuestMode) {
 			// signup と同じく validateName でサニタイズ（XSS対策・長さ上限100・前後空白除去）
 			const nameValidation = validateName(guestName);
@@ -232,12 +233,12 @@ export const actions: Actions = {
 		// 認証ユーザーの場合
 		logger.debug('[Join Session] 参加者追加を実行:', {
 			sessionId: sessionData.id,
-			userId: user.id
+			userId: authUser!.id
 		});
 
 		const { error: joinError } = await supabase.from('session_participants').insert({
 			session_id: sessionData.id,
-			user_id: user.id
+			user_id: authUser!.id
 		});
 
 		logger.debug('[Join Session] 参加者追加結果:', { error: joinError });

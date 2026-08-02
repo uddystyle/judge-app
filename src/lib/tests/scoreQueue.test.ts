@@ -13,6 +13,8 @@ import {
 	getRejectedCount,
 	markMutationSynced,
 	removeMutation,
+	rependMismatchedMutations,
+	setCurrentSyncIdentity,
 	syncPendingMutations,
 	resetOfflineDbForTests
 } from '$lib/offline/scoreQueue';
@@ -23,7 +25,8 @@ const baseInput = {
 	mode_type: 'training' as const,
 	event_id: 10,
 	bib_number: 5,
-	score: 80
+	score: 80,
+	judge_id: 'user-1'
 };
 
 function okResponse(body: unknown): Response {
@@ -33,6 +36,7 @@ function okResponse(body: unknown): Response {
 beforeEach(async () => {
 	resetOfflineDbForTests();
 	await Dexie.delete('tento-offline');
+	setCurrentSyncIdentity({ owner_type: 'auth', judge_id: 'user-1', guest_identifier: null });
 });
 
 describe('enqueueScoreMutation', () => {
@@ -42,6 +46,56 @@ describe('enqueueScoreMutation', () => {
 		expect(saved.client_mutation_id).toMatch(/^[0-9a-f-]{36}$/i);
 		expect(saved.sync_status).toBe('pending');
 		expect(await getPendingCount()).toBe(1);
+	});
+});
+
+describe('Dexie v3 マイグレーション（owner_type 導入前の行の整合）', () => {
+	it('旧 auth pending 行は legacy_no_owner で rejected に、旧 guest 行は guest として維持', async () => {
+		// owner_type を持たない v2 スキーマの DB を作り、旧行を投入する
+		const legacyDb = new Dexie('tento-offline');
+		legacyDb
+			.version(1)
+			.stores({ pending_score_mutations: '++id, &client_mutation_id, sync_status, session_id' });
+		legacyDb.version(2).stores({
+			pending_score_mutations: '++id, &client_mutation_id, sync_status, session_id',
+			cached_session_bundles: '&session_id'
+		});
+		await legacyDb.open();
+		const legacyRow = (cmid: string, guest: string | null, bib: number) => ({
+			client_mutation_id: cmid,
+			session_id: 1,
+			mode_type: 'training',
+			event_id: 10,
+			bib_number: bib,
+			score: 80,
+			guest_identifier: guest,
+			created_at_local: new Date().toISOString(),
+			sync_status: 'pending',
+			last_error: null,
+			retry_count: 0
+		});
+		await legacyDb
+			.table('pending_score_mutations')
+			.bulkAdd([legacyRow('legacy-auth', null, 5), legacyRow('legacy-guest', 'G-legacy', 6)]);
+		legacyDb.close();
+
+		// v3 スキーマで開く → upgrade が走る
+		const db = getOfflineDb();
+		const authRow = await db.pending_score_mutations
+			.where('client_mutation_id')
+			.equals('legacy-auth')
+			.first();
+		const guestRow = await db.pending_score_mutations
+			.where('client_mutation_id')
+			.equals('legacy-guest')
+			.first();
+
+		// owner 判別不能な旧 auth pending → 「同期失敗」として表面化（永久 pending の滞留を防ぐ）
+		expect(authRow?.sync_status).toBe('rejected');
+		expect(authRow?.last_error).toBe('legacy_no_owner');
+		// 旧 guest 行は owner_type を補完して通常どおり送信可能に
+		expect(guestRow?.sync_status).toBe('pending');
+		expect(guestRow?.owner_type).toBe('guest');
 	});
 });
 
@@ -170,6 +224,58 @@ describe('リトライ上限による打ち切り（P2: 無限 pending の表面
 	});
 });
 
+describe('rependMismatchedMutations（P3: 再認証後の救済）', () => {
+	async function seedRejected(overrides: Record<string, unknown>, bib = 5) {
+		const saved = await enqueueScoreMutation({
+			...baseInput,
+			bib_number: bib,
+			guest_identifier: 'G1'
+		});
+		await getOfflineDb().pending_score_mutations.update(saved.id!, {
+			sync_status: 'rejected',
+			last_error: 'guest_identity_mismatch',
+			...overrides
+		});
+		return saved;
+	}
+
+	it('同一 guest の guest_identity_mismatch 拒否を pending に戻し、カウンタをリセットする', async () => {
+		const saved = await seedRejected({ server_retry_count: 5 });
+		expect(await getRejectedCount()).toBe(1);
+
+		const n = await rependMismatchedMutations('G1');
+
+		expect(n).toBe(1);
+		expect(await getRejectedCount()).toBe(0);
+		expect(await getPendingCount()).toBe(1);
+		const row = await getOfflineDb().pending_score_mutations.get(saved.id!);
+		expect(row?.last_error).toBeNull();
+		expect(row?.server_retry_count).toBe(0);
+		expect(row?.first_server_reject_at).toBeNull();
+	});
+
+	it('別 guest の拒否は対象外（再 pending しない）', async () => {
+		await seedRejected({}); // guest_identifier G1
+		const n = await rependMismatchedMutations('G2');
+		expect(n).toBe(0);
+		expect(await getRejectedCount()).toBe(1);
+	});
+
+	it('mismatch 以外の理由（例: mode_mismatch / retry_exhausted）は救済しない', async () => {
+		await seedRejected({ last_error: 'mode_mismatch' }, 5);
+		await seedRejected({ last_error: 'retry_exhausted:auth_required' }, 6);
+		const n = await rependMismatchedMutations('G1');
+		expect(n).toBe(0);
+		expect(await getRejectedCount()).toBe(2);
+	});
+
+	it('空の guestIdentifier では何もしない', async () => {
+		await seedRejected({});
+		expect(await rependMismatchedMutations('')).toBe(0);
+		expect(await getRejectedCount()).toBe(1);
+	});
+});
+
 describe('markMutationSynced / removeMutation（オンライン経路との整合）', () => {
 	it('markMutationSynced で pending から消え、同期 API へは送られない', async () => {
 		const saved = await enqueueScoreMutation(baseInput);
@@ -202,6 +308,23 @@ describe('markMutationSynced / removeMutation（オンライン経路との整�
 });
 
 describe('syncPendingMutations', () => {
+	it('現在identityと一致しない mutation は送信しない', async () => {
+		await enqueueScoreMutation({ ...baseInput, judge_id: 'user-1' });
+		await enqueueScoreMutation({ ...baseInput, bib_number: 6, judge_id: 'user-2' });
+		setCurrentSyncIdentity({ owner_type: 'auth', judge_id: 'user-1', guest_identifier: null });
+		const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body));
+			expect(body.mutations).toHaveLength(1);
+			expect(body.mutations[0].judge_id).toBe('user-1');
+			return okResponse({ accepted: [body.mutations[0].client_mutation_id], rejected: [] });
+		});
+
+		const result = await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		expect(result).toMatchObject({ synced: 1, remaining: 1 });
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+	});
+
 	it('accepted された mutation は synced になり pending から消える', async () => {
 		const saved = await enqueueScoreMutation(baseInput);
 		const fetchFn = vi.fn(

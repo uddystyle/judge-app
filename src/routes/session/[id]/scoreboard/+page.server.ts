@@ -13,6 +13,9 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 
 	// セッション認証（ログインユーザー専用）
 	const { user } = await authenticateSession(supabase, sessionId, null);
+	if (!user) {
+		throw error(401, '認証が必要です。');
+	}
 
 	// セッション情報、種目一覧、採点結果、組織情報を並列取得（パフォーマンス最適化）
 	const [sessionDetailsResult, eventsResult, resultsResult, orgMembersResult] = await Promise.all([
@@ -39,7 +42,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, setHe
 	const results = resultsResult.data;
 	const orgMembers = orgMembersResult.data || [];
 
-	if (sessionDetailsResult.error) {
+	if (sessionDetailsResult.error || !sessionDetails) {
 		throw error(404, '大会が見つかりません。');
 	}
 

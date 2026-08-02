@@ -50,11 +50,21 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 
 	// 作成者のみがエクスポート可能
 	if (session.created_by !== user.id) {
-		logger.error('[Export API] Unauthorized export attempt:', { userId: user.id, sessionId: sessionIdNum, createdBy: session.created_by });
-		throw error(403, 'データをエクスポートする権限がありません。セッションの作成者のみがデータをエクスポートできます。');
+		logger.error('[Export API] Unauthorized export attempt:', {
+			userId: user.id,
+			sessionId: sessionIdNum,
+			createdBy: session.created_by
+		});
+		throw error(
+			403,
+			'データをエクスポートする権限がありません。セッションの作成者のみがデータをエクスポートできます。'
+		);
 	}
 
-	logger.debug('[Export API] 作成者チェック完了:', { userId: user.id, createdBy: session.created_by });
+	logger.debug('[Export API] 作成者チェック完了:', {
+		userId: user.id,
+		createdBy: session.created_by
+	});
 
 	// 新規追加: 組織メンバーシップのチェック
 	if (session.organization_id) {
@@ -100,7 +110,10 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 			.eq('training_events.session_id', sessionIdNum)
 			.order('created_at', { ascending: true });
 
-		logger.debug('[Export API] 研修モード結果:', { count: trainingScores?.length, error: scoresError });
+		logger.debug('[Export API] 研修モード結果:', {
+			count: trainingScores?.length,
+			error: scoresError
+		});
 
 		if (scoresError) {
 			logger.error('[Export API] Failed to fetch training scores:', scoresError);
@@ -110,28 +123,31 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 		// 検定員名を一括取得してマージ（N+1クエリを回避）
 		if (trainingScores && trainingScores.length > 0) {
 			// ユニークな検定員ID（認証ユーザー）を抽出
-			const judgeIds = [...new Set(trainingScores.map(score => score.judge_id).filter(id => id))];
+			const judgeIds = [
+				...new Set(trainingScores.map((score) => score.judge_id).filter((id) => id))
+			];
 
 			// ユニークなゲストIDを抽出
-			const guestIdentifiers = [...new Set(trainingScores.map(score => score.guest_identifier).filter(id => id))];
+			const guestIdentifiers = [
+				...new Set(trainingScores.map((score) => score.guest_identifier).filter((id) => id))
+			];
 
 			// 認証ユーザーの検定員名を一括取得
-			const { data: judgeProfiles } = judgeIds.length > 0
-				? await supabase
-					.from('profiles')
-					.select('id, full_name')
-					.in('id', judgeIds)
-				: { data: [] };
+			const { data: judgeProfiles } =
+				judgeIds.length > 0
+					? await supabase.from('profiles').select('id, full_name').in('id', judgeIds)
+					: { data: [] };
 
 			// ゲストユーザーの名前を一括取得
-			const { data: guestParticipants } = guestIdentifiers.length > 0
-				? await supabase
-					.from('session_participants')
-					.select('guest_identifier, guest_name')
-					.eq('session_id', sessionIdNum)
-					.eq('is_guest', true)
-					.in('guest_identifier', guestIdentifiers)
-				: { data: [] };
+			const { data: guestParticipants } =
+				guestIdentifiers.length > 0
+					? await supabase
+							.from('session_participants')
+							.select('guest_identifier, guest_name')
+							.eq('session_id', sessionIdNum)
+							.eq('is_guest', true)
+							.in('guest_identifier', guestIdentifiers)
+					: { data: [] };
 
 			logger.debug('[Export API] 検定員情報取得:', {
 				judgeCount: judgeProfiles?.length || 0,
@@ -140,26 +156,32 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 
 			// 検定員IDから名前へのマップを作成
 			const judgeMap = new Map(
-				(judgeProfiles || []).map(profile => [profile.id, profile.full_name])
+				(judgeProfiles || []).map((profile) => [profile.id, profile.full_name])
 			);
 
 			// ゲストIDから名前へのマップを作成
 			const guestMap = new Map(
-				(guestParticipants || []).map(guest => [guest.guest_identifier, guest.guest_name])
+				(guestParticipants || []).map((guest) => [guest.guest_identifier, guest.guest_name])
 			);
 
 			// スコアデータに検定員名をマージ
-			exportData = trainingScores.map(score => ({
-				created_at: score.created_at,
-				bib: score.athlete?.bib_number || '',
-				score: score.score,
-				discipline: '研修',
-				level: '',
-				event_name: score.training_events?.name || '',
-				judge_name: score.guest_identifier
-					? (guestMap.get(score.guest_identifier) || '不明')
-					: (judgeMap.get(score.judge_id) || '不明')
-			}));
+			exportData = trainingScores.map((score) => {
+				const athlete = Array.isArray(score.athlete) ? score.athlete[0] : score.athlete;
+				const trainingEvent = Array.isArray(score.training_events)
+					? score.training_events[0]
+					: score.training_events;
+				return {
+					created_at: score.created_at,
+					bib: athlete?.bib_number || '',
+					score: score.score,
+					discipline: '研修',
+					level: '',
+					event_name: trainingEvent?.name || '',
+					judge_name: score.guest_identifier
+						? guestMap.get(score.guest_identifier) || '不明'
+						: judgeMap.get(score.judge_id) || '不明'
+				};
+			});
 		}
 	} else {
 		// 検定モード・大会モード: resultsから取得

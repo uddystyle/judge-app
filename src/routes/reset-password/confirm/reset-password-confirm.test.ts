@@ -35,7 +35,7 @@ describe('/reset-password/confirm', () => {
 			const result = await load({
 				url: mockUrl,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(result).toEqual({ user: mockUser });
 		});
@@ -51,7 +51,7 @@ describe('/reset-password/confirm', () => {
 			const result = await load({
 				url: mockUrl,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(result).toMatchObject({
 				error: expect.stringContaining('無効')
@@ -59,12 +59,14 @@ describe('/reset-password/confirm', () => {
 		});
 
 		it('should return error when URL contains error parameter', async () => {
-			const mockUrl = new URL('http://localhost/reset-password/confirm?error=access_denied&error_description=Invalid+token');
+			const mockUrl = new URL(
+				'http://localhost/reset-password/confirm?error=access_denied&error_description=Invalid+token'
+			);
 
 			const result = await load({
 				url: mockUrl,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(result).toEqual({
 				error: 'Invalid token'
@@ -89,7 +91,7 @@ describe('/reset-password/confirm', () => {
 			const result = actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			await expect(result).rejects.toMatchObject({
 				status: 303,
@@ -115,7 +117,7 @@ describe('/reset-password/confirm', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.updateUser).not.toHaveBeenCalled();
 			expect(result).toMatchObject({
@@ -139,7 +141,7 @@ describe('/reset-password/confirm', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.updateUser).not.toHaveBeenCalled();
 			expect(result).toMatchObject({
@@ -164,7 +166,7 @@ describe('/reset-password/confirm', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.updateUser).not.toHaveBeenCalled();
 			expect(result).toMatchObject({
@@ -192,7 +194,7 @@ describe('/reset-password/confirm', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(result).toMatchObject({
 				status: 400,
@@ -219,7 +221,7 @@ describe('/reset-password/confirm', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(result).toMatchObject({
 				status: 500,
@@ -242,7 +244,7 @@ describe('/reset-password/confirm', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.updateUser).not.toHaveBeenCalled();
 			expect(result).toMatchObject({

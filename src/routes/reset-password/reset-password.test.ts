@@ -35,7 +35,7 @@ describe('/reset-password actions', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(
 				'test@example.com',
@@ -63,7 +63,7 @@ describe('/reset-password actions', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(
 				'test@example.com',
@@ -87,7 +87,7 @@ describe('/reset-password actions', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.resetPasswordForEmail).not.toHaveBeenCalled();
 			expect(result).toMatchObject({
@@ -111,7 +111,7 @@ describe('/reset-password actions', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			expect(mockSupabase.auth.resetPasswordForEmail).not.toHaveBeenCalled();
 			expect(result).toMatchObject({
@@ -135,7 +135,7 @@ describe('/reset-password actions', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			// セキュリティ上の理由で、常に成功を返す
 			expect(result).toEqual({
@@ -158,7 +158,7 @@ describe('/reset-password actions', () => {
 			const result = await actions.default({
 				request: mockRequest,
 				locals: mockLocals
-			} as unknown as RequestEvent);
+			} as any);
 
 			// サニタイズされたメールアドレスが使用される
 			expect(mockSupabase.auth.resetPasswordForEmail).toHaveBeenCalledWith(

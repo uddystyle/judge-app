@@ -56,7 +56,8 @@ const baseMutation = {
 	mode_type: 'training',
 	event_id: 10,
 	bib_number: 5,
-	score: 80
+	score: 80,
+	judge_id: 'user-1'
 };
 
 const trainingSessionRow = {
@@ -138,44 +139,41 @@ describe('processScoreMutation - owner 帰属ガード（P1）', () => {
 		guestParticipant: { guest_identifier: gid }
 	});
 
-	it('mutation の guest_identifier が認証済みゲストと不一致なら guest_identity_mismatch を恒久記録', async () => {
+	it('mutation の guest_identifier が認証済みゲストと不一致なら guest_identity_mismatch（記録しない=再採用で救済可能）', async () => {
 		vi.mocked(authenticateAction).mockResolvedValue(guestAuth('G2'));
 		const logCheck = makeChain({ data: null, error: null });
-		const logInsert = makeChain({ error: null });
-		const admin = makeSupabase({ score_mutations: [logCheck, logInsert] });
+		const admin = makeSupabase({ score_mutations: [logCheck] });
 		// ガードは session 存在確認の後（FK 安全のため）。session は存在するが保存には進まない
 		const supabase = makeSupabase({ sessions: [makeChain(trainingSessionRow)] });
 
 		const result = await processScoreMutation(supabase, admin, {
 			...baseMutation,
+			judge_id: null,
 			guest_identifier: 'G1'
 		});
 
 		expect(result).toEqual({ accepted: false, reason: 'guest_identity_mismatch' });
-		expect(logInsert.insert).toHaveBeenCalledWith(
-			expect.objectContaining({ status: 'rejected', rejection_reason: 'guest_identity_mismatch' })
-		);
+		// 記録しない: 正しい identity で再採用（P3 repend）して再送すれば再評価される
+		expect(logCheck.insert).not.toHaveBeenCalled();
 		// owner 不一致なので保存（training_scores 等）には進まない = sessions 以外は照会しない
 		expect(supabase.from).toHaveBeenCalledTimes(1);
 		expect(supabase.from).toHaveBeenCalledWith('sessions');
 	});
 
-	it('guest mutation を authed ユーザー（guestParticipant なし）で流すと mismatch で拒否', async () => {
+	it('guest mutation を authed ユーザー（guestParticipant なし）で流すと auth_identity_mismatch（記録しない）', async () => {
 		vi.mocked(authenticateAction).mockResolvedValue(authedUser as never);
 		const logCheck = makeChain({ data: null, error: null });
-		const logInsert = makeChain({ error: null });
-		const admin = makeSupabase({ score_mutations: [logCheck, logInsert] });
+		const admin = makeSupabase({ score_mutations: [logCheck] });
 		const supabase = makeSupabase({ sessions: [makeChain(trainingSessionRow)] });
 
 		const result = await processScoreMutation(supabase, admin, {
 			...baseMutation,
+			judge_id: null,
 			guest_identifier: 'G1'
 		});
 
-		expect(result).toEqual({ accepted: false, reason: 'guest_identity_mismatch' });
-		expect(logInsert.insert).toHaveBeenCalledWith(
-			expect.objectContaining({ rejection_reason: 'guest_identity_mismatch' })
-		);
+		expect(result).toEqual({ accepted: false, reason: 'auth_identity_mismatch' });
+		expect(logCheck.insert).not.toHaveBeenCalled();
 	});
 
 	it('guest_identifier が一致すれば通常処理に進み、owner=guest で保存される', async () => {
@@ -193,6 +191,7 @@ describe('processScoreMutation - owner 帰属ガード（P1）', () => {
 
 		const result = await processScoreMutation(supabase, admin, {
 			...baseMutation,
+			judge_id: null,
 			guest_identifier: 'G1'
 		});
 
@@ -200,6 +199,21 @@ describe('processScoreMutation - owner 帰属ガード（P1）', () => {
 		expect(scoreInsert.insert).toHaveBeenCalledWith(
 			expect.objectContaining({ guest_identifier: 'G1', athlete_id: 77, score: 80 })
 		);
+	});
+
+	it('auth mutation の judge_id が認証済みユーザーと不一致なら auth_identity_mismatch（記録しない）', async () => {
+		vi.mocked(authenticateAction).mockResolvedValue(authedUser as never);
+		const logCheck = makeChain({ data: null, error: null });
+		const admin = makeSupabase({ score_mutations: [logCheck] });
+		const supabase = makeSupabase({ sessions: [makeChain(trainingSessionRow)] });
+
+		const result = await processScoreMutation(supabase, admin, {
+			...baseMutation,
+			judge_id: 'user-2'
+		});
+
+		expect(result).toEqual({ accepted: false, reason: 'auth_identity_mismatch' });
+		expect(logCheck.insert).not.toHaveBeenCalled();
 	});
 });
 

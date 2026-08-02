@@ -4,7 +4,13 @@
 	import Header from '$lib/components/Header.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import * as m from '$lib/paraglide/messages.js';
-	import { currentBib as bibStore, currentSession, currentDiscipline, currentLevel, currentEvent } from '$lib/stores';
+	import {
+		currentBib as bibStore,
+		currentSession,
+		currentDiscipline,
+		currentLevel,
+		currentEvent
+	} from '$lib/stores';
 	import { onMount } from 'svelte';
 	import type { ActionData, PageData } from './$types';
 	import { enhance } from '$app/forms';
@@ -34,9 +40,9 @@
 		if (data.sessionDetails) {
 			currentSession.set(data.sessionDetails);
 		}
-		currentDiscipline.set(discipline);
-		currentLevel.set(level);
-		currentEvent.set(event);
+		currentDiscipline.set(discipline ?? null);
+		currentLevel.set(level ?? null);
+		currentEvent.set(event ?? null);
 	});
 
 	// キーパッドから数字が入力されたときの処理
@@ -97,7 +103,12 @@
 
 	<div class="numeric-display">{currentBib || '0'}</div>
 
-	<form method="POST" action="{guestIdentifier ? `` : '?'}/setPrompt" use:enhance bind:this={formElement}>
+	<form
+		method="POST"
+		action="{guestIdentifier ? `` : '?'}/setPrompt"
+		use:enhance
+		bind:this={formElement}
+	>
 		<input type="hidden" name="bib" value={currentBib} />
 	</form>
 
@@ -107,9 +118,15 @@
 	{/if}
 
 	<div class="nav-buttons">
-		<NavButton on:click={() => {
-			goto(isTournamentMode ? `/session/${id}/tournament-events` : `/session/${id}/${discipline}/${level}`);
-		}}>
+		<NavButton
+			on:click={() => {
+				goto(
+					isTournamentMode
+						? `/session/${id}/tournament-events`
+						: `/session/${id}/${discipline}/${level}`
+				);
+			}}
+		>
 			種目選択に戻る
 		</NavButton>
 	</div>
@@ -135,26 +152,6 @@
 		font-weight: 700;
 		color: var(--text-primary);
 		margin-bottom: 28px;
-	}
-	.scoring-info {
-		margin-bottom: 20px;
-	}
-	.scoring-badge {
-		display: inline-block;
-		background: transparent;
-		color: var(--text-secondary);
-		padding: 4px 12px;
-		border-radius: 6px;
-		border: 1px solid var(--border-medium);
-		font-size: 12px;
-		font-weight: 500;
-		margin-bottom: 8px;
-		letter-spacing: 0.01em;
-	}
-	.scoring-description {
-		font-size: 14px;
-		color: var(--secondary-text);
-		margin: 0;
 	}
 	.numeric-display {
 		font-size: 64px;
@@ -191,9 +188,6 @@
 			font-size: 20px;
 			margin-bottom: 20px;
 		}
-		.scoring-info {
-			margin-bottom: 16px;
-		}
 		.numeric-display {
 			font-size: 52px;
 			min-height: 80px;
@@ -212,9 +206,6 @@
 			font-size: 18px;
 			margin-bottom: 16px;
 		}
-		.scoring-info {
-			margin-bottom: 12px;
-		}
 		.numeric-display {
 			font-size: 46px;
 			min-height: 70px;
@@ -232,9 +223,6 @@
 		.instruction {
 			font-size: 16px;
 			margin-bottom: 12px;
-		}
-		.scoring-info {
-			margin-bottom: 10px;
 		}
 		.numeric-display {
 			font-size: 40px;

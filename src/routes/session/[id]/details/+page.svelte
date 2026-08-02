@@ -544,7 +544,7 @@
 				await update();
 				if (result.data?.error) {
 					alertTitle = m.common_error();
-					alertMessage = result.data.error;
+					alertMessage = String(result.data.error);
 					showAlert = true;
 				}
 			} else {
@@ -900,16 +900,5 @@
 		margin: 0;
 		padding-top: 8px;
 		border-top: 1px solid var(--border-light);
-	}
-
-	/* モバイル用改行 */
-	.mobile-break {
-		display: none;
-	}
-
-	@media (max-width: 480px) {
-		.mobile-break {
-			display: block;
-		}
 	}
 </style>

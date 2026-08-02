@@ -2,8 +2,11 @@ import { readable, writable, type Readable } from 'svelte/store';
 import { liveQuery } from 'dexie';
 import {
 	getOfflineDb,
+	matchesCurrentSyncIdentity,
 	startAutoSync,
+	subscribeSyncIdentity,
 	syncPendingMutations,
+	type PendingScoreMutation,
 	type SyncResult
 } from '$lib/offline/scoreQueue';
 
@@ -13,26 +16,39 @@ import {
  * 採点画面が購読して「未同期件数 / 同期中 / 最終同期時刻 / オフライン」を表示する。
  * 件数は Dexie の liveQuery で IndexedDB の変更に追従する。
  * SSR ではすべて初期値のまま（indexedDB / window ガード済み）。
+ *
+ * 件数は「現在の同期 identity に属する行」だけを数える（identity スコープ）。
+ * 共有端末で前の利用者や別 owner の送信不可 pending が残っても、現在の利用者の
+ * 「未同期/同期失敗」表示やオフライン保存表示の解除を妨げないようにするため。
+ * IndexedDB の変更と identity 変更の両方で再計算する。
  */
-
 function liveCount(status: 'pending' | 'rejected'): Readable<number> {
 	return readable(0, (set) => {
 		if (typeof indexedDB === 'undefined') {
 			return;
 		}
+		let lastRows: PendingScoreMutation[] = [];
+		const recompute = () => set(lastRows.filter(matchesCurrentSyncIdentity).length);
 		const subscription = liveQuery(() =>
-			getOfflineDb().pending_score_mutations.where('sync_status').equals(status).count()
+			getOfflineDb().pending_score_mutations.where('sync_status').equals(status).toArray()
 		).subscribe({
-			next: (count) => set(count),
+			next: (rows) => {
+				lastRows = rows;
+				recompute();
+			},
 			error: () => set(0)
 		});
-		return () => subscription.unsubscribe();
+		const unsubscribeIdentity = subscribeSyncIdentity(recompute);
+		return () => {
+			subscription.unsubscribe();
+			unsubscribeIdentity();
+		};
 	});
 }
 
-/** 未同期（pending）件数 */
+/** 未同期（pending）件数（現在 identity のみ） */
 export const pendingCount = liveCount('pending');
-/** 恒久的拒否（同期失敗）件数 */
+/** 恒久的拒否（同期失敗）件数（現在 identity のみ） */
 export const rejectedCount = liveCount('rejected');
 /** 同期リクエスト実行中か */
 export const syncing = writable(false);

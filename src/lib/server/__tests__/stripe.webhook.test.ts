@@ -81,7 +81,7 @@ describe('Webhook署名検証（P0-1）', () => {
 
 	it('stripe-signatureヘッダがない場合は400を返す', async () => {
 		const request = createMockRequest(null);
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		try {
 			await POST(event);
@@ -95,7 +95,7 @@ describe('Webhook署名検証（P0-1）', () => {
 
 	it('stripe.webhooks.constructEventが例外をスローする場合は400を返す', async () => {
 		const request = createMockRequest('invalid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		vi.mocked(stripe.webhooks.constructEvent).mockImplementation(() => {
 			throw new Error('Invalid signature');
@@ -112,7 +112,7 @@ describe('Webhook署名検証（P0-1）', () => {
 
 	it('署名が正当な場合はイベント処理へ進む（200を返す）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return an unhandled event type (won't trigger any handler)
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -155,7 +155,7 @@ describe('livemode検証（T14）', () => {
 
 	it('テスト環境でlivemode=trueの本番イベントは503を投げて可視化する（T14 / stripe-webhook-6）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return a livemode=true event in test environment
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -195,7 +195,7 @@ describe('livemode検証（T14）', () => {
 
 	it('テスト環境でlivemode=falseのイベントを受信した場合は通常処理を行う（T14）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return a livemode=false event in test environment (match)
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -240,7 +240,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 	// Stripe に再送させる（NonRetryable(400) だと恒久ドロップになるため）。
 	it('subscription行が見つからない場合（順序レース）は再送可能な500を返す', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return subscription.created event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -280,7 +280,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 
 	it('RetryableErrorが発生した場合は500を返す', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return subscription.updated event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -349,7 +349,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 
 	it('customer.subscription.updatedで未知price IDの場合は500を返す（T11）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return subscription.updated event with unknown price ID
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -394,7 +394,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 
 	it('customer.subscription.updatedでitems.dataが空配列の場合は500を返す（T11）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return subscription.updated event with empty items.data
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -429,7 +429,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 
 	it('customer.subscription.updatedでpriceが欠落している場合は500を返す（T11）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return subscription.updated event with missing price
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -471,7 +471,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 
 	it('未分類の例外が発生した場合は500を返す', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock constructEvent to return subscription.created event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -520,7 +520,7 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 
 	it('個人課金の場合はsubscriptionsテーブルにupsertする', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock checkout.session.completed event (personal)
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -588,7 +588,7 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 
 	it('組織新規の場合はorganizationsとsubscriptionsを作成する', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock checkout.session.completed event (organization new)
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -681,7 +681,7 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 
 	it('組織アップグレードの場合は旧subscriptionをクリアして新subscriptionを作成する', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock checkout.session.completed event (organization upgrade)
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -830,7 +830,7 @@ describe('Webhookべき等性（P0-4）', () => {
 	it('同一イベントを2回処理しても安全に再実行できる（個人課金）', async () => {
 		const createEvent = () => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock checkout.session.completed event (personal)
@@ -909,7 +909,7 @@ describe('Webhookべき等性（P0-4）', () => {
 	it('組織作成イベントを2回処理しても重複作成されない', async () => {
 		const createEvent = () => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock checkout.session.completed event (organization new)
@@ -1113,7 +1113,7 @@ describe('重複配送の強化（T5）', () => {
 	it('異なるevent.idで同一subscription.idの個人課金が二重反映されない（T5）', async () => {
 		const createEvent = () => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock stripe.subscriptions.retrieve
@@ -1224,7 +1224,7 @@ describe('重複配送の強化（T5）', () => {
 	it('異なるevent.idで同一subscription.idの組織課金が二重反映されない（T5）', async () => {
 		const createEvent = () => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock stripe.subscriptions.retrieve
@@ -1418,7 +1418,7 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 	it('organization_members失敗後の再送で整合状態へ収束する（T6）', async () => {
 		const createEvent = () => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock checkout.session.completed event (organization new)
@@ -1537,7 +1537,7 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 	it('subscriptions失敗後の再送で整合状態へ収束する（T6）', async () => {
 		const createEvent = () => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock checkout.session.completed event (organization new)
@@ -1677,7 +1677,7 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 
 	it('invoice.payment_succeededでsubscriptions.status=activeかつ期間更新', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock invoice.payment_succeeded event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -1739,7 +1739,7 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 
 	it('invoice.payment_failedでsubscriptions.status=past_due', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock invoice.payment_failed event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -1796,7 +1796,7 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 	it('payment_failed後にpayment_succeededでstatus=activeに回復する（T7）', async () => {
 		const createEvent = (type: string) => {
 			const request = createMockRequest('valid_signature', 'webhook_body');
-			return { request } as RequestEvent;
+			return { request } as any;
 		};
 
 		// Mock stripe.subscriptions.retrieve
@@ -1875,7 +1875,7 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 
 	it('cancel_at_period_end=trueが正しく保存される（T7）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock invoice.payment_succeeded event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -1936,7 +1936,7 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 
 	it('cancel_at_period_end=falseが正しく保存される（T7）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock invoice.payment_succeeded event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -2015,7 +2015,7 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 
 	it('削除対象が現行subscriptionのときのみ組織をfreeへ降格', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock customer.subscription.deleted event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -2119,7 +2119,7 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 
 	it('旧subscription削除（アップグレード中）では組織を更新しない', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock customer.subscription.deleted event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -2194,7 +2194,7 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 
 	it('同一subscription.idの削除イベント再送時は冪等に処理される（T16）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// First deletion event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
@@ -3397,7 +3397,7 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 
 	it('subscription.createdでitems.dataが空配列の場合は500を返す（T10拡張）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock customer.subscription.created with empty items.data
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -3446,7 +3446,7 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 
 	it('subscription.createdでpriceが欠落している場合は500を返す（T10拡張）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock customer.subscription.created with missing price
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -3502,7 +3502,7 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 
 	it('subscription.createdで未知price IDの場合は500を返す（T10拡張）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// Mock customer.subscription.created with unknown price ID
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -3582,7 +3582,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('新しいinvoice.payment_succeeded後に古いinvoice.payment_failedが来てもactiveを維持する（T13）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// First: payment_succeeded event (newer, sets active status)
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
@@ -3692,7 +3692,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('新しいcustomer.subscription.updated後に古いsubscription.updatedが来ても新しい状態を維持する（T13）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// First: newer subscription.updated event
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
@@ -3816,7 +3816,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('削除後に再作成されたsubscriptionに対して古い削除イベントが来ても影響しない（T13）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// subscription.deleted for old subscription ID
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
@@ -3883,7 +3883,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('同一期間内のpast_due→active回復は正しく処理される（T13修正）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -3994,7 +3994,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('subscription.updatedで同一期間内のcancel_at_period_end変更は正しく処理される（T13修正）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -4067,7 +4067,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('subscription.updatedで同一期間内のプラン変更は正しく処理される（T13修正）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -4143,7 +4143,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('invoice.payment_succeededで同一period_end+同一statusの完全重複イベントはDB更新を省略する（T13最適化）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -4240,7 +4240,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('subscription.updatedで同一period_end+同一内容の完全重複イベントはDB更新を省略する（T13最適化）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -4361,7 +4361,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('異なるevent.idでも同一内容のイベントはDB更新を省略する（T13最適化）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -4458,7 +4458,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 	it('invoice.payment_failedで同一period_end+同一statusの完全重複イベントはDB更新を省略する（T13最適化）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		const SAME_PERIOD_END = 1675209600; // 2023-02-01
 
@@ -4571,10 +4571,9 @@ describe('plan_limits欠落時のエラー処理（T17）', () => {
 		} as unknown as Request;
 	};
 
-
 	it('subscription.updated（組織プラン変更）時にplan_limitsが見つからない場合は400を返す（T17）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
 			id: 'evt_test_123',
@@ -4650,7 +4649,7 @@ describe('plan_limits欠落時のエラー処理（T17）', () => {
 
 	it('subscription.deleted（組織降格）時にplan_limitsが見つからない場合は400を返す（T17）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValue({
 			id: 'evt_test_123',
@@ -4732,7 +4731,7 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 
 	it('invoice.payment_succeededでsubscription取得が初回失敗しても再送時に成功すれば正しい状態に収束する（T18）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// First attempt: subscription.retrieve fails
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
@@ -4747,9 +4746,7 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 		} as any);
 
 		// T18: Stripe API一時障害をシミュレート
-		vi.mocked(stripe.subscriptions.retrieve).mockRejectedValueOnce(
-			new Error('Stripe API timeout')
-		);
+		vi.mocked(stripe.subscriptions.retrieve).mockRejectedValueOnce(new Error('Stripe API timeout'));
 
 		try {
 			await POST(event);
@@ -4821,7 +4818,7 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 
 	it('checkout.session.completedでsubscription取得が初回失敗しても再送時に成功すれば正しい状態に収束する（T18）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
-		const event = { request } as RequestEvent;
+		const event = { request } as any;
 
 		// First attempt: subscription.retrieve fails
 		vi.mocked(stripe.webhooks.constructEvent).mockReturnValueOnce({
@@ -4943,9 +4940,21 @@ describe('組織アップグレード時の旧サブスクリプション解約�
 	const createChainMock = (result: any) => {
 		const chain: any = {};
 		const methods = [
-			'select', 'update', 'upsert', 'insert', 'delete',
-			'eq', 'neq', 'in', 'is', 'not', 'or',
-			'single', 'maybeSingle', 'order', 'limit'
+			'select',
+			'update',
+			'upsert',
+			'insert',
+			'delete',
+			'eq',
+			'neq',
+			'in',
+			'is',
+			'not',
+			'or',
+			'single',
+			'maybeSingle',
+			'order',
+			'limit'
 		];
 		for (const m of methods) {
 			chain[m] = vi.fn(() => chain);
@@ -4996,9 +5005,7 @@ describe('組織アップグレード時の旧サブスクリプション解約�
 		} as any);
 
 		// DB操作（旧サブスククリア→org更新→新サブスクupsert）はすべて成功
-		mockSupabaseClient.from.mockImplementation(() =>
-			createChainMock({ data: null, error: null })
-		);
+		mockSupabaseClient.from.mockImplementation(() => createChainMock({ data: null, error: null }));
 	};
 
 	it('アップグレード完了時、旧Stripeサブスクリプションのみを解約する', async () => {
@@ -5107,9 +5114,21 @@ describe('非同期決済ガード（SEC-1b: incomplete時は旧サブスクを�
 	const createChainMock = (result: any) => {
 		const chain: any = {};
 		const methods = [
-			'select', 'update', 'upsert', 'insert', 'delete',
-			'eq', 'neq', 'in', 'is', 'not', 'or',
-			'single', 'maybeSingle', 'order', 'limit'
+			'select',
+			'update',
+			'upsert',
+			'insert',
+			'delete',
+			'eq',
+			'neq',
+			'in',
+			'is',
+			'not',
+			'or',
+			'single',
+			'maybeSingle',
+			'order',
+			'limit'
 		];
 		for (const m of methods) {
 			chain[m] = vi.fn(() => chain);
@@ -5157,9 +5176,7 @@ describe('非同期決済ガード（SEC-1b: incomplete時は旧サブスクを�
 			}
 		} as any);
 
-		mockSupabaseClient.from.mockImplementation(() =>
-			createChainMock({ data: null, error: null })
-		);
+		mockSupabaseClient.from.mockImplementation(() => createChainMock({ data: null, error: null }));
 
 		vi.mocked(stripe.subscriptions.list).mockResolvedValue({
 			data: [

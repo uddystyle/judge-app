@@ -8,7 +8,10 @@
 
 	export let data: PageData;
 
-	const retentionDays = data.organization.plans?.archived_data_retention_days;
+	const organization = data.organization as typeof data.organization & {
+		plans?: { archived_data_retention_days?: number | null } | null;
+	};
+	const retentionDays = organization.plans?.archived_data_retention_days;
 	const isUnlimited = retentionDays === -1;
 
 	// モード名のマッピング
@@ -61,8 +64,7 @@
 		.filter((session) => {
 			// 検索クエリでフィルタ
 			const matchesSearch =
-				searchQuery === '' ||
-				session.name.toLowerCase().includes(searchQuery.toLowerCase());
+				searchQuery === '' || session.name.toLowerCase().includes(searchQuery.toLowerCase());
 
 			// モードでフィルタ
 			const sessionMode = session.is_tournament_mode ? 'tournament' : session.mode;
@@ -124,6 +126,13 @@
 		showDeleteConfirm = false;
 		sessionToDelete = null;
 		deleteConfirmStage = 'first';
+	}
+
+	function handleModalOverlayKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' || event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			cancelDelete();
+		}
 	}
 
 	async function permanentlyDeleteSession() {
@@ -223,10 +232,7 @@
 	{#if filteredSessions && filteredSessions.length > 0}
 		<div class="archive-list">
 			{#each filteredSessions as session}
-				{@const daysUntilDeletion = calculateDaysUntilDeletion(
-					session.deleted_at,
-					retentionDays
-				)}
+				{@const daysUntilDeletion = calculateDaysUntilDeletion(session.deleted_at, retentionDays)}
 
 				<div
 					class="archive-card"
@@ -331,8 +337,21 @@
 
 <!-- 完全削除確認ダイアログ -->
 {#if showDeleteConfirm && sessionToDelete}
-	<div class="modal-overlay" on:click={cancelDelete}>
-		<div class="modal-content" on:click|stopPropagation>
+	<div
+		class="modal-overlay"
+		role="button"
+		tabindex="0"
+		on:click={cancelDelete}
+		on:keydown={handleModalOverlayKeydown}
+	>
+		<div
+			class="modal-content"
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+		>
 			{#if deleteConfirmStage === 'first'}
 				<div class="modal-header">
 					<h3 class="modal-title">完全削除の確認（1/2）</h3>
@@ -352,12 +371,8 @@
 					<p class="modal-question">本当に続行しますか？</p>
 				</div>
 				<div class="modal-actions">
-					<button class="modal-btn cancel-btn" on:click={cancelDelete}>
-						キャンセル
-					</button>
-					<button class="modal-btn danger-btn" on:click={proceedToSecondConfirm}>
-						次へ進む
-					</button>
+					<button class="modal-btn cancel-btn" on:click={cancelDelete}> キャンセル </button>
+					<button class="modal-btn danger-btn" on:click={proceedToSecondConfirm}> 次へ進む </button>
 				</div>
 			{:else}
 				<div class="modal-header">
@@ -368,15 +383,11 @@
 						最後の確認です。<strong>{sessionToDelete.name}</strong> を完全に削除します。
 					</p>
 					<div class="danger-box">
-						<p class="danger-text">
-							この操作は取り消せません。データは永久に失われます。
-						</p>
+						<p class="danger-text">この操作は取り消せません。データは永久に失われます。</p>
 					</div>
 				</div>
 				<div class="modal-actions">
-					<button class="modal-btn cancel-btn" on:click={cancelDelete}>
-						キャンセル
-					</button>
+					<button class="modal-btn cancel-btn" on:click={cancelDelete}> キャンセル </button>
 					<button
 						class="modal-btn final-delete-btn"
 						on:click={permanentlyDeleteSession}

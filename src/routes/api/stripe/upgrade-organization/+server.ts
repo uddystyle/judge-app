@@ -37,10 +37,13 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		if (!['basic', 'standard', 'premium'].includes(planType)) {
 			throw error(400, '無効なプランタイプです。');
 		}
+		const validatedPlanType = planType as keyof typeof PRICE_IDS;
 
 		if (!['month', 'year'].includes(billingInterval)) {
 			throw error(400, '無効な請求間隔です。');
 		}
+		const validatedBillingInterval =
+			billingInterval as keyof (typeof PRICE_IDS)[typeof validatedPlanType];
 
 		// Security: Validate redirect URLs to prevent Open Redirect attacks
 		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
@@ -89,7 +92,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		}
 
 		// 5. Price IDを取得
-		const priceId = PRICE_IDS[planType][billingInterval];
+		const priceId = PRICE_IDS[validatedPlanType][validatedBillingInterval];
 
 		if (priceId.includes('placeholder')) {
 			// 詳細はログのみに出力（セキュリティ：内部実装の詳細を隠す）

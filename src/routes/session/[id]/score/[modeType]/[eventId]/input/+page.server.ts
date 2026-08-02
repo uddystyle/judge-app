@@ -185,7 +185,7 @@ export const actions: Actions = {
 		// 4.5. #4: 複数審判モードでは、非主任・非ゲストの審判は主任が指定した bib のみ採点できる
 		{
 			const submitSessionDetails = await fetchSessionDetails(supabase, sessionId);
-			const submitIsChief = isChiefJudge(user, submitSessionDetails);
+			const submitIsChief = user ? isChiefJudge(user, submitSessionDetails) : false;
 			const submitIsMultiJudge = await getMultiJudgeMode(
 				supabase,
 				sessionId,
@@ -272,6 +272,9 @@ export const actions: Actions = {
 				);
 			} else {
 				// 認証ユーザーの場合
+				if (!user) {
+					return fail(401, { error: '認証が必要です。' });
+				}
 				existingScoreQuery = existingScoreQuery.eq('judge_id', user.id);
 			}
 
@@ -305,6 +308,9 @@ export const actions: Actions = {
 					logger.debug('[submitScore] Inserting training score for guest');
 				} else {
 					// 認証ユーザーの場合
+					if (!user) {
+						return fail(401, { error: '認証が必要です。' });
+					}
 					scoreData.judge_id = user.id;
 					logger.debug('[submitScore] Inserting training score for user');
 				}
