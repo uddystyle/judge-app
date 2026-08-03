@@ -57,7 +57,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		profile,
 		guestIdentifier,
 		guestParticipant,
-		activeBib
+		activeBib,
+		activePromptId: activePrompt?.id ?? null
 	};
 };
 

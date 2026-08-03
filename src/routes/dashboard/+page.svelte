@@ -8,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
-	import { createRealtimeChannel, type RealtimeChannelHandle } from '$lib/realtime';
+	import { createSerializedAsync } from '$lib/serializedAsync';
 	import * as m from '$lib/paraglide/messages.js';
 
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -16,21 +16,32 @@
 	// `+page.server.ts`のload関数から返されたデータを受け取る
 	export let data: PageData;
 
-	// リアルタイム更新用（バックオフ再購読つき共通ヘルパー）
-	let deleteChannelHandle: RealtimeChannelHandle | null = null;
+	let sessionPolling: ReturnType<typeof setInterval> | null = null;
+	const syncVisibleSessions = createSerializedAsync(
+		async () => {
+			const currentIds = data.sessions.map((session) => session.id);
+			if (currentIds.length === 0) return;
+
+			// DELETEイベントはRLSの対象外なので購読せず、閲覧権限のある行だけを
+			// 通常クエリで再確認する。
+			const { data: visibleSessions, error } = await supabase
+				.from('sessions')
+				.select('id')
+				.in('id', currentIds)
+				.is('deleted_at', null);
+			if (error || !visibleSessions) return;
+
+			const visibleIds = new Set(visibleSessions.map((session) => session.id));
+			data.sessions = data.sessions.filter((session) => visibleIds.has(session.id));
+		},
+		{
+			pendingDelayMs: 0,
+			onError: (error) => console.error('[dashboard] session polling failed:', error)
+		}
+	);
 
 	onMount(() => {
-		// セッションの削除を検知するリアルタイムリスナー
-		deleteChannelHandle = createRealtimeChannel(supabase, {
-			channelName: 'dashboard-sessions-delete',
-			table: 'sessions',
-			event: 'DELETE',
-			onPayload: (payload) => {
-				console.log('[ダッシュボード] セッション削除を検知:', payload);
-				// 削除されたセッションをリストから除外
-				data.sessions = data.sessions.filter((s) => s.id !== payload.old.id);
-			}
-		});
+		sessionPolling = setInterval(() => syncVisibleSessions.run(), 30000);
 
 		// 注: session_participants の INSERT 購読（参加検知）は削除した。
 		// 同テーブルは realtime publication に含まれておらず一度も発火していなかった
@@ -39,7 +50,11 @@
 	});
 
 	onDestroy(() => {
-		deleteChannelHandle?.cleanup();
+		if (sessionPolling) {
+			clearInterval(sessionPolling);
+			sessionPolling = null;
+		}
+		syncVisibleSessions.cleanup();
 	});
 
 	// プラン名の表示

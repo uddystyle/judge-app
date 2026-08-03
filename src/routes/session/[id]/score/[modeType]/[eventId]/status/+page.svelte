@@ -96,6 +96,7 @@
 				sessionId,
 				modeType,
 				eventId,
+				initialActivePromptId: data.sessionDetails?.active_prompt_id ?? null,
 				onNavigate: (url) => goto(url),
 				onBibChange: (b) => currentBib.set(b)
 			});
@@ -239,8 +240,12 @@
 
 	{#if realtimeConnectionError}
 		<div class="realtime-error-banner">
-			<div class="error-message"><Icon name="warning" size={18} />リアルタイム接続エラー - フォールバック更新中（10秒ごと）</div>
-			<button class="manual-refresh-btn" on:click={manualRefresh}><Icon name="refresh" size={18} />手動更新・再接続</button>
+			<div class="error-message">
+				<Icon name="warning" size={18} />リアルタイム接続エラー - フォールバック更新中（10秒ごと）
+			</div>
+			<button class="manual-refresh-btn" on:click={manualRefresh}
+				><Icon name="refresh" size={18} />手動更新・再接続</button
+			>
 		</div>
 	{/if}
 

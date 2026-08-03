@@ -32,6 +32,7 @@ interface MockQuery {
 }
 
 function createSupabase(responses: ResponseMap) {
+	const queries: Array<{ table: string; query: MockQuery }> = [];
 	return {
 		from: vi.fn((table: string) => {
 			const query = {} as MockQuery;
@@ -41,8 +42,10 @@ function createSupabase(responses: ResponseMap) {
 				single: vi.fn(async () => responses[table]?.single ?? { data: null, error: null }),
 				maybeSingle: vi.fn(async () => responses[table]?.maybeSingle ?? { data: null, error: null })
 			});
+			queries.push({ table, query });
 			return query;
-		})
+		}),
+		_queries: queries
 	};
 }
 
@@ -127,8 +130,11 @@ describe('createWaitingSessionMonitor', () => {
 	});
 
 	it('接続時に大会の既存採点があれば待機画面に留まる', async () => {
-		const { onNavigate, onBibChange } = setup(
+		const { onNavigate, onBibChange, supabase } = setup(
 			{
+				sessions: {
+					single: { data: { status: 'active', active_prompt_id: 'prompt-2' }, error: null }
+				},
 				scoring_prompts: {
 					single: {
 						data: {
@@ -151,6 +157,36 @@ describe('createWaitingSessionMonitor', () => {
 
 		expect(onBibChange).not.toHaveBeenCalled();
 		expect(onNavigate).not.toHaveBeenCalled();
+		const resultsQuery = supabase._queries.find(({ table }) => table === 'results')?.query;
+		expect(resultsQuery?.eq).toHaveBeenCalledWith('judge_id', 'judge-1');
+		expect(resultsQuery?.eq).not.toHaveBeenCalledWith('judge_name', 'Judge One');
+	});
+
+	it('再接続時はinitialPromptIdではなく現在のpromptをDBから取得する', async () => {
+		const { onNavigate } = setup(
+			{
+				sessions: {
+					single: { data: { status: 'active', active_prompt_id: 'prompt-new' }, error: null }
+				},
+				scoring_prompts: {
+					single: {
+						data: {
+							id: 'prompt-new',
+							bib_number: 45,
+							discipline: 'trampoline',
+							level: 'class-b',
+							event_name: 'routine'
+						},
+						error: null
+					}
+				}
+			},
+			{ initialPromptId: 'prompt-old' }
+		);
+
+		await currentMonitorConfig().onSubscribed?.();
+
+		expect(onNavigate).toHaveBeenCalledWith('/session/123/trampoline/class-b/routine/score');
 	});
 
 	it('ポーリングで研修の新しい採点指示を検知すると未採点者だけ遷移する', async () => {
@@ -193,5 +229,62 @@ describe('createWaitingSessionMonitor', () => {
 		expect(cleanup).toHaveBeenCalledTimes(1);
 		expect(onSessionEnded).toHaveBeenCalledTimes(1);
 		expect(onNavigate).toHaveBeenCalledWith('/session/123?ended=true');
+	});
+
+	it('終了画面でRealtimeから再開を検知すると待機画面へ戻る', async () => {
+		const { onNavigate } = setup({}, { isSessionEnded: () => true });
+
+		await currentMonitorConfig().onPayload({
+			old: { status: 'ended', active_prompt_id: null },
+			new: { status: 'active', active_prompt_id: null }
+		});
+
+		expect(onNavigate).toHaveBeenCalledWith('/session/123');
+	});
+
+	it('終了画面でpollingから再開を検知すると待機画面へ戻る', async () => {
+		const { onNavigate } = setup(
+			{
+				sessions: {
+					single: { data: { status: 'active', active_prompt_id: null }, error: null }
+				}
+			},
+			{ isSessionEnded: () => true }
+		);
+
+		await currentMonitorConfig().pollingFn();
+
+		expect(onNavigate).toHaveBeenCalledWith('/session/123');
+	});
+
+	it('prompt取得中に画面を離れた場合は遷移しない', async () => {
+		let pageActive = true;
+		const { onNavigate, onBibChange } = setup(
+			{
+				scoring_prompts: {
+					single: {
+						data: {
+							id: 'prompt-4',
+							bib_number: 67,
+							discipline: 'trampoline',
+							level: 'class-c',
+							event_name: 'routine'
+						},
+						error: null
+					}
+				}
+			},
+			{ isPageActive: () => pageActive }
+		);
+
+		const navigation = currentMonitorConfig().onPayload({
+			old: { status: 'active', active_prompt_id: null },
+			new: { status: 'active', active_prompt_id: 'prompt-4' }
+		});
+		pageActive = false;
+		await navigation;
+
+		expect(onBibChange).not.toHaveBeenCalled();
+		expect(onNavigate).not.toHaveBeenCalled();
 	});
 });

@@ -252,6 +252,96 @@ describe('createRealtimeChannelWithRetry', () => {
 		// No new channels should be created after cleanup
 		expect(supabase._channels.length).toBe(channelsAfterCleanup);
 	});
+
+	it('cleanup()に伴うCLOSEDではチャンネルを再生成しない', async () => {
+		const supabase = createRetryTestSupabase();
+		const handle = createRealtimeChannelWithRetry(supabase as any, makeConfig());
+
+		handle.cleanup();
+		// Supabase の unsubscribe() は正常な解除でも CLOSED を通知する。
+		supabase._fireStatus('CLOSED', 0);
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(supabase._channels).toHaveLength(1);
+	});
+
+	it('再接続前の古いチャンネルから届いたイベントを無視する', async () => {
+		const supabase = createRetryTestSupabase();
+		const onPayload = vi.fn();
+		const config = makeConfig({ onPayload });
+		const handle = createRealtimeChannelWithRetry(supabase as any, config);
+
+		supabase._fireStatus('CHANNEL_ERROR', 0);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(supabase._channels).toHaveLength(2);
+
+		supabase._channels[0].payloadCallback?.({ new: { id: 'stale' } });
+		supabase._fireStatus('CLOSED', 0);
+		await vi.advanceTimersByTimeAsync(5000);
+
+		expect(onPayload).not.toHaveBeenCalled();
+		expect(supabase._channels).toHaveLength(2);
+		handle.cleanup();
+	});
+
+	it('同じ障害のCHANNEL_ERRORとCLOSEDを1回のリトライとして扱う', async () => {
+		const supabase = createRetryTestSupabase();
+		const handle = createRealtimeChannelWithRetry(supabase as any, makeConfig());
+
+		supabase._fireStatus('CHANNEL_ERROR', 0);
+		supabase._fireStatus('CLOSED', 0);
+		await vi.advanceTimersByTimeAsync(1000);
+
+		expect(supabase._channels).toHaveLength(2);
+		handle.cleanup();
+	});
+
+	it('非同期pollingが遅延しても同時実行せず、保留分を1回にまとめる', async () => {
+		const supabase = createRetryTestSupabase();
+		let resolveFirst!: () => void;
+		const firstRun = new Promise<void>((resolve) => {
+			resolveFirst = resolve;
+		});
+		const pollingFn = vi
+			.fn<() => Promise<void>>()
+			.mockImplementationOnce(() => firstRun)
+			.mockResolvedValue(undefined);
+		const handle = createRealtimeChannelWithRetry(
+			supabase as any,
+			makeConfig({ pollingFn, pollingIntervalMs: 100, startPollingImmediately: true })
+		);
+
+		await vi.advanceTimersByTimeAsync(300);
+		expect(pollingFn).toHaveBeenCalledTimes(1);
+
+		resolveFirst();
+		await Promise.resolve();
+		await vi.advanceTimersByTimeAsync(0);
+		expect(pollingFn).toHaveBeenCalledTimes(2);
+
+		handle.cleanup();
+	});
+
+	it('非同期Realtimeコールバックのrejectを捕捉する', async () => {
+		const supabase = createRetryTestSupabase();
+		const error = new Error('callback failed');
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const handle = createRealtimeChannelWithRetry(
+			supabase as any,
+			makeConfig({ onPayload: vi.fn().mockRejectedValue(error) })
+		);
+
+		supabase._channels[0].payloadCallback?.({ new: { id: 1 } });
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(consoleError).toHaveBeenCalledWith(
+			'[realtime/test-channel] payload callback failed:',
+			error
+		);
+		consoleError.mockRestore();
+		handle.cleanup();
+	});
 });
 
 // --- Session monitor tests ---
@@ -455,7 +545,7 @@ describe('createSessionMonitorChannel - errorReloadTimer cleanup', () => {
 	});
 });
 
-describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
+describe('createSessionMonitorWithPolling - reloadなしの継続監視', () => {
 	let reloadMock: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
@@ -489,6 +579,43 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 		expect(reloadMock).not.toHaveBeenCalled();
 	});
 
+	it('初回SUBSCRIBED前からpollingで状態を監視する', async () => {
+		const supabase = createSessionMonitorSupabase();
+		const onPollingData = vi.fn();
+		const handle = createSessionMonitorWithPolling(supabase as any, {
+			sessionId: 'sess-1',
+			pollingIntervalMs: 500,
+			onRealtimePayload: vi.fn(),
+			onPollingData
+		});
+
+		await vi.advanceTimersByTimeAsync(500);
+		expect(onPollingData).toHaveBeenCalledOnce();
+
+		handle.cleanup();
+	});
+
+	it('再購読を使い切ってもreloadせずpollingを継続する', async () => {
+		const supabase = createSessionMonitorSupabase();
+		const onPollingData = vi.fn();
+		const handle = createSessionMonitorWithPolling(supabase as any, {
+			sessionId: 'sess-1',
+			pollingIntervalMs: 500,
+			maxRetryCount: 1,
+			onRealtimePayload: vi.fn(),
+			onPollingData
+		});
+
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(1000);
+		supabase._fireStatus('CHANNEL_ERROR');
+		await vi.advanceTimersByTimeAsync(3000);
+
+		expect(reloadMock).not.toHaveBeenCalled();
+		expect(onPollingData.mock.calls.length).toBeGreaterThan(0);
+		handle.cleanup();
+	});
+
 	it('TIMED_OUT後にcleanupするとreloadが発火しない', async () => {
 		const supabase = createSessionMonitorSupabase();
 		const handle = createSessionMonitorWithPolling(supabase as any, {
@@ -514,14 +641,14 @@ describe('createSessionMonitorWithPolling - errorReloadTimer cleanup', () => {
 			onPollingData: vi.fn()
 		});
 
-		// Error → 2s reload timer starts
+		// Error → 再購読中もpollingは継続
 		supabase._fireStatus('CHANNEL_ERROR');
 
 		// Connection recovers within 2s
 		await vi.advanceTimersByTimeAsync(500);
 		supabase._fireStatus('SUBSCRIBED');
 
-		// Advance past the original 2s deadline
+		// 旧実装のreload期限を越えてもreloadしない
 		await vi.advanceTimersByTimeAsync(2000);
 
 		expect(reloadMock).not.toHaveBeenCalled();
@@ -923,7 +1050,7 @@ describe('createRealtimeChannelWithRetry - 取りこぼし対策オプション�
 		handle.cleanup();
 	});
 
-	it('startPollingImmediately: 購読確立前からポーリングし、SUBSCRIBEDで停止する', async () => {
+	it('startPollingImmediately: 購読前は短周期、SUBSCRIBED後は低頻度で継続する', async () => {
 		const supabase = createRetryTestSupabase();
 		const config = makeConfig({ startPollingImmediately: true });
 		const handle = createRealtimeChannelWithRetry(supabase as any, config);
@@ -932,10 +1059,26 @@ describe('createRealtimeChannelWithRetry - 取りこぼし対策オプション�
 		await vi.advanceTimersByTimeAsync(2000);
 		expect(config.pollingFn).toHaveBeenCalledTimes(2);
 
-		// SUBSCRIBED で停止
+		// SUBSCRIBED 後は30秒のヘルスポーリングへ移行する
 		supabase._fireStatus('SUBSCRIBED');
-		await vi.advanceTimersByTimeAsync(3000);
+		await vi.advanceTimersByTimeAsync(29999);
 		expect(config.pollingFn).toHaveBeenCalledTimes(2);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(config.pollingFn).toHaveBeenCalledTimes(3);
+
+		handle.cleanup();
+	});
+
+	it('SUBSCRIBEDだけ成功して配信が無い場合もヘルスポーリングする', async () => {
+		const supabase = createRetryTestSupabase();
+		const config = makeConfig({ subscribedPollingIntervalMs: 2500 });
+		const handle = createRealtimeChannelWithRetry(supabase as any, config);
+
+		supabase._fireStatus('SUBSCRIBED');
+		await vi.advanceTimersByTimeAsync(2499);
+		expect(config.pollingFn).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(config.pollingFn).toHaveBeenCalledOnce();
 
 		handle.cleanup();
 	});

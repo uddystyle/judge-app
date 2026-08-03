@@ -9,7 +9,8 @@
 	import { enhance } from '$app/forms';
 	import { supabase } from '$lib/supabaseClient';
 	import { onMount, onDestroy } from 'svelte';
-	import { createSessionMonitorWithPolling, type RealtimeChannelHandle } from '$lib/realtime';
+	import type { RealtimeChannelHandle } from '$lib/realtime';
+	import { createSessionNavigationMonitor } from '$lib/sessionNavigationMonitor';
 	import * as m from '$lib/paraglide/messages.js';
 
 	export let data: PageData;
@@ -19,13 +20,13 @@
 	$: eventId = $page.params.eventId;
 	$: guestIdentifier = data.guestIdentifier;
 	$: guestParam = guestIdentifier ? `?guest=${guestIdentifier}` : '';
-	$: eventListUrl = data.isTrainingMode ? `/session/${sessionId}/training-events` : `/session/${sessionId}/tournament-events`;
+	$: eventListUrl = data.isTrainingMode
+		? `/session/${sessionId}/training-events`
+		: `/session/${sessionId}/tournament-events`;
 
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
 	let sessionMonitorHandle: RealtimeChannelHandle | null = null;
-	let previousIsActive: boolean | null = null;
-	let previousActivePromptId: string | null = null;
 
 	function handleNextAthlete() {
 		bibStore.set(null);
@@ -53,43 +54,14 @@
 		const shouldMonitorSession = !data.isChief && data.isMultiJudge;
 
 		if (shouldMonitorSession) {
-			sessionMonitorHandle = createSessionMonitorWithPolling(supabase, {
+			sessionMonitorHandle = createSessionNavigationMonitor({
+				supabase,
 				sessionId,
-				channelPrefix: 'session-end',
-				onRealtimePayload: async (payload) => {
-					const isActive = payload.new.is_active;
-					const activePromptId = payload.new.active_prompt_id;
-
-					if (isActive === false) {
-						goto(`/session/${sessionId}?ended=true`);
-					} else if (activePromptId === null && payload.old.active_prompt_id !== null) {
-						goto(`/session/${sessionId}`);
-					}
-				},
-				onPollingData: (sessionData) => {
-					const isActive = sessionData.is_active;
-					const activePromptId = sessionData.active_prompt_id;
-
-					// 初回のポーリング
-					if (previousIsActive === null) {
-						previousIsActive = isActive;
-						previousActivePromptId = activePromptId;
-						return;
-					}
-
-					// セッション終了を検知
-					if (isActive === false && previousIsActive === true) {
-						goto(`/session/${sessionId}?ended=true`);
-					}
-
-					// 種目変更を検知
-					if (previousActivePromptId !== null && activePromptId === null) {
-						goto(`/session/${sessionId}`);
-					}
-
-					previousIsActive = isActive;
-					previousActivePromptId = activePromptId;
-				}
+				modeType: modeType ?? '',
+				eventId: eventId ?? '',
+				initialActivePromptId: data.sessionDetails?.active_prompt_id ?? null,
+				onBibChange: (bib) => bibStore.set(bib),
+				onNavigate: (url) => goto(url)
 			});
 		}
 	});
@@ -145,15 +117,25 @@
 		<NavButton variant="secondary" on:click={handleViewResults}>結果を見る</NavButton>
 		{#if data.isChief || !data.isMultiJudge}
 			<NavButton on:click={handleChangeEvent}>種目を変更する</NavButton>
-			<NavButton on:click={handleEndSession}>
-				セッションを終了する
-			</NavButton>
+			<NavButton on:click={handleEndSession}>セッションを終了する</NavButton>
 		{/if}
 	</div>
 
 	<!-- 非表示のフォーム -->
-	<form bind:this={endSessionForm} method="POST" action="?/endSession{guestIdentifier ? `` : ''}" use:enhance style="display: none;"></form>
-	<form bind:this={changeEventForm} method="POST" action="?/changeEvent{guestIdentifier ? `` : ''}" use:enhance style="display: none;"></form>
+	<form
+		bind:this={endSessionForm}
+		method="POST"
+		action="?/endSession{guestIdentifier ? `` : ''}"
+		use:enhance
+		style="display: none;"
+	></form>
+	<form
+		bind:this={changeEventForm}
+		method="POST"
+		action="?/changeEvent{guestIdentifier ? `` : ''}"
+		use:enhance
+		style="display: none;"
+	></form>
 </div>
 
 <style>

@@ -38,7 +38,15 @@
 	const supabase = getContext<SupabaseClient>('supabase');
 	let sessionMonitorHandle: RealtimeChannelHandle | null = null;
 	let previousIsActive: boolean | null = null;
+	let previousActivePromptId: string | number | null = data.activePromptId ?? null;
 	let isPageMounted = true; // ページがマウントされているかを追跡
+	let navigationStarted = false;
+
+	function navigateFromMonitor(url: string) {
+		if (!isPageMounted || navigationStarted) return;
+		navigationStarted = true;
+		goto(url);
+	}
 
 	let loading = false;
 
@@ -235,10 +243,12 @@
 			channelPrefix: 'session-end-score',
 			pollingIntervalMs: 10000,
 			onRealtimePayload: (payload) => {
+				if (!isPageMounted || navigationStarted) return;
 				console.log('[採点画面] セッション更新を検知:', payload);
 				const isActive = payload.new.is_active;
 				const newPromptId = payload.new.active_prompt_id;
-				const oldPromptId = payload.old.active_prompt_id;
+				const oldPromptId = previousActivePromptId;
+				previousActivePromptId = newPromptId;
 				console.log('[採点画面] is_active:', isActive);
 				console.log('[採点画面] active_prompt_id:', { old: oldPromptId, new: newPromptId });
 
@@ -246,7 +256,7 @@
 				// この処理を先に行うことで、終了時にactive_prompt_idがクリアされても終了画面に遷移する
 				if (isActive === false) {
 					console.log('[採点画面] 検定/大会終了を検知。終了画面に遷移します。');
-					goto(`/session/${sessionId}?ended=true`);
+					navigateFromMonitor(`/session/${sessionId}?ended=true`);
 					return;
 				}
 
@@ -255,13 +265,13 @@
 				// セッションがアクティブな場合のみ実行
 				if (!isChief && isActive === true && oldPromptId !== null && newPromptId === null) {
 					console.log('[採点画面/一般検定員] ゼッケン修正を検知。準備画面に戻ります。');
-					goto(`/session/${sessionId}`);
+					navigateFromMonitor(`/session/${sessionId}`);
 					return;
 				}
 			},
 			onPollingData: (sessionData) => {
 				// ページを離れている間はポーリング結果で遷移しない
-				if (!isPageMounted || !window.location.pathname.endsWith('/score')) {
+				if (!isPageMounted || navigationStarted || !window.location.pathname.endsWith('/score')) {
 					return;
 				}
 
@@ -270,24 +280,31 @@
 
 				if (previousIsActive === null) {
 					previousIsActive = isActive;
+					previousActivePromptId = currentPromptId;
 					return;
 				}
 
 				// セッション終了を先にチェック
 				if (previousIsActive !== isActive && isActive === false && previousIsActive === true) {
 					console.log('[採点画面] ✅ 検定終了を検知（ポーリング）');
-					goto(`/session/${sessionId}?ended=true`);
+					navigateFromMonitor(`/session/${sessionId}?ended=true`);
 					return;
 				}
 
 				// active_prompt_idがnullになった場合（一般検定員のみ、かつセッションがアクティブな場合）
-				if (!isChief && isActive === true && currentPromptId === null) {
+				if (
+					!isChief &&
+					isActive === true &&
+					previousActivePromptId !== null &&
+					currentPromptId === null
+				) {
 					console.log('[採点画面/一般検定員] ✅ ゼッケン修正を検知（ポーリング）');
-					goto(`/session/${sessionId}`);
+					navigateFromMonitor(`/session/${sessionId}`);
 					return;
 				}
 
 				previousIsActive = isActive;
+				previousActivePromptId = currentPromptId;
 			},
 			onError: () => {
 				// 再購読を使い果たしてもポーリング監視は継続するため、reload はしない

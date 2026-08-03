@@ -16,7 +16,8 @@
 	import { enhance } from '$app/forms';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
-	import { createSessionMonitorWithPolling, type RealtimeChannelHandle } from '$lib/realtime';
+	import type { RealtimeChannelHandle } from '$lib/realtime';
+	import { createSessionNavigationMonitor } from '$lib/sessionNavigationMonitor';
 
 	export let data: PageData;
 
@@ -29,8 +30,6 @@
 	let endSessionForm: HTMLFormElement;
 	let changeEventForm: HTMLFormElement;
 	let sessionMonitorHandle: RealtimeChannelHandle | null = null;
-	let previousIsActive: boolean | null = null;
-	let previousActivePromptId: string | null = null;
 
 	function handleNextSkier() {
 		bibStore.set(null);
@@ -66,79 +65,21 @@
 		if (!data.isChief) {
 			const sessionId = $page.params.id || '';
 
-			sessionMonitorHandle = createSessionMonitorWithPolling(supabase, {
+			const waitingUrl = guestIdentifier
+				? `/session/${sessionId}?guest=${encodeURIComponent(guestIdentifier)}`
+				: `/session/${sessionId}`;
+			sessionMonitorHandle = createSessionNavigationMonitor({
+				supabase,
 				sessionId,
-				channelPrefix: 'session-end',
-				onRealtimePayload: async (payload) => {
-					const isActive = payload.new.is_active;
-					const activePromptId = payload.new.active_prompt_id;
-					const oldActivePromptId = payload.old.active_prompt_id;
-
-					if (isActive === false) {
-						goto(`/session/${sessionId}?ended=true`);
-					} else if (activePromptId === null && oldActivePromptId !== null) {
-						goto(`/session/${sessionId}?${guestParam.substring(1)}`);
-					} else if (activePromptId && activePromptId !== oldActivePromptId) {
-						const { data: promptData, error } = await supabase
-							.from('scoring_prompts')
-							.select('*')
-							.eq('id', activePromptId)
-							.single();
-
-						if (!error && promptData) {
-							bibStore.set(promptData.bib_number);
-							goto(
-								`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
-							);
-						}
-					}
-				},
-				onPollingData: async (sessionData) => {
-					const isActive = sessionData.is_active;
-					const activePromptId = sessionData.active_prompt_id;
-
-					// 初回のポーリング
-					if (previousIsActive === null) {
-						previousIsActive = isActive;
-						previousActivePromptId = activePromptId;
-						return;
-					}
-
-					// セッション終了を検知
-					if (isActive === false && previousIsActive === true) {
-						goto(`/session/${sessionId}?ended=true`);
-						previousIsActive = isActive;
-						return;
-					}
-
-					// 種目変更を検知
-					if (activePromptId === null && previousActivePromptId !== null) {
-						goto(`/session/${sessionId}?${guestParam.substring(1)}`);
-						previousActivePromptId = activePromptId;
-						return;
-					}
-
-					// 新しい採点指示を検知
-					if (activePromptId && activePromptId !== previousActivePromptId) {
-						const { data: promptData, error } = await supabase
-							.from('scoring_prompts')
-							.select('*')
-							.eq('id', activePromptId)
-							.single();
-
-						if (!error && promptData) {
-							bibStore.set(promptData.bib_number);
-							goto(
-								`/session/${sessionId}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
-							);
-							previousActivePromptId = activePromptId;
-							return;
-						}
-					}
-
-					previousIsActive = isActive;
-					previousActivePromptId = activePromptId;
-				}
+				modeType: $page.params.discipline ?? 'legacy',
+				eventId: $page.params.event ?? 'legacy',
+				initialActivePromptId: data.sessionDetails?.active_prompt_id ?? null,
+				waitingUrl,
+				promptFallbackUrl: waitingUrl,
+				buildPromptUrl: (prompt) =>
+					`/session/${sessionId}/${prompt.discipline}/${prompt.level}/${prompt.event_name}/score`,
+				onBibChange: (bib) => bibStore.set(bib),
+				onNavigate: (url) => goto(url)
 			});
 		}
 	});

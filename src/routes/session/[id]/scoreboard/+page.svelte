@@ -8,7 +8,7 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { createRealtimeChannel, type RealtimeChannelHandle } from '$lib/realtime';
+	import { createRealtimeChannelWithRetry, type RealtimeChannelHandle } from '$lib/realtime';
 
 	export let data: PageData;
 
@@ -38,10 +38,15 @@
 		const sessionId = $page.params.id;
 		shareUrl = `${window.location.origin}/scoreboard/${sessionId}`;
 
-		realtimeHandle = createRealtimeChannel(supabase, {
+		realtimeHandle = createRealtimeChannelWithRetry(supabase, {
 			channelName: `scoreboard-${sessionId}`,
 			table: 'results',
 			filter: `session_id=eq.${sessionId}`,
+			pollingIntervalMs: 30000,
+			subscribedPollingIntervalMs: 30000,
+			startPollingImmediately: true,
+			startPollingOnErrorStatus: true,
+			pollingFn: refreshData,
 			onPayload: (payload) => {
 				console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
 				refreshData();

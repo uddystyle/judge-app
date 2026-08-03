@@ -1,4 +1,5 @@
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
+import { createSerializedAsync } from '$lib/serializedAsync';
 
 const DEFAULT_MAX_RETRY = 5;
 const DEFAULT_POLLING_INTERVAL_MS = 10000;
@@ -15,7 +16,7 @@ export interface RealtimeChannelConfig {
 	event?: string; // default '*'
 	/** 省略時はテーブル全体を購読 */
 	filter?: string;
-	onPayload: (payload: any) => void;
+	onPayload: (payload: any) => void | Promise<void>;
 	/** Bounded exponential-backoff resubscribe attempts before giving up. Default 5. */
 	maxRetryCount?: number;
 }
@@ -31,11 +32,16 @@ export interface RealtimeChannelWithRetryConfig extends RealtimeChannelConfig {
 	pollingFn: () => Promise<void>;
 	onConnectionError?: (hasError: boolean) => void;
 	/** SUBSCRIBED 時の追加処理（リトライ状態リセット・ポーリング停止の後に呼ばれる） */
-	onSubscribed?: () => void;
+	onSubscribed?: () => void | Promise<void>;
 	/** true なら購読確立を待たずに直ちにフォールバックポーリングを開始する（取りこぼし対策） */
 	startPollingImmediately?: boolean;
 	/** true ならエラーステータス検知時点でポーリングを開始する（リトライ上限を待たない） */
 	startPollingOnErrorStatus?: boolean;
+	/**
+	 * SUBSCRIBED 中も無音故障を検知する低頻度ポーリング間隔。default 30000ms。
+	 * false の場合のみ、接続確立中のヘルスポーリングを無効化する。
+	 */
+	subscribedPollingIntervalMs?: number | false;
 }
 
 export interface RealtimeChannelWithRetryHandle extends RealtimeChannelHandle {
@@ -55,13 +61,13 @@ interface ManagedChannelOptions {
 	event?: string; // default '*'
 	filter?: string;
 	maxRetryCount: number;
-	onPayload: (payload: any) => void;
+	onPayload: (payload: any) => void | Promise<void>;
 	/** SUBSCRIBED 時の追加処理（コアが retryCount リセット・retryTimer クリアを済ませた後） */
-	onSubscribed?: () => void;
+	onSubscribed?: () => void | Promise<void>;
 	/** エラーステータス時の追加処理（バックオフ再購読の前） */
-	onErrorStatus?: () => void;
+	onErrorStatus?: () => void | Promise<void>;
 	/** 再購読上限到達時の最終手段（ログ出力も呼び出し側の責務） */
-	onMaxRetriesExhausted: () => void;
+	onMaxRetriesExhausted: () => void | Promise<void>;
 }
 
 interface ManagedChannelHandle {
@@ -80,6 +86,19 @@ function createManagedChannel(
 	let channel: RealtimeChannel | null = null;
 	let retryCount = 0;
 	let retryTimer: ReturnType<typeof setTimeout> | null = null;
+	let disposed = false;
+	let generation = 0;
+
+	function runCallback(callback: (() => void | Promise<void>) | undefined, label: string) {
+		if (!callback || disposed) return;
+		try {
+			void Promise.resolve(callback()).catch((error) => {
+				console.error(`[realtime/${opts.channelName}] ${label} failed:`, error);
+			});
+		} catch (error) {
+			console.error(`[realtime/${opts.channelName}] ${label} failed:`, error);
+		}
+	}
 
 	function clearRetryTimer() {
 		if (retryTimer) {
@@ -90,17 +109,28 @@ function createManagedChannel(
 
 	function removeChannel() {
 		if (channel) {
-			supabase.removeChannel(channel);
+			const channelToRemove = channel;
 			channel = null;
+			// removeChannel() itself emits CLOSED. Invalidate this generation first so
+			// an intentional unsubscribe cannot schedule a replacement subscription.
+			generation++;
+			try {
+				void Promise.resolve(supabase.removeChannel(channelToRemove)).catch((error) => {
+					console.error(`[realtime/${opts.channelName}] removeChannel failed:`, error);
+				});
+			} catch (error) {
+				console.error(`[realtime/${opts.channelName}] removeChannel failed:`, error);
+			}
 		}
 	}
 
 	function retryConnection() {
+		if (disposed) return;
 		// 既存タイマーをクリアして重複購読を防ぐ
 		clearRetryTimer();
 
 		if (retryCount >= opts.maxRetryCount) {
-			opts.onMaxRetriesExhausted();
+			runCallback(opts.onMaxRetriesExhausted, 'max retry callback');
 			return;
 		}
 
@@ -110,13 +140,19 @@ function createManagedChannel(
 			`[realtime/${opts.channelName}] retry ${retryCount}/${opts.maxRetryCount} in ${backoffDelay}ms`
 		);
 
+		const scheduledGeneration = generation;
 		retryTimer = setTimeout(() => {
+			if (disposed || scheduledGeneration !== generation) return;
+			retryTimer = null;
 			removeChannel();
 			setupChannel();
 		}, backoffDelay);
 	}
 
 	function setupChannel() {
+		if (disposed) return;
+		const channelGeneration = ++generation;
+		let failureHandled = false;
 		channel = supabase
 			.channel(opts.channelName)
 			.on(
@@ -128,20 +164,27 @@ function createManagedChannel(
 					filter: opts.filter
 				},
 				(payload: any) => {
-					opts.onPayload(payload);
+					if (disposed || channelGeneration !== generation) return;
+					runCallback(() => opts.onPayload(payload), 'payload callback');
 				}
 			)
 			.subscribe((status: string) => {
+				if (disposed || channelGeneration !== generation) return;
 				console.log(`[realtime/${opts.channelName}] status:`, status);
 				if (status === 'SUBSCRIBED') {
+					failureHandled = false;
 					console.log(`[realtime/${opts.channelName}] connected`);
 					// 接続成功でリトライ状態をリセット（再購読の上限を使い果たさない）
 					retryCount = 0;
 					clearRetryTimer();
-					opts.onSubscribed?.();
+					runCallback(opts.onSubscribed, 'subscribed callback');
 				} else if (isErrorStatus(status)) {
+					// Supabase can report CHANNEL_ERROR followed by CLOSED for the same
+					// failure. Count and schedule it only once per channel generation.
+					if (failureHandled) return;
+					failureHandled = true;
 					console.error(`[realtime/${opts.channelName}] error:`, status);
-					opts.onErrorStatus?.();
+					runCallback(opts.onErrorStatus, 'error status callback');
 					// 即諦めず、上限つきバックオフ再購読
 					retryConnection();
 				}
@@ -152,6 +195,8 @@ function createManagedChannel(
 
 	return {
 		cleanup: () => {
+			if (disposed) return;
+			disposed = true;
 			clearRetryTimer();
 			removeChannel();
 		},
@@ -161,6 +206,7 @@ function createManagedChannel(
 			retryCount = 0;
 		},
 		reconnect: () => {
+			if (disposed) return;
 			clearRetryTimer();
 			retryCount = 0;
 			removeChannel();
@@ -214,26 +260,35 @@ export function createRealtimeChannelWithRetry(
 ): RealtimeChannelWithRetryHandle {
 	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
 	const pollingIntervalMs = config.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS;
+	const subscribedPollingIntervalMs = config.subscribedPollingIntervalMs ?? 30000;
 
 	let fallbackPolling: ReturnType<typeof setInterval> | null = null;
+	let activePollingIntervalMs: number | null = null;
 	let connectionError = false;
+	let disposed = false;
+	const pollingRunner = createSerializedAsync(config.pollingFn, {
+		pendingDelayMs: 0,
+		onError: (error) => {
+			console.error(`[realtime/${config.channelName}] fallback polling failed:`, error);
+		}
+	});
 
-	function startFallbackPolling() {
-		if (fallbackPolling) return;
+	function startPolling(intervalMs: number, reason: 'fallback' | 'health') {
+		if (disposed || (fallbackPolling && activePollingIntervalMs === intervalMs)) return;
+		stopPolling();
 
-		console.log(
-			`[realtime/${config.channelName}] fallback polling started (${pollingIntervalMs}ms)`
-		);
-		fallbackPolling = setInterval(async () => {
-			await config.pollingFn();
-		}, pollingIntervalMs);
+		console.log(`[realtime/${config.channelName}] ${reason} polling started (${intervalMs}ms)`);
+		activePollingIntervalMs = intervalMs;
+		fallbackPolling = setInterval(() => pollingRunner.run(), intervalMs);
 	}
 
-	function stopFallbackPolling() {
+	function stopPolling() {
 		if (fallbackPolling) {
 			clearInterval(fallbackPolling);
 			fallbackPolling = null;
 		}
+		activePollingIntervalMs = null;
+		pollingRunner.cleanup();
 	}
 
 	const core = createManagedChannel(supabase, {
@@ -247,15 +302,20 @@ export function createRealtimeChannelWithRetry(
 		onSubscribed: () => {
 			connectionError = false;
 			config.onConnectionError?.(false);
-			// realtime 接続中はフォールバックポーリング不要
-			stopFallbackPolling();
-			config.onSubscribed?.();
+			// SUBSCRIBED は配信保証ではないため、publication/RLS drift を拾う
+			// 低頻度のヘルスポーリングは継続する。
+			if (subscribedPollingIntervalMs === false) {
+				stopPolling();
+			} else {
+				startPolling(subscribedPollingIntervalMs, 'health');
+			}
+			return config.onSubscribed?.();
 		},
 		onErrorStatus: () => {
 			connectionError = true;
 			config.onConnectionError?.(true);
 			if (config.startPollingOnErrorStatus) {
-				startFallbackPolling();
+				startPolling(pollingIntervalMs, 'fallback');
 			}
 		},
 		onMaxRetriesExhausted: () => {
@@ -264,30 +324,33 @@ export function createRealtimeChannelWithRetry(
 			);
 			connectionError = true;
 			config.onConnectionError?.(true);
-			startFallbackPolling();
+			startPolling(pollingIntervalMs, 'fallback');
 		}
 	});
 
-	// 取りこぼし対策: 購読確立を待たずにポーリングを開始（SUBSCRIBED で停止する）
+	// 取りこぼし対策: 購読確立前は短周期、確立後は低頻度のヘルスポーリングへ移行する。
 	if (config.startPollingImmediately) {
-		startFallbackPolling();
+		startPolling(pollingIntervalMs, 'fallback');
 	}
 
 	return {
 		cleanup: () => {
+			if (disposed) return;
+			disposed = true;
 			core.cleanup();
-			stopFallbackPolling();
+			stopPolling();
 		},
 		getChannel: core.getChannel,
 		hasConnectionError: () => connectionError,
 		manualRefresh: async (refreshFn?: () => Promise<void>) => {
+			if (disposed) return;
 			// 保留中のバックオフ再購読をキャンセルして重複 setupChannel を防ぐ
 			core.cancelRetry();
 
 			connectionError = false;
 			config.onConnectionError?.(false);
 
-			stopFallbackPolling();
+			stopPolling();
 
 			if (refreshFn) {
 				await refreshFn();
@@ -312,7 +375,7 @@ export function createSessionMonitorChannel(
 		sessionId: string;
 		channelPrefix?: string;
 		maxRetryCount?: number;
-		onPayload: (payload: any) => void;
+		onPayload: (payload: any) => void | Promise<void>;
 		onError?: () => void;
 	}
 ): RealtimeChannelHandle {
@@ -380,8 +443,11 @@ export function createSessionMonitorWithPolling(
 		channelPrefix?: string;
 		maxRetryCount?: number;
 		pollingIntervalMs?: number;
-		onRealtimePayload: (payload: any) => void;
-		onPollingData: (data: { is_active: boolean; active_prompt_id: string | null }) => void;
+		onRealtimePayload: (payload: any) => void | Promise<void>;
+		onPollingData: (data: {
+			is_active: boolean;
+			active_prompt_id: string | null;
+		}) => void | Promise<void>;
 		onError?: () => void;
 	}
 ): RealtimeChannelHandle {
@@ -390,50 +456,42 @@ export function createSessionMonitorWithPolling(
 	const pollingMs = config.pollingIntervalMs ?? 3000;
 	const maxRetryCount = config.maxRetryCount ?? DEFAULT_MAX_RETRY;
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
-	let errorReloadTimer: ReturnType<typeof setTimeout> | null = null;
-
-	function stopPolling() {
-		if (pollingInterval) {
-			clearInterval(pollingInterval);
-			pollingInterval = null;
-		}
-	}
-
-	function startPolling() {
-		// Supabase は SUBSCRIBED を複数回発火しうる（再接続）。既存 interval を
-		// clear してから張り直すので多重化しない。
-		stopPolling();
-		pollingInterval = setInterval(async () => {
+	let disposed = false;
+	const pollingRunner = createSerializedAsync(
+		async () => {
+			if (disposed) return;
 			const { data, error } = await supabase
 				.from('sessions')
 				.select('is_active, active_prompt_id')
 				.eq('id', config.sessionId)
 				.single();
 
-			if (!error && data) {
-				config.onPollingData(data as any);
+			if (!disposed && !error && data) {
+				await config.onPollingData(data as any);
 			}
-		}, pollingMs);
+		},
+		{
+			pendingDelayMs: 0,
+			onError: (error) => {
+				console.error(`[realtime/${channelName}] polling failed:`, error);
+			}
+		}
+	);
+
+	function stopPolling() {
+		if (pollingInterval) {
+			clearInterval(pollingInterval);
+			pollingInterval = null;
+		}
+		pollingRunner.cleanup();
 	}
 
-	function clearErrorReloadTimer() {
-		if (errorReloadTimer) {
-			clearTimeout(errorReloadTimer);
-			errorReloadTimer = null;
-		}
-	}
-
-	// 上限つき再購読を使い果たした後の最終手段。
-	function terminalFallback() {
-		if (config.onError) {
-			config.onError();
-		} else {
-			clearErrorReloadTimer();
-			errorReloadTimer = setTimeout(() => {
-				core.cleanup();
-				window.location.reload();
-			}, 2000);
-		}
+	function startPolling() {
+		if (disposed) return;
+		// Supabase は SUBSCRIBED を複数回発火しうる（再接続）。既存 interval を
+		// clear してから張り直すので多重化しない。
+		stopPolling();
+		pollingInterval = setInterval(() => pollingRunner.run(), pollingMs);
 	}
 
 	const core = createManagedChannel(supabase, {
@@ -444,8 +502,7 @@ export function createSessionMonitorWithPolling(
 		maxRetryCount,
 		onPayload: config.onRealtimePayload,
 		onSubscribed: () => {
-			// 接続成功・再接続復帰: 最終手段(reload)をリセットし、保険のポーリングを開始
-			clearErrorReloadTimer();
+			// 接続成功・再接続復帰後も、無音故障対策としてポーリングを維持する。
 			startPolling();
 		},
 		// エラー中もポーリングは止めない（再購読中の取りこぼしを防ぐ保険として走らせ続ける）
@@ -453,13 +510,18 @@ export function createSessionMonitorWithPolling(
 			console.error(
 				`[realtime/${channelName}] max retries (${maxRetryCount}) reached, falling back`
 			);
-			terminalFallback();
+			// ポーリングが状態監視を継続するため、ページreloadは行わない。
+			config.onError?.();
 		}
 	});
 
+	// Realtime が一度も SUBSCRIBED にならない場合も状態監視を継続する。
+	startPolling();
+
 	return {
 		cleanup: () => {
-			clearErrorReloadTimer();
+			if (disposed) return;
+			disposed = true;
 			core.cleanup();
 			stopPolling();
 		},

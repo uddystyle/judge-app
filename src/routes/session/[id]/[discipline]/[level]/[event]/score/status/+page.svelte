@@ -20,6 +20,7 @@
 	import { get } from 'svelte/store';
 	import { createScoreStatusManager, type ScoreStatusManagerHandle } from '$lib/scoreStatusManager';
 	import { createSessionMonitorChannel, type RealtimeChannelHandle } from '$lib/realtime';
+	import { createSerializedAsync } from '$lib/serializedAsync';
 
 	export let data: PageData;
 	let scoreStatus: any = data.initialScoreStatus || { scores: [], requiredJudges: 1 };
@@ -38,6 +39,9 @@
 	// realtime 瞬断時のフォールバック（次の滑走者への遷移を確実化）
 	let navPolling: any = null;
 	let lastActivePromptId: number | string | null = null;
+	let pageActive = false;
+	let navigationInProgress = false;
+	let navigationVersion = 0;
 
 	let isChief = false;
 	$: isChief = data.user?.id === data.sessionDetails?.chief_judge_id;
@@ -60,39 +64,58 @@
 
 	// realtime のバックアップ。瞬断で次の滑走者(active_prompt 変化)を取りこぼしても確実に遷移する
 	// （待機ページと同方針。createSessionMonitorChannel の onPayload と同じナビ規則）。
+	function navigateOnce(url: string, version: number) {
+		if (!pageActive || navigationInProgress || version !== navigationVersion) return;
+		navigationInProgress = true;
+		goto(url);
+	}
+
 	async function pollNextSkaterNav() {
-		if (isChief) return;
+		if (isChief || !pageActive || navigationInProgress) return;
+		const pollVersion = navigationVersion;
 		const { data: s } = await supabase
 			.from('sessions')
 			.select('active_prompt_id, is_active')
 			.eq('id', id)
 			.maybeSingle();
-		if (!s) return;
+		if (!pageActive || navigationInProgress || pollVersion !== navigationVersion || !s) return;
 		if (s.is_active === false) {
-			goto(`/session/${id}?ended=true`);
+			const version = ++navigationVersion;
+			navigateOnce(`/session/${id}?ended=true`, version);
 			return;
 		}
 		const ap = s.active_prompt_id;
 		if (ap && ap !== lastActivePromptId) {
 			lastActivePromptId = ap;
+			const version = ++navigationVersion;
 			const { data: prompt } = await supabase
 				.from('scoring_prompts')
 				.select('*')
 				.eq('id', ap)
 				.maybeSingle();
-			if (prompt) {
+			if (pageActive && !navigationInProgress && version === navigationVersion && prompt) {
 				currentBib.set(prompt.bib_number);
-				goto(`/session/${id}/${prompt.discipline}/${prompt.level}/${prompt.event_name}/score`);
+				navigateOnce(
+					`/session/${id}/${prompt.discipline}/${prompt.level}/${prompt.event_name}/score`,
+					version
+				);
 			}
 			return;
 		}
 		if (ap === null && lastActivePromptId !== null) {
 			lastActivePromptId = null;
-			goto(`/session/${id}`);
+			const version = ++navigationVersion;
+			navigateOnce(`/session/${id}`, version);
 		}
 	}
 
+	const navPollingRunner = createSerializedAsync(pollNextSkaterNav, {
+		pendingDelayMs: 0,
+		onError: (error) => console.error('[status] navigation polling failed:', error)
+	});
+
 	onMount(async () => {
+		pageActive = true;
 		// URLパラメータを取得
 		id = $page.params.id || '';
 		discipline = $page.params.discipline || '';
@@ -134,6 +157,11 @@
 				}
 			});
 			await manager.initializeNameCache();
+			if (!pageActive) {
+				manager.cleanup();
+				manager = null;
+				return;
+			}
 			manager.setupRealtime();
 		}
 
@@ -147,49 +175,65 @@
 				sessionId: id,
 				channelPrefix: 'session-finalize',
 				onPayload: async (payload) => {
+					if (!pageActive || navigationInProgress) return;
+					const version = ++navigationVersion;
 					const isActive = payload.new.is_active;
 					const activePromptId = payload.new.active_prompt_id;
-					const oldActivePromptId = payload.old.active_prompt_id;
+					const previousActivePromptId = lastActivePromptId;
+					lastActivePromptId = activePromptId;
 
 					// セッションが終了した場合
 					if (isActive === false) {
-						goto(`/session/${id}?ended=true`);
+						navigateOnce(`/session/${id}?ended=true`, version);
 						return;
 					}
 
 					// 新しいactive_prompt_idが設定された場合（次の滑走者）
-					if (activePromptId && activePromptId !== oldActivePromptId) {
+					if (activePromptId && activePromptId !== previousActivePromptId) {
 						const { data: promptData, error: promptError } = await supabase
 							.from('scoring_prompts')
 							.select('*')
 							.eq('id', activePromptId)
 							.single();
 
-						if (!promptError && promptData) {
+						if (
+							pageActive &&
+							!navigationInProgress &&
+							version === navigationVersion &&
+							!promptError &&
+							promptData
+						) {
 							currentBib.set(promptData.bib_number);
-							goto(
-								`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`
+							navigateOnce(
+								`/session/${id}/${promptData.discipline}/${promptData.level}/${promptData.event_name}/score`,
+								version
 							);
 							return;
 						}
 					}
 
 					// active_prompt_idがnullになったら、採点が確定された
-					if (activePromptId === null && oldActivePromptId !== null) {
-						goto(`/session/${id}`);
+					if (activePromptId === null && previousActivePromptId !== null) {
+						navigateOnce(`/session/${id}`, version);
 					}
+				},
+				onError: () => {
+					console.error('[status] realtime retries exhausted; polling remains active');
 				}
 			});
 
 			// realtime のバックアップ・ポーリング（3秒）。瞬断しても次の滑走者へ確実に遷移。
 			lastActivePromptId = data.sessionDetails?.active_prompt_id ?? null;
-			navPolling = setInterval(pollNextSkaterNav, 3000);
+			navPolling = setInterval(() => navPollingRunner.run(), 3000);
 		}
 	});
 
 	onDestroy(() => {
+		pageActive = false;
+		navigationVersion++;
 		manager?.cleanup();
 		sessionMonitorHandle?.cleanup();
+		navPollingRunner.cleanup();
 		if (navPolling) {
 			clearInterval(navPolling);
 			navPolling = null;
@@ -240,8 +284,12 @@
 
 	{#if realtimeConnectionError}
 		<div class="realtime-error-banner">
-			<div class="error-message"><Icon name="warning" size={18} />リアルタイム接続エラー - フォールバック更新中（10秒ごと）</div>
-			<button class="manual-refresh-btn" on:click={manualRefresh}><Icon name="refresh" size={18} />手動更新・再接続</button>
+			<div class="error-message">
+				<Icon name="warning" size={18} />リアルタイム接続エラー - フォールバック更新中（10秒ごと）
+			</div>
+			<button class="manual-refresh-btn" on:click={manualRefresh}
+				><Icon name="refresh" size={18} />手動更新・再接続</button
+			>
 		</div>
 	{/if}
 

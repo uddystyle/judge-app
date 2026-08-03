@@ -49,8 +49,16 @@ export function createWaitingSessionMonitor(
 		onBibChange,
 		onNavigate
 	} = config;
-	let previousPromptId = initialPromptId;
+	let latestPromptId = initialPromptId;
+	let hasCheckedCurrentPrompt = false;
+	let promptRequestVersion = 0;
+	let transitionInProgress = false;
+	let disposed = false;
 	let handle: RealtimeChannelWithRetryHandle | null = null;
+
+	function isMonitorActive() {
+		return !disposed && isPageActive();
+	}
 
 	async function hasExistingScore(prompt: PromptData, participantId: string | number) {
 		const mode = prompt.discipline;
@@ -67,19 +75,26 @@ export function createWaitingSessionMonitor(
 		if (identity.guestIdentifier) {
 			scoreQuery = scoreQuery.eq('guest_identifier', identity.guestIdentifier);
 		} else if (identity.userId) {
-			if (mode === 'training') {
-				scoreQuery = scoreQuery.eq('judge_id', identity.userId);
-			} else {
-				const judgeName = identity.profileName || identity.userEmail || 'Unknown';
-				scoreQuery = scoreQuery.eq('judge_name', judgeName);
-			}
+			// 表示名は重複・変更されうるため、全モードで不変の所有者IDを使う。
+			scoreQuery = scoreQuery.eq('judge_id', identity.userId);
 		}
 
-		const { data } = await scoreQuery.maybeSingle();
+		const { data, error } = await scoreQuery.maybeSingle();
+		if (error) return null;
 		return Boolean(data);
 	}
 
 	async function navigateToPrompt(promptId: string, checkExistingScore: boolean) {
+		const requestVersion = ++promptRequestVersion;
+		latestPromptId = promptId;
+		const isCurrentRequest = () =>
+			isMonitorActive() && requestVersion === promptRequestVersion && !transitionInProgress;
+		const allowRetry = () => {
+			if (requestVersion === promptRequestVersion && latestPromptId === promptId) {
+				latestPromptId = null;
+			}
+		};
+
 		const { data, error } = await supabase
 			.from('scoring_prompts')
 			.select('*')
@@ -87,12 +102,17 @@ export function createWaitingSessionMonitor(
 			.single();
 		const prompt = data as PromptData | null;
 
-		if (error || !prompt) return;
+		if (!isCurrentRequest()) return;
+		if (error || !prompt) {
+			allowRetry();
+			return;
+		}
 
 		const mode = prompt.discipline;
 		if (mode !== 'tournament' && mode !== 'training') {
+			if (!isCurrentRequest()) return;
 			onBibChange(prompt.bib_number);
-			previousPromptId = promptId;
+			transitionInProgress = true;
 			onNavigate(
 				`/session/${sessionId}/${prompt.discipline}/${prompt.level}/${prompt.event_name}/score`
 			);
@@ -106,25 +126,52 @@ export function createWaitingSessionMonitor(
 			.eq('bib_number', prompt.bib_number)
 			.maybeSingle();
 
-		if (!participant) return;
-		if (checkExistingScore && (await hasExistingScore(prompt, participant.id))) return;
+		if (!isCurrentRequest()) return;
+		if (!participant) {
+			allowRetry();
+			return;
+		}
+		if (checkExistingScore) {
+			const alreadyScored = await hasExistingScore(prompt, participant.id);
+			if (!isCurrentRequest()) return;
+			if (alreadyScored === null) {
+				allowRetry();
+				return;
+			}
+			if (alreadyScored) return;
+		}
 
 		onBibChange(prompt.bib_number);
-		previousPromptId = promptId;
+		transitionInProgress = true;
 		onNavigate(
 			`/session/${sessionId}/score/${mode}/${prompt.level}/input?bib=${prompt.bib_number}&participantId=${participant.id}`
 		);
 	}
 
-	function endSession() {
-		if (!isPageActive() || isSessionEnded()) return;
+	function cleanupMonitor() {
+		if (disposed) return;
+		disposed = true;
+		promptRequestVersion++;
 		handle?.cleanup();
+	}
+
+	function endSession() {
+		if (!isMonitorActive() || isSessionEnded() || transitionInProgress) return;
+		transitionInProgress = true;
+		cleanupMonitor();
 		onSessionEnded();
 		onNavigate(`/session/${sessionId}?ended=true`);
 	}
 
+	function resumeSession() {
+		if (!isMonitorActive() || !isSessionEnded() || transitionInProgress) return;
+		transitionInProgress = true;
+		promptRequestVersion++;
+		onNavigate(`/session/${sessionId}`);
+	}
+
 	async function pollSession() {
-		if (!isPageActive()) return;
+		if (!isMonitorActive()) return;
 
 		const { data: session, error } = await supabase
 			.from('sessions')
@@ -132,14 +179,23 @@ export function createWaitingSessionMonitor(
 			.eq('id', sessionId)
 			.single();
 
-		if (error || !session) return;
+		if (!isMonitorActive() || error || !session) return;
 		if (session.status === 'ended') {
 			endSession();
 			return;
 		}
+		if (isSessionEnded()) {
+			resumeSession();
+			return;
+		}
 
 		const newPromptId = session.active_prompt_id as string | null;
-		if (newPromptId && newPromptId !== previousPromptId && !shouldShowJoinUI) {
+		const shouldProcessPrompt =
+			newPromptId &&
+			(!hasCheckedCurrentPrompt || newPromptId !== latestPromptId) &&
+			!shouldShowJoinUI;
+		hasCheckedCurrentPrompt = true;
+		if (shouldProcessPrompt) {
 			await navigateToPrompt(newPromptId, true);
 		}
 	}
@@ -154,23 +210,35 @@ export function createWaitingSessionMonitor(
 		startPollingImmediately: true,
 		startPollingOnErrorStatus: true,
 		onPayload: async (payload) => {
-			if (isSessionEnded()) return;
+			if (!isMonitorActive()) return;
 			if (payload.new.status === 'ended') {
 				endSession();
 				return;
 			}
+			if (isSessionEnded()) {
+				resumeSession();
+				return;
+			}
 
 			const newPromptId = payload.new.active_prompt_id as string | null;
-			if (newPromptId && payload.old.active_prompt_id !== newPromptId) {
+			if (newPromptId && newPromptId !== latestPromptId && !shouldShowJoinUI) {
+				hasCheckedCurrentPrompt = true;
 				await navigateToPrompt(newPromptId, false);
 			}
 		},
 		onSubscribed: async () => {
-			if (initialPromptId && !shouldShowJoinUI) {
-				await navigateToPrompt(initialPromptId, true);
-			}
+			// 再接続時に起動時の prompt を再生せず、現在のDB状態を正として同期する。
+			await pollSession();
 		}
 	});
 
-	return handle;
+	return {
+		cleanup: cleanupMonitor,
+		getChannel: () => handle?.getChannel() ?? null,
+		hasConnectionError: () => handle?.hasConnectionError() ?? false,
+		manualRefresh: async (refreshFn) => {
+			if (!isMonitorActive()) return;
+			await handle?.manualRefresh(refreshFn);
+		}
+	};
 }

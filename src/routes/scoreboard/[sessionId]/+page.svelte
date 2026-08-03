@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
-	import { createRealtimeChannel, type RealtimeChannelHandle } from '$lib/realtime';
+	import { createRealtimeChannelWithRetry, type RealtimeChannelHandle } from '$lib/realtime';
 	import Icon from '$lib/components/Icon.svelte';
 
 	export let data: PageData;
@@ -20,10 +20,15 @@
 	onMount(() => {
 		const sessionId = $page.params.sessionId;
 
-		realtimeHandle = createRealtimeChannel(supabase, {
+		realtimeHandle = createRealtimeChannelWithRetry(supabase, {
 			channelName: `scoreboard-${sessionId}`,
 			table: 'results',
 			filter: `session_id=eq.${sessionId}`,
+			pollingIntervalMs: 30000,
+			subscribedPollingIntervalMs: 30000,
+			startPollingImmediately: true,
+			startPollingOnErrorStatus: true,
+			pollingFn: refreshData,
 			onPayload: (payload) => {
 				console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
 				refreshData();
@@ -51,7 +56,11 @@
 
 	<!-- タブ -->
 	<div class="tabs">
-		<button class="tab" class:active={selectedTab === 'overall'} on:click={() => (selectedTab = 'overall')}>
+		<button
+			class="tab"
+			class:active={selectedTab === 'overall'}
+			on:click={() => (selectedTab = 'overall')}
+		>
 			総合
 		</button>
 		{#each data.events as event}
@@ -135,7 +144,9 @@
 	{/each}
 
 	<div class="refresh-section">
-		<button class="refresh-btn" on:click={refreshData}><Icon name="refresh" size={18} /> 最新データを取得</button>
+		<button class="refresh-btn" on:click={refreshData}
+			><Icon name="refresh" size={18} /> 最新データを取得</button
+		>
 	</div>
 </div>
 
