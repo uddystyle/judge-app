@@ -4,11 +4,12 @@
 	import NavButton from '$lib/components/NavButton.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import * as m from '$lib/paraglide/messages.js';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { createRealtimeChannelWithRetry, type RealtimeChannelHandle } from '$lib/realtime';
+	import { createScoreboardDataRefresher } from '$lib/scoreboardRefresh';
 
 	export let data: PageData;
 
@@ -16,10 +17,11 @@
 	let realtimeHandle: RealtimeChannelHandle | null = null;
 	let shareUrl = '';
 	let showCopiedMessage = false;
+	const dataRefresher = createScoreboardDataRefresher(invalidateAll);
 
-	// ページをリロードして最新データを取得
-	async function refreshData() {
-		window.location.reload();
+	// loadデータだけを更新し、選択中タブ・スクロール位置を維持する。
+	function refreshData() {
+		return dataRefresher.runAsync();
 	}
 
 	// リンクをコピー
@@ -48,14 +50,15 @@
 			startPollingOnErrorStatus: true,
 			pollingFn: refreshData,
 			onPayload: (payload) => {
-				console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
-				refreshData();
+				console.log('[scoreboard] スコア変更を検知 - データ更新中...', payload.eventType);
+				return refreshData();
 			}
 		});
 	});
 
 	onDestroy(() => {
 		realtimeHandle?.cleanup();
+		dataRefresher.cleanup();
 	});
 
 	$: sessionId = $page.params.id;

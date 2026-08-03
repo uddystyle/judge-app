@@ -1,19 +1,22 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { page } from '$app/stores';
+	import { invalidateAll } from '$app/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import { supabase } from '$lib/supabaseClient';
 	import { createRealtimeChannelWithRetry, type RealtimeChannelHandle } from '$lib/realtime';
 	import Icon from '$lib/components/Icon.svelte';
+	import { createScoreboardDataRefresher } from '$lib/scoreboardRefresh';
 
 	export let data: PageData;
 
 	let selectedTab: 'overall' | number = 'overall';
 	let realtimeHandle: RealtimeChannelHandle | null = null;
+	const dataRefresher = createScoreboardDataRefresher(invalidateAll);
 
-	// ページをリロードして最新データを取得
-	async function refreshData() {
-		window.location.reload();
+	// loadデータだけを更新し、選択中タブ・スクロール位置を維持する。
+	function refreshData() {
+		return dataRefresher.runAsync();
 	}
 
 	// Realtimeで自動更新（resultsテーブル監視）
@@ -30,14 +33,15 @@
 			startPollingOnErrorStatus: true,
 			pollingFn: refreshData,
 			onPayload: (payload) => {
-				console.log('[scoreboard] スコア変更を検知 - リロード中...', payload.eventType);
-				refreshData();
+				console.log('[scoreboard] スコア変更を検知 - データ更新中...', payload.eventType);
+				return refreshData();
 			}
 		});
 	});
 
 	onDestroy(() => {
 		realtimeHandle?.cleanup();
+		dataRefresher.cleanup();
 	});
 
 	$: sessionId = $page.params.sessionId;
