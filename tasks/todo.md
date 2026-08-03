@@ -373,17 +373,18 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 - [x] vitest: 782 passed / 11 skipped 全緑
 - [x] svelte-check: 243 / 25（維持）、`npm run build` 成功、prettier クリーン、eslint はページ 28→26（any 2件減・新規なし）
 
-## リファクタリング ステップ8: 手書き realtime チャネルのヘルパー移行（2026-07-05）— ✅ 2/3ページ完了
+## リファクタリング ステップ8: 手書き realtime チャネルのヘルパー移行（2026-07-05〜2026-08-04）— ✅ 完了
 
 - [x] **dashboard**: 1チャンネル2リスナー（sessions DELETE + session_participants INSERT）を `createRealtimeChannel` ×2 に分割移行（Supabase は同一 WebSocket に多重化するため実質差なし）。従来 no-op だった接続エラーがバックオフ再購読されるようになった。`filter` 無しの購読に対応するため `RealtimeChannelConfig.filter` をオプショナル化
 - [x] **検定 score ページ**（[discipline]/.../score）: 手書きの「エラー時のみ10秒ポーリング・再購読なし」約130行を `createSessionMonitorWithPolling`（complete ページと同方針）へ移行。チャンネル名 `session-end-score-{id}` を維持、ポーリング間隔10秒維持、realtime/polling 両ハンドラのナビ規則・ガード（マウント/パスチェック、previousIsActive シード）を移植。再購読を使い切っても reload せずポーリング継続（onError で明示）
-- [ ] **session/[id]/+page.svelte（保留・次ステップ）**: 手書き約270行 + `startFallbackPolling`/`checkSessionStatus`。調査の結果、`page.realtime.test.ts`（900行）はページを import しないシミュレーションテストで実装をロックしておらず、実質のロックは `page.component.test.ts`（$lib/supabaseClient をモックしてページを render）のみと判明。ただし subscribe コールバック内の分岐が複雑（複数ステータス×初期チェック×ポーリング開始条件）で、コンポーネントテストのモック改修込みの独立ステップが妥当
+- [x] **session/[id]/+page.svelte**: 待機画面固有の終了検知・既存採点確認・モード別遷移を `waitingSessionMonitor.ts` に抽出。Realtime と3秒フォールバックポーリングの重複処理を同じ prompt 処理へ統合し、監視コード375行をページから撤去。既存の `createRealtimeChannelWithRetry` による即時ポーリング・エラー時再開・バックオフ再購読・cleanup は維持。専用ユニットテスト5件（検定遷移／大会の採点済み抑止／研修ポーリング／終了遷移／監視設定）と実コンポーネントテストで配線を保護
 
 ### 検証
 
 - [x] vitest: 779 passed / 11 skipped 全緑
 - [x] svelte-check: 243 errors / 25 warnings（途中 +1 した sessionId 型エラーは non-null 明示で解消、最終的にベースライン維持）
 - [x] `npm run build` 成功、prettier クリーン、eslint 新規指摘なし（残りは HEAD から存在する既存分）
+- [x] 最終ページ移行: vitest 885 passed / 11 skipped、svelte-check 0 errors / 0 warnings、build 成功、prettier・`git diff --check` クリーン
 
 ## リファクタリング ステップ7: realtime.ts 内部統合（2026-07-05）— ✅ 完了
 
