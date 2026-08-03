@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import Footer from '$lib/components/Footer.svelte';
+	import LandingScoreDemo from '$lib/components/LandingScoreDemo.svelte';
 	import type { PageData } from './$types';
 	import * as m from '$lib/paraglide/messages.js';
 
@@ -18,28 +19,34 @@
 
 <div class="page">
 	<div class="hero">
-		<div class="hero-content">
-			<h1 class="title">{m.landing_title()}</h1>
-			<p class="subtitle">
-				{m.landing_subtitle()}
-			</p>
-			<p class="description">
-				{m.landing_description()}
-			</p>
+		<div class="hero-inner">
+			<div class="hero-content">
+				<h1 class="title">{m.landing_title()}</h1>
+				<p class="subtitle">
+					{m.landing_subtitle()}
+				</p>
+				<p class="description">
+					{m.landing_description()}
+				</p>
 
-			<div class="cta-buttons">
-				{#if data.user}
-					<button class="btn btn-primary" on:click={() => goto('/dashboard')}>
-						{m.landing_backToDashboard()}
-					</button>
-				{:else}
-					<button class="btn btn-primary" on:click={() => goto('/signup')}>
-						{m.auth_signup()}
-					</button>
-					<button class="btn btn-secondary" on:click={() => goto('/login')}
-						>{m.common_login()}</button
-					>
-				{/if}
+				<div class="cta-buttons">
+					{#if data.user}
+						<button class="btn btn-primary" on:click={() => goto('/dashboard')}>
+							{m.landing_backToDashboard()}
+						</button>
+					{:else}
+						<button class="btn btn-primary" on:click={() => goto('/signup')}>
+							{m.auth_signup()}
+						</button>
+						<button class="btn btn-secondary" on:click={() => goto('/login')}
+							>{m.common_login()}</button
+						>
+					{/if}
+				</div>
+			</div>
+
+			<div class="hero-visual">
+				<LandingScoreDemo />
 			</div>
 		</div>
 	</div>
@@ -225,16 +232,28 @@
 	.hero {
 		background: var(--bg-primary);
 		color: var(--text-primary);
-		padding: 80px 20px;
+		padding: 72px 20px;
 		text-align: center;
 		border-bottom: 1px solid var(--border-light);
 	}
 
-	.hero-content {
-		max-width: 800px;
+	.hero-inner {
+		max-width: 1100px;
 		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 48px;
+	}
+
+	.hero-content {
+		max-width: 640px;
 		position: relative;
 		z-index: 1;
+	}
+
+	.hero-visual {
+		flex-shrink: 0;
 	}
 
 	.title {
@@ -581,11 +600,26 @@
 
 	@media (min-width: 768px) {
 		.hero {
-			padding: 120px 40px;
+			padding: 100px 40px;
+			text-align: left;
+		}
+
+		.hero-inner {
+			flex-direction: row;
+			justify-content: center;
+			gap: 56px;
+		}
+
+		.hero-content {
+			flex: 1;
+		}
+
+		.cta-buttons {
+			justify-content: flex-start;
 		}
 
 		.title {
-			font-size: 80px;
+			font-size: 72px;
 		}
 
 		.subtitle {
