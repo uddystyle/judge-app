@@ -1,5 +1,21 @@
 # Current Tasks
 
+## オフライン対応 インクリメント7: オンライン採点の mutation log 冪等化（2026-08-04）— ✅ 完了
+
+オンライン action の応答が端末へ届かず、保存済みの IndexedDB mutation が同期 API から再送される経路を二重防御した。
+
+### 実装
+
+- [x] 大会・研修・検定の両採点画面で、enqueue 時の `client_mutation_id` をオンライン action の FormData に追加（IndexedDB が使えず ID が無い場合は従来どおり送信）
+- [x] 両 `submitScore` action は採点保存成功後、JWT 検証済み owner とサーバー側で確定した採点値を `score_mutations` に `accepted` として記録
+- [x] `$lib/server/scoreSync.ts` に `recordAcceptedScoreMutation` を追加し、同期 API と同じ記録・重複競合処理を再利用。ログ記録失敗で保存済み採点を失敗扱いにしない方針も維持
+- [x] 応答喪失後の同期では `processScoreMutation` の既存冪等チェックが同じ ID の accepted 記録を返し、採点保存を再実行しない
+
+### 検証
+
+- [x] helper テスト2件追加（accepted の全記録値／ID・admin 欠落時の安全なno-op）
+- [x] vitest 887 passed / 11 skipped、svelte-check 0 errors / 0 warnings、build 成功、prettier・`git diff --check` クリーン
+
 ## オフライン対応 インクリメント6: ゲスト identity 復元 P3 + identity 層の完成（2026-08-02）— ✅ 完了（コミット e96be7d, main へ push 済み）
 
 増分5で見送った **P3（ゲスト identity 復元 = 真の再認証フロー）** を実装。あわせて identity ガードが対称化（認証審判も対象）+ クライアント側 identity フィルタが加わり、identity 層が完成した。
@@ -216,7 +232,7 @@ docs/architecture/network-resilience-strategy.md（検証済み）のロード�
 
 - Phase 4: 種目データの事前ダウンロード / Phase 5: PWA・Service Worker / Step 6: PowerSync PoC
 - ゲスト再認証: 匿名 JWT 失効後の pending 同期経路（現状は auth_required で保持し続ける。再参加時に新 guest_identifier へ付け替わる問題も含めて設計が必要）
-- action フォームに client_mutation_id を渡してオンライン成功時も mutation log に記録（再送が冪等チェックに命中する二重防御。supersede 導入により緊急度は低）
+- [x] action フォームに client_mutation_id を渡してオンライン成功時も mutation log に記録（インクリメント7で完了）
 
 ## 大会モードのスポット販売化（チケット制）実装計画（2026-07-30）— ✅ 実装完了（DB適用・法務文言の最終確認待ち）
 

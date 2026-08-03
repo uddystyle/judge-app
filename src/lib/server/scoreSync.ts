@@ -51,7 +51,7 @@ export interface ScoreMutationInput {
 export type ScoreMutationOutcome = { accepted: true } | { accepted: false; reason: string };
 
 const VALID_MODES = ['certification', 'tournament', 'training'] as const;
-type ModeType = (typeof VALID_MODES)[number];
+export type ScoreModeType = (typeof VALID_MODES)[number];
 
 const CLIENT_MUTATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -62,7 +62,7 @@ function reject(reason: string): ScoreMutationOutcome {
 interface MutationRecord {
 	client_mutation_id: string;
 	session_id: number;
-	mode_type: ModeType;
+	mode_type: ScoreModeType;
 	event_id: number | null;
 	bib_number: number;
 	score: number;
@@ -141,6 +141,49 @@ async function recordOutcome(
 	return outcome;
 }
 
+export interface AcceptedScoreMutationInput {
+	client_mutation_id: unknown;
+	session_id: number;
+	mode_type: ScoreModeType;
+	event_id: number | null;
+	bib_number: number;
+	score: number;
+	judge_id: string | null;
+	guest_identifier: string | null;
+	payload?: unknown;
+}
+
+/**
+ * オンライン action で保存済みの採点を mutation log に記録する。
+ * IndexedDB が使えず ID が無い場合は何もしない。ログ障害で保存済み採点を
+ * 失敗扱いにしないため、記録エラーは recordOutcome 内でログに留める。
+ */
+export async function recordAcceptedScoreMutation(
+	supabaseAdmin: SupabaseClient | undefined,
+	input: AcceptedScoreMutationInput
+): Promise<void> {
+	const clientMutationId =
+		typeof input.client_mutation_id === 'string' ? input.client_mutation_id : '';
+	if (!supabaseAdmin || !CLIENT_MUTATION_ID_RE.test(clientMutationId)) return;
+
+	await recordOutcome(
+		supabaseAdmin,
+		{
+			client_mutation_id: clientMutationId,
+			session_id: input.session_id,
+			mode_type: input.mode_type,
+			event_id: input.event_id,
+			bib_number: input.bib_number,
+			score: input.score,
+			judge_id: input.judge_id,
+			guest_identifier: input.guest_identifier,
+			created_at_local: null,
+			payload: input.payload ?? { source: 'online_action' }
+		},
+		{ accepted: true }
+	);
+}
+
 /**
  * mutation を1件処理する。
  * 戻り値が accepted / 恒久的拒否なら処理済みとして記録済み（session_not_found を除く）。
@@ -166,7 +209,7 @@ export async function processScoreMutation(
 	}
 	const sessionId = String(sessionIdNum);
 
-	const modeType = String(input.mode_type ?? '') as ModeType;
+	const modeType = String(input.mode_type ?? '') as ScoreModeType;
 	if (!VALID_MODES.includes(modeType)) {
 		return reject('validation_failed');
 	}
@@ -274,7 +317,7 @@ export async function processScoreMutation(
 		return recordOutcome(supabaseAdmin, record, reject('auth_identity_mismatch'));
 	}
 
-	const sessionMode: ModeType =
+	const sessionMode: ScoreModeType =
 		session.mode === 'training'
 			? 'training'
 			: session.is_tournament_mode || session.mode === 'tournament'
@@ -473,7 +516,7 @@ async function verifyPromptMembership(
 	supabase: SupabaseClient,
 	opts: {
 		sessionId: string;
-		modeType: ModeType;
+		modeType: ScoreModeType;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		user: any;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any

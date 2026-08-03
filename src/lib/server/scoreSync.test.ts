@@ -16,7 +16,7 @@ vi.mock('$lib/server/sessionHelpers', () => ({
 	getMultiJudgeMode: vi.fn(async () => false)
 }));
 
-import { processScoreMutation } from './scoreSync';
+import { processScoreMutation, recordAcceptedScoreMutation } from './scoreSync';
 import { authenticateAction } from '$lib/server/sessionAuth';
 import { getMultiJudgeMode } from '$lib/server/sessionHelpers';
 
@@ -72,6 +72,61 @@ beforeEach(() => {
 		authedUser as any
 	);
 	vi.mocked(getMultiJudgeMode).mockResolvedValue(false);
+});
+
+describe('recordAcceptedScoreMutation - オンラインaction記録', () => {
+	it('オンライン保存済みの採点をacceptedとして権威owner付きで記録する', async () => {
+		const logInsert = makeChain({ error: null });
+		const admin = makeSupabase({ score_mutations: [logInsert] });
+
+		await recordAcceptedScoreMutation(admin, {
+			client_mutation_id: MUTATION_ID,
+			session_id: 1,
+			mode_type: 'training',
+			event_id: 10,
+			bib_number: 5,
+			score: 80,
+			judge_id: 'user-1',
+			guest_identifier: null
+		});
+
+		expect(logInsert.insert).toHaveBeenCalledWith({
+			client_mutation_id: MUTATION_ID,
+			session_id: 1,
+			mode_type: 'training',
+			event_id: 10,
+			bib_number: 5,
+			score: 80,
+			judge_id: 'user-1',
+			guest_identifier: null,
+			created_at_local: null,
+			payload: { source: 'online_action' },
+			status: 'accepted',
+			rejection_reason: null
+		});
+	});
+
+	it('IDが無い・不正、またはsupabaseAdmin未設定なら記録せずオンライン成功を維持する', async () => {
+		const admin = makeSupabase({});
+		const base = {
+			session_id: 1,
+			mode_type: 'certification' as const,
+			event_id: null,
+			bib_number: 5,
+			score: 80,
+			judge_id: 'user-1',
+			guest_identifier: null
+		};
+
+		await recordAcceptedScoreMutation(admin, { ...base, client_mutation_id: null });
+		await recordAcceptedScoreMutation(admin, { ...base, client_mutation_id: 'not-a-uuid' });
+		await recordAcceptedScoreMutation(undefined, {
+			...base,
+			client_mutation_id: MUTATION_ID
+		});
+
+		expect(admin.from).not.toHaveBeenCalled();
+	});
 });
 
 describe('processScoreMutation - 形式・冪等性', () => {

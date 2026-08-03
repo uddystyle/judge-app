@@ -10,6 +10,7 @@ import {
 } from '$lib/server/sessionHelpers';
 import { validateBib, validateScoreInput, validateScoreRange } from '$lib/server/validation';
 import { logger } from '$lib/server/logger';
+import { recordAcceptedScoreMutation } from '$lib/server/scoreSync';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
 	const { id: sessionId } = params;
@@ -61,7 +62,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 };
 
 export const actions: Actions = {
-	submitScore: async ({ request, params, url, locals: { supabase } }) => {
+	submitScore: async ({ request, params, url, locals: { supabase, supabaseAdmin } }) => {
 		logger.debug('[submitScore/inspection] Action called');
 
 		const guestIdentifier = url.searchParams.get('guest');
@@ -88,6 +89,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const scoreRaw = formData.get('score') as string;
 		const bibRaw = formData.get('bib') as string;
+		const clientMutationId = formData.get('client_mutation_id');
 
 		const { id: sessionId, discipline, level, event: eventName } = params;
 
@@ -279,6 +281,17 @@ export const actions: Actions = {
 		}
 
 		logger.debug('[submitScore/inspection] Score saved successfully');
+
+		await recordAcceptedScoreMutation(supabaseAdmin, {
+			client_mutation_id: clientMutationId,
+			session_id: Number.parseInt(sessionId, 10),
+			mode_type: 'certification',
+			event_id: null,
+			bib_number: bib,
+			score,
+			judge_id: guestParticipant ? null : (user?.id ?? null),
+			guest_identifier: guestParticipant?.guest_identifier ?? null
+		});
 
 		return {
 			success: true,

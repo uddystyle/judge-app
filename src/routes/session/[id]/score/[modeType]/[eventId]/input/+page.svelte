@@ -214,12 +214,16 @@
 	id="scoreForm"
 	method="POST"
 	action={formAction}
-	use:enhance={() => {
+	use:enhance={({ formData }) => {
+		// IndexedDB に保存した mutation と同じ ID をオンライン action に渡す。
+		// 応答喪失後にキューが再送されても、サーバーの mutation log で処理済みになる。
+		const queuedId = pendingMutationId;
+		if (queuedId) formData.set('client_mutation_id', queuedId);
+
 		// 送信完了後に loading を必ず解除する。
 		// これがないと失敗時 (fail) にキーパッド/確定ボタンが disabled のまま固まり、再入力できなくなる。
 		return async ({ result, update }) => {
 			// オフラインキューとの整合（enqueue 済みの mutation を送信結果で確定させる）
-			const queuedId = pendingMutationId;
 			pendingMutationId = null;
 			if (queuedId) {
 				if (result.type === 'success' || result.type === 'redirect') {

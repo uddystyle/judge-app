@@ -137,6 +137,10 @@
 		const formData = new FormData();
 		formData.append('score', score.toString());
 		formData.append('bib', bib.toString());
+		if (pendingMutationId) {
+			// IndexedDB の mutation とオンライン action を同じ冪等キーで結び付ける。
+			formData.append('client_mutation_id', pendingMutationId);
+		}
 
 		try {
 			const response = await fetch(`?/submitScore${guestIdentifier ? `` : ''}`, {
