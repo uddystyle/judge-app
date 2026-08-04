@@ -55,7 +55,7 @@
 
 	let frameIndex = 0;
 	let reduceMotion = false;
-	let inView = false;
+	let inView = true;
 	let timer: ReturnType<typeof setInterval> | null = null;
 	let motionQuery: MediaQueryList | null = null;
 	let observer: IntersectionObserver | null = null;
@@ -96,20 +96,21 @@
 		};
 		motionQuery.addEventListener('change', onMotionChange);
 
-		// 画面内の時だけ再生（画面外では停止して軽量化）
+		// 画面外に出たら停止（軽量化）。IntersectionObserver は一時停止のみに使い、
+		// 再生開始は下の syncPlayback() で必ず行う（IO 初回コールバック待ちで固まらない）。
 		if ('IntersectionObserver' in window && root) {
 			observer = new IntersectionObserver(
 				(entries) => {
-					inView = entries[0]?.isIntersecting ?? false;
+					inView = entries[0]?.isIntersecting ?? true;
 					syncPlayback();
 				},
-				{ threshold: 0.2 }
+				{ threshold: 0 }
 			);
 			observer.observe(root);
-		} else {
-			inView = true;
-			syncPlayback();
 		}
+
+		// マウント直後に再生開始（inView は既定 true）
+		syncPlayback();
 
 		return () => motionQuery?.removeEventListener('change', onMotionChange);
 	});
@@ -118,13 +119,6 @@
 		stopTimer();
 		observer?.disconnect();
 	});
-
-	function keyClass(key: string): string {
-		const base = 'key';
-		const type = key === CONFIRM ? ' key-confirm' : key === CLEAR ? ' key-clear' : '';
-		const active = current.active === key ? ' is-active' : '';
-		return base + type + active;
-	}
 </script>
 
 <div class="demo" bind:this={root} aria-hidden="true">
@@ -146,11 +140,13 @@
 
 				<div class="keypad">
 					{#each KEYPAD as key (key)}
-						<div class={keyClass(key)}>{key}</div>
+						<div class="key" class:is-active={current.active === key}>{key}</div>
 					{/each}
 					<div class="key spacer" aria-hidden="true"></div>
-					<div class={keyClass(CLEAR)}>C</div>
-					<div class={keyClass(CONFIRM)}>{m.score_confirm()}</div>
+					<div class="key key-clear" class:is-active={current.active === CLEAR}>C</div>
+					<div class="key key-confirm" class:is-active={current.active === CONFIRM}>
+						{m.score_confirm()}
+					</div>
 				</div>
 			</div>
 			<div class="home-indicator" aria-hidden="true"></div>
