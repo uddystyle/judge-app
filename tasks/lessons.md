@@ -1110,3 +1110,13 @@ if (guestIdentifier) {
 **Why**: 画面外での軽量化目的の IO 一時停止が、リロード時に「表示中なのに停止したまま」レースを生んだ。setInterval（620ms）1本の負荷は無視でき、背景タブはブラウザが自動スロットルするため、撤去が最も堅牢（7b91e11）。
 
 **How to apply**: 装飾・常時再生アニメは `onMount` で `setInterval` を張り `onDestroy` で `clearInterval` するだけにする。省電力が本当に要るなら IO ではなく `document.visibilitychange`（非交差変化イベント）を使う。
+
+### ✅ 手書き `manualChunks` は CJS 依存を requirer から分離しない（本番だけボタン全滅の原因）
+**Rule**: `vite.config.ts` の `manualChunks` で `id.includes('lib')` 方式のチャンク分割をする時、そのライブラリの **CommonJS 依存を別チャンクに散らさない**。CJS モジュールを requirer と別チャンクに割ると @rollup/plugin-commonjs の相互運用が壊れ、実行時に `Cannot set properties of undefined (setting 'exports')` を throw。これがアプリのブートストラップ中に起きると**全ページのハイドレーションが停止 → 全ボタン/リンクが無反応**になる（SSR HTML は出るのでパッと見は正常）。
+
+**Why**: `if (id.includes('qrcode')) return 'qrcode'` は `qrcode` 本体だけを 'qrcode' チャンクへ送り、その CJS 依存 `dijkstrajs`/`pngjs` は後続の `if (id.includes('node_modules')) return 'vendor'` catch-all で 'vendor' に分離された。チャンク跨ぎで CJS ラッパの module オブジェクトが未定義になり `pu()`（dijkstra factory）が落ちて、新規登録などボタンが全滅した（`7176516`）。`dev` は esbuild 事前バンドルで CJS を正しく扱うため再現せず、**本番ビルドだけ**で出る。
+
+**How to apply**:
+- `manualChunks` でライブラリを名前付きチャンクにする時は、その **CJS 依存も同じチャンクに co-locate** する（例: `id.includes('qrcode') || id.includes('dijkstrajs') || id.includes('pngjs')`）。`npm ls <lib>` で依存ツリー、各依存の package.json に `type`/`module` が無ければ CJS。
+- 症状「本番だけボタン/リンクが無反応」を見たら、まず `npm run build && npm run preview` を Playwright で開き `page.on('pageerror')` を張る。`exports`/`require`/`module is not defined` 系はほぼ CJS バンドル事故。**「preview 特有のアーティファクト」と決めつけない**（本番でも同じビルド経路なので同じ事故が出る。今回それを一度誤って切り分けた）。
+- ハイドレーション有無は「ボタンを実クリックして URL が変わるか」で判定するのが確実（`window.__anim` 等の露出フックや `navigator.serviceWorker.controller` は副次情報）。
