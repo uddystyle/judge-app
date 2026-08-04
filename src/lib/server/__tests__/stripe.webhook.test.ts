@@ -2,11 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { RequestEvent } from '@sveltejs/kit';
 
 // Use vi.hoisted to create mocks that can be referenced in vi.mock
-const { mockSupabaseClient } = vi.hoisted(() => {
+const { mockSupabaseClient, mockConstructEvent } = vi.hoisted(() => {
 	return {
 		mockSupabaseClient: {
 			from: vi.fn()
-		}
+		},
+		// ハンドラは constructEventAsync を呼ぶが、本ファイルの既存テストは
+		// constructEvent に対して mockReturnValue / mockImplementation している。
+		// 同一の mock 関数へ委譲することで、既存テストを一切変えずに両方を満たす。
+		mockConstructEvent: vi.fn()
 	};
 });
 
@@ -14,7 +18,10 @@ const { mockSupabaseClient } = vi.hoisted(() => {
 vi.mock('$lib/server/stripe', () => ({
 	stripe: {
 		webhooks: {
-			constructEvent: vi.fn()
+			constructEvent: mockConstructEvent,
+			constructEventAsync: vi.fn(async (...args: unknown[]) =>
+				(mockConstructEvent as (...a: unknown[]) => unknown)(...args)
+			)
 		},
 		subscriptions: {
 			retrieve: vi.fn(),

@@ -30,7 +30,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		const body = await request.text();
 
 		// 2. Webhook署名を検証
-		event = stripe.webhooks.constructEvent(body, signature, STRIPE_WEBHOOK_SECRET);
+		// 同期版 constructEvent は Node の同期 crypto に依存するため、edge/worker ランタイム
+		// （SubtleCrypto は非同期のみ）では実行時に throw する。現在は nodejs20.x で動くが、
+		// async 版は Node でも挙動が同一で移植性があるためこちらを使う。
+		event = await stripe.webhooks.constructEventAsync(body, signature, STRIPE_WEBHOOK_SECRET);
 
 		logger.debug('[Webhook] イベント受信:', event.type, 'ID:', event.id);
 	} catch (err: any) {

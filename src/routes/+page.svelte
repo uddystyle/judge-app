@@ -15,6 +15,8 @@
 	<meta property="og:description" content={m.landing_metaDescription()} />
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://www.tentoapp.com/" />
+	<meta name="twitter:title" content={m.landing_metaTitle()} />
+	<meta name="twitter:description" content={m.landing_metaDescription()} />
 	<link rel="canonical" href="https://www.tentoapp.com/" />
 </svelte:head>
 

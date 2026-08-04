@@ -5,12 +5,9 @@ const ORIGIN = 'https://tento.app';
 const context = {
 	origin: ORIGIN,
 	isAsset: (pathname: string) =>
-		[
-			'/_app/immutable/entry/app.js',
-			'/icons/icon-192.png',
-			'/offline',
-			'/manifest.webmanifest'
-		].includes(pathname)
+		['/_app/immutable/entry/app.js', '/icon-192.png', '/offline', '/manifest.webmanifest'].includes(
+			pathname
+		)
 };
 
 const req = (url: string, method = 'GET', mode?: string) => ({ method, url, mode });
@@ -46,7 +43,7 @@ describe('decideRequest（SW の振り分け）', () => {
 
 	it('不変サブリソース（ハッシュ名 JS/CSS・アイコン等）は cache-first', () => {
 		expect(decideRequest(req(`${ORIGIN}/_app/immutable/entry/app.js`), context)).toBe('asset');
-		expect(decideRequest(req(`${ORIGIN}/icons/icon-192.png`), context)).toBe('asset');
+		expect(decideRequest(req(`${ORIGIN}/icon-192.png`), context)).toBe('asset');
 	});
 
 	it('ページ遷移は navigation（network-first + オフライン fallback）', () => {

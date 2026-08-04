@@ -1150,3 +1150,22 @@ if (guestIdentifier) {
 - ベアラ値を設計したら「この値を読めるのは誰か」を列挙する。RLS の SELECT ポリシー、API の応答、HTML の hidden input、URL の3箇所を必ず見る。1人でも本人以外が読めるなら資格情報として使わない。
 - 隠したい値を既存テーブルの列にするのは危ない（PostgREST の `select=*` で読まれる。列単位 GRANT で隠すと `select('*')` するコードが権限エラーで壊れる）。**RLS 有効・ポリシー無しの別テーブル**に置いて service role 専用にするのが確実。
 - 「所持＝本人証明」と書いたコメントを見つけたら、その値の露出先を必ず再確認する。設計時に露出が無くても、後から owner 列として画面に出すと静かに壊れる。
+
+### ✅ Webhook 署名は「モックせずに実物を通す」テストを1本持つ
+**Rule**: 決済 webhook のテストで `constructEvent`（署名検証）を丸ごとモックすると、**署名検証・改ざん検知・リプレイ拒否・実イベント形状が全て回帰対象から外れる**。SDK の `generateTestHeaderStringAsync()` で本物の署名を作り、ハンドラ内の検証を実際に走らせるテストを別ファイルで最低1本持つ。Stripe API への通信は発生しない（ローカルの HMAC 計算だけ）。
+
+**Why**: 本 repo の `stripe.webhook.test.ts` は 5,197 行・66ケースありながら `$lib/server/stripe` を丸ごとモックしており、署名検証が一度も実行されていなかった。分岐やDB反映は厚く守られている一方で、「不正な署名を弾けるか」「ボディ改ざんを検知できるか」は誰も検証していない状態だった。
+
+**How to apply**:
+- 実物テストは**別ファイル**にする。巨大なモック済みテストのモックを外すと66ケースを巻き込む。
+- ハンドラが要求する型（`RequestEvent<RouteParams, '/api/...'>`）は自ルート固有なので、テストからは `Parameters<typeof POST>[0]` へキャストするのが素直。
+- 最低限のケース: 正しい署名で通る／別シークレットで 400／署名後に改ざんで 400／古いタイムスタンプで 400（既定許容差 300 秒）。
+
+### ✅ Stripe SDK は同期 crypto に依存する。async 版 API を使うと環境差で壊れない
+**Rule**: `stripe.webhooks.constructEvent` / `generateTestHeaderString`（同期版）は **Node の同期 crypto 前提**。edge/worker ランタイムや、`resolve.conditions: ['browser']` のテスト環境では SDK が SubtleCrypto（非同期のみ）を選び、`SubtleCryptoProvider cannot be used in a synchronous context` で throw する。**`constructEventAsync` / `generateTestHeaderStringAsync` を使う**。Node でも挙動は同一。
+
+**Why**: vitest.config.ts が `resolve.conditions: ['browser']` を指定しているため、テストでは stripe が worker ビルド（`esm/stripe.esm.worker.js`）に解決され、同期 API が必ず失敗した。本番は `svelte.config.js` の `runtime: 'nodejs20.x'` なので同期版でも動いていたが、**edge へ移した瞬間に全 webhook が 500 になる**地雷でもあった。
+
+**How to apply**:
+- `stripe` パッケージは条件付き export のみでサブパス export が無い（`stripe/cjs/...` を直接 import できない）ため、「テストだけ Node ビルドを掴む」逃げ道は無い。async 版に寄せるのが唯一きれいな解。
+- 既存テストが同期版をモックしている場合は、`vi.hoisted` で mock 関数を共有し `constructEventAsync` から同じ関数へ委譲すれば、既存アサーションを1行も変えずに済む。

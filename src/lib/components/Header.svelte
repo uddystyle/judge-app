@@ -130,7 +130,9 @@
 	<div class="header-content">
 		<div class="info-display">
 			{#if showAppName}
-				<button class="app-name-button" on:click={handleAppNameClick}> TENTO </button>
+				<button class="app-name-button" on:click={handleAppNameClick} aria-label="TENTO ホームへ">
+					<img src="/brand/tento-logo-horizontal.svg" alt="TENTO" />
+				</button>
 			{:else}
 				<span id="session-info">
 					{infoText}
@@ -257,20 +259,22 @@
 		letter-spacing: -0.01em;
 	}
 	.app-name-button {
+		display: inline-flex;
+		align-items: center;
 		background: transparent;
 		border: none;
-		font-size: 20px;
-		font-weight: 800;
-		font-family: 'M PLUS Rounded 1c', sans-serif;
-		color: var(--text-primary);
-		letter-spacing: 0.05em;
 		cursor: pointer;
 		padding: 0;
 		transition: all 0.15s ease;
 	}
+	.app-name-button img {
+		display: block;
+		width: 105px;
+		height: 25px;
+	}
 	.app-name-button:hover {
-		color: var(--text-secondary);
 		transform: scale(1.02);
+		opacity: 0.78;
 	}
 	.app-name-button:active {
 		transform: scale(0.98);

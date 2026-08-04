@@ -1,19 +1,19 @@
 {
-	"name": "TENTO - スキー・スノーボード検定・大会採点アプリ",
+	"name": "TENTO — スキー・スノーボード検定／大会の採点管理",
 	"short_name": "TENTO",
-	"description": "検定・大会・研修の採点をシンプルに。電波の弱い会場でも採点は端末に保存され、通信復帰後に自動同期されます。",
-	"start_url": "/",
+	"description": "スキー・スノーボードの検定・大会・研修をリアルタイムで採点管理。複数検定員の合議採点に対応。",
+	"start_url": "/dashboard",
 	"scope": "/",
 	"display": "standalone",
 	"orientation": "portrait",
-	"background_color": "#ffffff",
+	"background_color": "#f4f4f6",
 	"theme_color": "#005AB5",
 	"lang": "ja",
 	"icons": [
-		{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-		{ "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+		{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+		{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
 		{
-			"src": "/icons/icon-maskable-512.png",
+			"src": "/icon-512-maskable.png",
 			"sizes": "512x512",
 			"type": "image/png",
 			"purpose": "maskable"

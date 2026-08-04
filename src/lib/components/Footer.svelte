@@ -28,7 +28,13 @@
 <footer class="footer">
 	<div class="footer-container">
 		<div class="footer-brand">
-			<button class="brand-name" on:click={() => goto('/?view=landing')}>TENTO</button>
+			<button
+				class="brand-name"
+				on:click={() => goto('/?view=landing')}
+				aria-label="TENTO ホームへ"
+			>
+				<img src="/brand/tento-logo-horizontal.svg" alt="TENTO" />
+			</button>
 			<p class="brand-description">{m.footer_description()}</p>
 		</div>
 
@@ -36,10 +42,20 @@
 			<div class="footer-column">
 				<h4 class="column-title">{m.footer_product()}</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => navigateWithAnchor('/#features')}>{m.footer_features()}</button></li>
-					<li><button class="link-button" on:click={() => goto('/pricing')}>{m.footer_pricing()}</button></li>
 					<li>
-						<button class="link-button" on:click={() => navigateWithAnchor('/#how-it-works')}>{m.footer_howToUse()}</button>
+						<button class="link-button" on:click={() => navigateWithAnchor('/#features')}
+							>{m.footer_features()}</button
+						>
+					</li>
+					<li>
+						<button class="link-button" on:click={() => goto('/pricing')}
+							>{m.footer_pricing()}</button
+						>
+					</li>
+					<li>
+						<button class="link-button" on:click={() => navigateWithAnchor('/#how-it-works')}
+							>{m.footer_howToUse()}</button
+						>
 					</li>
 				</ul>
 			</div>
@@ -47,17 +63,33 @@
 			<div class="footer-column">
 				<h4 class="column-title">{m.footer_support()}</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => goto('/contact')}>{m.footer_contact()}</button></li>
-					<li><button class="link-button" on:click={() => goto('/faq')}>{m.footer_faq()}</button></li>
+					<li>
+						<button class="link-button" on:click={() => goto('/contact')}
+							>{m.footer_contact()}</button
+						>
+					</li>
+					<li>
+						<button class="link-button" on:click={() => goto('/faq')}>{m.footer_faq()}</button>
+					</li>
 				</ul>
 			</div>
 
 			<div class="footer-column">
 				<h4 class="column-title">{m.footer_legal()}</h4>
 				<ul class="link-list">
-					<li><button class="link-button" on:click={() => goto('/terms')}>{m.footer_terms()}</button></li>
-					<li><button class="link-button" on:click={() => goto('/privacy')}>{m.footer_privacy()}</button></li>
-					<li><button class="link-button" on:click={() => goto('/legal')}>{m.footer_commercialLaw()}</button></li>
+					<li>
+						<button class="link-button" on:click={() => goto('/terms')}>{m.footer_terms()}</button>
+					</li>
+					<li>
+						<button class="link-button" on:click={() => goto('/privacy')}
+							>{m.footer_privacy()}</button
+						>
+					</li>
+					<li>
+						<button class="link-button" on:click={() => goto('/legal')}
+							>{m.footer_commercialLaw()}</button
+						>
+					</li>
 				</ul>
 			</div>
 		</div>
@@ -90,12 +122,8 @@
 	}
 
 	.brand-name {
-		font-family: 'M PLUS Rounded 1c', sans-serif;
-		font-size: 32px;
-		font-weight: 800;
-		color: var(--text-primary);
+		display: block;
 		margin-bottom: 12px;
-		letter-spacing: 0.05em;
 		background: transparent;
 		border: none;
 		padding: 0;
@@ -103,9 +131,15 @@
 		transition: all 0.15s ease;
 	}
 
+	.brand-name img {
+		display: block;
+		width: 168px;
+		height: 40px;
+	}
+
 	.brand-name:hover {
-		color: var(--text-secondary);
 		transform: scale(1.02);
+		opacity: 0.78;
 	}
 
 	.brand-name:active {
@@ -195,14 +229,6 @@
 			grid-template-columns: 1.5fr 2.5fr;
 			gap: 80px;
 			align-items: start;
-		}
-
-		.brand-name {
-			font-size: 36px;
-		}
-
-		.brand-name:hover {
-			color: var(--text-secondary);
 		}
 
 		.brand-description {
