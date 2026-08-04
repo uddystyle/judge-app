@@ -12,7 +12,7 @@ import {
 	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
-import { deleteTrainingScore } from '$lib/server/scoreActions';
+import { deleteTrainingScore, resolveCorrectionOwner } from '$lib/server/scoreActions';
 import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, url, locals: { supabase } }) => {
@@ -187,8 +187,8 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const bib = formData.get('bib') as string;
 		const judgeName = formData.get('judgeName') as string;
-		const judgeId = formData.get('judgeId') as string;
-		const formGuestIdentifier = formData.get('guestIdentifier') as string;
+		const requestedJudgeId = formData.get('judgeId') as string;
+		const requestedGuestIdentifier = formData.get('guestIdentifier') as string;
 
 		if (!bib || !judgeName) {
 			return fail(400, { error: 'パラメータが不足しています。' });
@@ -206,6 +206,14 @@ export const actions: Actions = {
 		if (!isChief && isMultiJudge) {
 			return fail(403, { error: '修正を要求する権限がありません。' });
 		}
+
+		// ⚠️ SECURITY: 削除対象の owner はフォーム値をそのまま使わない。
+		// 主任は指定された owner を対象にできるが、それ以外は自分の owner のみ。
+		const { judgeId, guestIdentifier: formGuestIdentifier } = resolveCorrectionOwner(
+			authResult,
+			isChief,
+			{ judgeId: requestedJudgeId, guestIdentifier: requestedGuestIdentifier }
+		);
 
 		const isTrainingMode = modeType === 'training';
 
@@ -251,7 +259,7 @@ export const actions: Actions = {
 			// 渡すので、同名審判が居ても誤って別の行/両方を消さない。owner 未提供時のみ judge_name 後方互換。
 			let deleteQuery = supabase
 				.from('results')
-				.delete()
+				.delete({ count: 'exact' })
 				.eq('session_id', sessionId)
 				.eq('bib', parseInt(bib))
 				.eq('discipline', eventInfo.discipline)
@@ -264,11 +272,18 @@ export const actions: Actions = {
 			} else {
 				deleteQuery = deleteQuery.eq('judge_name', judgeName);
 			}
-			const { error: deleteError } = await deleteQuery;
+			const { error: deleteError, count } = await deleteQuery.select();
 
 			if (deleteError) {
 				logger.error('Error deleting result:', deleteError);
 				return fail(500, { error: '得点の削除に失敗しました。' });
+			}
+
+			// RLS で 0 行になっても success を返していたため、修正要求が黙って効かない
+			// ことがあった（legacy 版と同じく 0 件は失敗として扱う）
+			if (!count) {
+				logger.error('[requestCorrection] 削除された行が0件です（権限または対象なし）');
+				return fail(500, { error: '得点の削除に失敗しました（削除された行が0件）。' });
 			}
 		}
 

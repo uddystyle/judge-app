@@ -18,27 +18,43 @@ export const appointChief = async ({ request, params, locals: { supabase } }: Re
 	const formData = await request.formData();
 	const userIdToAppoint = formData.get('userId') as string;
 
-	// 任命しようとしているユーザーがゲストでないか確認
+	if (!userIdToAppoint) {
+		return fail(400, { error: m.action_guestIdMissing() });
+	}
+
+	const { data: currentSession, error: fetchError } = await supabase
+		.from('sessions')
+		.select('created_by, chief_judge_id')
+		.eq('id', params.id)
+		.single();
+
+	if (fetchError || !currentSession) {
+		return fail(500, { error: m.action_fetchSessionFailed() });
+	}
+
+	// ⚠️ SECURITY: 兄弟アクション（removeGuest / removeParticipant）と同じく作成者に限定する。
+	// 以前はログイン確認のみで、実効範囲が sessions の UPDATE RLS（作成者/主任/組織管理者）
+	// 任せになっており、UI の想定（作成者のみ）より広かった。
+	if (currentSession.created_by !== user.id) {
+		return fail(403, { error: m.action_noPermissionAppointChief() });
+	}
+
+	// 任命しようとしているユーザーがこのセッションの参加者で、かつゲストでないことを確認。
+	// 参加者行が無いと participantData が null になり、以前は「ゲストではない」と解釈されて
+	// 非参加者の任意 UUID が主任になれてしまっていた。
 	const { data: participantData } = await supabase
 		.from('session_participants')
 		.select('is_guest')
 		.eq('session_id', params.id)
 		.eq('user_id', userIdToAppoint)
-		.single();
+		.maybeSingle();
 
-	if (participantData?.is_guest) {
-		return fail(400, { error: m.action_guestCannotBeChief() });
+	if (!participantData) {
+		return fail(400, { error: m.action_participantNotFoundInSession() });
 	}
 
-	// データベースを更新
-	const { data: currentSession, error: fetchError } = await supabase
-		.from('sessions')
-		.select('chief_judge_id')
-		.eq('id', params.id)
-		.single();
-
-	if (fetchError) {
-		return fail(500, { error: m.action_fetchSessionFailed() });
+	if (participantData.is_guest) {
+		return fail(400, { error: m.action_guestCannotBeChief() });
 	}
 
 	const newChiefId = currentSession?.chief_judge_id === userIdToAppoint ? null : userIdToAppoint;

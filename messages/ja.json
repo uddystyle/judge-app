@@ -355,6 +355,8 @@
 	"action_guestIdMissing": "ゲスト識別子が指定されていません。",
 	"action_sessionNotFound": "セッションが見つかりません。",
 	"action_noPermissionRemoveGuest": "ゲストユーザーを削除する権限がありません。",
+	"action_noPermissionAppointChief": "主任検定員を任命する権限がありません。",
+	"action_participantNotFoundInSession": "対象のユーザーはこの検定の参加者ではありません。",
 	"action_removeGuestFailed": "ゲストユーザーの削除に失敗しました。",
 	"action_guestRemoved": "ゲストユーザーを削除しました。",
 	"action_userIdMissing": "ユーザーIDが指定されていません。",

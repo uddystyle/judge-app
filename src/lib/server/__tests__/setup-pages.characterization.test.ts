@@ -30,6 +30,12 @@ function makeChain(result: unknown = { data: null, error: null }) {
 /** table ごとのチェーンのキューから from() を返すモック */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeSupabase(queues: Record<string, any[]>) {
+	// アクション側にも認可ガード（作成者 または 主任）が入ったため、sessions を既定で用意する。
+	// 明示的に sessions を渡したテスト（load 系・権限テスト）はそちらが優先される。
+	queues = {
+		sessions: [makeChain({ data: { created_by: 'user-1', chief_judge_id: null }, error: null })],
+		...queues
+	};
 	return {
 		auth: {
 			getUser: vi.fn(async () => ({ data: { user: { id: 'user-1' } }, error: null }))
@@ -327,5 +333,66 @@ describe.each([
 			const result = await module.actions.deleteEvent(makeEvent(supabase, { eventId: 'e1' }));
 			expect(result).toMatchObject({ success: true });
 		});
+	});
+});
+
+// ============================================================
+// アクション側の認可ガード（作成者 または 主任のみ）
+// 以前はログイン確認のみで、認可が完全に RLS 任せになっていた。
+// ============================================================
+
+describe.each([
+	['tournament', () => tournamentParticipants],
+	['training', () => trainingParticipants]
+] as const)('%s-setup/participants の認可ガード', (_mode, getModule) => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const outsiderSession = () =>
+		makeChain({ data: { created_by: 'someone-else', chief_judge_id: 'another' }, error: null });
+
+	it('❗ 作成者でも主任でもないユーザーの addParticipant は 403', async () => {
+		const supabase = makeSupabase({ sessions: [outsiderSession()] });
+		const result = await getModule().actions.addParticipant(
+			makeEvent(supabase, { bibNumber: '1', athleteName: '選手A' })
+		);
+		expect(result).toMatchObject({ status: 403 });
+		// participants には一切触らない
+		expect(supabase.from).not.toHaveBeenCalledWith('participants');
+	});
+
+	it('❗ 作成者でも主任でもないユーザーの importCSV は 403（名簿の洗い替えを実行しない）', async () => {
+		const supabase = makeSupabase({ sessions: [outsiderSession()] });
+		const result = await getModule().actions.importCSV(
+			makeEvent(supabase, {
+				csvFile: { size: 10, text: async () => '1,選手A,チーム' }
+			})
+		);
+		expect(result).toMatchObject({ status: 403 });
+		expect(supabase.from).not.toHaveBeenCalledWith('participants');
+	});
+
+	it('主任検定員は許可される', async () => {
+		const supabase = makeSupabase({
+			sessions: [
+				makeChain({ data: { created_by: 'someone-else', chief_judge_id: 'user-1' }, error: null })
+			],
+			participants: [makeChain({ data: null, error: null }), makeChain({ error: null })]
+		});
+		const result = await getModule().actions.addParticipant(
+			makeEvent(supabase, { bibNumber: '1', athleteName: '選手A' })
+		);
+		expect(result).not.toMatchObject({ status: 403 });
+	});
+
+	it('セッションが見つからなければ 404', async () => {
+		const supabase = makeSupabase({
+			sessions: [makeChain({ data: null, error: { message: 'not found' } })]
+		});
+		const result = await getModule().actions.addParticipant(
+			makeEvent(supabase, { bibNumber: '1', athleteName: '選手A' })
+		);
+		expect(result).toMatchObject({ status: 404 });
 	});
 });

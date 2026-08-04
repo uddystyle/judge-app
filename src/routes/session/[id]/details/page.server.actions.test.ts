@@ -67,8 +67,40 @@ beforeEach(() => {
 });
 
 describe('appointChief', () => {
+	// 作成者チェック追加後は sessions を先に引く（created_by + chief_judge_id）
+	const ownedSession = (chiefJudgeId: string | null) => ({
+		data: { created_by: 'user-1', chief_judge_id: chiefJudgeId },
+		error: null
+	});
+
+	it('userId が無ければ 400', async () => {
+		const supabase = makeSupabase({});
+		const result = await actions.appointChief(makeEvent(supabase, {}));
+		expect(result).toMatchObject({ status: 400 });
+	});
+
+	it('❗ 作成者以外は 403（以前はログイン確認のみで RLS 任せだった）', async () => {
+		const supabase = makeSupabase({
+			sessions: [
+				makeChain({ data: { created_by: 'someone-else', chief_judge_id: null }, error: null })
+			]
+		});
+		const result = await actions.appointChief(makeEvent(supabase, { userId: 'user-2' }));
+		expect(result).toMatchObject({ status: 403 });
+	});
+
+	it('❗ 参加者行が無いユーザー（非参加者）は 400', async () => {
+		const supabase = makeSupabase({
+			sessions: [makeChain(ownedSession(null))],
+			session_participants: [makeChain({ data: null, error: null })]
+		});
+		const result = await actions.appointChief(makeEvent(supabase, { userId: 'stranger' }));
+		expect(result).toMatchObject({ status: 400 });
+	});
+
 	it('ゲストを主任に任命しようとすると 400', async () => {
 		const supabase = makeSupabase({
+			sessions: [makeChain(ownedSession(null))],
 			session_participants: [makeChain({ data: { is_guest: true }, error: null })]
 		});
 		const result = await actions.appointChief(makeEvent(supabase, { userId: 'guest-1' }));
@@ -79,7 +111,7 @@ describe('appointChief', () => {
 		const update = makeChain({ error: null });
 		const supabase = makeSupabase({
 			session_participants: [makeChain({ data: { is_guest: false }, error: null })],
-			sessions: [makeChain({ data: { chief_judge_id: 'other' }, error: null }), update]
+			sessions: [makeChain(ownedSession('other')), update]
 		});
 
 		const result = await actions.appointChief(makeEvent(supabase, { userId: 'user-2' }));
@@ -92,7 +124,7 @@ describe('appointChief', () => {
 		const update = makeChain({ error: null });
 		const supabase = makeSupabase({
 			session_participants: [makeChain({ data: { is_guest: false }, error: null })],
-			sessions: [makeChain({ data: { chief_judge_id: 'user-2' }, error: null }), update]
+			sessions: [makeChain(ownedSession('user-2')), update]
 		});
 
 		await actions.appointChief(makeEvent(supabase, { userId: 'user-2' }));
@@ -418,7 +450,6 @@ describe('deleteSession', () => {
 });
 
 describe('未認証時の挙動', () => {
-	 
 	const unauthSupabase = () => {
 		const supabase = makeSupabase({});
 		supabase.auth.getUser = vi.fn(async () => ({

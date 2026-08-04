@@ -1,30 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { deleteTrainingScore } from './scoreActions';
+import { deleteTrainingScore, resolveCorrectionOwner } from './scoreActions';
 
 // Supabase モック
 function createMockSupabase(options?: {
 	deleteError?: { message: string } | null;
 	profileResult?: { id: string } | null;
+	deletedCount?: number | null;
 }) {
 	const deleteChain = {
 		eq: vi.fn().mockReturnThis(),
 		then: vi.fn()
 	};
 
-	// delete() の最終結果
+	// delete().select() の最終結果。count は 0 件検知（サイレント成功の防止）に使う
 	const deleteResult = {
-		error: options?.deleteError ?? null
+		error: options?.deleteError ?? null,
+		count: options?.deletedCount === undefined ? 1 : options.deletedCount
 	};
 
-	// eq チェインの最後に Promise を返す
+	// eq チェインの最後に select() を生やす
 	let eqCallCount = 0;
 	deleteChain.eq = vi.fn().mockImplementation(() => {
 		eqCallCount++;
 		// delete().eq(event_id).eq(athlete_id) で2回、+ 条件で3回
-		// Promise.then で解決されるように thenable にする
 		return {
 			eq: deleteChain.eq,
-			then: (resolve: any) => resolve(deleteResult)
+			select: vi.fn().mockResolvedValue(deleteResult)
 		};
 	});
 
@@ -162,5 +163,90 @@ describe('deleteTrainingScore', () => {
 		expect(result).toEqual({ success: true });
 		// profiles は呼ばれない（guestIdentifier が優先されるため）
 		expect(supabase.from).not.toHaveBeenCalledWith('profiles');
+	});
+});
+
+describe('deleteTrainingScore の 0 件検知', () => {
+	it('❗ RLS 等で 0 行しか消えなかった場合は失敗を返す（サイレント成功の防止）', async () => {
+		const supabase = createMockSupabase({ deletedCount: 0 });
+
+		const result = await deleteTrainingScore(supabase as any, {
+			eventId: 'event-1',
+			athleteId: 'athlete-1',
+			judgeId: 'user-123',
+			judgeName: 'テスト検定員'
+		});
+
+		expect(result.success).toBe(false);
+		if (!result.success) {
+			expect(result.error).toContain('0件');
+		}
+	});
+
+	it('count が null（取得できない）でも失敗として扱う', async () => {
+		const supabase = createMockSupabase({ deletedCount: null });
+
+		const result = await deleteTrainingScore(supabase as any, {
+			eventId: 'event-1',
+			athleteId: 'athlete-1',
+			judgeId: 'user-123',
+			judgeName: 'テスト検定員'
+		});
+
+		expect(result.success).toBe(false);
+	});
+});
+
+describe('resolveCorrectionOwner（修正要求の owner 決定）', () => {
+	const authedCaller = {
+		user: { id: 'judge-self' },
+		guestParticipant: null,
+		guestIdentifier: null
+	} as never;
+
+	const guestCaller = {
+		user: { id: 'anon-1' },
+		guestParticipant: { guest_identifier: 'guest-self' },
+		guestIdentifier: 'guest-self'
+	} as never;
+
+	it('主任はフォームで指定された owner を対象にできる（他検定員の修正は主任の職務）', () => {
+		expect(
+			resolveCorrectionOwner(authedCaller, true, {
+				judgeId: 'other-judge',
+				guestIdentifier: null
+			})
+		).toEqual({ judgeId: 'other-judge', guestIdentifier: null });
+
+		expect(
+			resolveCorrectionOwner(authedCaller, true, {
+				judgeId: null,
+				guestIdentifier: 'other-guest'
+			})
+		).toEqual({ judgeId: null, guestIdentifier: 'other-guest' });
+	});
+
+	it('❗ 主任以外は、フォームが他人を指していても自分の owner に強制される（認証審判）', () => {
+		expect(
+			resolveCorrectionOwner(authedCaller, false, {
+				judgeId: 'victim-judge',
+				guestIdentifier: 'victim-guest'
+			})
+		).toEqual({ judgeId: 'judge-self', guestIdentifier: null });
+	});
+
+	it('❗ 主任以外は、フォームが他人を指していても自分の owner に強制される（ゲスト）', () => {
+		expect(
+			resolveCorrectionOwner(guestCaller, false, {
+				judgeId: 'victim-judge',
+				guestIdentifier: 'victim-guest'
+			})
+		).toEqual({ judgeId: null, guestIdentifier: 'guest-self' });
+	});
+
+	it('主任が owner 未指定なら judge_name 後方互換のため両方 null を返す', () => {
+		expect(
+			resolveCorrectionOwner(authedCaller, true, { judgeId: '', guestIdentifier: '' })
+		).toEqual({ judgeId: null, guestIdentifier: null });
 	});
 });

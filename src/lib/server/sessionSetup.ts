@@ -99,6 +99,40 @@ async function requireActionUser(supabase: SupabaseClient) {
 	return user;
 }
 
+/**
+ * セットアップ系アクションの認可ガード。
+ *
+ * ⚠️ SECURITY: 以前は `requireActionUser`（ログイン確認のみ）で、対象行は params.id と
+ * フォーム値だけで決まっていた。作成者・主任の判定は load 側の `authorizeSetupAccess`
+ * にしか無く、アクションは**認可を完全に RLS 任せ**にしていた。特に importCSV は
+ * 「セッションの全参加者を delete → insert」なので、RLS が緩んだ瞬間に名簿が飛ぶ。
+ * load と同じ条件（作成者 または 主任検定員）をアクション側でも必ず確認する。
+ *
+ * @returns 認可 OK なら `{ user }`、NG なら `{ failure }`（呼び出し側でそのまま return する）
+ */
+async function requireSetupManager(supabase: SupabaseClient, sessionId: string) {
+	const user = await requireActionUser(supabase);
+	if (!user) {
+		return { user: null, failure: fail(401, { error: '認証が必要です。' }) };
+	}
+
+	const { data: session, error: sessionError } = await supabase
+		.from('sessions')
+		.select('created_by, chief_judge_id')
+		.eq('id', sessionId)
+		.single();
+
+	if (sessionError || !session) {
+		return { user: null, failure: fail(404, { error: 'セッションが見つかりません。' }) };
+	}
+
+	if (session.created_by !== user.id && session.chief_judge_id !== user.id) {
+		return { user: null, failure: fail(403, { error: 'この操作を行う権限がありません。' }) };
+	}
+
+	return { user, failure: null };
+}
+
 // ============================================================
 // participants ページ（モード間で完全に同一の挙動）
 // ============================================================
@@ -136,10 +170,8 @@ export async function loadSetupParticipants(
 export const participantsSetupActions = {
 	// CSVファイルから参加者を一括登録
 	importCSV: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-		const user = await requireActionUser(supabase);
-		if (!user) {
-			return fail(401, { error: '認証が必要です。' });
-		}
+		const { user, failure } = await requireSetupManager(supabase, params.id);
+		if (failure) return failure;
 
 		const formData = await request.formData();
 		const csvFile = formData.get('csvFile') as File;
@@ -231,10 +263,8 @@ export const participantsSetupActions = {
 
 	// 参加者を個別に追加
 	addParticipant: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-		const user = await requireActionUser(supabase);
-		if (!user) {
-			return fail(401, { error: '認証が必要です。' });
-		}
+		const { user, failure } = await requireSetupManager(supabase, params.id);
+		if (failure) return failure;
 
 		const formData = await request.formData();
 		const bibNumber = parseInt(formData.get('bibNumber') as string);
@@ -279,10 +309,8 @@ export const participantsSetupActions = {
 
 	// 参加者を編集
 	updateParticipant: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-		const user = await requireActionUser(supabase);
-		if (!user) {
-			return fail(401, { error: '認証が必要です。' });
-		}
+		const { user, failure } = await requireSetupManager(supabase, params.id);
+		if (failure) return failure;
 
 		const formData = await request.formData();
 		const participantId = formData.get('participantId') as string;
@@ -336,10 +364,8 @@ export const participantsSetupActions = {
 
 	// 参加者を削除
 	deleteParticipant: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-		const user = await requireActionUser(supabase);
-		if (!user) {
-			return fail(401, { error: '認証が必要です。' });
-		}
+		const { user, failure } = await requireSetupManager(supabase, params.id);
+		if (failure) return failure;
 
 		const formData = await request.formData();
 		const participantId = formData.get('participantId') as string;
@@ -443,10 +469,8 @@ export function createSetupEventsActions(mode: SetupMode) {
 	return {
 		// 種目を追加
 		addEvent: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-			const user = await requireActionUser(supabase);
-			if (!user) {
-				return fail(401, { error: '認証が必要です。' });
-			}
+			const { user, failure } = await requireSetupManager(supabase, params.id);
+			if (failure) return failure;
 
 			const formData = await request.formData();
 			const eventName = formData.get('eventName') as string;
@@ -483,10 +507,8 @@ export function createSetupEventsActions(mode: SetupMode) {
 
 		// 種目を削除
 		deleteEvent: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-			const user = await requireActionUser(supabase);
-			if (!user) {
-				return fail(401, { error: '認証が必要です。' });
-			}
+			const { user, failure } = await requireSetupManager(supabase, params.id);
+			if (failure) return failure;
 
 			const formData = await request.formData();
 			const eventId = formData.get('eventId') as string;
@@ -512,10 +534,8 @@ export function createSetupEventsActions(mode: SetupMode) {
 
 		// 種目を編集
 		updateEvent: async ({ request, params, locals: { supabase } }: SetupActionEvent) => {
-			const user = await requireActionUser(supabase);
-			if (!user) {
-				return fail(401, { error: '認証が必要です。' });
-			}
+			const { user, failure } = await requireSetupManager(supabase, params.id);
+			if (failure) return failure;
 
 			const formData = await request.formData();
 			const eventId = formData.get('eventId') as string;

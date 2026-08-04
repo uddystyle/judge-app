@@ -1,5 +1,25 @@
 # Current Tasks
 
+## 追加監査の残り5件を修正（2026-08-04）— ✅ 完了
+
+1025/1026 後の監査で挙げた「アプリ層の防御が無く RLS だけが守っている」型の所見をまとめて対応。
+
+- [x] **🟡 setPrompt の 403 回避**: `[event]/+page.server.ts` が認可判定に生の `?guest=` を使っていた（一般検定員が `?guest=x` を足すだけで多審制のゼッケン確定ゲートを回避できた）→ `authResult.guestParticipant` に差し替え
+- [x] **🟡 appointChief の認可欠落**: 作成者チェックが無く、実効範囲が sessions の UPDATE RLS 任せ（UI 想定より広い）。さらに参加者行が無い任意 UUID も「ゲストではない」と解釈されて主任になれた → 作成者チェック追加 + `maybeSingle()` で非参加者を明示的に 400
+- [x] **🟢 training_sessions の anon SELECT**（1027）: 述語が caller を参照しない `TO anon` ポリシー。1025 で撤去した anon_* と同じクラス
+- [x] **🟡 修正要求の owner 認可とサイレント成功**: 削除対象 owner を form 値だけで決めていた → `resolveCorrectionOwner()` を新設し「主任は指定 owner／それ以外は自分の owner のみ」に。0 行削除で success を返さないよう `count: 'exact'` で検知
+- [x] **🟡 setup/settings/events の認可欠落**: `sessionSetup.ts` の7アクションがログイン確認のみ（importCSV は名簿を全 delete → insert する）→ `requireSetupManager()` を新設し、load と同じ「作成者 または 主任」を各アクションでも確認
+
+### 副次的に判明・同時に直したもの
+
+- **「修正を要求」は元々機能していなかった**: `training_scores` に authenticated 向けの DELETE ポリシーが存在せず（1026 で入れたゲスト owner 版のみ）、主任でも認証審判の研修採点を消せなかった。アプリは 0 行でも success を返していたため誰も気づけない状態だった → 1027 で owner/主任の DELETE を results/training_scores に整備
+- **prod/dev ドリフト**: `chief_judge_can_delete_results` が prod にしか無かった → 1027 で同じ定義を貼り直して両環境を揃えた
+
+### 検証
+
+- [x] vitest **951 passed**（+17: resolveCorrectionOwner 5 / 0件検知 2 / setup 認可 8 / appointChief 2）/ svelte-check 0 errors / build 成功
+- [x] 1027 を dev → prod に適用。`training_sessions` の anon ポリシー **0件**、results / training_scores の DELETE ポリシーが**各3本**、`_metadata` 参照ポリシーは引き続き **0件**
+
 ## セキュリティ修正: ゲスト復帰の資格情報を guest_identifier から分離（2026-08-04）— ✅ 完了
 
 1025 適用後の追加監査で見つかった**同じクラスの残存穴**。`/session/[id]?guest=<識別子>` の再採用は呼び出し元の身元を問わず uid を再束縛するが、**その識別子は同席者全員に見えていた**（dev で実地確認: ゲストが他ゲストの `guest_identifier` を読める）。結果、同席者が他検定員の identity を乗っ取れ、1025 の uid 束縛により**本人がロックアウト**される副作用も生じていた（なりすまし自体は 1025 以前から可能で、残っていた穴が露出した形）。

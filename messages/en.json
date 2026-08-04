@@ -355,6 +355,8 @@
 	"action_guestIdMissing": "Guest identifier is not specified.",
 	"action_sessionNotFound": "Session not found.",
 	"action_noPermissionRemoveGuest": "You do not have permission to remove guest users.",
+	"action_noPermissionAppointChief": "You do not have permission to appoint a chief judge.",
+	"action_participantNotFoundInSession": "The specified user is not a participant in this session.",
 	"action_removeGuestFailed": "Failed to remove guest user.",
 	"action_guestRemoved": "Guest user removed.",
 	"action_userIdMissing": "User ID is not specified.",

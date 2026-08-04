@@ -78,7 +78,7 @@ export const actions: Actions = {
 			return fail(401, { error: '認証が必要です。' });
 		}
 
-		const { user } = authResult;
+		const { user, guestParticipant } = authResult;
 
 		// セッション情報を取得して権限をチェック
 		const { data: sessionData, error: sessionError } = await supabase
@@ -96,7 +96,10 @@ export const actions: Actions = {
 
 		// 複数検定員モードONの場合、主任検定員のみがゼッケン番号を確定できる
 		// ゲストユーザーは個別採点モードでのみアクセス可能
-		if (!isChief && isMultiJudge && !guestIdentifier) {
+		// ⚠️ SECURITY: ゲスト判定に URL の ?guest= を使ってはいけない。誰でも付けられるため、
+		// 一般検定員が ?guest=任意文字 を足すだけで 403 を回避できてしまう。
+		// JWT 検証済みの authResult.guestParticipant で判定する。
+		if (!isChief && isMultiJudge && !guestParticipant) {
 			return fail(403, { error: 'ゼッケン番号を確定する権限がありません。' });
 		}
 

@@ -8,6 +8,7 @@ import {
 	fetchActivePrompt
 } from '$lib/server/sessionHelpers';
 import { calculateFinalScore } from '$lib/scoreCalculation';
+import { resolveCorrectionOwner } from '$lib/server/scoreActions';
 import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
@@ -79,8 +80,8 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const bib = formData.get('bib') as string;
 		const judgeName = formData.get('judgeName') as string;
-		const judgeId = formData.get('judgeId') as string;
-		const formGuestIdentifier = formData.get('guestIdentifier') as string;
+		const requestedJudgeId = formData.get('judgeId') as string;
+		const requestedGuestIdentifier = formData.get('guestIdentifier') as string;
 
 		logger.debug('[requestCorrection] 修正要求を受信:', { bib, judgeName, sessionId: id });
 
@@ -100,6 +101,14 @@ export const actions: Actions = {
 		if (!isChief && isMultiJudge) {
 			return fail(403, { error: '修正を要求する権限がありません。' });
 		}
+
+		// ⚠️ SECURITY: 削除対象の owner はフォーム値をそのまま使わない。
+		// 主任は指定された owner を対象にできるが、それ以外は自分の owner のみ。
+		const { judgeId, guestIdentifier: formGuestIdentifier } = resolveCorrectionOwner(
+			authResult,
+			isChief,
+			{ judgeId: requestedJudgeId, guestIdentifier: requestedGuestIdentifier }
+		);
 
 		// 該当する検定員の得点を削除
 		logger.debug('[requestCorrection] 得点を削除中...', {
