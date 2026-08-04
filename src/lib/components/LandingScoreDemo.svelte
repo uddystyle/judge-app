@@ -6,7 +6,6 @@
 	// 実際の ScoreInput / NumericKeypad は再利用せず、見た目だけ忠実に複製する
 	// （採点ロジック・送信・検証は持たない）。パレットは本物と同じトークンを使う。
 	// マーケLP の装飾デモとして視認性優先で常時再生する（reduce-motion でも停止しない）。
-	// 画面外に出たら一時停止（軽量化）。
 
 	const KEYPAD: string[] = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0'];
 	const CONFIRM = 'confirm';
@@ -55,10 +54,7 @@
 	};
 
 	let frameIndex = 0;
-	let inView = true;
 	let timer: ReturnType<typeof setInterval> | null = null;
-	let observer: IntersectionObserver | null = null;
-	let root: HTMLElement;
 
 	$: current = frames[frameIndex] ?? staticFrame;
 
@@ -66,51 +62,20 @@
 		frameIndex = (frameIndex + 1) % frames.length;
 	}
 
-	function startTimer() {
-		if (timer || !inView) return;
-		timer = setInterval(tick, FRAME_MS);
-	}
-
-	function stopTimer() {
-		if (timer) {
-			clearInterval(timer);
-			timer = null;
-		}
-	}
-
-	function syncPlayback() {
-		if (inView) {
-			startTimer();
-		} else {
-			stopTimer();
-		}
-	}
-
 	onMount(() => {
-		// 画面外に出たら停止（軽量化）。IntersectionObserver は一時停止のみに使い、
-		// 再生開始は下の syncPlayback() で必ず行う（IO 初回コールバック待ちで固まらない）。
-		if ('IntersectionObserver' in window && root) {
-			observer = new IntersectionObserver(
-				(entries) => {
-					inView = entries[0]?.isIntersecting ?? true;
-					syncPlayback();
-				},
-				{ threshold: 0 }
-			);
-			observer.observe(root);
-		}
-
-		// マウント直後に再生開始（inView は既定 true）
-		syncPlayback();
+		// マーケLP の装飾デモは常時再生する。以前は IntersectionObserver で画面外時に
+		// 一時停止していたが、初回コールバックの誤検知やスクロール復元のタイミングで
+		// 「表示中なのに停止したまま復帰しない」状態が起きたため撤去した。
+		// setInterval は 620ms 間隔の軽量処理で、背景タブはブラウザが自動スロットルする。
+		timer = setInterval(tick, FRAME_MS);
 	});
 
 	onDestroy(() => {
-		stopTimer();
-		observer?.disconnect();
+		if (timer) clearInterval(timer);
 	});
 </script>
 
-<div class="demo" bind:this={root} aria-hidden="true">
+<div class="demo" aria-hidden="true">
 	<div class="phone">
 		<div class="screen">
 			<div class="island" aria-hidden="true"></div>
