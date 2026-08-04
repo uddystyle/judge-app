@@ -36,7 +36,11 @@ export default defineConfig({
 					if (id.includes('xlsx')) {
 						return 'xlsx';
 					}
-					if (id.includes('qrcode')) {
+					// qrcode とその CJS 依存(dijkstrajs/pngjs)は必ず同一チャンクに固める。
+					// 別チャンク(vendor)へ分離すると CommonJS 相互運用が壊れ、実行時に
+					// "Cannot set properties of undefined (setting 'exports')" を投げて
+					// 全ページのハイドレーションが停止する（＝新規登録等のボタンが無反応になる）。
+					if (id.includes('qrcode') || id.includes('dijkstrajs') || id.includes('pngjs')) {
 						return 'qrcode';
 					}
 					// node_modulesは別チャンクに
