@@ -1,5 +1,39 @@
 # Current Tasks
 
+## レビュー指摘の検証と対応（2026-08-04）— ✅ 完了
+
+**まず本番プロジェクトを実測で確定**: `https://www.tentoapp.com/` の埋め込み env が `kbxlukbvhlxponcentyp`（= scoring-system）を指しており、これが本番。ローカル `.env` の `qyxjoybicsmiysqrevhk` は dev。
+
+### 指摘① 「本番に 1027 が未適用」→ **事実誤認**（1027 は適用済み）
+
+本番の実測: `results` の DELETE ポリシー **3本**（auth/chief/guest）、`training_scores` も **3本**、`training_sessions` の anon ポリシー **0件**。指摘は別プロジェクトを見たものと思われる。
+
+### 指摘④ 「本番に score_mutations が無い」→ **正しい**（台帳が誤っていた）
+
+- `to_regclass('public.score_mutations')` が **null**。1024 の prod ✅ は誤記載だった
+- 直近マイグレーションを本番で総点検: **1022 ✅ / 1023 ✅ / 1024 ❌ / 1025 ✅ / 1026 ✅ / 1027 ✅** — 欠落は 1024 のみ
+- 本番へ 1024 を適用し、table / RLS 有効 / ポリシー0件 / 索引3本を確認。APPLIED.md も実測値へ是正
+
+### 指摘② 「セットアップ認可と RLS が不一致」→ **正しい**（1028 で解消）
+
+アプリ（load / アクション）は「作成者 または 主任」を通すが、RLS は `participants` / `training_events` とも `is_session_creator` のみ。主任の操作が DB で 0 行になり、しかも影響行数を見ていないため成功が返っていた。
+
+- `is_session_manager()` を追加し、両テーブルに manager 版 INSERT/UPDATE/DELETE を**追加**（既存 creator 版は残す＝SELECT を持つ ALL ポリシーを壊さない）
+- アプリ側にも影響行数チェックを追加（updateParticipant / deleteParticipant が 0 行なら 500）
+- **importCSV は delete 後に残存が無いことを確認してから insert**（0件削除のまま挿入して名簿が重複・混在するのを防ぐ）
+
+### 指摘③ 「参加者なら誰でも participants を INSERT できる」→ **正しい。ただし提案どおりの撤去は不可**
+
+`auth_participants_insert_by_participation` は **検定モードの未登録ゼッケン自動作成**（`scoreSync.ts:490` の `ensureParticipantExists` が**ユーザークライアント**で INSERT）を支える現役の依存で、作成者/主任に絞ると検定の採点が壊れる。
+
+- → **検定モードのセッションに限定**（`mode='certification'` かつ `is_tournament_mode=false`）。大会・研修の名簿差し込みを閉じつつ、検定の自動作成は維持
+
+### 検証
+
+- [x] vitest **961 passed**（+10: 影響行数チェック5 / 認可ガード追加分ほか）/ svelte-check 0 errors / build 成功
+- [x] 1028 を dev → prod に適用。1024 も prod へ適用
+- [x] lint の 433 ファイル警告は変更前から存在する既存のフォーマットドリフト（本変更由来ではない）
+
 ## 追加監査の残り5件を修正（2026-08-04）— ✅ 完了
 
 1025/1026 後の監査で挙げた「アプリ層の防御が無く RLS だけが守っている」型の所見をまとめて対応。

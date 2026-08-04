@@ -231,7 +231,7 @@ export const participantsSetupActions = {
 				return fail(400, { error: 'インポートするデータがありません。' });
 			}
 
-			// 既存の参加者を削除してから新しいデータを挿入
+			// 既存の参加者を削除してから新しいデータを挿入（洗い替え）
 			const { error: deleteError } = await supabase
 				.from('participants')
 				.delete()
@@ -240,6 +240,25 @@ export const participantsSetupActions = {
 			if (deleteError) {
 				logger.error('Error deleting existing participants:', deleteError);
 				return fail(500, { error: '既存の参加者データの削除に失敗しました。' });
+			}
+
+			// ⚠️ 洗い替えの安全確認: RLS で delete が 0 行になってもエラーにはならないため、
+			// 残存があるまま insert すると名簿が重複・混在する。残っていたら中断する。
+			const { count: remaining, error: remainingError } = await supabase
+				.from('participants')
+				.select('id', { count: 'exact', head: true })
+				.eq('session_id', params.id);
+
+			if (remainingError) {
+				logger.error('Error verifying participant cleanup:', remainingError);
+				return fail(500, { error: '既存の参加者データの削除に失敗しました。' });
+			}
+
+			if (remaining) {
+				logger.error('[importCSV] 既存参加者が残ったままです（権限不足の可能性）:', { remaining });
+				return fail(500, {
+					error: '既存の参加者データを削除できませんでした。権限をご確認ください。'
+				});
 			}
 
 			const { error: insertError } = await supabase
@@ -344,19 +363,29 @@ export const participantsSetupActions = {
 			return fail(400, { error: 'このゼッケン番号は既に登録されています。' });
 		}
 
-		const { error: updateError } = await supabase
+		const { error: updateError, count: updatedCount } = await supabase
 			.from('participants')
-			.update({
-				bib_number: bibNumber,
-				athlete_name: athleteName.trim(),
-				team_name: teamName?.trim() || null
-			})
+			.update(
+				{
+					bib_number: bibNumber,
+					athlete_name: athleteName.trim(),
+					team_name: teamName?.trim() || null
+				},
+				{ count: 'exact' }
+			)
 			.eq('id', participantId)
-			.eq('session_id', params.id);
+			.eq('session_id', params.id)
+			.select();
 
 		if (updateError) {
 			logger.error('Error updating participant:', updateError);
 			return fail(500, { error: '参加者の更新に失敗しました。' });
+		}
+
+		// RLS で 0 行になっても成功を返していたため、操作していないのに成功に見えていた
+		if (!updatedCount) {
+			logger.error('[updateParticipant] 更新された行が0件です（権限または対象なし）');
+			return fail(500, { error: '参加者の更新に失敗しました（更新された行が0件）。' });
 		}
 
 		return { success: true, message: '参加者を更新しました。' };
@@ -374,15 +403,21 @@ export const participantsSetupActions = {
 			return fail(400, { error: '参加者IDが指定されていません。' });
 		}
 
-		const { error: deleteError } = await supabase
+		const { error: deleteError, count: deletedCount } = await supabase
 			.from('participants')
-			.delete()
+			.delete({ count: 'exact' })
 			.eq('id', participantId)
-			.eq('session_id', params.id);
+			.eq('session_id', params.id)
+			.select();
 
 		if (deleteError) {
 			logger.error('Error deleting participant:', deleteError);
 			return fail(500, { error: '参加者の削除に失敗しました。' });
+		}
+
+		if (!deletedCount) {
+			logger.error('[deleteParticipant] 削除された行が0件です（権限または対象なし）');
+			return fail(500, { error: '参加者の削除に失敗しました（削除された行が0件）。' });
 		}
 
 		return { success: true, message: '参加者を削除しました。' };

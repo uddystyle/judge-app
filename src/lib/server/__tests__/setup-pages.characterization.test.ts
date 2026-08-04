@@ -396,3 +396,85 @@ describe.each([
 		expect(result).toMatchObject({ status: 404 });
 	});
 });
+
+// ============================================================
+// 影響行数チェック（RLS で 0 行になったときに success を返さない）
+// ============================================================
+
+describe.each([
+	['tournament', () => tournamentParticipants],
+	['training', () => trainingParticipants]
+] as const)('%s-setup/participants の影響行数チェック', (_mode, getModule) => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('❗ updateParticipant が 0 行なら 500（黙って成功しない）', async () => {
+		const supabase = makeSupabase({
+			participants: [
+				makeChain({ data: null, error: null }), // 重複チェック
+				makeChain({ error: null, count: 0 }) // update → 0 行
+			]
+		});
+
+		const result = await getModule().actions.updateParticipant(
+			makeEvent(supabase, { participantId: 'p-1', bibNumber: '1', athleteName: '選手A' })
+		);
+
+		expect(result).toMatchObject({ status: 500 });
+	});
+
+	it('updateParticipant が 1 行なら成功', async () => {
+		const supabase = makeSupabase({
+			participants: [makeChain({ data: null, error: null }), makeChain({ error: null, count: 1 })]
+		});
+
+		const result = await getModule().actions.updateParticipant(
+			makeEvent(supabase, { participantId: 'p-1', bibNumber: '1', athleteName: '選手A' })
+		);
+
+		expect(result).toMatchObject({ success: true });
+	});
+
+	it('❗ deleteParticipant が 0 行なら 500', async () => {
+		const supabase = makeSupabase({ participants: [makeChain({ error: null, count: 0 })] });
+
+		const result = await getModule().actions.deleteParticipant(
+			makeEvent(supabase, { participantId: 'p-1' })
+		);
+
+		expect(result).toMatchObject({ status: 500 });
+	});
+
+	it('❗ importCSV は delete 後に既存行が残っていたら insert せず 500', async () => {
+		const del = makeChain({ error: null });
+		const remaining = makeChain({ count: 2, error: null }); // 洗い替えできていない
+		const insert = makeChain({ error: null });
+		const supabase = makeSupabase({ participants: [del, remaining, insert] });
+
+		const result = await getModule().actions.importCSV(
+			makeEvent(supabase, {
+				csvFile: { size: 20, text: async () => '1,選手A,チーム' }
+			})
+		);
+
+		expect(result).toMatchObject({ status: 500 });
+		expect(insert.insert).not.toHaveBeenCalled();
+	});
+
+	it('importCSV は delete 後に残存が無ければ insert する', async () => {
+		const del = makeChain({ error: null });
+		const remaining = makeChain({ count: 0, error: null });
+		const insert = makeChain({ error: null });
+		const supabase = makeSupabase({ participants: [del, remaining, insert] });
+
+		const result = await getModule().actions.importCSV(
+			makeEvent(supabase, {
+				csvFile: { size: 20, text: async () => '1,選手A,チーム' }
+			})
+		);
+
+		expect(insert.insert).toHaveBeenCalled();
+		expect(result).toMatchObject({ success: true });
+	});
+});
