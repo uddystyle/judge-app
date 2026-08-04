@@ -4,6 +4,7 @@ import { checkCanAddJudgeToSession } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { validateName } from '$lib/server/validation';
 import { isJudgeNameTakenInSession } from '$lib/server/sessionHelpers';
+import { issueResumeToken } from '$lib/server/guestResume';
 import { logger } from '$lib/server/logger';
 
 export const actions: Actions = {
@@ -226,10 +227,11 @@ export const actions: Actions = {
 			// ゲストの身元はこの user_id だけで判定する（JWT の user_metadata は
 			// 本人が書き換えられるため認可に使えない）。束縛できないと以後の認証が
 			// 通らないので、JWT発行失敗と同じくロールバックして失敗させる。
-			const { error: bindError } = await supabaseAdmin
+			const { data: boundRows, error: bindError } = await supabaseAdmin
 				.from('session_participants')
 				.update({ user_id: authData.user!.id })
-				.eq('guest_identifier', guestIdentifier);
+				.eq('guest_identifier', guestIdentifier)
+				.select('id');
 
 			if (bindError) {
 				logger.error('[Join Session] ゲストuid束縛エラー:', bindError);
@@ -248,6 +250,14 @@ export const actions: Actions = {
 					guestName,
 					error: '検定への参加に失敗しました。'
 				});
+			}
+
+			// Step 2.6: 復帰トークンを発行する（クッキー失効後の ?resume= 用）。
+			// guest_identifier は同席者に見えるため復帰の資格情報には使えない（1026）。
+			// 発行に失敗しても参加自体は成立させる（自動復帰ができないだけ）。
+			const boundParticipantId = boundRows?.[0]?.id;
+			if (boundParticipantId) {
+				await issueResumeToken(supabaseAdmin, boundParticipantId);
 			}
 
 			logger.debug(

@@ -4,10 +4,11 @@
  * 目的: 認証セッション（クッキー）が失われても、端末に残る guest_identifier で
  * 同一 identity を再採用し、オフラインで保存した採点を正しい owner で同期できるようにする。
  *
- * 信頼モデル: guest_identifier はランダム UUID（推測不能）。所持＝本人証明という
- * ベアラモデルで、既存の `?guest=<guest_identifier>` 招待リンクと同一の信頼水準。
- * 再採用時の検証はサーバー（/session/[id] load の ?guest= 移行）が session_participants
- * 照合で行うため、ここは「端末に自分の identity を控える」だけの役割に留める。
+ * 信頼モデル（1026 で変更）: 復帰の資格情報は `resume_token`（guest_resume_tokens）。
+ * `guest_identifier` は採点行の owner 列として**同席者全員に見える**ため、
+ * ベアラ資格情報には使えない（同席者による identity 乗っ取りが成立してしまう）。
+ * 再採用時の検証はサーバー（/session/[id] load の ?resume= 経路）が service role 専用
+ * テーブルとの照合で行うため、ここは「端末に自分の identity を控える」だけの役割に留める。
  *
  * 注意: ITP 等でストレージが一括削除される環境（iOS 非インストール7日）では、
  * この localStorage も IndexedDB の採点キューも同時に消えるため復元対象が無い。
@@ -22,6 +23,8 @@ export interface SavedGuestIdentity {
 	session_id: number;
 	guest_identifier: string;
 	guest_name: string;
+	/** 復帰用トークン（1026）。旧エントリには無いので任意。無い場合は自動復帰できない */
+	resume_token?: string;
 }
 
 function isValid(v: unknown): v is SavedGuestIdentity {
@@ -38,16 +41,24 @@ function isValid(v: unknown): v is SavedGuestIdentity {
 export function persistGuestIdentity(
 	sessionId: number | string,
 	guestIdentifier: string,
-	guestName: string
+	guestName: string,
+	resumeToken?: string | null
 ): void {
 	if (typeof localStorage === 'undefined') return;
 	try {
+		// トークンが取れなかった時に、既に控えてある有効なトークンを消さないようにする
+		const existing = getSavedGuestIdentity(sessionId);
+		const token =
+			resumeToken ??
+			(existing?.guest_identifier === guestIdentifier ? existing?.resume_token : undefined);
+
 		localStorage.setItem(
 			storageKey(sessionId),
 			JSON.stringify({
 				session_id: Number(sessionId),
 				guest_identifier: guestIdentifier,
-				guest_name: guestName
+				guest_name: guestName,
+				...(token ? { resume_token: token } : {})
 			})
 		);
 	} catch {
@@ -66,7 +77,8 @@ export function getSavedGuestIdentity(sessionId: number | string): SavedGuestIde
 			? {
 					session_id: Number(sessionId),
 					guest_identifier: parsed.guest_identifier,
-					guest_name: parsed.guest_name
+					guest_name: parsed.guest_name,
+					...(typeof parsed.resume_token === 'string' ? { resume_token: parsed.resume_token } : {})
 				}
 			: null;
 	} catch {
@@ -100,7 +112,10 @@ export function listSavedGuestIdentities(): SavedGuestIdentity[] {
 					out.push({
 						session_id: Number(parsed.session_id),
 						guest_identifier: parsed.guest_identifier,
-						guest_name: parsed.guest_name
+						guest_name: parsed.guest_name,
+						...(typeof parsed.resume_token === 'string'
+							? { resume_token: parsed.resume_token }
+							: {})
 					});
 				}
 			} catch {

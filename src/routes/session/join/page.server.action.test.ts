@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { actions } from './+page.server';
 import { redirect } from '@sveltejs/kit';
 import { checkRateLimit } from '$lib/server/rateLimit';
+import { issueResumeToken } from '$lib/server/guestResume';
 
 // @sveltejs/kit のモック
 vi.mock('@sveltejs/kit', () => ({
@@ -24,6 +25,11 @@ vi.mock('@sveltejs/kit', () => ({
 vi.mock('$lib/server/rateLimit', () => ({
 	rateLimiters: null,
 	checkRateLimit: vi.fn(() => Promise.resolve({ success: true }))
+}));
+
+// ゲスト復帰トークン（1026）のモック。発行そのものは guestResume.test.ts で検証する
+vi.mock('$lib/server/guestResume', () => ({
+	issueResumeToken: vi.fn(() => Promise.resolve('resume-token-1'))
 }));
 
 // 組織制限チェックのモック
@@ -119,7 +125,13 @@ describe('join action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) }))
 					};
 				}
@@ -218,7 +230,13 @@ describe('join action - JWT ロールバック検証', () => {
 							}
 							return Promise.resolve({ error: null });
 						}),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn((field: string, value: any) => {
 								deleteCallCount++;
@@ -288,7 +306,13 @@ describe('join action - JWT ロールバック検証', () => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
 						}),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => {
 								deleteCallCount++;
@@ -363,7 +387,11 @@ describe('join action - JWT ロールバック検証', () => {
 							return {
 								eq: vi.fn((field: string, value: unknown) => {
 									updateFilters.push([field, value]);
-									return Promise.resolve({ error: null });
+									return {
+										select: vi.fn(() =>
+											Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+										)
+									};
 								})
 							};
 						}),
@@ -391,6 +419,8 @@ describe('join action - JWT ロールバック検証', () => {
 			// 発行された匿名 uid が、INSERT したゲスト行に書き込まれる
 			expect(updatePayloads).toEqual([{ user_id: 'anon-user-bound' }]);
 			expect(updateFilters).toEqual([['guest_identifier', capturedGuestIdentifier]]);
+			// 1026: 束縛した参加行に対して復帰トークンが発行される
+			expect(issueResumeToken).toHaveBeenCalledWith(expect.anything(), 'participant-1');
 		});
 
 		it('uid束縛に失敗したら参加者行をロールバックして失敗を返す', async () => {
@@ -422,7 +452,11 @@ describe('join action - JWT ロールバック検証', () => {
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
 						update: vi.fn(() => ({
-							eq: vi.fn(() => Promise.resolve({ error: { message: 'bind failed' } }))
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: null, error: { message: 'bind failed' } })
+								)
+							}))
 						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => {
@@ -485,7 +519,13 @@ describe('join action - JWT ロールバック検証', () => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
 						}),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => {
 								deleteCallCount++;
@@ -556,7 +596,13 @@ describe('join action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -644,7 +690,13 @@ describe('join action - JWT ロールバック検証', () => {
 							}
 							return Promise.resolve({ error: null });
 						}),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -737,7 +789,13 @@ describe('join action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -814,7 +872,13 @@ describe('join action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -883,7 +947,13 @@ describe('join action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -958,7 +1028,13 @@ describe('join action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
-						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
+						update: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								select: vi.fn(() =>
+									Promise.resolve({ data: [{ id: 'participant-1' }], error: null })
+								)
+							}))
+						})),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))

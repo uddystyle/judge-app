@@ -2,6 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { fail } from '@sveltejs/kit';
 import { authenticateSession, authenticateAction } from '$lib/server/sessionAuth';
+import { findParticipantByResumeToken, getResumeToken } from '$lib/server/guestResume';
 import { logger } from '$lib/server/logger';
 
 export const load: PageServerLoad = async ({
@@ -10,56 +11,52 @@ export const load: PageServerLoad = async ({
 	locals: { supabase, supabaseAdmin }
 }) => {
 	const sessionId = params.id;
-	const guestParam = url.searchParams.get('guest');
+	const resumeParam = url.searchParams.get('resume');
 
-	// URLパラメータでguest_identifierが渡された場合（ゲスト identity の再採用）
-	if (guestParam) {
+	// ⚠️ SECURITY: 旧 `?guest=<guest_identifier>` による再採用は廃止した（1026）。
+	// guest_identifier は採点行の owner 列として**同席者全員に見える**ため、
+	// 「所持＝本人証明」のベアラ資格情報には使えなかった（同席者が他検定員の
+	// identity を乗っ取り、uid 束縛ごと奪って本人をロックアウトできた）。
+	// 復帰は同席者が読めない guest_resume_tokens の token（?resume=）だけで行う。
+	if (url.searchParams.has('guest')) {
+		logger.debug('[ゲスト復帰] 旧 ?guest= は再採用に使わない。パラメータを落として続行');
+		// 他のパラメータ（restart / ended / join 等）は落とさない
+		const rest = new URLSearchParams(url.searchParams);
+		rest.delete('guest');
+		const qs = rest.toString();
+		throw redirect(303, `/session/${sessionId}${qs ? `?${qs}` : ''}`);
+	}
+
+	// 復帰トークンが渡された場合（ゲスト identity の再採用）
+	if (resumeParam) {
 		// 既にJWT認証されているか確認
 		const {
 			data: { user }
 		} = await supabase.auth.getUser();
 
 		// ✅ SECURITY: 通常ユーザー（認証済みで匿名ではない）の場合、ゲスト移行をスキップ
-		// 通常ユーザーが誤ってゲストリンクを踏んでも、匿名JWTに置き換わらないようにする
+		// 通常ユーザーが誤って復帰リンクを踏んでも、匿名JWTに置き換わらないようにする
 		if (user && user.is_anonymous !== true) {
-			logger.debug('[ゲスト移行] 通常ユーザーのため、ゲスト移行をスキップ');
+			logger.debug('[ゲスト復帰] 通常ユーザーのため、ゲスト移行をスキップ');
 			// URLパラメータを削除してリダイレクト
 			throw redirect(303, `/session/${sessionId}`);
 		}
 
 		if (!supabaseAdmin) {
-			logger.error('[ゲスト移行] supabaseAdmin が利用できません（SERVICE_ROLE_KEY 未設定）');
+			logger.error('[ゲスト復帰] supabaseAdmin が利用できません（SERVICE_ROLE_KEY 未設定）');
 		} else {
-			// ✅ SECURITY: URLのsessionIdと一致するguest_identifierのみ取得。
-			// guest_identifier はランダムUUIDで、所持を本人証明とみなす（招待リンクと同じ信頼モデル）。
-			// service role で引くのは、未認証訪問者は RLS 下で自分の参加行を読めないため。
-			const { data: participant } = await supabaseAdmin
-				.from('session_participants')
-				.select('session_id, guest_name, guest_identifier, user_id')
-				.eq('session_id', sessionId)
-				.eq('guest_identifier', guestParam)
-				.eq('is_guest', true)
-				.maybeSingle();
+			// token は service role 専用テーブルにあり同席者からは読めない。
+			// URL の sessionId と参加行の session_id 一致もヘルパー内で確認している。
+			const participant = await findParticipantByResumeToken(supabaseAdmin, sessionId, resumeParam);
 
 			if (!participant) {
-				logger.warn('[ゲスト移行] session_participants が見つかりません:', {
-					guestParam,
-					sessionId,
-					reason: 'URLのsessionIdと一致するguest_identifierが存在しない'
-				});
-			} else if (participant.session_id.toString() !== sessionId) {
-				// ✅ SECURITY: 念のため、取得したparticipantのsession_idがURLと一致するか確認
-				logger.error('[ゲスト移行] セッションID不一致:', {
-					urlSessionId: sessionId,
-					participantSessionId: participant.session_id
-				});
-				throw redirect(303, `/session/${sessionId}`);
+				logger.warn('[ゲスト復帰] 復帰トークンに一致する参加者がいません:', { sessionId });
 			} else if (user && participant.user_id === user.id) {
-				logger.debug('[ゲスト移行] 既に本端末のuidが束縛済み、URLパラメータを削除してリダイレクト');
+				logger.debug('[ゲスト復帰] 既に本端末のuidが束縛済み、URLパラメータを削除してリダイレクト');
 				throw redirect(303, `/session/${sessionId}`);
 			} else {
 				// JWT発行（再採用のたびに新しい匿名uidが発行される）
-				logger.debug('[ゲスト移行] session_participants取得成功、JWT発行中');
+				logger.debug('[ゲスト復帰] 復帰トークン照合成功、JWT発行中');
 				const { data: authData, error: signInError } = await supabase.auth.signInAnonymously({
 					options: {
 						data: {
@@ -72,19 +69,19 @@ export const load: PageServerLoad = async ({
 				});
 
 				if (signInError || !authData.user) {
-					logger.error('[ゲスト移行] JWT発行エラー:', signInError);
+					logger.error('[ゲスト復帰] JWT発行エラー:', signInError);
 				} else {
 					// 新しいuidを参加者行に束縛し直す（身元の正本は user_id）。
 					// 束縛できなければ認証が通らないため、リダイレクトせずエラーとして扱う。
 					const { error: bindError } = await supabaseAdmin
 						.from('session_participants')
 						.update({ user_id: authData.user.id })
-						.eq('guest_identifier', guestParam);
+						.eq('id', participant.id);
 
 					if (bindError) {
-						logger.error('[ゲスト移行] ゲストuid束縛エラー:', bindError);
+						logger.error('[ゲスト復帰] ゲストuid束縛エラー:', bindError);
 					} else {
-						logger.debug('[ゲスト移行] JWT発行・uid束縛成功、リダイレクト');
+						logger.debug('[ゲスト復帰] JWT発行・uid束縛成功、リダイレクト');
 						// リダイレクト（URLパラメータを削除）
 						throw redirect(303, `/session/${sessionId}`);
 					}
@@ -101,6 +98,13 @@ export const load: PageServerLoad = async ({
 		sessionId,
 		guestIdentifier
 	);
+
+	// 認証済みゲスト本人にだけ復帰トークンを渡す（端末の localStorage に控えさせる）。
+	// 同席者からは service role 専用テーブルのため到達できない。
+	const guestResumeToken =
+		guestParticipant && supabaseAdmin
+			? await getResumeToken(supabaseAdmin, guestParticipant.id)
+			: null;
 
 	// 組織所属チェック（組織バッジ表示用）
 	let hasOrganization = false;
@@ -264,7 +268,8 @@ export const load: PageServerLoad = async ({
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: trainingSession?.is_multi_judge || false,
 			guestParticipant,
-			guestIdentifier
+			guestIdentifier,
+			guestResumeToken
 		};
 	}
 
@@ -288,7 +293,8 @@ export const load: PageServerLoad = async ({
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: true,
 			guestParticipant,
-			guestIdentifier
+			guestIdentifier,
+			guestResumeToken
 		};
 	}
 
@@ -314,7 +320,8 @@ export const load: PageServerLoad = async ({
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: sessionDetails.is_multi_judge || false,
 			guestParticipant,
-			guestIdentifier
+			guestIdentifier,
+			guestResumeToken
 		};
 	}
 
@@ -341,7 +348,8 @@ export const load: PageServerLoad = async ({
 			isSessionActive: sessionDetails.is_active,
 			isMultiJudge: sessionDetails.is_multi_judge || false,
 			guestParticipant,
-			guestIdentifier
+			guestIdentifier,
+			guestResumeToken
 		};
 	}
 
@@ -371,6 +379,7 @@ export const load: PageServerLoad = async ({
 		isSessionActive: sessionDetails.is_active,
 		guestParticipant,
 		guestIdentifier,
+		guestResumeToken,
 		disciplines,
 		isMultiJudge
 	};
@@ -571,9 +580,8 @@ export const actions: Actions = {
 		// 同じページにリダイレクト（終了フラグを削除）
 		// restart=true パラメータを付けて、誤った終了検知を防ぐ
 		// ゲストユーザーの場合もrestart=trueを追加して、isSessionEndedの判定が正しく動作するようにする
-		const guestParam = guestIdentifier
-			? `?guest=${guestIdentifier}&join=true&restart=true`
-			: '?restart=true';
+		// ?guest= は識別子を URL に載せるだけで再採用にも認可にも使わないため付けない（1026）
+		const guestParam = guestIdentifier ? '?join=true&restart=true' : '?restart=true';
 		throw redirect(303, `/session/${id}${guestParam}`);
 	}
 };

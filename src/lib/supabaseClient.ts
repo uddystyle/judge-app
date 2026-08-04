@@ -50,10 +50,12 @@ if (typeof window !== 'undefined') {
 					// P3: 端末保存済みの guest identity があり、かつ「今失効したのがその本人」の時だけ
 					// ?guest= で自動再採用する。共有端末で別ゲストや認証ユーザーが、前の利用者の
 					// 保存 identity に誤って降格・すり替わるのを防ぐ（別人の採点への誤帰属防止）。
+					// 復帰は resume_token でのみ行う（guest_identifier は同席者に見えるため
+					// ベアラ資格情報にできない。1026）。旧エントリでトークンが無い場合は再参加へ。
 					const saved = getSavedGuestIdentity(sessionId);
-					if (saved && saved.guest_identifier === lastKnownGuestIdentifier) {
+					if (saved && saved.resume_token && saved.guest_identifier === lastKnownGuestIdentifier) {
 						console.log('[supabaseClient] Auto-resuming guest identity for session:', sessionId);
-						window.location.href = `/session/${sessionId}?guest=${encodeURIComponent(saved.guest_identifier)}`;
+						window.location.href = `/session/${sessionId}?resume=${encodeURIComponent(saved.resume_token)}`;
 					} else {
 						console.log('[supabaseClient] Redirecting to rejoin session:', sessionId);
 						window.location.href = `/session/${sessionId}?expired=true`;

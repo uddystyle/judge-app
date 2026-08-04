@@ -72,7 +72,9 @@
 		const gp = data.guestParticipant;
 		const sid = Number(data.sessionDetails.id);
 		if (gp?.guest_identifier && gp?.guest_name) {
-			persistGuestIdentity(sid, gp.guest_identifier, gp.guest_name);
+			// 1026: 復帰の資格情報は resume_token（同席者から読めない）。guest_identifier は
+			// owner 列として同席者に見えるため、復帰には使わない。
+			persistGuestIdentity(sid, gp.guest_identifier, gp.guest_name, data.guestResumeToken);
 			rependMismatchedMutations(gp.guest_identifier)
 				.then((n) => {
 					if (n > 0) syncNow().catch(() => {});

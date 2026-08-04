@@ -15,7 +15,8 @@
 	let isSubmitting = false;
 
 	// P3: この端末に保存済みのゲスト identity があれば「再開」を提示する。
-	// 再採用は /session/[id]?guest= のサーバー移行が session_participants 照合のうえ行う。
+	// 再採用は /session/[id]?resume= のサーバー経路が service role 専用テーブルと照合のうえ行う。
+	// 復帰トークンを持たない旧エントリは再開できないため提示しない。
 	let savedIdentity: SavedGuestIdentity | null = null;
 	$: sessionOrganization = data.session
 		? Array.isArray(data.session.organizations)
@@ -25,14 +26,16 @@
 
 	onMount(() => {
 		if (data.session) {
-			savedIdentity = getSavedGuestIdentity(data.session.id);
+			const saved = getSavedGuestIdentity(data.session.id);
+			savedIdentity = saved?.resume_token ? saved : null;
 		}
 	});
 
-	// フルロードで再開する（サーバーの ?guest= 移行が session_participants 照合のうえ
+	// フルロードで再開する（サーバーの ?resume= 経路が service role 専用テーブルと照合のうえ
 	// 同一 identity で JWT を再発行し、クッキーを張り直す）。
-	function resumeGuest(sessionId: number, guestIdentifier: string) {
-		window.location.href = `/session/${sessionId}?guest=${encodeURIComponent(guestIdentifier)}`;
+	// 1026: guest_identifier は同席者に見えるためベアラ資格情報にできない。resume_token を使う。
+	function resumeGuest(sessionId: number, resumeToken: string) {
+		window.location.href = `/session/${sessionId}?resume=${encodeURIComponent(resumeToken)}`;
 	}
 </script>
 
@@ -89,7 +92,8 @@
 							type="button"
 							class="resume-btn"
 							on:click={() =>
-								savedIdentity && resumeGuest(data.session.id, savedIdentity.guest_identifier)}
+								savedIdentity?.resume_token &&
+								resumeGuest(data.session.id, savedIdentity.resume_token)}
 						>
 							「{savedIdentity.guest_name}」として再開
 						</button>

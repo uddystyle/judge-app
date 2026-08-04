@@ -1,5 +1,38 @@
 # Current Tasks
 
+## セキュリティ修正: ゲスト復帰の資格情報を guest_identifier から分離（2026-08-04）— ✅ 完了
+
+1025 適用後の追加監査で見つかった**同じクラスの残存穴**。`/session/[id]?guest=<識別子>` の再採用は呼び出し元の身元を問わず uid を再束縛するが、**その識別子は同席者全員に見えていた**（dev で実地確認: ゲストが他ゲストの `guest_identifier` を読める）。結果、同席者が他検定員の identity を乗っ取れ、1025 の uid 束縛により**本人がロックアウト**される副作用も生じていた（なりすまし自体は 1025 以前から可能で、残っていた穴が露出した形）。
+
+### 設計
+
+「採点行の owner を表す識別子（同席者に見えてよい）」と「identity を復帰させる資格情報（本人の端末だけが持つ）」を分離。`session_participants` に列を足す案は同席者が `select=*` で読めてしまい、列単位 GRANT は `sessionAuth` の `.select('*')` を壊すため、**RLS 有効・ポリシー無しの別テーブル**（service role 専用。1024 と同じパターン）にした。
+
+### 実装
+
+- [x] `1026_guest_resume_tokens.sql` + rollback + verify + APPLIED.md（既存ゲスト行に token をバックフィル）
+- [x] `$lib/server/guestResume.ts`: `issueResumeToken` / `getResumeToken` / `findParticipantByResumeToken`（token と URL の session_id 一致・`is_guest` も必須）
+- [x] join / invite: uid 束縛の直後に token 発行（失敗しても参加自体は成立させる）
+- [x] `session/[id]` load: **`?guest=` の再採用を廃止**（他のクエリは落とさずリダイレクト）、`?resume=<token>` で復帰。本人にだけ token を load データで返す
+- [x] クライアント: `guestIdentity` に `resume_token`（旧エントリは後方互換で読めるが再開ボタンは出さない）、`supabaseClient` の SIGNED_OUT・join/invite の再開ボタン・restartSession を `?resume=` へ
+
+### 検証
+
+- [x] vitest **934 passed**（+23: guestResume 12 / guestIdentity 5 / load 回帰 6）/ svelte-check 0 errors / build 成功 / 変更ファイルは prettier クリーン
+- [x] dev 実地（アプリ画面経由・テストデータ削除済み）:
+  - **`?guest=<被害者の識別子>` で乗っ取れない**（束縛 uid が不変、攻撃者は `/login` へ）
+  - 正規の `?resume=<token>` は復帰でき、新しい uid が束縛される（`/session/10` に留まる）
+  - 未知の token では束縛が変化しない
+- [x] prod へ 1026 適用（**DB 先行**）: RLS 有効 / ポリシー **0件** / ゲスト31行すべてに token 発行
+
+### 監査で挙がった未対応（今回のスコープ外・記録のみ）
+
+- 🟡 `[event]/+page.server.ts:72,99` setPrompt が**生の `?guest=`** で 403 を回避できる（多審制で一般検定員が `scoring_prompts` に INSERT 可能。sessions 更新は RLS が 0 行にするが success を返す）
+- 🟡 `details/actions/participants.ts` appointChief に**作成者チェックが無い**（参加者行が無い任意 UUID も通る）
+- 🟡 status 系2ファイルの修正要求削除が form 値の owner をそのまま使う（RLS が弾くが 0 行でも success を返すサイレント成功）
+- 🟡 `sessionSetup.ts` / `details/actions/{settings,events}.ts` がログイン確認のみで認可は RLS 任せ
+- 🟢 `training_sessions` の anon SELECT が caller を参照しない述語（本番4行中1行が未認証で読める。中身は表示設定のみ）
+
 ## セキュリティ修正: ゲスト身元を JWT クレームから auth.uid() 束縛へ（2026-08-04）— ✅ 完了（コミット f2d84e8・本番デプロイ済み・dev+prod 適用済み）
 
 ポリシー重複の調査中に見つかった、**同一根本原因の重大な欠陥2件**の修正。
