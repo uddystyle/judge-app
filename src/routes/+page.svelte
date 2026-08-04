@@ -14,7 +14,8 @@
 	<meta property="og:title" content={m.landing_metaTitle()} />
 	<meta property="og:description" content={m.landing_metaDescription()} />
 	<meta property="og:type" content="website" />
-	<link rel="canonical" href="https://tento.vercel.app/" />
+	<meta property="og:url" content="https://www.tentoapp.com/" />
+	<link rel="canonical" href="https://www.tentoapp.com/" />
 </svelte:head>
 
 <div class="page">

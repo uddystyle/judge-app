@@ -9,4 +9,4 @@ Disallow: /onboarding/
 Disallow: /invite/
 Disallow: /api/
 
-Sitemap: https://tento.vercel.app/sitemap.xml
+Sitemap: https://www.tentoapp.com/sitemap.xml
