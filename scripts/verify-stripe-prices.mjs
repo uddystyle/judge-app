@@ -9,8 +9,17 @@
  *   npm run verify:stripe-prices
  *
  * 読み取り専用（GET のみ）。既定は .env の STRIPE_SECRET_KEY を使う。
- * 本番(live)を確認したい場合は環境変数で上書きする:
- *   STRIPE_SECRET_KEY=sk_live_... npm run verify:stripe-prices
+ *
+ * 本番(live)を確認する場合の注意:
+ * .env の price ID は**テストモードのオブジェクト**なので、live キーで引くと
+ * resource_missing になる。本番の price ID を渡すか、渡さない場合は
+ * live 上の active な定期課金 price を一覧して表示価格と突き合わせる。
+ *
+ *   # 本番の price ID が分かっている場合
+ *   STRIPE_SECRET_KEY=sk_live_xxx STRIPE_PRICE_BASIC_MONTH=price_xxx ... npm run verify:stripe-prices
+ *
+ *   # 分からない場合（live の price を一覧して目視突合）
+ *   STRIPE_SECRET_KEY=sk_live_xxx npm run verify:stripe-prices -- --list
  */
 import { readFileSync } from 'node:fs';
 
@@ -58,9 +67,68 @@ const TARGETS = [
 	['premium', 'STRIPE_PRICE_PREMIUM_YEAR', 'year']
 ];
 
+const stripeGet = (path) =>
+	fetch(`https://api.stripe.com/v1/${path}`, {
+		headers: { Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}` }
+	}).then((r) => r.json());
+
+const listOnly = process.argv.includes('--list');
+
 console.log(`Stripe price 突合（mode=${mode}）\n`);
 
+/** live 上の active な定期課金 price を一覧し、表示価格と突き合わせる */
+async function listActivePrices() {
+	const res = await stripeGet('prices?active=true&limit=100&expand[]=data.product');
+	if (res.error) {
+		console.error(`price 一覧の取得に失敗: ${res.error.message}`);
+		return 1;
+	}
+
+	const recurring = (res.data ?? []).filter((p) => p.recurring);
+	if (!recurring.length) {
+		console.log('active な定期課金 price がありません。');
+		return 1;
+	}
+
+	// 表示価格（plans.ts）の全額を集合にしておき、一致するものに印を付ける
+	const displayed = new Map();
+	for (const id of ['basic', 'standard', 'premium']) {
+		const { monthly, yearly } = readPlanPrices(id);
+		displayed.set(`${monthly}:month`, `${id}/month`);
+		displayed.set(`${yearly}:year`, `${id}/year`);
+	}
+
+	console.log(`${mode} 上の active な定期課金 price（${recurring.length}件）:\n`);
+	const matched = new Set();
+
+	for (const p of recurring.sort((a, b) => a.unit_amount - b.unit_amount)) {
+		const key = `${p.unit_amount}:${p.recurring.interval}`;
+		const hit = displayed.get(key);
+		if (hit) matched.add(hit);
+		const product = typeof p.product === 'object' ? p.product?.name : p.product;
+		console.log(
+			`${hit ? '✅' : '  '} ${p.id}  ¥${p.unit_amount?.toLocaleString()} / ${p.recurring.interval}` +
+				`  ${product ?? ''}${hit ? `  → 表示価格 ${hit} と一致` : ''}`
+		);
+	}
+
+	const missing = [...displayed.values()].filter((v) => !matched.has(v));
+	console.log();
+	if (missing.length) {
+		console.log(`⚠️ 表示価格に対応する ${mode} price が見つからないもの: ${missing.join(', ')}`);
+		console.log('   → 本番の請求額が画面表示と食い違っている可能性があります。');
+		return 1;
+	}
+	console.log('表示価格はすべて、対応する price が存在します。');
+	return 0;
+}
+
+if (listOnly) {
+	process.exit(await listActivePrices());
+}
+
 let failed = 0;
+let missingResource = 0;
 
 for (const [planId, envKey, interval] of TARGETS) {
 	const priceId = process.env[envKey] || fileEnv[envKey];
@@ -72,13 +140,12 @@ for (const [planId, envKey, interval] of TARGETS) {
 		continue;
 	}
 
-	const res = await fetch(`https://api.stripe.com/v1/prices/${priceId}`, {
-		headers: { Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString('base64')}` }
-	});
-	const price = await res.json();
+	const price = await stripeGet(`prices/${priceId}`);
 
 	if (price.error) {
-		console.log(`❌ ${label}: ${priceId} -> ${price.error.code}: ${price.error.message}`);
+		const code = price.error.code ?? price.error.type ?? 'error';
+		console.log(`❌ ${label}: ${priceId} -> ${code}: ${price.error.message}`);
+		if (code === 'resource_missing') missingResource++;
 		failed++;
 		continue;
 	}
@@ -107,6 +174,17 @@ for (const [planId, envKey, interval] of TARGETS) {
 }
 
 console.log();
+
+// live キーで test の price ID を引くと必ず resource_missing になる。
+// その場合は ID 指定なしでも判定できるよう、自動で一覧突合に切り替える。
+if (missingResource === TARGETS.length) {
+	console.log(
+		`指定された price ID が ${mode} に存在しません（.env の ID は別モードのものと思われます）。`
+	);
+	console.log(`${mode} 上の price を一覧して突き合わせます。\n`);
+	process.exit(await listActivePrices());
+}
+
 if (failed) {
 	console.error(`${failed} 件の不一致があります。`);
 	process.exit(1);
