@@ -1090,3 +1090,23 @@ if (guestIdentifier) {
 - リファクタ後は `npm run check 2>&1 | grep -A3 "<変更したファイルのパス>"` を必ず実行し、変更前（`git stash` 比較 or HEAD 時点の同 grep）と**エラー内容**を突き合わせる。
 - 変数を置換するリファクタでは、置換対象の**旧変数名を最後に grep**して参照ゼロを確認する（`grep -n "membership" <file>`）。Edit の old_string 範囲外に残った参照はこれで捕まえられる。
 - API がエラーでも、クライアントが `!response.ok` を「データなし」等の別メッセージに丸めている場合がある。「データがありません」系の報告は、まずエンドポイントが 4xx/5xx を返していないかを疑う。
+
+## Debugging（実環境再現・計測）
+
+### ✅ 「まだ直っていない」報告は“実環境そのもの”で再現する。安易な probe は条件を落とす
+**Rule**: ユーザーが「直したはずが直っていない/リロードで再発する」と言う時、dev の簡易 probe で「動いた」を確認して終わりにしない。**本番ビルド＋Service Worker＋実リロードの意味論（スクロール復元）＋ユーザーの OS 設定（reduce-motion 等）**を揃えて再現する。
+
+**Why**: LP 採点デモ（`LandingScoreDemo.svelte`）の「リロードで止まる」調査で、Playwright の `page.reload()` は**スクロールを毎回トップに戻す**ため、真因（スクロール復元／レイアウト確定タイミングで `IntersectionObserver` の初回コールバックが「非表示」を誤検知 →`inView=false` のまま復帰イベントが来ず停止）を再現できず、「reload でも PLAYING」と誤結論した。dev では動くが本番ビルド（`vite preview`）では onMount 未実行で停止、という dev/prod 差もあった。
+
+**How to apply**:
+- 再現は `npm run build && npm run preview` の**本番ビルド**で。SW を効かせるため Playwright は `launchPersistentContext`（新規 context では SW が毎回消える）。
+- コンポーネント内部状態は**推測せず計測**する。`window.__anim = () => ({inView, timer:!!timer, ...})` を一時的に露出し、`window.__anim()` で ground truth を読む。停止原因の切り分けは「表示中か？」「timer は動いているか？」を直接見る。
+- ハイドレーション不発の切り分けは `page.on('pageerror')` / `page.on('console')` を必ず張る（今回 `Cannot set properties of undefined (setting 'exports')` を捕捉。ただし `vite preview` 特有の CJS アーティファクトで実本番は正常、というノイズもあるので実本番の挙動と突き合わせる）。
+- 本番URLを prober に渡す時は**実在確認**する。コード内の canonical（`https://tento.vercel.app/`）は**別サイト**を指していた。`.vercel/project.json` の projectName や実 curl のタイトル/マーカーで判定する。
+
+### ✅ 常時再生の装飾アニメを `IntersectionObserver` の「画面外一時停止」でゲートしない
+**Rule**: 「常に動かす」要件の装飾アニメでは、IO による画面外一時停止を入れない。IO は**交差状態が“変化”した時だけ**発火するので、初回/一過性の false 誤検知で停止すると、表示され続ける限り復帰イベントが来ず**止まったまま**になる。
+
+**Why**: 画面外での軽量化目的の IO 一時停止が、リロード時に「表示中なのに停止したまま」レースを生んだ。setInterval（620ms）1本の負荷は無視でき、背景タブはブラウザが自動スロットルするため、撤去が最も堅牢（7b91e11）。
+
+**How to apply**: 装飾・常時再生アニメは `onMount` で `setInterval` を張り `onDestroy` で `clearInterval` するだけにする。省電力が本当に要るなら IO ではなく `document.visibilitychange`（非交差変化イベント）を使う。
