@@ -1,5 +1,73 @@
 # Current Tasks
 
+## セキュリティ修正: ゲスト身元を JWT クレームから auth.uid() 束縛へ（2026-08-04）— 🚧 dev 適用済み・prod 未適用
+
+ポリシー重複の調査中に見つかった、**同一根本原因の重大な欠陥2件**の修正。
+
+### 根本原因（1つ）
+
+「ゲスト＝`anon` ロール」「ゲストの身元＝JWT の `user_metadata`」という 2 つの誤った前提。
+Supabase 公式仕様では匿名サインインのユーザーは**永続ユーザーと同じ `authenticated` ロール**（`anon` ロールは「ユーザー無しの anon API キー」用）。かつ `user_metadata`（`raw_user_meta_data`）は**本人が `updateUser({data})` で書き換え可能**。
+
+- **① セキュリティ（なりすまし）**: `session_participants` の UPDATE(`TO public`)/DELETE(`TO authenticated`) と `sessionAuth.ts` のゲスト判定が `user_metadata.guest_identifier` を信頼 → 同一セッションの参加者が他ゲストの identifier を読んで詐称し、採点の書込み・上書き、参加行の改変・削除が可能。RLS 側の該当句には**セッションスコープも無かった**。
+- **② 可用性（ゲスト採点不能）**: ゲスト向けの `anon_*_by_jwt` 15本は全て `TO anon` で**一度も発火しない**。`authenticated` 側は `judge_id = auth.uid()` とセッション参加(`session_participants.user_id`)を要求するが、ゲストは `guest_identifier` 運用で `user_id` が NULL（本番31行すべて実測）→ セッション行の読取りも採点保存もできない。2026-06 末の RLS 強化以降に発生とみられる。
+
+### 設計（実測に基づく）
+
+ゲストの身元を **`session_participants.user_id` = 匿名 uid** に束縛し、認可から JWT クレームへの信頼を撤廃。`guest_identifier` は採点行の owner 列としては据え置き（`results`/`training_scores`/`score_mutations` のデータ移行は不要）。
+
+- `check_user_or_guest` は OR 条件 → `is_guest=true` のまま `user_id` を入れられる
+- `user_id` の FK は **auth.users と profiles の2本**。匿名ユーザーにも `profiles` 行が存在（本番10/10。`handle_new_user` が発火し `full_name` にゲスト名）→ FK 撤去不要
+- `is_session_member` / `is_session_participant` は**いずれも `user_id = auth.uid()` 基準** → 束縛すれば読取り系は既存ポリシーで自動的に通る（新ポリシーは書込みの5本だけで足りる）
+- 再採用（`?guest=`）は毎回新 uid が出るので `user_id` を**上書き**。旧端末は `auth_required`（retryable）でキュー保持＝データ喪失なし
+
+### 実装
+
+- [x] `sessionAuth.ts`: `authenticateSession`/`authenticateAction` のゲスト判定を `user.is_anonymous` + `session_participants.user_id = auth.uid()` 照合へ。`user_metadata` 依存を撤去。第3引数はクライアント値との食い違い検知の**警告ログ専用**に降格（認可には不使用）
+- [x] ゲスト発行3経路で uid を束縛: `session/join`（Step 2.5）、`session/invite/[token]`、`session/[id]` の `?guest=` 再採用。束縛失敗時は参加行をロールバックして失敗（束縛できないゲストは以後どのポリシーにも当たらないため）
+- [x] `?guest=` 再採用の participants 照合を **service role** 化（未認証訪問者は RLS 下で自分の行を読めないため。所持=本人証明の信頼モデルは招待リンクと同一）
+- [x] `api/score-status/[sessionId]/[bib]`: `sessionAuth` を迂回する独自検証（未認証でも URL の `?guest=` だけで通っていた）を `authenticateAction` へ一本化
+- [x] `1025_guest_identity_bind_to_uid.sql` + rollback + verify + APPLIED.md: バックフィル／偽造可能句の撤去／`anon_*` 14本+`training_events` anon SELECT の撤去／ゲスト owner 書込み5本を `current_guest_identifier()`（SECURITY DEFINER・`search_path` 固定・**anon から revoke**）で新設
+
+### 検証
+
+- [x] vitest **911 passed / 11 skipped**（+4: なりすまし拒否1・uid束縛の回帰3）。`sessionAuth.test.ts` は「user_metadata に偽造値を仕込んだ匿名ユーザー」を全ゲストテストの既定にし、`guest_identifier` で引かないことを assert
+- [x] svelte-check **0 errors / 0 warnings**、build 成功、変更ファイルは prettier クリーン
+- [x] eslint: 変更ファイルの本番コードは新規エラーなし（テストの `as any` 4件のみ増。既存70件と同種）
+- [x] dev（tento-development）へ 1025 適用 → `_metadata` 参照ポリシー **0件**／`anon_*` **0件**／ゲスト owner ポリシー **5本**／ヘルパは SECURITY DEFINER + `search_path=public, pg_temp` + anon revoke 済み
+- [x] prod バックフィルの事前見積り（読み取りのみ）: ゲスト31行中 **10行が突合可能**（残21行は匿名認証導入前の履歴で `user_id` NULL のまま＝想定内）
+
+### dev 実地検証（2026-08-04・匿名サインイン有効化後）— 9項目すべて緑
+
+REST API に実 JWT を投げる検証スクリプトで、DB 層の挙動を実測（テストデータは実行後に削除）。
+
+- [x] **[1]** 匿名ユーザーの JWT は `role=authenticated` / `is_anonymous=true` を実測 → 「ゲスト＝anon ロール」という前提の誤りを**実証**（ドキュメントだけでなく実物で確定）
+- [x] **[2]** uid 束縛**前**はゲストが `sessions` 行を読めない（rows=0）→ **本番で起きている②を再現**
+- [x] **[3]** uid 束縛**後**は読める（rows=1）／**[4]** 自分の `guest_identifier` で `results` INSERT が成功（201）→ ②の修正を実証
+- [x] **[5]** 攻撃者ゲストが `PUT /auth/v1/user` + トークンリフレッシュで、自分の JWT の `user_metadata.guest_identifier` を**被害者の値に書き換えることに成功** → 脆弱性の前提が実在することを実証
+- [x] **[6]** その偽造 JWT で被害者名義の採点 INSERT → **403**／**[7]** 被害者の採点 UPDATE → **0行**／**[8]** 被害者の参加行 DELETE → **0行**／**[9]** 同 UPDATE（改変）→ **0行**。①のなりすましは DB 層で塞がれた
+
+### アプリ画面での E2E（dev サーバー + dev Supabase）— ゲスト join 経路を実証
+
+- [x] ゲストが参加コードで join → **`/session/15` へ遷移し、ゲストとしてセッション画面が描画される**（`/session/join` へ差し戻されない＝`authenticateSession` の uid 照合が通っている）
+- [x] join 直後に `session_participants.user_id` に匿名 uid が**束縛されている**ことを DB 側で確認（アプリの Step 2.5 が実際に効いている）
+- [x] クライアント側の未捕捉例外なし
+- テストデータ（セッション15 / 参加者3 / 匿名ユーザー3）は削除済み
+
+**この検証で分かった別件（今回の変更とは無関係の既存事項。未対応）**:
+
+- `hooks.server.ts:17` は service role キーを `process.env.SUPABASE_SERVICE_ROLE_KEY` から直接読むが、SvelteKit の dev では `.env` が `process.env` に載らないため**ローカル dev ではゲスト join が「サーバー設定エラー」で必ず失敗する**（本番は Vercel の実 env があるので無影響）。`$env/dynamic/private` に寄せれば解消する。今回は手動で env を export して検証した
+- dev の既存セッションの `join_code` は6桁だが、現在の実装は**8桁必須**のバリデーション。dev データが旧仕様のまま
+- `.env` の34行目以降に手順メモの markdown 表が貼り込まれており、`.env` を `source` すると壊れる（dotenv は無視するため実害なし）
+
+### 残タスク
+
+- [ ] 採点画面まで通した UI E2E（種目・参加者のセットアップが要るため未実施）。※ゲスト採点の保存可否は DB 層で実証済み（上記[4]）
+- [ ] `?guest=` 再採用の UI 経路とオフラインキュー同期の通し確認
+- [ ] **アプリを先にデプロイ** → その後 prod へ 1025 を適用（逆順だと適用後の新規ゲストが `user_id` 無しで何もできない）→ `verify/1025_verify_guest_identity.sql` で確認 → APPLIED.md を ✅ に更新
+- [ ] 追って検討: `authenticateSession/Action` の第3引数を全呼び出し元（約27箇所）から削除する掃除。今回は security 修正の差分を絞るため見送り
+- [ ] 別件の既存ギャップ: `training_scores` に **authenticated 向け DELETE ポリシーが無い**（`scoreActions.ts` の `deleteTrainingScore` は認証審判では 0 行削除になる疑い）。今回のスコープ外として未対応
+
 ## オフライン対応 インクリメント7: オンライン採点の mutation log 冪等化（2026-08-04）— ✅ 完了
 
 オンライン action の応答が端末へ届かず、保存済みの IndexedDB mutation が同期 API から再送される経路を二重防御した。

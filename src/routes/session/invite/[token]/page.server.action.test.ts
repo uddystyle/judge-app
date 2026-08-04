@@ -97,6 +97,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							}
 							return Promise.resolve({ error: null });
 						}),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn((field: string, value: any) => {
 								deleteCallCount++;
@@ -161,6 +162,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
 						}),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => {
 								deleteCallCount++;
@@ -175,6 +177,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			// JWT発行成功をシミュレート
 			mockSupabase.auth.signInAnonymously.mockResolvedValue({
 				data: {
+					user: { id: 'anon-user-invite-123' },
 					session: {
 						access_token: 'valid_invite_token',
 						user: { id: 'anon-user-invite-123' }
@@ -195,6 +198,69 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 			// 検証
 			expect(insertCallCount).toBe(1); // INSERT実行
 			expect(deleteCallCount).toBe(0); // DELETE未実行（ロールバックしない）
+		});
+
+		it('JWT発行成功後、匿名ユーザーのuidが参加者行に束縛される（なりすまし防止の土台）', async () => {
+			const updatePayloads: Array<Record<string, unknown>> = [];
+			const updateFilters: Array<[string, unknown]> = [];
+			let capturedGuestIdentifier: string | undefined;
+
+			mockSupabase.from = vi.fn((table: string) => {
+				if (table === 'sessions') {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => ({
+								single: vi.fn(() =>
+									Promise.resolve({
+										data: { id: 'session-invite-456', organization_id: 'org-invite-456' },
+										error: null
+									})
+								)
+							}))
+						}))
+					};
+				} else if (table === 'session_participants') {
+					return {
+						select: vi.fn(() => ({
+							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
+						})),
+						insert: vi.fn((data: { guest_identifier?: string }) => {
+							capturedGuestIdentifier = data.guest_identifier;
+							return Promise.resolve({ error: null });
+						}),
+						update: vi.fn((payload: Record<string, unknown>) => {
+							updatePayloads.push(payload);
+							return {
+								eq: vi.fn((field: string, value: unknown) => {
+									updateFilters.push([field, value]);
+									return Promise.resolve({ error: null });
+								})
+							};
+						}),
+						delete: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) }))
+					};
+				}
+				return {};
+			});
+
+			mockSupabase.auth.signInAnonymously.mockResolvedValue({
+				data: {
+					user: { id: 'anon-user-invite-bound' },
+					session: { access_token: 'valid_invite_token', user: { id: 'anon-user-invite-bound' } }
+				},
+				error: null
+			});
+
+			await expect(
+				actions.join({
+					request: mockRequest,
+					params: mockParams,
+					locals: { supabase: mockSupabase, supabaseAdmin: mockSupabase }
+				} as any)
+			).rejects.toThrow('Redirecting to /session/session-invite-456');
+
+			expect(updatePayloads).toEqual([{ user_id: 'anon-user-invite-bound' }]);
+			expect(updateFilters).toEqual([['guest_identifier', capturedGuestIdentifier]]);
 		});
 
 		it('rollback失敗時も利用者向けは認証失敗レスポンスになる', async () => {
@@ -225,6 +291,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							insertCallCount++;
 							return Promise.resolve({ error: null });
 						}),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => {
 								deleteCallCount++;
@@ -290,6 +357,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -303,6 +371,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				capturedOptions.push(opts);
 				return Promise.resolve({
 					data: {
+						user: { id: 'anon-user' },
 						session: {
 							access_token: 'valid_token',
 							user: { id: 'anon-user' }
@@ -372,6 +441,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -384,6 +454,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				capturedOptions.push(opts);
 				return Promise.resolve({
 					data: {
+						user: { id: 'anon-user' },
 						session: {
 							access_token: 'valid_token',
 							user: { id: 'anon-user' }
@@ -444,6 +515,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -456,6 +528,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				capturedOptions.push(opts);
 				return Promise.resolve({
 					data: {
+						user: { id: 'anon-user' },
 						session: {
 							access_token: 'valid_token',
 							user: { id: 'anon-user' }
@@ -508,6 +581,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -520,6 +594,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				capturedOptions.push(opts);
 				return Promise.resolve({
 					data: {
+						user: { id: 'anon-user' },
 						session: {
 							access_token: 'valid_token',
 							user: { id: 'anon-user' }
@@ -578,6 +653,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 							eq: vi.fn(() => Promise.resolve({ data: [], error: null }))
 						})),
 						insert: vi.fn(() => Promise.resolve({ error: null })),
+						update: vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) })),
 						delete: vi.fn(() => ({
 							eq: vi.fn(() => Promise.resolve({ error: null }))
 						}))
@@ -590,6 +666,7 @@ describe('invite/[token] action - JWT ロールバック検証', () => {
 				capturedOptions.push(opts);
 				return Promise.resolve({
 					data: {
+						user: { id: 'anon-user' },
 						session: {
 							access_token: 'valid_token',
 							user: { id: 'anon-user' }

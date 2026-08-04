@@ -1120,3 +1120,23 @@ if (guestIdentifier) {
 - `manualChunks` でライブラリを名前付きチャンクにする時は、その **CJS 依存も同じチャンクに co-locate** する（例: `id.includes('qrcode') || id.includes('dijkstrajs') || id.includes('pngjs')`）。`npm ls <lib>` で依存ツリー、各依存の package.json に `type`/`module` が無ければ CJS。
 - 症状「本番だけボタン/リンクが無反応」を見たら、まず `npm run build && npm run preview` を Playwright で開き `page.on('pageerror')` を張る。`exports`/`require`/`module is not defined` 系はほぼ CJS バンドル事故。**「preview 特有のアーティファクト」と決めつけない**（本番でも同じビルド経路なので同じ事故が出る。今回それを一度誤って切り分けた）。
 - ハイドレーション有無は「ボタンを実クリックして URL が変わるか」で判定するのが確実（`window.__anim` 等の露出フックや `navigator.serviceWorker.controller` は副次情報）。
+
+### ✅ Supabase の匿名サインインは `anon` ロールではない。ゲスト向け RLS は `authenticated` に書く
+**Rule**: `signInAnonymously()` で作ったゲストは**永続ユーザーと同じ `authenticated` ロール**で来る。`TO anon` のポリシーは彼らに**一度も発火しない**。`anon` ロールは「ユーザー無しの anon API キーだけのリクエスト」用で、その JWT には `user_metadata` も載らないため、`auth.jwt() -> 'user_metadata' ->> '...'` を条件にした `TO anon` ポリシーは**誰にもマッチしない死んだポリシー**になる。
+
+**Why**: 本アプリはゲスト向けに `anon_*_by_jwt` を15本作っていたが全て `TO anon` で無効。一方 `authenticated` 側の書込みポリシーは `judge_id = auth.uid()` とセッション参加(`session_participants.user_id`)を要求し、ゲストは `guest_identifier` 運用で `user_id` が NULL だった。結果、**本番でゲストがセッションを読むことも採点を保存することもできない**状態が RLS 強化以降ずっと続いていた。ポリシーが「あるのに効かない」ため、pg_policies を眺めるだけでは気づけない。
+
+**How to apply**:
+- ゲスト/匿名ユーザー向けのポリシーは `TO authenticated` に書き、`anon` と区別したいときだけ `auth.jwt() ->> 'is_anonymous'` を見る。
+- 「ポリシーが存在する＝効いている」ではない。`roles` 列と、実際に来る JWT の `role` クレームを突き合わせる。判定は `select role, is_anonymous from auth.users` と公式ドキュメントで確定させる（推測しない）。
+- 逆に「この経路は誰が通しているのか」を追うときは、対象ロールのポリシーだけを抽出して読む。`TO anon` と `TO authenticated` を混ぜて読むと、死んだポリシーを生きていると誤読する。
+
+### ✅ `user_metadata` は本人が書き換えられる。認可の入力にしてはいけない
+**Rule**: Supabase の `user_metadata`(`raw_user_meta_data`) はユーザー自身が `supabase.auth.updateUser({ data })` で自由に変更できる。**RLS でもサーバーコードでも、認可の判断材料にしない**。身元は `auth.uid()` と、サーバー/service role だけが書けるテーブル列で束縛する（`app_metadata` に逃がす手もあるが、`signInAnonymously` は `app_metadata` を書けず、埋めるには admin API + トークン再発行が要る）。
+
+**Why**: ゲストの身元を `user_metadata.guest_identifier` に置いていたため、同一セッションの参加者が他ゲストの identifier を読み（参加者一覧は同席者に見える）、自分の `user_metadata` に仕込むだけで**他検定員になりすまして採点を書き換えられる**状態だった。RLS 側の該当句にはセッションスコープすら無く、識別子を知っていれば別セッションの参加行も消せた。
+
+**How to apply**:
+- 認可に使う値は「クライアントが送れるか？」で判定する。URLパラメータ・フォーム値・`user_metadata` はすべて送れる＝信頼しない。
+- 匿名ユーザーの身元は `session_participants.user_id = auth.uid()` のような**サーバーが書いた束縛**で表す。JWT には表示用の情報だけ載せる。
+- 監査は `select * from pg_policies where (qual||with_check) ilike '%user_metadata%'` で機械的に洗える。0件を維持する。

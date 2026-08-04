@@ -1,6 +1,6 @@
 # マイグレーション適用台帳 (APPLIED.md)
 
-> 最終更新: 2026-06-29 ／ 自動生成(ヘッダ抽出)＋手動オーバーレイ。`database/migrations/` の全 106 SQL を網羅。
+> 最終更新: 2026-08-04 ／ 自動生成(ヘッダ抽出)＋手動オーバーレイ。`database/migrations/` の全 116 SQL を網羅。
 
 ## 1. 前提・凡例
 
@@ -99,7 +99,7 @@
 | 55 | `055_add_create_organization_with_subscription_function.sql` | 組織作成のトランザクション関数を追加 | 2026-01-22 | ✓ |  | ⚠️要確認 | ⚠️要確認 | **アプリ先行** create_organization_with_subscription をCREATE OR REPLACEで定義。header:次工程で /api/organization/create を改修・デプロイ必要 |
 | 56 | `056_make_create_organization_idempotent.sql` | 組織作成関数を冪等化 | 2026-01-22 | ✓ | 055 | ⚠️要確認 | ⚠️要確認 | 055のcreate_organization_with_subscriptionをCREATE OR REPLACEで置換。重複/再試行(UNIQUE違反)に安全な冪等版 |
 
-### 3.2 ロックダウンera（1000–1024・24本）
+### 3.2 ロックダウンera（1000–1025・25本）
 
 > 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1024`＋`052` は dev+prod 適用確認済み。
 
@@ -129,6 +129,7 @@
 | 1022 | `1022_add_tournament_tickets.sql` | 大会スポット販売チケット + DB層強制 | 2026-07-30 | ✓ | 018 の直叩き穴 / 1006 トリガー前例 | ✅(2026-08-01 verify全✅) | ✅(2026-08-01 トリガー2本確認) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリ先行だとチケット無消費で大会作成できる窓が開く。DB先行なら旧アプリの大会作成はトリガーが拒否=安全側）。tournament_tickets新設(RLS: メンバーSELECTのみ・書込みservice role、org FKはrestrict=請求監査保全)+sessions BEFORE INSERTでチケット原子消費(FOR UPDATE SKIP LOCKED、session_id FKはdeferrable initially deferred必須)+BEFORE UPDATEでauthed大会化拒否。適用後はチケット無しで大会作成不可(service role含む)。検証: verify/1022_verify_tournament_tickets.sql。冪等 |
 | 1023 | `1023_contact_category_tournament_quote.sql` | contact category に tournament_quote 追加 | 2026-07-30 | ✓ | 023 (⚠️要確認) | ✅(2026-08-01 制約確認済) | ✅(2026-08-01 制約確認済) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリ先行だと tournament_quote 送信が CHECK 違反で失敗）。category CHECK制約を定義文で特定してdrop→named制約で再作成。023の実在を冒頭(0)で事前確認のこと。冪等 |
 | 1024 | `1024_add_score_mutations.sql` | オフライン採点同期の mutation log | 2026-08-01 | ✓ | network-resilience-strategy Phase 2 | ✅(2026-08-01 index3本+RLS確認) | ✅(2026-08-01 RLS確認) | **DEV先行** client_mutation_id unique が冪等性の要。RLS有効・ポリシー無し=service role専用。未適用でも同期APIは save_failed を返すだけでクライアントはキュー保持（採点は失われない）が、アプリより先の適用を推奨。冪等 |
+| 1025 | `1025_guest_identity_bind_to_uid.sql` | ゲスト身元を auth.uid() 束縛へ移行・user_metadata 依存を全廃 | 2026-08-04 | ✓ | 1000/1001/1002/1004/1007/1008/1010/1012 の user_metadata 前提を是正 | 🔴未適用 | 🔴未適用 | **DEV先行 アプリ先行** 適用順: user_id を束縛するアプリを先にデプロイ（逆順だと適用後の新規ゲストが user_id 無しでどのポリシーにも当たらない）。①匿名ユーザーの raw_user_meta_data.guest_identifier で session_participants.user_id をバックフィル ②session_participants の UPDATE/DELETE から偽造可能な user_metadata 句を撤去（**なりすまし穴の本丸**）③発火しない anon_*_by_jwt 群14本+training_events anon SELECT(USING true) を撤去 ④ゲスト owner 書込み 5本を authenticated + current_guest_identifier() で新設。読取りは is_session_member/is_session_participant が user_id 基準のため束縛済みゲストが自動的に通る。検証: verify/1025_verify_guest_identity.sql。冪等 |
 
 ## 4. ロールバック対応表（20本）
 
@@ -156,8 +157,9 @@
 | `1022_rollback.sql` | `1022_add_tournament_tickets.sql` | ✓ | **💥破壊的** テーブルDROPでチケット付与/消費履歴(請求監査データ)喪失。撤去後は大会作成が無条件可能に戻る。緊急時のみ。冪等 |
 | `1023_rollback.sql` | `1023_contact_category_tournament_quote.sql` | ✓ | tournament_quote 行が存在すると失敗（先に category を UPDATE）。緊急時のみ。冪等 |
 | `1024_rollback.sql` | `1024_add_score_mutations.sql` | ✓ | 冪等性の処理済み記録が消える。同期APIも同時停止のこと（再送は同値上書きで実害は限定的）。緊急時のみ。冪等 |
+| `1025_rollback.sql` | `1025_guest_identity_bind_to_uid.sql` | ✓ | ⚠️**撤回するとなりすまし穴が再び開く**（user_metadata は本人が書換可）。かつ anon_* を復元してもゲストは authenticated ロールのため発火せず、ゲストの採点保存はできないまま（1025以前の壊れた状態）。session_participants.user_id のバックフィルは戻さない（旧ポリシーは user_id を見ないので無害）。アプリも同時に戻すこと。緊急時のみ。冪等 |
 
-## 5. 非マイグレーション（検証/診断 4本・破壊的データ削除 2本）
+## 5. 非マイグレーション（検証/診断 6本・破壊的データ削除 2本）
 
 > これらは前進スキーマ変更ではない。検証系4本は `database/migrations/verify/`、破壊的データ削除2本（`008`/`010`）は `database/migrations/archive/one-time/` へ隔離済み。
 
@@ -167,6 +169,8 @@
 | `999_check_user_data.sql` | 検証SELECT | ログインユーザーの既存データ確認クエリ。SELECT のみ。クリーンアップ用 DELETE/TRUNCATE は全てコメントアウト。スキーマ変更なし |
 | `check_production_schema.sql` | 検証SELECT | 本番スキーマ(列/FK)確認用 SELECT。information_schema 等を SELECT するのみ。本番 SQL Editor で実行。スキーマ変更なし |
 | `verify_migration.sql` | 検証SELECT | Tournament Mode 移行の検証 SELECT。列/テーブル/RLS/index/trigger/制約の存在を SELECT 確認。スキーマ変更なし |
+| `1022_verify_tournament_tickets.sql` | 検証SELECT | 大会チケットの検証（残0拒否・二重消費なし・authed大会化拒否）。スキーマ変更なし |
+| `1025_verify_guest_identity.sql` | 検証SELECT | 1025 の検証。user_metadata 参照ポリシー0件／anon_*撤去／ゲスト owner ポリシー5本／ヘルパのSECURITY DEFINER+search_path／user_id束縛率／同一セッション内uid重複なし。スキーマ変更なし |
 | `archive/one-time/008_phase0_cleanup_existing_data.sql` | 💥破壊的データ削除 | 既存データを全TRUNCATEしクリーンアップ。ヘッダ「本番未稼働のため削除して再構築」。Phase0、009(Phase1)の前に実行。全テーブルTRUNCATE。**隔離済み** |
 | `archive/one-time/010_cleanup_existing_user_data.sql` | 💥破壊的データ削除 | 既存組織・セッションデータをTRUNCATE。日付なし。profiles/auth.usersは保持。末尾に確認SELECT。**隔離済み** |
 
@@ -198,7 +202,7 @@ ORDER BY table_name, ordinal_position;
 
 ## 付録: 集計
 
-- 総ファイル: **113**（forward 84 ／ rollback 20 ／ verify·診断 5 ／ cleanup 2 ／ deprecated 1 ／ planned 1）
+- 総ファイル: **116**（forward 85 ／ rollback 21 ／ verify·診断 6 ／ cleanup 2 ／ deprecated 1 ／ planned 1）
 - dev+prod 適用確認済み: **17**（1007–1021 ＋ 052 ＋ `001_add_session_security`〔2026-06-29 実測〕）
 - 適用状況 要確認: forward のうち上記・実行禁止を除く残り
 

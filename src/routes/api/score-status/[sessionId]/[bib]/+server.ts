@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
+import { authenticateAction } from '$lib/server/sessionAuth';
 
 export const GET: RequestHandler = async ({ params, url, request, locals: { supabase } }) => {
 	// レート制限チェックを最初に実行
@@ -9,28 +10,12 @@ export const GET: RequestHandler = async ({ params, url, request, locals: { supa
 		return rateLimitResult.response;
 	}
 
-	const {
-		data: { user },
-		error: userError
-	} = await supabase.auth.getUser();
+	// ✅ SECURITY: 認証は authenticateAction に一本化する。
+	// 以前はここだけ独自検証で、未認証でも URL の ?guest= が既存の guest_identifier に
+	// 一致するだけで通していた（JWT 不要＝識別子を知る第三者が採点状況を読めた）。
+	const auth = await authenticateAction(supabase, params.sessionId, url.searchParams.get('guest'));
 
-	const guestIdentifier = url.searchParams.get('guest');
-
-	// ゲストユーザーの場合
-	if (!user && guestIdentifier) {
-		// ゲスト参加者情報を検証
-		const { data: guestData, error: guestError } = await supabase
-			.from('session_participants')
-			.select('*')
-			.eq('session_id', params.sessionId)
-			.eq('guest_identifier', guestIdentifier)
-			.eq('is_guest', true)
-			.single();
-
-		if (guestError || !guestData) {
-			throw error(401, 'Unauthorized');
-		}
-	} else if (userError || !user) {
+	if (!auth) {
 		throw error(401, 'Unauthorized');
 	}
 

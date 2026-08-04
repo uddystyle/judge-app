@@ -188,6 +188,32 @@ export const actions: Actions = {
 			});
 		}
 
+		// Step 2.5: 発行された匿名ユーザーの uid を参加者行に束縛する。
+		// ゲストの身元はこの user_id だけで判定する（JWT の user_metadata は
+		// 本人が書き換えられるため認可に使えない）。束縛できないと以後の認証が
+		// 通らないので、JWT発行失敗と同じくロールバックして失敗させる。
+		const { error: bindError } = await supabaseAdmin
+			.from('session_participants')
+			.update({ user_id: authData.user!.id })
+			.eq('guest_identifier', guestIdentifier);
+
+		if (bindError) {
+			logger.error('[Guest Invite] ゲストuid束縛エラー:', bindError);
+
+			const { error: rollbackError } = await supabaseAdmin
+				.from('session_participants')
+				.delete()
+				.eq('guest_identifier', guestIdentifier);
+
+			if (rollbackError) {
+				logger.error('[Guest Invite] ロールバック失敗:', rollbackError);
+			}
+
+			return fail(500, {
+				error: 'セッションへの参加に失敗しました。'
+			});
+		}
+
 		logger.debug(
 			'[Guest Invite] ゲスト参加成功。JWT発行完了。リダイレクト先:',
 			`/session/${session.id}`

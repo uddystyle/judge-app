@@ -31,14 +31,17 @@ export interface AuthResult {
  *
  * @param supabase - Supabaseクライアント
  * @param sessionId - セッションID
- * @param guestIdentifier - ゲスト識別子（URLパラメータから、下位互換性用）
+ * @param clientSuppliedGuestIdentifier - 旧: URLパラメータ由来のゲスト識別子。
+ *   **認可には使わない**（クライアントが自由に指定できる値なので、信頼すると
+ *   他ゲストへのなりすましが成立する）。身元は auth.uid() 束縛のみで判定し、
+ *   この値は「束縛結果と食い違ったら警告ログを出す」観測用途にだけ使う。
  * @returns 認証結果（user, guestParticipant, guestIdentifier）
  * @throws redirect - 認証失敗時に /login または /session/join にリダイレクト
  */
 export async function authenticateSession(
 	supabase: SupabaseClient,
 	sessionId: string,
-	guestIdentifier: string | null
+	clientSuppliedGuestIdentifier: string | null
 ): Promise<AuthResult> {
 	// ユーザー認証を確認（例外をキャッチしてredirectに変換）
 	let user: User | null = null;
@@ -56,23 +59,21 @@ export async function authenticateSession(
 
 	let guestParticipant: GuestParticipant | null = null;
 
-	// ✅ 新方式: JWTのuser_metadataから取得
-	const jwtGuestIdentifier = user?.user_metadata?.guest_identifier;
-	const isGuest = user?.user_metadata?.is_guest === true;
-
-	// URLパラメータとJWTの両方から取得（JWTを優先）
-	const effectiveGuestIdentifier = jwtGuestIdentifier || guestIdentifier;
+	// ✅ ゲストの身元は auth.uid() に束縛された session_participants 行で確定する。
+	// JWT の user_metadata は本人が updateUser({data}) で書き換えられるため、
+	// guest_identifier / is_guest を認可の入力に使ってはならない（なりすまし防止）。
+	const isGuest = user?.is_anonymous === true;
 
 	// ゲストユーザーの場合
-	if (isGuest && effectiveGuestIdentifier) {
-		// ゲスト参加者情報を検証
+	if (isGuest && user) {
+		// ゲスト参加者情報を検証（uid 束縛のみを信頼する）
 		const { data: guestData, error: guestError } = await supabase
 			.from('session_participants')
 			.select('*')
 			.eq('session_id', sessionId)
-			.eq('guest_identifier', effectiveGuestIdentifier)
+			.eq('user_id', user.id)
 			.eq('is_guest', true)
-			.single();
+			.maybeSingle();
 
 		if (guestError || !guestData) {
 			logger.error('[authenticateSession] ゲスト認証失敗:', guestError);
@@ -80,6 +81,11 @@ export async function authenticateSession(
 		}
 
 		guestParticipant = guestData as GuestParticipant;
+		warnOnIdentifierMismatch(
+			'authenticateSession',
+			clientSuppliedGuestIdentifier,
+			guestParticipant
+		);
 	} else if (userError || !user) {
 		// 認証ユーザーでもゲストでもない場合
 		logger.error('[authenticateSession] 認証失敗:', userError);
@@ -89,8 +95,30 @@ export async function authenticateSession(
 	return {
 		user,
 		guestParticipant,
-		guestIdentifier: effectiveGuestIdentifier
+		guestIdentifier: guestParticipant?.guest_identifier ?? null
 	};
+}
+
+/**
+ * クライアント由来の guest_identifier が、uid 束縛で確定した本来の identity と
+ * 食い違うときだけ警告する。認可には一切影響しない（観測のみ）。
+ * 古い招待リンクの再訪でも出るが、なりすましの試行もここに現れる。
+ */
+function warnOnIdentifierMismatch(
+	label: string,
+	clientSupplied: string | null,
+	guestParticipant: GuestParticipant
+) {
+	if (clientSupplied && clientSupplied !== guestParticipant.guest_identifier) {
+		logger.warn(
+			`[${label}] クライアント指定の guest_identifier が uid 束縛と不一致のため無視しました:`,
+			{
+				supplied: clientSupplied,
+				resolved: guestParticipant.guest_identifier,
+				session_id: guestParticipant.session_id
+			}
+		);
+	}
 }
 
 /**
@@ -101,13 +129,15 @@ export async function authenticateSession(
  *
  * @param supabase - Supabaseクライアント
  * @param sessionId - セッションID
- * @param guestIdentifier - ゲスト識別子（URLパラメータから、下位互換性用）
+ * @param clientSuppliedGuestIdentifier - 旧: URLパラメータ／クライアント送信のゲスト識別子。
+ *   **認可には使わない**。身元は auth.uid() 束縛の session_participants 行のみで
+ *   判定し、この値は食い違い検知の警告ログにだけ使う。
  * @returns 認証結果または null（認証失敗時）
  */
 export async function authenticateAction(
 	supabase: SupabaseClient,
 	sessionId: string,
-	guestIdentifier: string | null
+	clientSuppliedGuestIdentifier: string | null
 ): Promise<AuthResult | null> {
 	// ユーザー認証を確認（例外をキャッチしてnullに変換）
 	let user: User | null = null;
@@ -125,23 +155,21 @@ export async function authenticateAction(
 
 	let guestParticipant: GuestParticipant | null = null;
 
-	// ✅ 新方式: JWTのuser_metadataから取得
-	const jwtGuestIdentifier = user?.user_metadata?.guest_identifier;
-	const isGuest = user?.user_metadata?.is_guest === true;
-
-	// URLパラメータとJWTの両方から取得（JWTを優先）
-	const effectiveGuestIdentifier = jwtGuestIdentifier || guestIdentifier;
+	// ✅ ゲストの身元は auth.uid() に束縛された session_participants 行で確定する。
+	// JWT の user_metadata は本人が updateUser({data}) で書き換えられるため、
+	// guest_identifier / is_guest を認可の入力に使ってはならない（なりすまし防止）。
+	const isGuest = user?.is_anonymous === true;
 
 	// ゲストユーザーの場合
-	if (isGuest && effectiveGuestIdentifier) {
-		// ゲスト参加者情報を検証
+	if (isGuest && user) {
+		// ゲスト参加者情報を検証（uid 束縛のみを信頼する）
 		const { data: guestData, error: guestError } = await supabase
 			.from('session_participants')
 			.select('*')
 			.eq('session_id', sessionId)
-			.eq('guest_identifier', effectiveGuestIdentifier)
+			.eq('user_id', user.id)
 			.eq('is_guest', true)
-			.single();
+			.maybeSingle();
 
 		if (guestError || !guestData) {
 			logger.error('[authenticateAction] ゲスト認証失敗:', guestError);
@@ -149,6 +177,7 @@ export async function authenticateAction(
 		}
 
 		guestParticipant = guestData as GuestParticipant;
+		warnOnIdentifierMismatch('authenticateAction', clientSuppliedGuestIdentifier, guestParticipant);
 	} else if (userError || !user) {
 		// 認証ユーザーでもゲストでもない場合
 		logger.error('[authenticateAction] 認証失敗:', userError);
@@ -158,6 +187,6 @@ export async function authenticateAction(
 	return {
 		user,
 		guestParticipant,
-		guestIdentifier: effectiveGuestIdentifier
+		guestIdentifier: guestParticipant?.guest_identifier ?? null
 	};
 }
