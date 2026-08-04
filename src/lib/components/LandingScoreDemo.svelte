@@ -205,7 +205,7 @@
 		padding: 0 0 14px;
 	}
 	.app-header {
-		padding: 40px 16px 9px;
+		padding: 48px 16px 9px;
 		border-bottom: 1px solid var(--border-light);
 		text-align: left;
 	}
