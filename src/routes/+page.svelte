@@ -209,7 +209,11 @@
 	{#if !data.user}
 		<div class="cta-section">
 			<div class="container">
-				<h2 class="cta-title">{m.landing_ctaTitle()}</h2>
+				<h2 class="cta-title">
+					<span class="cta-title-lead">{m.landing_ctaTitleLead()}</span><span class="cta-title-tail"
+						>{m.landing_ctaTitleTail()}</span
+					>
+				</h2>
 				<p class="cta-description">{m.landing_ctaDescription()}</p>
 				<button class="btn btn-primary btn-large" on:click={() => goto('/signup')}
 					>{m.landing_ctaButton()}</button
@@ -600,6 +604,11 @@
 		color: var(--text-primary);
 		letter-spacing: -0.01em;
 	}
+	/* モバイルでは「採点と集計を」で改行する（tail をブロックに）。
+	   PC/タブレット（≥768px）では1行に戻す。 */
+	.cta-title-tail {
+		display: block;
+	}
 
 	.cta-description {
 		font-size: 19px;
@@ -653,6 +662,9 @@
 
 		.cta-title {
 			font-size: 48px;
+		}
+		.cta-title-tail {
+			display: inline;
 		}
 
 		.cta-description {
