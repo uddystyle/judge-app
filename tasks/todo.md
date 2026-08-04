@@ -1,6 +1,6 @@
 # Current Tasks
 
-## セキュリティ修正: ゲスト身元を JWT クレームから auth.uid() 束縛へ（2026-08-04）— 🚧 dev 適用済み・prod 未適用
+## セキュリティ修正: ゲスト身元を JWT クレームから auth.uid() 束縛へ（2026-08-04）— ✅ 完了（コミット f2d84e8・本番デプロイ済み・dev+prod 適用済み）
 
 ポリシー重複の調査中に見つかった、**同一根本原因の重大な欠陥2件**の修正。
 
@@ -60,10 +60,24 @@ REST API に実 JWT を投げる検証スクリプトで、DB 層の挙動を実
 - dev の既存セッションの `join_code` は6桁だが、現在の実装は**8桁必須**のバリデーション。dev データが旧仕様のまま
 - `.env` の34行目以降に手順メモの markdown 表が貼り込まれており、`.env` を `source` すると壊れる（dotenv は無視するため実害なし）
 
+### ロールアウト（2026-08-04）— アプリ先行 → DB の順で完了
+
+- [x] コミット `f2d84e8` → main へ push → Vercel 反映（`/_app/version.json` の変化で確認・50秒未満）
+- [x] 本番スモーク: トップ / `/session/join` とも 200、join フォーム描画あり、pageerror 0
+- [x] **prod へ 1025 適用**（アプリのデプロイ後）。検証結果:
+  - `user_metadata` / `app_metadata` を参照するポリシー **0件**（今回の本丸）
+  - `anon_*` および `Anonymous users can view training events` **0件**
+  - ゲスト owner 書込みポリシー **5本**（すべて `TO authenticated`）
+  - `current_guest_identifier`: SECURITY DEFINER・`search_path=public, pg_temp`・grantee は `authenticated/postgres/service_role`（**anon なし**）
+  - バックフィル: ゲスト31行中 **10行が束縛**（残21行は匿名認証導入前の履歴。事前見積りと一致）
+  - `(session_id, user_id)` の重複 **0件**
+- [x] APPLIED.md を dev/prod とも ✅ に更新
+
 ### 残タスク
 
 - [ ] 採点画面まで通した UI E2E（種目・参加者のセットアップが要るため未実施）。※ゲスト採点の保存可否は DB 層で実証済み（上記[4]）
 - [ ] `?guest=` 再採用の UI 経路とオフラインキュー同期の通し確認
+- [ ] 本番でのゲスト参加の実地スモーク（オフシーズンのため任意。実セッションの参加コードが要る）
 - [ ] **アプリを先にデプロイ** → その後 prod へ 1025 を適用（逆順だと適用後の新規ゲストが `user_id` 無しで何もできない）→ `verify/1025_verify_guest_identity.sql` で確認 → APPLIED.md を ✅ に更新
 - [ ] 追って検討: `authenticateSession/Action` の第3引数を全呼び出し元（約27箇所）から削除する掃除。今回は security 修正の差分を絞るため見送り
 - [ ] 別件の既存ギャップ: `training_scores` に **authenticated 向け DELETE ポリシーが無い**（`scoreActions.ts` の `deleteTrainingScore` は認証審判では 0 行削除になる疑い）。今回のスコープ外として未対応
