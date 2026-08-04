@@ -106,7 +106,6 @@
 			<div class="home-indicator" aria-hidden="true"></div>
 		</div>
 	</div>
-	<p class="caption">{m.landing_scoreDemoCaption()}</p>
 </div>
 
 <style>
@@ -114,7 +113,6 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 14px;
 	}
 
 	.phone {
@@ -289,13 +287,6 @@
 	.key-confirm.is-active {
 		background: var(--accent-hover);
 		transform: translateY(1px);
-	}
-
-	.caption {
-		font-size: 13px;
-		color: var(--text-secondary);
-		margin: 0;
-		letter-spacing: -0.01em;
 	}
 
 	@media (min-width: 768px) {
