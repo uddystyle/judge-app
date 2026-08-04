@@ -1,5 +1,39 @@
 # Current Tasks
 
+## 課金: 年額の表示価格が Stripe の実価格と乖離していたのを是正（2026-08-04）— ✅ 完了
+
+Stripe 実装の検証方法を検討する中で、`.env` の price ID を Stripe API に直接照会して発見。
+
+### 何が起きていたか
+
+課金額は Stripe の Price ID（`$lib/server/plans.ts`）で決まる一方、画面表示は `src/lib/plans.ts` の `yearlyPrice` という**別ソース**の数値。両者が同期しておらず、**年額プランは表示より 18,000〜198,000 円高く請求される**状態だった（月額は3プランとも一致）。
+
+| プラン | Stripe 実価格 | 旧表示 | 月換算 |
+|---|---|---|---|
+| Basic 年額 | ¥88,000 | ¥70,000 | Stripe=10.00ヶ月 / 旧表示=7.95ヶ月 |
+| Standard 年額 | ¥248,000 | ¥180,000 | Stripe=10.00ヶ月 / 旧表示=7.26ヶ月 |
+| Premium 年額 | ¥498,000 | ¥300,000 | Stripe=10.00ヶ月 / 旧表示=6.02ヶ月 |
+
+Stripe 側は3プランとも**ぴったり月額×10（2ヶ月分無料・16.7%引き）**という単一ルール。旧表示は割引率が 33.7%→39.5%→49.8% とバラバラで、上位プランほど深い逆進構造だった。**Stripe 側を正**と判断（ユーザー確認済み）。
+
+### 修正
+
+- [x] `src/lib/plans.ts`: `yearlyPrice` を 88,000 / 248,000 / 498,000 へ
+- [x] `src/routes/legal/+page.svelte`（**特商法表記**）の年額3件を同時に修正 — 法的な価格表示なので必須
+- [x] `src/routes/faq/+page.svelte`: 「約4ヶ月分お得」→「2ヶ月分お得（年額＝月額10ヶ月分）」と実額を修正
+- [x] 旧価格の残存ゼロを grep で確認
+
+### 再発防止
+
+- [x] `src/lib/tests/plans.pricing.test.ts`（新規6件）: 「年額＝月額×10」「割引率が全プラン同一」「ティア倍率が月額と年額で一致」「Stripe 実測値の固定」を CI で守る
+- [x] `npm run verify:stripe-prices`（新規）: `.env` の price ID を Stripe API に照会して表示価格と突合（読み取り専用）。`STRIPE_SECRET_KEY=sk_live_... npm run verify:stripe-prices` で本番も確認できる
+
+### 残作業（要ユーザー確認）
+
+- [ ] **本番(live mode)の price ID との突合**。今回照合したのは `.env` のテストモード。Vercel の live price が旧価格系なら、本番の表示/請求も同じ乖離を抱えている可能性がある。`STRIPE_SECRET_KEY=sk_live_...` で上記コマンドを実行して確認する
+- [ ] 既に年額で契約している顧客がいる場合の扱い（Stripe の Price は金額変更不可。既存サブスクは旧 price のまま追随しない）
+
+
 ## レビュー指摘の検証と対応（2026-08-04）— ✅ 完了
 
 **まず本番プロジェクトを実測で確定**: `https://www.tentoapp.com/` の埋め込み env が `kbxlukbvhlxponcentyp`（= scoring-system）を指しており、これが本番。ローカル `.env` の `qyxjoybicsmiysqrevhk` は dev。

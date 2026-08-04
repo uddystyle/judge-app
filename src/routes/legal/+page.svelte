@@ -87,7 +87,7 @@
 				</div>
 				<div class="price-row">
 					<div class="price-label">Basicプラン（年額）</div>
-					<div class="price-value">¥70,000 / 年</div>
+					<div class="price-value">¥88,000 / 年</div>
 				</div>
 				<div class="price-row">
 					<div class="price-label">Standardプラン（月額）</div>
@@ -95,7 +95,7 @@
 				</div>
 				<div class="price-row">
 					<div class="price-label">Standardプラン（年額）</div>
-					<div class="price-value">¥180,000 / 年</div>
+					<div class="price-value">¥248,000 / 年</div>
 				</div>
 				<div class="price-row">
 					<div class="price-label">Premiumプラン（月額）</div>
@@ -103,7 +103,7 @@
 				</div>
 				<div class="price-row">
 					<div class="price-label">Premiumプラン（年額）</div>
-					<div class="price-value">¥300,000 / 年</div>
+					<div class="price-value">¥498,000 / 年</div>
 				</div>
 				<div class="price-row">
 					<div class="price-label">大会モード利用（1大会ごと）</div>

@@ -23,7 +23,7 @@ export const ORG_PLANS: Record<OrgPlanId, OrgPlan> = {
 		maxMembers: 10,
 		maxJudges: 15,
 		monthlyPrice: 8800,
-		yearlyPrice: 70000,
+		yearlyPrice: 88000,
 		features: ['組織メンバー10名まで', '検定員15名まで', 'セッション無制限', '検定・研修モード']
 	},
 	standard: {
@@ -31,7 +31,7 @@ export const ORG_PLANS: Record<OrgPlanId, OrgPlan> = {
 		maxMembers: 30,
 		maxJudges: 50,
 		monthlyPrice: 24800,
-		yearlyPrice: 180000,
+		yearlyPrice: 248000,
 		features: ['組織メンバー30名まで', '検定員50名まで', 'セッション無制限', '検定・研修モード']
 	},
 	premium: {
@@ -39,7 +39,7 @@ export const ORG_PLANS: Record<OrgPlanId, OrgPlan> = {
 		maxMembers: 100,
 		maxJudges: 100,
 		monthlyPrice: 49800,
-		yearlyPrice: 300000,
+		yearlyPrice: 498000,
 		features: ['組織メンバー100名まで', '検定員100名まで', 'セッション無制限', '検定・研修モード']
 	}
 };
