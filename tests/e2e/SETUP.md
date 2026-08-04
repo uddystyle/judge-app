@@ -50,9 +50,22 @@ TEST_JUDGE1_PASSWORD=password
 TEST_JUDGE2_EMAIL=judge2@example.com
 TEST_JUDGE2_PASSWORD=password
 
+# Realtime/polling E2E用（一般検定員が参加済みの待機中セッション）
+TEST_JUDGE_EMAIL=judge1@example.com
+TEST_JUDGE_PASSWORD=password
+TEST_REALTIME_SESSION_ID=00000000-0000-0000-0000-000000000000
+
 # ベースURL
 BASE_URL=http://localhost:5173
 ```
+
+`TEST_REALTIME_SESSION_ID` のセッションは、次の状態にしてください。
+
+- `status = 'active'`、`is_active = true`
+- `active_prompt_id IS NULL`
+- `TEST_JUDGE_EMAIL` の一般検定員が参加済み
+
+値が未設定の場合、`realtime-polling-behavior.spec.ts` は理由を表示してskipします。
 
 ## 4. 開発サーバーの起動
 

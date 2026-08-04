@@ -1,4 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
+import { loadEnv } from 'vite';
+
+// SETUP.md どおり .env.test を置けばE2Eから利用できるようにする。
+// シェルやCIで明示された値は上書きしない。
+const testEnv = loadEnv('test', process.cwd(), '');
+for (const [key, value] of Object.entries(testEnv)) {
+	process.env[key] ??= value;
+}
 
 /**
  * Playwright E2Eテスト設定

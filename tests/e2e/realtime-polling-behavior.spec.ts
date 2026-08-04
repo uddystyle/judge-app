@@ -1,278 +1,138 @@
 /**
- * Realtimeポーリング動作のE2Eテスト
+ * Realtime / polling の実環境 E2E。
  *
- * Playwrightを使用して、Realtime接続成功後のポーリング動作を検証します。
- *
- * 実行方法:
- *   npm run test:e2e
- *   または
- *   npx playwright test tests/e2e/realtime-polling-behavior.spec.ts
+ * 事前に、一般検定員が参加済みで active_prompt_id が null のテスト用セッションを用意する。
+ * 必須環境変数は tests/e2e/SETUP.md を参照。
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Request } from '@playwright/test';
 
-// テスト設定
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
-const TEST_TIMEOUT = 30000;
+const TEST_EMAIL = process.env.TEST_JUDGE_EMAIL ?? process.env.TEST_JUDGE1_EMAIL;
+const TEST_PASSWORD = process.env.TEST_JUDGE_PASSWORD ?? process.env.TEST_JUDGE1_PASSWORD;
+const TEST_SESSION_ID = process.env.TEST_REALTIME_SESSION_ID;
+const TEST_TIMEOUT = 65_000;
 
-// テストユーザー情報
-const TEST_EMAIL = process.env.TEST_JUDGE_EMAIL || 'judge@example.com';
-const TEST_PASSWORD = process.env.TEST_JUDGE_PASSWORD || 'password';
+const missingConfiguration = !TEST_EMAIL || !TEST_PASSWORD || !TEST_SESSION_ID;
+const targetPath = `/session/${TEST_SESSION_ID ?? 'missing-session-id'}`;
+const channelName = `session-status-${TEST_SESSION_ID ?? 'missing-session-id'}`;
 
-test.describe('Realtime Polling Behavior', () => {
+function isSessionPollingRequest(request: Request): boolean {
+	const url = new URL(request.url());
+	return (
+		request.method() === 'GET' &&
+		url.pathname.endsWith('/rest/v1/sessions') &&
+		url.searchParams.get('id') === `eq.${TEST_SESSION_ID}`
+	);
+}
+
+async function loginToSession(page: Page): Promise<void> {
+	await page.goto(`/login?next=${encodeURIComponent(targetPath)}`);
+	await page.locator('input[name="email"]').fill(TEST_EMAIL!);
+	await page.locator('input[name="password"]').fill(TEST_PASSWORD!);
+
+	await Promise.all([
+		page.waitForURL((url) => url.pathname === targetPath, { timeout: 10_000 }),
+		page.getByRole('button', { name: /ログイン|log in|login/i }).click()
+	]);
+
+	// active prompt が残った不適切な fixture では採点画面へ自動遷移するため、早期に失敗させる。
+	await expect(page).toHaveURL((url) => url.pathname === targetPath);
+}
+
+test.describe('Realtime polling behavior', () => {
 	test.setTimeout(TEST_TIMEOUT);
+	test.skip(
+		missingConfiguration,
+		'TEST_JUDGE_EMAIL/PASSWORD（または TEST_JUDGE1_*）と TEST_REALTIME_SESSION_ID が必要です'
+	);
 
-	let page: Page;
-
-	test.beforeEach(async ({ browser }) => {
-		page = await browser.newPage();
-
-		// ネットワークリクエストをログ
-		page.on('request', (request) => {
-			if (request.url().includes('/sessions') || request.url().includes('supabase')) {
-				console.log(`[Request] ${request.method()} ${request.url()}`);
-			}
-		});
-
-		// コンソールログをキャプチャ
-		page.on('console', (msg) => {
-			if (msg.text().includes('polling') || msg.text().includes('Realtime')) {
-				console.log(`[Console] ${msg.text()}`);
-			}
-		});
-	});
-
-	test.afterEach(async () => {
-		await page.close();
-	});
-
-	test('Realtime接続成功後はポーリングが発生しない（採点画面）', async () => {
-		// ログイン処理（省略 - 実際の環境に合わせて実装）
-		await page.goto(`${BASE_URL}/login`);
-		// ... ログイン処理 ...
-
-		// 採点画面に遷移（実際のURLに合わせて調整）
-		// await page.goto(`${BASE_URL}/session/test-session/score`);
-
-		const networkRequests: string[] = [];
+	test('SUBSCRIBED後も30秒ヘルスポーリングを継続し、ページをreloadしない', async ({ page }) => {
 		const consoleMessages: string[] = [];
+		const sessionReads: number[] = [];
+		let targetNavigations = 0;
 
-		// ネットワークリクエストを記録
+		page.on('console', (message) => consoleMessages.push(message.text()));
 		page.on('request', (request) => {
-			if (request.url().includes('/sessions') && request.method() === 'GET') {
-				networkRequests.push(`${Date.now()}_${request.url()}`);
+			if (isSessionPollingRequest(request)) sessionReads.push(Date.now());
+		});
+		page.on('framenavigated', (frame) => {
+			if (frame === page.mainFrame() && new URL(frame.url()).pathname === targetPath) {
+				targetNavigations++;
 			}
 		});
 
-		// コンソールメッセージを記録
-		page.on('console', (msg) => {
-			const text = msg.text();
-			if (text.includes('Realtime') || text.includes('polling')) {
-				consoleMessages.push(text);
-			}
-		});
+		await loginToSession(page);
 
-		// Realtime接続成功を待つ
-		await page.waitForTimeout(3000);
+		await expect
+			.poll(
+				() =>
+					consoleMessages.some((message) =>
+						message.includes(`[realtime/${channelName}] connected`)
+					),
+				{
+					timeout: 10_000,
+					message: 'Supabase Realtime が SUBSCRIBED にならなかった'
+				}
+			)
+			.toBe(true);
+		await expect
+			.poll(() =>
+				consoleMessages.some((message) =>
+					message.includes(`[realtime/${channelName}] health polling started (30000ms)`)
+				)
+			)
+			.toBe(true);
 
-		// Realtime接続成功のログを確認
-		const realtimeSuccessLog = consoleMessages.find((msg) =>
-			msg.includes('✅ リアルタイム接続成功')
-		);
-		expect(realtimeSuccessLog).toBeTruthy();
+		// onSubscribed 内の即時状態同期を測定対象から除外する。
+		await page.waitForTimeout(500);
+		sessionReads.length = 0;
+		targetNavigations = 0;
 
-		// ポーリング不要のログを確認
-		const pollingNotNeededLog = consoleMessages.find((msg) => msg.includes('ポーリング不要'));
-		expect(pollingNotNeededLog).toBeTruthy();
+		await page.waitForTimeout(31_500);
 
-		// 初期リクエスト数を記録
-		const initialRequestCount = networkRequests.length;
-
-		// 15秒待機（ポーリングが3秒ごとに発生しないことを確認）
-		await page.waitForTimeout(15000);
-
-		// ポーリングリクエストが発生していないことを確認
-		// (Realtime接続成功後は、定期的なGETリクエストが発生しないはず)
-		const finalRequestCount = networkRequests.length;
-		const additionalRequests = finalRequestCount - initialRequestCount;
-
-		// ポーリングが停止されているので、追加リクエストは最小限（0-1回程度）
-		expect(additionalRequests).toBeLessThan(2);
-
-		console.log(`✅ ポーリング停止確認: 初期=${initialRequestCount}, 最終=${finalRequestCount}`);
+		// 無変更・無配信でも health polling が1回動く。短周期pollingへの退行も同時に検知する。
+		expect(sessionReads.length).toBeGreaterThanOrEqual(1);
+		expect(sessionReads.length).toBeLessThanOrEqual(2);
+		expect(targetNavigations).toBe(0);
+		await expect(page).toHaveURL((url) => url.pathname === targetPath);
 	});
 
-	test('Realtime接続エラー時はフォールバックポーリングが動作', async () => {
-		// Realtime接続をブロックするように設定
-		await page.route('**/realtime/**', (route) => {
-			route.abort('failed');
-		});
-
-		// ログイン処理（省略）
-		await page.goto(`${BASE_URL}/login`);
-		// ... ログイン処理 ...
-
-		// 採点画面に遷移
-		// await page.goto(`${BASE_URL}/session/test-session/score`);
-
+	test('Realtimeが無応答でも3秒ポーリングにフォールバックし、離脱時に停止する', async ({
+		page
+	}) => {
 		const consoleMessages: string[] = [];
-		const networkRequests: { timestamp: number; url: string }[] = [];
+		const sessionReads: number[] = [];
 
-		// コンソールメッセージを記録
-		page.on('console', (msg) => {
-			const text = msg.text();
-			if (text.includes('Realtime') || text.includes('polling') || text.includes('エラー')) {
-				consoleMessages.push(text);
-			}
+		// Supabase WebSocketだけを遮断し、PostgRESTのpollingは到達可能な状態にする。
+		await page.routeWebSocket(/\/realtime\/v1\/websocket/, async (webSocket) => {
+			await webSocket.close({ code: 1011, reason: 'E2E simulated realtime outage' });
 		});
-
-		// ネットワークリクエストを記録（タイムスタンプ付き）
+		page.on('console', (message) => consoleMessages.push(message.text()));
 		page.on('request', (request) => {
-			if (request.url().includes('/sessions') && request.method() === 'GET') {
-				networkRequests.push({
-					timestamp: Date.now(),
-					url: request.url()
-				});
-			}
+			if (isSessionPollingRequest(request)) sessionReads.push(Date.now());
 		});
 
-		// Realtime接続エラーを待つ
-		await page.waitForTimeout(3000);
+		await loginToSession(page);
 
-		// エラーログを確認
-		const errorLog = consoleMessages.find(
-			(msg) => msg.includes('❌') && msg.includes('Realtime')
-		);
-		expect(errorLog).toBeTruthy();
+		await expect
+			.poll(() =>
+				consoleMessages.some((message) =>
+					message.includes(`[realtime/${channelName}] fallback polling started (3000ms)`)
+				)
+			)
+			.toBe(true);
+		await expect
+			.poll(() => sessionReads.length, {
+				timeout: 8_000,
+				message: 'Realtime無応答時に3秒pollingが継続しなかった'
+			})
+			.toBeGreaterThanOrEqual(2);
 
-		// フォールバックポーリング開始のログを確認
-		const fallbackLog = consoleMessages.find((msg) => msg.includes('フォールバック'));
-		expect(fallbackLog).toBeTruthy();
+		await page.goto('/dashboard');
+		sessionReads.length = 0;
+		await page.waitForTimeout(4_000);
 
-		// 30秒待機してポーリングの間隔を確認（10秒ごと）
-		await page.waitForTimeout(30000);
-
-		// ポーリングリクエストの間隔を計算
-		const intervals: number[] = [];
-		for (let i = 1; i < networkRequests.length; i++) {
-			const interval = networkRequests[i].timestamp - networkRequests[i - 1].timestamp;
-			intervals.push(interval);
-		}
-
-		// 10秒間隔のポーリングが2回以上発生していることを確認
-		expect(intervals.length).toBeGreaterThanOrEqual(2);
-
-		// 各間隔が約10秒（±2秒）であることを確認
-		const validIntervals = intervals.filter((interval) => interval >= 8000 && interval <= 12000);
-		expect(validIntervals.length).toBeGreaterThan(0);
-
-		console.log(`✅ フォールバックポーリング確認: 間隔=${intervals.map((i) => `${i}ms`).join(', ')}`);
-	});
-
-	test('手動更新ボタンでポーリングが再開される', async () => {
-		// 初期状態でRealtime接続エラーをシミュレート
-		await page.route('**/realtime/**', (route) => {
-			route.abort('failed');
-		});
-
-		// ログイン処理（省略）
-		await page.goto(`${BASE_URL}/login`);
-		// ... ログイン処理 ...
-
-		// Status監視画面に遷移（Realtime接続エラーが発生する）
-		// await page.goto(`${BASE_URL}/session/test-session/score/status?bib=1`);
-
-		await page.waitForTimeout(3000);
-
-		// エラーバナーが表示されることを確認
-		const errorBanner = page.locator('.realtime-error-banner');
-		await expect(errorBanner).toBeVisible();
-
-		// 手動更新ボタンをクリック
-		const refreshButton = page.locator('.manual-refresh-btn');
-		await refreshButton.click();
-
-		await page.waitForTimeout(2000);
-
-		// 再接続試行のログを確認
-		const consoleMessages: string[] = [];
-		page.on('console', (msg) => {
-			consoleMessages.push(msg.text());
-		});
-
-		await page.waitForTimeout(3000);
-
-		const reconnectLog = consoleMessages.find((msg) => msg.includes('再接続'));
-		expect(reconnectLog).toBeTruthy();
-
-		console.log('✅ 手動更新で再接続試行を確認');
-	});
-
-	test('ページ離脱時にポーリングが停止される', async () => {
-		// ログイン処理（省略）
-		await page.goto(`${BASE_URL}/login`);
-		// ... ログイン処理 ...
-
-		// 採点画面に遷移
-		// await page.goto(`${BASE_URL}/session/test-session/score`);
-
-		await page.waitForTimeout(2000);
-
-		const consoleMessages: string[] = [];
-		page.on('console', (msg) => {
-			const text = msg.text();
-			if (text.includes('onDestroy') || text.includes('ポーリング')) {
-				consoleMessages.push(text);
-			}
-		});
-
-		// 別のページに遷移
-		await page.goto(`${BASE_URL}/dashboard`);
-
-		await page.waitForTimeout(1000);
-
-		// onDestroyが実行されたことを確認
-		const destroyLog = consoleMessages.find((msg) => msg.includes('onDestroy'));
-		expect(destroyLog).toBeTruthy();
-
-		console.log('✅ ページ離脱時のクリーンアップを確認');
-	});
-
-	test('ネットワークリクエスト数が削減されている（20 req/min → < 2 req/min）', async () => {
-		// ログイン処理（省略）
-		await page.goto(`${BASE_URL}/login`);
-		// ... ログイン処理 ...
-
-		// 採点画面に遷移
-		// await page.goto(`${BASE_URL}/session/test-session/score`);
-
-		const networkRequests: { timestamp: number; url: string }[] = [];
-
-		page.on('request', (request) => {
-			if (request.url().includes('/sessions') && request.method() === 'GET') {
-				networkRequests.push({
-					timestamp: Date.now(),
-					url: request.url()
-				});
-			}
-		});
-
-		// Realtime接続成功を待つ
-		await page.waitForTimeout(3000);
-
-		const startTime = Date.now();
-		const initialCount = networkRequests.length;
-
-		// 60秒待機してリクエスト数をカウント
-		await page.waitForTimeout(60000);
-
-		const endTime = Date.now();
-		const finalCount = networkRequests.length;
-		const requestsPerMinute = finalCount - initialCount;
-
-		// 1分間のリクエスト数が2回未満であることを確認（修正後）
-		expect(requestsPerMinute).toBeLessThan(2);
-
-		console.log(`✅ ネットワーク負荷削減確認: ${requestsPerMinute} req/min (目標: < 2 req/min)`);
+		// 待機画面のmonitorが破棄され、対象セッションへの短周期pollingが残らない。
+		expect(sessionReads).toHaveLength(0);
 	});
 });

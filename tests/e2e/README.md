@@ -1,8 +1,10 @@
 # E2Eテスト
 
 このディレクトリには、以下のE2E（End-to-End）テストが含まれています：
+
 1. **複数検定員のリアルタイム機能テスト** (`multi-judge-realtime.spec.ts`)
-2. **Stripe統合機能テスト**（手動テスト）
+2. **Realtime/polling耐障害テスト** (`realtime-polling-behavior.spec.ts`)
+3. **Stripe統合機能テスト**（手動テスト）
 
 ---
 
@@ -11,6 +13,7 @@
 ### 目的
 
 本番環境相当のブラウザ環境で、以下を検証します：
+
 - **二重遷移の防止**: 同一promptで複数回遷移しないこと
 - **Realtime機能**: スコア更新、修正要求、セッション終了のリアルタイム反映
 - **状態同期**: RealtimeとPollingフォールバックの競合がないこと
@@ -18,18 +21,22 @@
 ### テストケース
 
 #### 1.1 待機画面で採点指示の二重遷移が起きない
+
 - 主任が1回promptを発行した際、一般検定員が1回だけ採点画面に遷移することを確認
 - **検証項目**: URL変化回数 = 1回、正しいbibパラメータ、3秒待機後も追加遷移なし
 
 #### 1.2 待機画面で複数promptが連続発行されても正しく遷移する
+
 - 複数のpromptが連続発行された場合でも、各promptで1回ずつ正しく遷移すること
 - **検証項目**: 各promptで1回遷移、正しいパラメータ
 
 #### 1.3 待機画面でセッション終了時は終了画面へ遷移する
+
 - セッション終了時に採点画面ではなく終了画面に遷移すること
 - **検証項目**: URL変化回数 = 1回、`ended=true`パラメータ、終了メッセージ表示
 
 #### 1.4 Realtimeとポーリングの同時動作で二重遷移が起きない
+
 - RealtimeとPollingフォールバックが両方動作しても、previousPromptIdで二重遷移を防ぐこと
 - **検証項目**: URL変化回数 = 1回（検知回数に関わらず）、5秒待機後も追加遷移なし
 
@@ -38,11 +45,13 @@
 #### 前提条件
 
 1. **Playwrightのインストール**:
+
 ```bash
 npx playwright install
 ```
 
 2. **環境変数の設定** (`.env.test`):
+
 ```bash
 # テストユーザーのクレデンシャル
 TEST_CHIEF_EMAIL=chief@example.com
@@ -52,11 +61,20 @@ TEST_JUDGE1_PASSWORD=password
 TEST_JUDGE2_EMAIL=judge2@example.com
 TEST_JUDGE2_PASSWORD=password
 
+# Realtime/polling E2E用
+TEST_JUDGE_EMAIL=judge1@example.com
+TEST_JUDGE_PASSWORD=password
+TEST_REALTIME_SESSION_ID=00000000-0000-0000-0000-000000000000
+
 # ベースURL（オプション）
 BASE_URL=http://localhost:5173
 ```
 
+`TEST_REALTIME_SESSION_ID` には、一般検定員が参加済みで
+`status = 'active'`、`is_active = true`、`active_prompt_id IS NULL` のセッションを指定します。
+
 3. **開発サーバーの起動**:
+
 ```bash
 npm run dev
 ```
@@ -81,15 +99,17 @@ npx playwright test -g "待機画面で採点指示の二重遷移が起きな�
 テストでは以下の方法で二重遷移を検出します：
 
 1. **URL変化のカウント**:
+
 ```typescript
 page.on('framenavigated', (frame) => {
-  if (frame === page.mainFrame()) {
-    urlChanges.push(frame.url());
-  }
+	if (frame === page.mainFrame()) {
+		urlChanges.push(frame.url());
+	}
 });
 ```
 
 2. **待機時間の挿入**:
+
 ```typescript
 await page.waitForURL('**/score/input**', { timeout: 5000 });
 await page.waitForTimeout(3000); // 追加遷移がないことを確認
@@ -106,7 +126,23 @@ await page.waitForTimeout(3000); // 追加遷移がないことを確認
 
 ---
 
-## 2. Stripe統合機能テスト
+## 2. Realtime/polling耐障害テスト
+
+実際のログインと待機画面を使い、次を検証します。
+
+- `SUBSCRIBED` 後も30秒ヘルスポーリングが継続し、全画面reloadが発生しない
+- Realtime WebSocketが無応答でも3秒ポーリングへフォールバックする
+- 待機画面を離れると対象セッションのポーリングが停止する
+
+```bash
+npx playwright test tests/e2e/realtime-polling-behavior.spec.ts
+```
+
+必要なfixtureと環境変数は [SETUP.md](./SETUP.md) を参照してください。
+
+---
+
+## 3. Stripe統合機能テスト
 
 ## テストの目的
 
@@ -126,6 +162,7 @@ await page.waitForTimeout(3000); // 追加遷移がないことを確認
 詳細は[`/docs/stripe/stripe-cli-setup.md`](/docs/stripe/stripe-cli-setup.md)の「E2E統合テスト手順（T8）」セクションを参照してください。
 
 **実施タイミング:**
+
 - Stripe統合機能の大幅な変更後
 - 本番デプロイ前の最終確認
 - Stripe APIバージョンアップグレード後
@@ -213,11 +250,13 @@ npm run dev
 **結論: CI環境では実行しません**
 
 理由：
+
 - Stripe CLIの認証が必要
 - ローカル環境依存の設定が多数必要
 - テスト実行時間が長い（10-15分）
 
 代わりに、ユニットテストが以下をカバー：
+
 - 全Webhook処理ロジック
 - エラーハンドリング
 - DB更新ロジック
