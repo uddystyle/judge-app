@@ -113,11 +113,8 @@
 
 <div class="demo" bind:this={root} aria-hidden="true">
 	<div class="phone">
-		<div class="statusbar">
-			<span class="clock">9:41</span>
-			<span class="dots"><i></i><i></i><i></i></span>
-		</div>
 		<div class="screen">
+			<div class="island" aria-hidden="true"></div>
 			<p class="instruction">{m.score_enterScore()}</p>
 
 			<div class="score" class:confirmed={current.confirmed}>
@@ -133,6 +130,7 @@
 				<div class={keyClass(CLEAR)}>C</div>
 				<div class={keyClass(CONFIRM)}>{m.score_confirm()}</div>
 			</div>
+			<div class="home-indicator" aria-hidden="true"></div>
 		</div>
 	</div>
 	<p class="caption">{m.landing_scoreDemoCaption()}</p>
@@ -147,40 +145,60 @@
 	}
 
 	.phone {
+		position: relative;
 		width: clamp(240px, 78vw, 300px);
 		background: #141418;
-		border-radius: 40px;
-		padding: 10px;
+		border-radius: 44px;
+		padding: 12px;
 		box-shadow:
 			0 24px 60px rgba(0, 0, 0, 0.28),
 			0 4px 12px rgba(0, 0, 0, 0.12);
 	}
-
-	.statusbar {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 6px 18px 4px;
-		color: rgba(255, 255, 255, 0.85);
-		font-size: 12px;
-		font-weight: 600;
+	/* サイドボタン（音量・電源）でスマホらしさを足す */
+	.phone::before,
+	.phone::after {
+		content: '';
+		position: absolute;
+		width: 3px;
+		border-radius: 2px;
+		background: #0b0b0e;
 	}
-	.dots {
-		display: inline-flex;
-		gap: 3px;
+	.phone::before {
+		left: -2px;
+		top: 24%;
+		height: 42px;
 	}
-	.dots i {
-		width: 5px;
-		height: 5px;
-		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.6);
+	.phone::after {
+		right: -2px;
+		top: 34%;
+		height: 58px;
 	}
 
 	.screen {
+		position: relative;
+		overflow: hidden;
 		background: var(--bg-primary);
-		border-radius: 30px;
-		padding: 22px 18px 24px;
+		border-radius: 34px;
+		padding: 40px 18px 16px;
 		text-align: center;
+	}
+	.island {
+		position: absolute;
+		top: 12px;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 84px;
+		height: 26px;
+		background: #141418;
+		border-radius: 16px;
+		z-index: 2;
+	}
+	.home-indicator {
+		width: 108px;
+		height: 5px;
+		margin: 16px auto 2px;
+		border-radius: 999px;
+		background: rgba(22, 22, 28, 0.82);
 	}
 
 	.instruction {
