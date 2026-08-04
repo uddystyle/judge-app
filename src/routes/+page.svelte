@@ -23,9 +23,9 @@
 			<div class="hero-content">
 				<h1 class="title">{m.landing_title()}</h1>
 				<p class="subtitle">
-					<span class="subtitle-lead">{m.landing_subtitleLead()}</span><span class="subtitle-tail"
-						>{m.landing_subtitleTail()}</span
-					>
+					<span class="subtitle-line1">{m.landing_subtitleLine1()}</span><span
+						class="subtitle-line2">{m.landing_subtitleLine2()}</span
+					><span class="subtitle-tail">{m.landing_subtitleTail()}</span>
 				</p>
 				<p class="description">
 					{m.landing_description()}
@@ -284,12 +284,12 @@
 		font-weight: 600;
 		margin-bottom: 20px;
 		color: var(--text-secondary);
-	}
-	/* 「採点管理システム」は常に独立行に。前段（subtitle-lead）は幅に応じて自然に折り返す。
-	   これで PC/タブレット/モバイルのどの幅でも改行位置が採点管理システムの前で揃う。 */
-	.subtitle-lead {
 		text-wrap: balance;
 	}
+	/* サブタイトルは3セグメント。モバイル(<768px)は各セグメントを独立行にして3段、
+	   PC/タブレット(>=768px)は前2段をインライン結合で自然折り返し＋「採点管理システム」を独立行。 */
+	.subtitle-line1,
+	.subtitle-line2,
 	.subtitle-tail {
 		display: block;
 	}
@@ -643,6 +643,12 @@
 
 		.subtitle {
 			font-size: 32px;
+		}
+
+		/* PC/タブレットは前2段をインライン結合（「採点管理システム」のみ独立行）＝従来どおり */
+		.subtitle-line1,
+		.subtitle-line2 {
+			display: inline;
 		}
 
 		.description {
