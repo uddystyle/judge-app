@@ -5,7 +5,8 @@
 	// ランディング用の「採点画面」自動再生デモ（純・表示用）。
 	// 実際の ScoreInput / NumericKeypad は再利用せず、見た目だけ忠実に複製する
 	// （採点ロジック・送信・検証は持たない）。パレットは本物と同じトークンを使う。
-	// prefers-reduced-motion では静止（数字が入った状態）を表示する。
+	// マーケLP の装飾デモとして視認性優先で常時再生する（reduce-motion でも停止しない）。
+	// 画面外に出たら一時停止（軽量化）。
 
 	const KEYPAD: string[] = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0'];
 	const CONFIRM = 'confirm';
@@ -18,10 +19,10 @@
 	const LEVEL = '2級';
 	const EVENT = '大回り';
 	const ATHLETES = [
-		{ score: 88, bib: 12 },
-		{ score: 92, bib: 13 },
-		{ score: 76, bib: 14 },
-		{ score: 85, bib: 15 }
+		{ score: 65, bib: 12 },
+		{ score: 67, bib: 13 },
+		{ score: 64, bib: 14 },
+		{ score: 66, bib: 15 }
 	];
 
 	type Frame = { display: string; active: string | null; confirmed: boolean; bib: number };
@@ -45,7 +46,7 @@
 	}
 
 	const frames = buildFrames(ATHLETES);
-	// 静止時（reduced-motion / 初期）は最初の選手の得点が入った状態を見せる
+	// フォールバック用の静止フレーム（通常は frames[frameIndex] が使われるため未使用）
 	const staticFrame: Frame = {
 		display: String(ATHLETES[0].score),
 		active: null,
@@ -54,21 +55,19 @@
 	};
 
 	let frameIndex = 0;
-	let reduceMotion = false;
 	let inView = true;
 	let timer: ReturnType<typeof setInterval> | null = null;
-	let motionQuery: MediaQueryList | null = null;
 	let observer: IntersectionObserver | null = null;
 	let root: HTMLElement;
 
-	$: current = reduceMotion ? staticFrame : (frames[frameIndex] ?? staticFrame);
+	$: current = frames[frameIndex] ?? staticFrame;
 
 	function tick() {
 		frameIndex = (frameIndex + 1) % frames.length;
 	}
 
 	function startTimer() {
-		if (timer || reduceMotion || !inView) return;
+		if (timer || !inView) return;
 		timer = setInterval(tick, FRAME_MS);
 	}
 
@@ -80,22 +79,14 @@
 	}
 
 	function syncPlayback() {
-		if (reduceMotion || !inView) {
-			stopTimer();
-		} else {
+		if (inView) {
 			startTimer();
+		} else {
+			stopTimer();
 		}
 	}
 
 	onMount(() => {
-		motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-		reduceMotion = motionQuery.matches;
-		const onMotionChange = (e: MediaQueryListEvent) => {
-			reduceMotion = e.matches;
-			syncPlayback();
-		};
-		motionQuery.addEventListener('change', onMotionChange);
-
 		// 画面外に出たら停止（軽量化）。IntersectionObserver は一時停止のみに使い、
 		// 再生開始は下の syncPlayback() で必ず行う（IO 初回コールバック待ちで固まらない）。
 		if ('IntersectionObserver' in window && root) {
@@ -111,8 +102,6 @@
 
 		// マウント直後に再生開始（inView は既定 true）
 		syncPlayback();
-
-		return () => motionQuery?.removeEventListener('change', onMotionChange);
 	});
 
 	onDestroy(() => {
