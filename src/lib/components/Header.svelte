@@ -269,7 +269,7 @@
 	}
 	.app-name-button img {
 		display: block;
-		width: 105px;
+		width: auto;
 		height: 25px;
 	}
 	.app-name-button:hover {

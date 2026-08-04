@@ -108,7 +108,7 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    font-family: 'M PLUS Rounded 1c', -apple-system, 'Hiragino Maru Gothic ProN', sans-serif;
     background-color: var(--bg-secondary);
     color: var(--text-primary);
     touch-action: manipulation;

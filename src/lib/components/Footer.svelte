@@ -133,7 +133,7 @@
 
 	.brand-name img {
 		display: block;
-		width: 168px;
+		width: auto;
 		height: 40px;
 	}
 
