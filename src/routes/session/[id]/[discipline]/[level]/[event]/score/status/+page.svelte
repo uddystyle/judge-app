@@ -20,7 +20,7 @@
 	import { get } from 'svelte/store';
 	import { createScoreStatusManager, type ScoreStatusManagerHandle } from '$lib/scoreStatusManager';
 	import { createSessionMonitorChannel, type RealtimeChannelHandle } from '$lib/realtime';
-	import { createSerializedAsync } from '$lib/serializedAsync';
+	import { createSerializedAsync, DEFAULT_POLL_TIMEOUT_MS } from '$lib/serializedAsync';
 
 	export let data: PageData;
 	let scoreStatus: any = data.initialScoreStatus || { scores: [], requiredJudges: 1 };
@@ -70,13 +70,14 @@
 		goto(url);
 	}
 
-	async function pollNextSkaterNav() {
+	async function pollNextSkaterNav(signal?: AbortSignal) {
 		if (isChief || !pageActive || navigationInProgress) return;
 		const pollVersion = navigationVersion;
 		const { data: s } = await supabase
 			.from('sessions')
 			.select('active_prompt_id, is_active')
 			.eq('id', id)
+			.abortSignal(signal!)
 			.maybeSingle();
 		if (!pageActive || navigationInProgress || pollVersion !== navigationVersion || !s) return;
 		if (s.is_active === false) {
@@ -111,6 +112,8 @@
 
 	const navPollingRunner = createSerializedAsync(pollNextSkaterNav, {
 		pendingDelayMs: 0,
+		// 通信ハングで錠が永久に残ると、次の滑走者への遷移が止まる
+		timeoutMs: DEFAULT_POLL_TIMEOUT_MS,
 		onError: (error) => console.error('[status] navigation polling failed:', error)
 	});
 

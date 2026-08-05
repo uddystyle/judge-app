@@ -151,7 +151,8 @@ describe('DELETE 受信時は payload に頼らず再取得する', () => {
 
 		// RLS 下で実際に届く形（主キーのみ。judge_id も guest_identifier も無い）
 		await payload({ eventType: 'DELETE', old: { id: 42 }, new: {} } as never);
-		await new Promise((r) => setTimeout(r, 10));
+		// DELETE 起因の再取得は連続分をまとめるため debounce を挟む
+		await new Promise((r) => setTimeout(r, 400));
 
 		// 再取得のためにクエリが発行されていること
 		expect(configs[0].pollingFn).toBeDefined();
@@ -167,7 +168,8 @@ describe('DELETE 受信時は payload に頼らず再取得する', () => {
 			const { payload } = setup(false);
 
 			await payload({ eventType: 'DELETE', old: { id: 42 }, new: {} } as never);
-			await new Promise((r) => setTimeout(r, 10));
+			// DELETE 起因の再取得は連続分をまとめるため debounce を挟む
+			await new Promise((r) => setTimeout(r, 400));
 
 			expect(fetchSpy).toHaveBeenCalledWith(
 				expect.stringContaining('/api/score-status/'),
@@ -287,5 +289,40 @@ describe('ポーリングの期限が実クエリまで届く', () => {
 
 		expect(abortSignalSpy).toHaveBeenCalled();
 		expect(abortSignalSpy.mock.calls[0][0]).toBeInstanceOf(AbortSignal);
+	});
+});
+
+/**
+ * DELETE 再取得の負荷
+ *
+ * ⚠️ DELETE イベントは購読フィルタが効かない（old に主キーしか入らないため、
+ * session_id / bib での絞り込みが評価できない）。同じテーブルの**無関係な DELETE でも
+ * 全クライアントに届く**ので、1件ごとに再取得すると DELETE が多い環境で負荷が跳ねる。
+ * 連続した DELETE はまとめて1回の再取得に畳む。
+ */
+describe('DELETE の連続受信をまとめる', () => {
+	beforeEach(() => {
+		configs.length = 0;
+		vi.clearAllMocks();
+	});
+
+	it('短時間に届いた複数の DELETE で再取得が何度も走らない', async () => {
+		// baseConfig の既定 supabase を使う（lastFrom がそのインスタンスを指す）
+		const manager = createScoreStatusManager(
+			baseConfig({ isTrainingMode: true, initialAthleteId: 'athlete-1' })
+		);
+		manager.setupRealtime();
+		const payload = configs[0].onPayload!;
+
+		// 無関係な DELETE が連続して届く状況
+		for (let i = 0; i < 10; i++) {
+			await payload({ eventType: 'DELETE', old: { id: i }, new: {} } as never);
+		}
+		await new Promise((r) => setTimeout(r, 400));
+
+		// 10回分の再取得が発生していないこと（畳まれている）
+		const fromCalls = (lastFrom as ReturnType<typeof vi.fn>).mock.calls.length;
+		expect(fromCalls).toBeGreaterThan(0);
+		expect(fromCalls).toBeLessThan(10);
 	});
 });

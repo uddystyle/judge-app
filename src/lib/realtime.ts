@@ -1,9 +1,9 @@
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
-import { createSerializedAsync } from '$lib/serializedAsync';
+import { createSerializedAsync, DEFAULT_POLL_TIMEOUT_MS } from '$lib/serializedAsync';
 
 const DEFAULT_MAX_RETRY = 5;
 /** 1回のポーリングに許す上限。超えたら錠を解放して次の周期へ進む */
-const DEFAULT_POLLING_TIMEOUT_MS = 15000;
+const DEFAULT_POLLING_TIMEOUT_MS = DEFAULT_POLL_TIMEOUT_MS;
 const DEFAULT_POLLING_INTERVAL_MS = 10000;
 
 /** Status values that indicate the channel is no longer functional. */

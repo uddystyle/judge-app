@@ -21,6 +21,15 @@ export interface SerializedAsyncHandle {
 	cleanup: () => void;
 }
 
+/**
+ * ポーリング系の既定の期限。
+ *
+ * 「錠を持つ機構には必ず期限を持たせる」という方針の既定値。
+ * 個別に事情がある場合だけ timeoutMs で上書きする。
+ * 会場の低速回線でも通る余裕を見た値で、超えたら錠を解放して次の周期へ進む。
+ */
+export const DEFAULT_POLL_TIMEOUT_MS = 15000;
+
 export class SerializedAsyncTimeoutError extends Error {
 	constructor(timeoutMs: number) {
 		super(`serialized async execution exceeded ${timeoutMs}ms`);

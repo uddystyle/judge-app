@@ -8,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { getContext, onMount, onDestroy } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
-	import { createSerializedAsync } from '$lib/serializedAsync';
+	import { createSerializedAsync, DEFAULT_POLL_TIMEOUT_MS } from '$lib/serializedAsync';
 	import * as m from '$lib/paraglide/messages.js';
 
 	const supabase = getContext<SupabaseClient>('supabase');
@@ -18,7 +18,7 @@
 
 	let sessionPolling: ReturnType<typeof setInterval> | null = null;
 	const syncVisibleSessions = createSerializedAsync(
-		async () => {
+		async (signal) => {
 			const currentIds = data.sessions.map((session) => session.id);
 			if (currentIds.length === 0) return;
 
@@ -28,13 +28,16 @@
 				.from('sessions')
 				.select('id')
 				.in('id', currentIds)
-				.is('deleted_at', null);
+				.is('deleted_at', null)
+				.abortSignal(signal!);
 			if (error || !visibleSessions) return;
 
 			const visibleIds = new Set(visibleSessions.map((session) => session.id));
 			data.sessions = data.sessions.filter((session) => visibleIds.has(session.id));
 		},
 		{
+			// 通信ハングで錠が永久に残ると、以後セッション一覧が更新されなくなる
+			timeoutMs: DEFAULT_POLL_TIMEOUT_MS,
 			pendingDelayMs: 0,
 			onError: (error) => console.error('[dashboard] session polling failed:', error)
 		}

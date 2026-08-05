@@ -30,8 +30,9 @@ describe('createScoreboardDataRefresher', () => {
 
 		resolveFirst();
 		await firstRefresh;
-		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(invalidate).toHaveBeenCalledTimes(2);
+		// 保留分は次のマクロタスクで走る。期限監視（Promise.race）が1段挟まるぶん
+		// tick 数が変わり得るため、固定の setTimeout(0) ではなく条件で待つ。
+		await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
 		refresher.cleanup();
 	});
 });

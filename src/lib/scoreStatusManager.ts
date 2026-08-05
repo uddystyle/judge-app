@@ -47,6 +47,8 @@ export interface ScoreStatusManagerHandle {
 
 /** 採点状況の1回の取得に許す上限。超えたら錠を解放し、クエリを abort する */
 const STATUS_FETCH_TIMEOUT_MS = 15000;
+/** DELETE 起因の再取得をまとめる窓。フィルタが効かず無関係な DELETE も届くため */
+const DELETE_REFETCH_DEBOUNCE_MS = 300;
 
 export function createScoreStatusManager(
 	config: ScoreStatusManagerConfig
@@ -321,8 +323,8 @@ export function createScoreStatusManager(
 			// RLS 有効なテーブルでは REPLICA IDENTITY FULL にしても主キーしか届かないため、
 			// guest_identifier / judge_id での絞り込みは成立しない（以前はここで絞っており、
 			// 採点削除が即時反映されずヘルスポーリング頼みになっていた）。
-			// payload に頼らず正規状態を取り直す。削除は稀なのでコストも問題にならない。
-			fetchStatus();
+			// payload に頼らず正規状態を取り直す（連続分はまとめる）。
+			scheduleDeleteRefetch();
 		}
 	}
 
@@ -351,7 +353,12 @@ export function createScoreStatusManager(
 		}
 
 		if (shouldUpdate) {
-			fetchStatus();
+			// DELETE はフィルタが効かず無関係なイベントも届くため、連続分をまとめる
+			if (payload.eventType === 'DELETE') {
+				scheduleDeleteRefetch();
+			} else {
+				fetchStatus();
+			}
 		}
 	}
 
@@ -375,6 +382,23 @@ export function createScoreStatusManager(
 	// 実クエリを監視できるようにする。投げっぱなしにすると期限が意味を成さない。
 	function pollStatus(): Promise<void> {
 		return serializedFetch!.runAsync();
+	}
+
+	/**
+	 * DELETE 起因の再取得をまとめる。
+	 *
+	 * ⚠️ DELETE イベントには購読フィルタが効かない。old に主キーしか入らないため
+	 * session_id / bib での絞り込みが評価できず、**同じテーブルの無関係な DELETE でも
+	 * 全クライアントに届く**。1件ごとに再取得すると DELETE が多い環境で負荷が跳ねる。
+	 * 連続分は1回に畳む（正確性は保ったまま、取得回数だけ抑える）。
+	 */
+	let deleteRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+	function scheduleDeleteRefetch() {
+		if (deleteRefetchTimer) return;
+		deleteRefetchTimer = setTimeout(() => {
+			deleteRefetchTimer = null;
+			fetchStatus();
+		}, DELETE_REFETCH_DEBOUNCE_MS);
 	}
 
 	// Awaitable fetch that respects serialization (for manualRefresh)
@@ -432,6 +456,10 @@ export function createScoreStatusManager(
 			await scoreRealtimeHandle?.manualRefresh(fetchStatusAwaitable);
 		},
 		cleanup() {
+			if (deleteRefetchTimer) {
+				clearTimeout(deleteRefetchTimer);
+				deleteRefetchTimer = null;
+			}
 			scoreRealtimeHandle?.cleanup();
 			serializedFetch?.cleanup();
 		},
