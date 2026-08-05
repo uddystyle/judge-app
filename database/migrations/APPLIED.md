@@ -1,6 +1,6 @@
 # マイグレーション適用台帳 (APPLIED.md)
 
-> 最終更新: 2026-08-04 ／ 自動生成(ヘッダ抽出)＋手動オーバーレイ。`database/migrations/` の全 132 SQL を網羅。
+> 最終更新: 2026-08-04 ／ 自動生成(ヘッダ抽出)＋手動オーバーレイ。`database/migrations/` の全 135 SQL を網羅。
 
 ## 1. 前提・凡例
 
@@ -99,7 +99,7 @@
 | 55 | `055_add_create_organization_with_subscription_function.sql` | 組織作成のトランザクション関数を追加 | 2026-01-22 | ✓ |  | ⚠️要確認 | ⚠️要確認 | **アプリ先行** create_organization_with_subscription をCREATE OR REPLACEで定義。header:次工程で /api/organization/create を改修・デプロイ必要 |
 | 56 | `056_make_create_organization_idempotent.sql` | 組織作成関数を冪等化 | 2026-01-22 | ✓ | 055 | ⚠️要確認 | ⚠️要確認 | 055のcreate_organization_with_subscriptionをCREATE OR REPLACEで置換。重複/再試行(UNIQUE違反)に安全な冪等版 |
 
-### 3.2 ロックダウンera（1000–1032・32本）
+### 3.2 ロックダウンera（1000–1033・33本）
 
 > 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1024`＋`052` は dev+prod 適用確認済み。
 
@@ -138,6 +138,7 @@
 | 1030 | `1030_stripe_event_idempotency.sql` | Stripe Webhook の冪等化（処理済み event.id の記録） | 2026-08-04 | ✓ | Stripe監査 M-2 | ✅(2026-08-04 RLS有効/ポリシー0/索引2) | ✅(2026-08-04 RLS有効/ポリシー0/索引2) | **DB先行** Stripe は「少なくとも1回」配信・順序保証なし・2xx以外は最大3日再送のため同一 event.id が複数回届くのは通常運用。多くの経路は UPSERT で冪等だが組織アップグレードは Stripe 側 list→cancel を伴い純粋冪等ではない。`stripe_events` に event_id を主キーで記録し、INSERT の一意制約違反＝処理済みと判定して本処理前に弾く（チェックしてから書く方式と違い同時配信でも競合しない）。RLS 有効・**ポリシー無し=service role 専用**（1024/1026 と同じパターン）。テーブル未作成でも課金処理は止めず error ログで可視化する実装。冪等 |
 | 1031 | `1031_stripe_events_lease_and_deadletter.sql` | stripe_events に処理状態・リース期限・破棄理由を追加 | 2026-08-04 | ✓ | **1030 の設計欠陥を修正** | ✅(2026-08-04) | ✅(2026-08-04) | **DB先行** 1030 は本処理の**前**に INSERT し、その瞬間から処理済みと判定していた。失敗時は catch で削除する作りだったため、**catch を通らない終了**（Vercel maxDuration=10s 超過／プロセス強制終了／デプロイ）で記録だけが残り、Stripe の再送が「処理済み」と判定されて**イベントが永久消失**する。とくに組織アップグレードは list+複数 cancel を伴い 10 秒に迫りやすい。`status`(processing/completed/dropped) と `claimed_at` を追加し、**永久スキップは completed と dropped のみ**、processing はリース切れ(60s)で再取得可能にした。`failure_reason` は破棄イベントの dead-letter レコード（payload は持たないが event_id から `stripe.events.retrieve()` で再構築できる）。冪等 |
 | 1032 | `1032_subscriptions_organization_id_nullable.sql` | subscriptions.organization_id を NULL 許容にする | 2026-08-05 | ✓ | Stripe監査の派生 | ✅(2026-08-05) | ✅(2026-08-05) | **DB先行 🔴重要** 列が NOT NULL なのに外部キーは ON DELETE SET NULL という自己矛盾。しかも本番コードは紐付けを外すため null を書く（handleSubscriptionDeleted の解約、handleOrganizationCheckout のアップグレード時の旧サブスク切り離し）。いずれも NOT NULL 違反 → 500 → 3日間再送で全滅し、**解約もアップグレードも DB に反映されない**。行が残る組織は ON DELETE SET NULL が働けず削除もできなかった。ユニットテストは Supabase をモックするため検出できず、一回限りのデータ修正を実行して初めて表面化した。冪等 |
+| 1033 | `1033_realtime_prerequisites.sql` | Realtime の DB 前提条件（publication + REPLICA IDENTITY FULL）を正規化 | 2026-08-05 | ✓ | 999(❌実行禁止) / scripts/apply-realtime-setup.sql を置換 | ✅(2026-08-05 no-op) | ✅(2026-08-05 no-op) | **DB先行** publication 収録と REPLICA IDENTITY FULL は 999（**台帳で実行禁止**）と手動スクリプトにしか無く、**通常のマイグレーション経路に存在しなかった**。現行 prod/dev は手動適用済みのため no-op だが、**新規・復旧環境では Realtime が無言で無配信になる**（購読は成功するのでイベントが来ないことに気づきにくい）。REPLICA IDENTITY FULL は DELETE payload に old データを載せるためにも必要。冪等（未設定のときだけ ALTER） |
 
 ## 4. ロールバック対応表（20本）
 
@@ -188,6 +189,7 @@
 | `1026_verify_guest_resume.sql` | 検証SELECT | 1026 の検証。テーブル存在+RLS有効／ポリシー0件（service role 専用）／token 未発行のゲスト行0件／token 重複なし。スキーマ変更なし |
 | `1029_verify_status_check.sql` | 検証SELECT | 1029 の検証。CHECK 定義／`subscriptions_organization_active_unique` との矛盾解消／一時テーブルで8ステータス全投入／既存データの不適合0件。本番テーブルには書き込まない。スキーマ変更なし |
 | `1031_verify_stripe_events.sql` | 検証SELECT | 1030/1031 の検証。RLS有効+ポリシー0件（service role 専用）／status の3値が通り不正値は拒否されること（一時テーブル）／dead-letter(dropped) とリース切れ processing の運用監視クエリ。本番テーブルには書き込まない |
+| `1033_verify_realtime_prerequisites.sql` | 検証SELECT | 1033 の検証。3テーブルの publication 収録・REPLICA IDENTITY FULL を**テーブル単位**で厳密判定（1つでも欠ければ exception）。SELECT ポリシーの有無もテーブルごとに表示。スキーマ変更なし |
 | `1025_verify_guest_identity.sql` | 検証SELECT | 1025 の検証。user_metadata 参照ポリシー0件／anon_*撤去／ゲスト owner ポリシー5本／ヘルパのSECURITY DEFINER+search_path／user_id束縛率／同一セッション内uid重複なし。スキーマ変更なし |
 | `archive/one-time/008_phase0_cleanup_existing_data.sql` | 💥破壊的データ削除 | 既存データを全TRUNCATEしクリーンアップ。ヘッダ「本番未稼働のため削除して再構築」。Phase0、009(Phase1)の前に実行。全テーブルTRUNCATE。**隔離済み** |
 | `archive/one-time/010_cleanup_existing_user_data.sql` | 💥破壊的データ削除 | 既存組織・セッションデータをTRUNCATE。日付なし。profiles/auth.usersは保持。末尾に確認SELECT。**隔離済み** |

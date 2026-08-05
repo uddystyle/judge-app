@@ -430,3 +430,131 @@ describe('syncPendingMutations', () => {
 		expect(fetchFn).not.toHaveBeenCalled();
 	});
 });
+
+/**
+ * 同期APIの非2xx応答の扱い。
+ *
+ * ⚠️ 以前は `if (!response.ok)` で 400/403 を含む**全ての非2xx**を bumpRetry へ流していた。
+ * bumpRetry は retry_count を増やすだけで打ち切らないため、クライアントとサーバーの
+ * 契約不整合など**恒久的な 400** が起きると mutation が永久に pending のまま残る
+ * （打ち切り機構 MAX_SERVER_REJECTS は 2xx 応答の rejected リスト経路にしか効かない）。
+ *
+ * 分類は既存の isPermanentActionFailureStatus と同じ規則に揃える:
+ *   408 / 429 / 5xx / 401 → 一時的。保持して再送
+ *   それ以外の 4xx        → 恒久的。rejected にして表面化させる
+ */
+describe('同期API の HTTP ステータス分類', () => {
+	function errorResponse(status: number): Response {
+		return {
+			ok: false,
+			status,
+			json: async () => ({}),
+			text: async () => ''
+		} as unknown as Response;
+	}
+
+	it('恒久的な 400 は rejected にして永久 pending を防ぐ', async () => {
+		await enqueueScoreMutation(baseInput);
+		const fetchFn = vi.fn(async () => errorResponse(400));
+
+		const result = await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		expect(await getPendingCount()).toBe(0);
+		expect(await getRejectedCount()).toBe(1);
+		expect(result.rejected).toBe(1);
+		// ネットワーク不達ではないので offline 扱いにしない
+		expect(result.offline).toBe(false);
+	});
+
+	it('403 も恒久的として扱う', async () => {
+		await enqueueScoreMutation(baseInput);
+		const fetchFn = vi.fn(async () => errorResponse(403));
+
+		await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		expect(await getRejectedCount()).toBe(1);
+	});
+
+	it.each([408, 429, 500, 503])(
+		'一時的な %i は pending のまま保持して再送させる',
+		async (status) => {
+			await enqueueScoreMutation(baseInput);
+			const fetchFn = vi.fn(async () => errorResponse(status));
+
+			await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+			expect(await getPendingCount()).toBe(1);
+			expect(await getRejectedCount()).toBe(0);
+		}
+	);
+
+	it('401 は一時的（再認証で解ける）ため保持する', async () => {
+		await enqueueScoreMutation(baseInput);
+		const fetchFn = vi.fn(async () => errorResponse(401));
+
+		await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		expect(await getPendingCount()).toBe(1);
+	});
+});
+
+/**
+ * 同期リクエストの期限
+ *
+ * ⚠️ 以前は fetch に signal も期限も無く、syncInFlight は「doSync が解決するまで」
+ * 保持され続けた。通信がハングすると **以後の同期呼び出しが全て合流して永久に待つ**。
+ * オフライン採点が端末に溜まったまま送信されない状態になり、
+ * 現場では再読み込み以外に復旧手段が無い。
+ */
+describe('同期リクエストの期限', () => {
+	/** signal で中断されたら reject する（実 fetch と同じ挙動） */
+	function hangingFetch() {
+		return vi.fn(
+			(_url: string, init?: RequestInit) =>
+				new Promise<Response>((_, reject) => {
+					init?.signal?.addEventListener('abort', () =>
+						reject(new DOMException('Aborted', 'AbortError'))
+					);
+				})
+		);
+	}
+
+	it('応答が返らない場合は期限で打ち切り、キューは保持したまま次回に委ねる', async () => {
+		await enqueueScoreMutation(baseInput);
+		const fetchFn = hangingFetch();
+
+		const result = await syncPendingMutations(fetchFn as unknown as typeof fetch, {
+			timeoutMs: 20
+		});
+
+		// ネットワーク不達と同じ扱い（全件保持）
+		expect(result.offline).toBe(true);
+		expect(await getPendingCount()).toBe(1);
+		expect(await getRejectedCount()).toBe(0);
+	});
+
+	it('期限切れ後も再同期できる（syncInFlight が握られたままにならない）', async () => {
+		await enqueueScoreMutation(baseInput);
+
+		await syncPendingMutations(hangingFetch() as unknown as typeof fetch, { timeoutMs: 20 });
+
+		// 2回目は正常に応答する fetch で、実際に送信できること
+		const ok = vi.fn(async () => okResponse({ accepted: [], rejected: [] }));
+		await syncPendingMutations(ok as unknown as typeof fetch);
+
+		expect(ok).toHaveBeenCalled();
+	});
+
+	it('fetch に AbortSignal が渡される', async () => {
+		await enqueueScoreMutation(baseInput);
+		let received: RequestInit | undefined;
+		const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+			received = init;
+			return okResponse({ accepted: [], rejected: [] });
+		});
+
+		await syncPendingMutations(fetchFn as unknown as typeof fetch);
+
+		expect(received?.signal).toBeInstanceOf(AbortSignal);
+	});
+});

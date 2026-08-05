@@ -331,7 +331,9 @@ describe('createSerializedAsync', () => {
 
 		// 2回目: runAsync — 実行中なのでpendingになり、完了を待つ
 		let asyncResolved = false;
-		const promise = handle.runAsync().then(() => { asyncResolved = true; });
+		const promise = handle.runAsync().then(() => {
+			asyncResolved = true;
+		});
 
 		// 1回目完了 → pending実行がスケジュール
 		resolvers[0]();
@@ -395,7 +397,9 @@ describe('createSerializedAsync', () => {
 
 		// runAsync 開始（完了前に cleanup される）
 		let resolved = false;
-		const promise = handle.runAsync().then(() => { resolved = true; });
+		const promise = handle.runAsync().then(() => {
+			resolved = true;
+		});
 
 		// cleanup → waiter が即座に resolve される（ハングしない）
 		handle.cleanup();
@@ -440,5 +444,131 @@ describe('createSerializedAsync', () => {
 		expect(executionCount).toBe(2);
 
 		handle.cleanup();
+	});
+});
+
+/**
+ * リクエスト期限
+ *
+ * ⚠️ 以前は fn() が解決するまで isExecuting が立ちっぱなしで、後続呼び出しは
+ * hasPending を立てて即 return するだけだった。PostgREST が一度ハングすると
+ * **その画面のポーリングが以後まったく実行されなくなる**（realtime.ts の
+ * ヘルスポーリングもこの機構を使っている）。現場では復旧手段が「再読み込み」しかない。
+ *
+ * fn 側が期限を守れなくても、直列化の錠だけは必ず解放されなければならない。
+ */
+describe('createSerializedAsync のリクエスト期限', () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it('fn がハングしても期限で錠が解放され、次の実行が走る', async () => {
+		let calls = 0;
+		// 1回目は永久にハングする
+		const handle = createSerializedAsync(
+			() => {
+				calls++;
+				return calls === 1 ? new Promise<void>(() => {}) : Promise.resolve();
+			},
+			{ pendingDelayMs: 0, timeoutMs: 5000 }
+		);
+
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(calls).toBe(1);
+
+		// 期限前は錠がかかったまま（重複実行しない）
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(calls).toBe(1);
+
+		// 期限を過ぎたら錠が解放され、保留していた分が**自動で**走る
+		// （ポーリングが自力で再開する。利用者が再度叩く必要はない）
+		await vi.advanceTimersByTimeAsync(5000);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(calls).toBe(2);
+
+		// 以後も通常どおり実行できる
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(calls).toBe(3);
+	});
+
+	it('期限切れは onError で通知される（沈黙させない）', async () => {
+		const onError = vi.fn();
+		const handle = createSerializedAsync(() => new Promise<void>(() => {}), {
+			pendingDelayMs: 0,
+			timeoutMs: 3000,
+			onError
+		});
+
+		handle.run();
+		await vi.advanceTimersByTimeAsync(3000);
+
+		expect(onError).toHaveBeenCalled();
+	});
+
+	it('fn には AbortSignal が渡され、期限切れで abort される', async () => {
+		let signal: AbortSignal | undefined;
+		const handle = createSerializedAsync(
+			(s) => {
+				signal = s;
+				return new Promise<void>(() => {});
+			},
+			{ pendingDelayMs: 0, timeoutMs: 2000 }
+		);
+
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(signal).toBeInstanceOf(AbortSignal);
+		expect(signal!.aborted).toBe(false);
+
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(signal!.aborted).toBe(true);
+	});
+
+	it('cleanup で実行中の signal が abort される（画面離脱時に握ったままにしない）', async () => {
+		let signal: AbortSignal | undefined;
+		const handle = createSerializedAsync(
+			(s) => {
+				signal = s;
+				return new Promise<void>(() => {});
+			},
+			{ pendingDelayMs: 0, timeoutMs: 60000 }
+		);
+
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(signal!.aborted).toBe(false);
+
+		handle.cleanup();
+		expect(signal!.aborted).toBe(true);
+	});
+
+	it('timeoutMs 未指定なら従来どおり期限なしで動く（既定の互換）', async () => {
+		let resolveFn: (() => void) | undefined;
+		let calls = 0;
+		const handle = createSerializedAsync(() => {
+			calls++;
+			return new Promise<void>((r) => {
+				resolveFn = r;
+			});
+		});
+
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(calls).toBe(1);
+
+		// 長時間経っても勝手に解放しない
+		await vi.advanceTimersByTimeAsync(600000);
+		handle.run();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(calls).toBe(1);
+
+		resolveFn!();
+		await vi.advanceTimersByTimeAsync(1);
 	});
 });

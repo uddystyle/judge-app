@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import { isRetryableReason } from '$lib/syncContract';
+import { isPermanentActionFailureStatus, isRetryableReason } from '$lib/syncContract';
 import type { CachedSessionBundle } from '$lib/offline/sessionCache';
 
 /**
@@ -74,6 +74,15 @@ const BUNDLE_RETENTION_DAYS = 30;
  * なので、一過性の DB エラー・長期オフライン・復帰時の瞬断では発火しない。
  */
 const MAX_SERVER_REJECTS = 10;
+/**
+ * 同期リクエスト1回の上限。
+ *
+ * ⚠️ 期限が無いと、通信がハングしたときに syncInFlight が解放されず
+ * **以後の同期呼び出しが全て合流して永久に待つ**。オフライン採点が端末に
+ * 溜まったまま送信されない状態になり、現場では再読み込み以外に復旧手段が無い。
+ * 会場の低速回線でも通る余裕を見て 30 秒。
+ */
+const SYNC_TIMEOUT_MS = 30000;
 const MIN_STUCK_AGE_MS = 6 * 60 * 60 * 1000;
 
 class OfflineScoreDb extends Dexie {
@@ -355,15 +364,28 @@ let syncInFlight: Promise<SyncResult> | null = null;
  * pending の mutation をまとめて同期する。
  * 多重呼び出しは合流する（同時に2本の同期は走らない）。
  */
-export function syncPendingMutations(fetchFn: typeof fetch = fetch): Promise<SyncResult> {
+export function syncPendingMutations(
+	fetchFn: typeof fetch = fetch,
+	options?: { timeoutMs?: number }
+): Promise<SyncResult> {
 	if (syncInFlight) return syncInFlight;
-	syncInFlight = doSync(fetchFn).finally(() => {
+	syncInFlight = doSync(fetchFn, options?.timeoutMs ?? SYNC_TIMEOUT_MS).finally(() => {
 		syncInFlight = null;
 	});
 	return syncInFlight;
 }
 
-async function doSync(fetchFn: typeof fetch): Promise<SyncResult> {
+/**
+ * 指定ミリ秒で abort する signal を返す。
+ * `AbortSignal.timeout` は Safari 16 未満に無く、本アプリは iOS 現場端末を含むため自前で用意する。
+ */
+function timeoutSignal(ms: number): AbortSignal {
+	const controller = new AbortController();
+	setTimeout(() => controller.abort(), ms);
+	return controller.signal;
+}
+
+async function doSync(fetchFn: typeof fetch, timeoutMs: number): Promise<SyncResult> {
 	const db = getOfflineDb();
 	let totalSynced = 0;
 	let totalRejected = 0;
@@ -380,7 +402,7 @@ async function doSync(fetchFn: typeof fetch): Promise<SyncResult> {
 
 		if (syncable.length === 0) break;
 
-		const batch = await sendBatch(db, fetchFn, syncable);
+		const batch = await sendBatch(db, fetchFn, syncable, timeoutMs);
 		totalSynced += batch.synced;
 		totalRejected += batch.rejected;
 
@@ -405,7 +427,8 @@ async function doSync(fetchFn: typeof fetch): Promise<SyncResult> {
 async function sendBatch(
 	db: OfflineScoreDb,
 	fetchFn: typeof fetch,
-	pending: PendingScoreMutation[]
+	pending: PendingScoreMutation[],
+	timeoutMs: number
 ): Promise<{ synced: number; rejected: number; offline: boolean }> {
 	let result: {
 		accepted?: string[];
@@ -415,6 +438,8 @@ async function sendBatch(
 	try {
 		const response = await fetchFn(SYNC_ENDPOINT, {
 			method: 'POST',
+			// 期限切れは AbortError となり、下の catch でネットワーク不達と同じ扱い（全件保持）になる
+			signal: timeoutSignal(timeoutMs),
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				mutations: pending.map((m) => ({
@@ -436,7 +461,24 @@ async function sendBatch(
 		});
 
 		if (!response.ok) {
-			// サーバーエラー / レート制限: 全件保持して次回再送
+			// ⚠️ 非2xx を一律で「一時障害」として扱ってはいけない。
+			// bumpRetry は retry_count を増やすだけで打ち切らないため、恒久的な 400
+			// （クライアントとサーバーの契約不整合など）が起きると mutation が
+			// **永久に pending のまま**残る。打ち切り機構（MAX_SERVER_REJECTS）は
+			// 2xx 応答の rejected リスト経路にしか効かない。
+			// 分類は既存の action POST と同じ規則（isPermanentActionFailureStatus）に揃える。
+			if (isPermanentActionFailureStatus(response.status)) {
+				// 恒久的な拒否。再送しても解けないので「同期失敗」として表面化させる
+				for (const m of pending) {
+					await db.pending_score_mutations.update(m.id!, {
+						sync_status: 'rejected',
+						last_error: `http_${response.status}`,
+						retry_count: m.retry_count + 1
+					});
+				}
+				return { synced: 0, rejected: pending.length, offline: false };
+			}
+			// 一時的（401 認証 / 408 / 429 / 5xx）: 全件保持して次回再送
 			await bumpRetry(db, pending);
 			return { synced: 0, rejected: 0, offline: false };
 		}

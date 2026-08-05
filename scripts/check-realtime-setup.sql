@@ -99,8 +99,11 @@ BEGIN
     AND c.relreplident = 'f';
 
   -- SELECTポリシーが存在するかチェック
+  -- ⚠️ 以前は COUNT(*) > 0 で、3テーブルのうち**1つにポリシーがあるだけで合格**だった。
+  --    Realtime は RLS を通すため、ポリシーが無いテーブルはイベントが届かない。
+  --    「3テーブルすべてに SELECT ポリシーがあること」をテーブル単位で判定する。
   SELECT
-    COUNT(*) > 0
+    COUNT(DISTINCT tablename) = 3
   INTO has_select_policies
   FROM pg_policies
   WHERE schemaname = 'public'

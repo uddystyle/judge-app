@@ -375,6 +375,11 @@ export function createScoreStatusManager(
 				table: 'training_scores',
 				filter: `event_id=eq.${eventId}`,
 				pollingFn: fetchStatus,
+				// 現場では「点が入ったか」をこの画面で見る。Realtime に繋がらないときは
+				// 再購読の上限（5回・約31秒のバックオフ＋接続タイムアウト）を待たず、
+				// すぐポーリングへ切り替える。待機画面・スコアボードと同じ扱い。
+				startPollingImmediately: true,
+				startPollingOnErrorStatus: true,
 				onConnectionError: (hasError) => {
 					onConnectionError(hasError);
 				},
@@ -386,6 +391,11 @@ export function createScoreStatusManager(
 				table: 'results',
 				filter: `session_id=eq.${sessionId},bib=eq.${parseInt(bib || '0')}`,
 				pollingFn: fetchStatus,
+				// 現場では「点が入ったか」をこの画面で見る。Realtime に繋がらないときは
+				// 再購読の上限（5回・約31秒のバックオフ＋接続タイムアウト）を待たず、
+				// すぐポーリングへ切り替える。待機画面・スコアボードと同じ扱い。
+				startPollingImmediately: true,
+				startPollingOnErrorStatus: true,
 				onConnectionError: (hasError) => {
 					onConnectionError(hasError);
 				},

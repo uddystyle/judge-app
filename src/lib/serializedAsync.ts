@@ -21,18 +21,41 @@ export interface SerializedAsyncHandle {
 	cleanup: () => void;
 }
 
+export class SerializedAsyncTimeoutError extends Error {
+	constructor(timeoutMs: number) {
+		super(`serialized async execution exceeded ${timeoutMs}ms`);
+		this.name = 'SerializedAsyncTimeoutError';
+	}
+}
+
 export function createSerializedAsync(
-	fn: () => Promise<void>,
+	fn: (signal?: AbortSignal) => Promise<void>,
 	options?: {
 		pendingDelayMs?: number;
 		onError?: (error: unknown) => void;
+		/**
+		 * 1回の実行に許す上限。超えたら**錠だけ解放**して後続を動かす。
+		 *
+		 * ⚠️ これが無いと、fn が解決しない限り isExecuting が立ちっぱなしになり、
+		 * 後続の呼び出しは hasPending を立てて即 return するだけになる。
+		 * PostgREST が一度ハングすると、その画面のポーリングが以後まったく
+		 * 実行されなくなる（復旧手段が再読み込みしかない）。
+		 *
+		 * 期限切れでも元の Promise は握り潰さず、AbortSignal で中断を通知する。
+		 * fn 側が signal を尊重すれば実際の通信も止まる（supabase-js は
+		 * `.abortSignal()`、fetch は `signal` を受ける）。
+		 * 未指定なら期限なし（従来の挙動）。
+		 */
+		timeoutMs?: number;
 	}
 ): SerializedAsyncHandle {
 	const pendingDelayMs = options?.pendingDelayMs ?? 100;
+	const timeoutMs = options?.timeoutMs;
 
 	let isExecuting = false;
 	let hasPending = false;
 	let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+	let activeController: AbortController | null = null;
 
 	// Waiters that need to be notified when the current cycle completes.
 	// A "cycle" is the current execution plus any coalesced pending run.
@@ -56,13 +79,36 @@ export function createSerializedAsync(
 			return;
 		}
 
+		const controller = new AbortController();
+		activeController = controller;
+		let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
 		try {
 			isExecuting = true;
 			hasPending = false;
-			await fn();
+
+			if (timeoutMs === undefined) {
+				await fn(controller.signal);
+			} else {
+				// 期限で負けたら錠を解放する。元の Promise は捨てるが、
+				// 後で解決/失敗しても未処理拒否にならないよう握っておく。
+				const running = fn(controller.signal);
+				void running.catch(() => {});
+				await Promise.race([
+					running,
+					new Promise<never>((_, reject) => {
+						timeoutTimer = setTimeout(() => {
+							controller.abort();
+							reject(new SerializedAsyncTimeoutError(timeoutMs));
+						}, timeoutMs);
+					})
+				]);
+			}
 		} catch (error) {
 			options?.onError?.(error);
 		} finally {
+			if (timeoutTimer) clearTimeout(timeoutTimer);
+			if (activeController === controller) activeController = null;
 			isExecuting = false;
 
 			if (hasPending) {
@@ -94,6 +140,9 @@ export function createSerializedAsync(
 				clearTimeout(pendingTimer);
 				pendingTimer = null;
 			}
+			// 画面離脱時に実行中の通信を握ったままにしない
+			activeController?.abort();
+			activeController = null;
 			hasPending = false;
 			// Resolve any outstanding waiters so they don't hang
 			flushWaiters();

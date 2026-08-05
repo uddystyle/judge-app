@@ -1223,3 +1223,24 @@ if (guestIdentifier) {
 - FK の `ON DELETE SET NULL` は「その列が NULL 許容であること」を要求する。片方だけ見ると矛盾を見逃す。`information_schema.columns` と `pg_constraint` は必ずセットで確認する。
 - モックしたテストで担保できるのは「アプリがどう振る舞うつもりか」だけ。「DBが受け付けるか」は別問題として、実DBに対する検証SQL（`verify/`）で押さえる。
 - 一回限りのデータ修正 SQL は**トランザクションで囲む**。今回は BEGIN/COMMIT で囲んでいたため、途中で失敗しても中途半端な状態が残らなかった。
+
+### ✅ 直列化・排他の機構には必ず期限を入れる
+**Rule**: 「同時に1本しか走らせない」仕組み（`createSerializedAsync` の `isExecuting`、`syncInFlight` のような in-flight フラグ）を作ったら、**必ず上限時間をセットで持たせる**。対象の Promise が解決しない限り錠が解放されない設計は、通信が一度ハングしただけで機能が永久停止する。
+
+**Why**: `createSerializedAsync` は `await fn()` の間 `isExecuting` が立ちっぱなしで、後続呼び出しは `hasPending` を立てて即 return するだけだった。Realtime のヘルスポーリングもこの機構を使っているため、**PostgREST が一度ハングするとその画面のポーリングが以後まったく走らなくなる**。オフライン同期も `syncInFlight` が解放されず、以後の同期呼び出しが全て合流して永久に待つ。現場（会場）では復旧手段が再読み込みしかなく、しかも「止まっている」ことに気づけない。fetch に `signal` を渡していなかったため、実際の通信を止める手段も無かった。
+
+**How to apply**:
+- 錠を持つ機構には `timeoutMs` を必ず用意し、期限切れでは**錠だけでも解放**する（元の Promise は握って未処理拒否を防ぐ）。
+- 期限切れは `onError` などで必ず可視化する。黙って解放すると原因調査ができない。
+- あわせて `AbortSignal` を下位へ渡し、`cleanup()` でも abort する。fetch は `signal`、supabase-js は `.abortSignal()` を受ける。
+- 期限値はテストから注入できるようにする。fake timer と IndexedDB(Dexie) は噛み合わせが悪く、実タイマー＋短い期限で書ける方が壊れにくい。
+
+### ✅ 「診断」と名の付く場所に変更系SQLを置かない
+**Rule**: `diagnostics/` のような読み取り専用を約束した置き場には、`ALTER` / `INSERT` / `UPDATE` / `DELETE` を**コメントアウトしてでも置かない**（実行例として載せるなら「実行しないこと」と明記し、正規の適用先を示す）。状態を見るつもりで開いたファイルが本番の定義を変える事故は、気づくのが遅れる。
+
+**Why**: `database/diagnostics/realtime_setup_check.sql` に**無条件の `ALTER TABLE ... REPLICA IDENTITY FULL` が3行**入っていた。台帳では diagnostics を読み取り専用の置き場と定義していたにもかかわらず、丸ごと実行すると本番のテーブル定義と WAL 量が変わる。
+
+**How to apply**:
+- `grep -rn "^ALTER \|^DROP \|^CREATE \|^INSERT \|^UPDATE \|^DELETE " database/diagnostics/` が 0 件であることを定期的に確認する。
+- 適用したい設定は冪等なマイグレーションに落とし、診断側からはそれを参照させる。
+- 判定ロジックも疑う。`COUNT(*) > 0` は「3つのうち1つでもあれば合格」になりがちで、**対象単位で見ていないチェックは通っても意味がない**（実際 `check-realtime-setup.sql` がこれで、3テーブル中1つにポリシーがあるだけで合格していた）。

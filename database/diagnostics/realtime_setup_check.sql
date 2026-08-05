@@ -39,16 +39,20 @@ WHERE n.nspname = 'public'
   AND c.relname IN ('training_scores', 'results', 'sessions')
 ORDER BY c.relname;
 
--- FULLに設定（DELETE時にold値を取得できるようにする）
--- 注意: これによりWALログのサイズが増加する可能性があります
-ALTER TABLE training_scores REPLICA IDENTITY FULL;
-ALTER TABLE results REPLICA IDENTITY FULL;
-ALTER TABLE sessions REPLICA IDENTITY FULL;
-
--- または、主キーのみで十分な場合（デフォルト）
--- ALTER TABLE training_scores REPLICA IDENTITY DEFAULT;
--- ALTER TABLE results REPLICA IDENTITY DEFAULT;
--- ALTER TABLE sessions REPLICA IDENTITY DEFAULT;
+-- ⚠️ ここは診断（読み取り専用）の置き場。**変更を行う SQL を置かないこと。**
+--    以前は無条件の ALTER TABLE ... REPLICA IDENTITY FULL が3行入っており、
+--    「状態を確認するつもりで開いて実行したら本番のテーブル定義が変わる」状態だった。
+--    WAL 量にも影響するため、事故ると気づきにくい。
+--
+--    設定を**適用**したい場合は、正規のマイグレーションを使うこと:
+--      database/migrations/1033_realtime_prerequisites.sql   （冪等・publication と FULL を両方担保）
+--    適用後の**確認**は:
+--      database/migrations/verify/1033_verify_realtime_prerequisites.sql
+--
+-- 参考（実行しないこと。1033 が冪等に行う内容）:
+--   ALTER TABLE training_scores REPLICA IDENTITY FULL;
+--   ALTER TABLE results         REPLICA IDENTITY FULL;
+--   ALTER TABLE sessions        REPLICA IDENTITY FULL;
 
 
 -- ============================================

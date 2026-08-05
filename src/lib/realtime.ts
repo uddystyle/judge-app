@@ -2,6 +2,8 @@ import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { createSerializedAsync } from '$lib/serializedAsync';
 
 const DEFAULT_MAX_RETRY = 5;
+/** 1回のポーリングに許す上限。超えたら錠を解放して次の周期へ進む */
+const DEFAULT_POLLING_TIMEOUT_MS = 15000;
 const DEFAULT_POLLING_INTERVAL_MS = 10000;
 
 /** Status values that indicate the channel is no longer functional. */
@@ -29,7 +31,9 @@ export interface RealtimeChannelHandle {
 export interface RealtimeChannelWithRetryConfig extends RealtimeChannelConfig {
 	// maxRetryCount は RealtimeChannelConfig から継承
 	pollingIntervalMs?: number;
-	pollingFn: () => Promise<void>;
+	pollingFn: (signal?: AbortSignal) => Promise<void>;
+	/** 1回のポーリングの上限（既定 15 秒）。ハング時に錠を解放するための保険 */
+	pollingTimeoutMs?: number;
 	onConnectionError?: (hasError: boolean) => void;
 	/** SUBSCRIBED 時の追加処理（リトライ状態リセット・ポーリング停止の後に呼ばれる） */
 	onSubscribed?: () => void | Promise<void>;
@@ -268,6 +272,10 @@ export function createRealtimeChannelWithRetry(
 	let disposed = false;
 	const pollingRunner = createSerializedAsync(config.pollingFn, {
 		pendingDelayMs: 0,
+		// ⚠️ 期限は必須。PostgREST が一度ハングすると直列化の錠が解放されず、
+		// その画面のポーリングが以後まったく走らなくなる（復旧手段が再読み込みだけになる）。
+		// ポーリング間隔より十分長く、かつ現場が待てる範囲として 15 秒。
+		timeoutMs: config.pollingTimeoutMs ?? DEFAULT_POLLING_TIMEOUT_MS,
 		onError: (error) => {
 			console.error(`[realtime/${config.channelName}] fallback polling failed:`, error);
 		}
