@@ -6,6 +6,7 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import BillingStatusBadge from '$lib/components/BillingStatusBadge.svelte';
 	import type { PageData, ActionData } from './$types';
 	import * as m from '$lib/paraglide/messages.js';
 	import { getLocale } from '$lib/paraglide/runtime.js';
@@ -14,6 +15,32 @@
 	export let form: ActionData;
 
 	const isAdmin = data.userRole === 'admin';
+
+	// 支払い方法の確認・更新は Stripe Customer Portal に委ねる
+	// （カード情報を自前で扱わない）
+	let portalLoading = false;
+	async function openCustomerPortal() {
+		if (portalLoading) return;
+		portalLoading = true;
+		try {
+			const response = await fetch('/api/stripe/customer-portal', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					organizationId: data.organization.id,
+					returnUrl: window.location.href
+				})
+			});
+			if (!response.ok) throw new Error('Customer Portalの作成に失敗しました');
+			const result = await response.json();
+			window.location.href = result.url;
+		} catch (error) {
+			console.error('Customer Portal Error:', error);
+			alert('お支払い情報の画面を開けませんでした。しばらくしてから再度お試しください。');
+		} finally {
+			portalLoading = false;
+		}
+	}
 
 	// 組織名編集用の状態
 	let isEditingName = false;
@@ -255,6 +282,11 @@
 				{/if}
 			</span>
 		</div>
+
+		<!-- プラン名だけでは「支払われている premium」と「支払いが滞っている premium」を
+		     区別できないため、対処が必要な状態のときだけここに表示する。
+		     正常時は何も出さない（SyncStatusBadge と同じ方針）。 -->
+		<BillingStatusBadge billing={data.billing} onManage={openCustomerPortal} />
 	</div>
 
 	<!-- 組織情報セクション -->

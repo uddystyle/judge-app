@@ -5,6 +5,7 @@
 	import Header from '$lib/components/Header.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import OrganizationList from '$lib/components/OrganizationList.svelte';
 	import { goto } from '$app/navigation';
 	import { getContext } from 'svelte';
 	import type { SupabaseClient } from '@supabase/supabase-js';
@@ -244,7 +245,13 @@
 	}
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} pageOrganizations={data.organizations || []} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+	pageOrganizations={data.organizations || []}
+/>
 
 <div class="container">
 	<div class="instruction">{m.account_title()}</div>
@@ -257,6 +264,12 @@
 			<span class="info-value">{data.user?.email || '-'}</span>
 		</div>
 	</div>
+
+	<!-- 所属組織セクション -->
+	<!-- 自分がどの組織に所属しているか（と、そこでの役割）をアカウント画面で確認できるようにする。
+	     各カードから組織ページへ遷移でき、支払い状態の確認もそちらで行える。 -->
+	<h2 class="section-title">所属組織</h2>
+	<OrganizationList organizations={data.organizations || []} />
 
 	<!-- プロフィール情報セクション -->
 	<h2 class="section-title">{m.account_profile()}</h2>
@@ -322,7 +335,9 @@
 		<hr class="divider" />
 
 		<NavButton on:click={() => goto('/dashboard')}>{m.account_backToDashboard()}</NavButton>
-		<NavButton variant="danger" on:click={handleLogout}><Icon name="logout" size={18} />{m.common_logout()}</NavButton>
+		<NavButton variant="danger" on:click={handleLogout}
+			><Icon name="logout" size={18} />{m.common_logout()}</NavButton
+		>
 		<NavButton variant="danger" on:click={() => goto('/account/delete')}>
 			<Icon name="trash" size={18} />{m.account_deleteAccount()}
 		</NavButton>

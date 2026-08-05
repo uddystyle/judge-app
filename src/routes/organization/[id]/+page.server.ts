@@ -91,6 +91,36 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	// 組織所属チェック（このページは既に組織ページなので常にtrue）
 	const hasOrganization = true;
 
+	// 課金状態（status / 解約予定）を管理者にだけ付与する。
+	//
+	// ⚠️ subscriptions の SELECT ポリシーは `auth.uid() = user_id` なので、契約者本人以外の
+	// 管理者はユーザークライアントでは読めない。上で role を確認済みなので service role で引く。
+	// 一般メンバーには渡さない。支払い方法を直せる立場になく、見せる必要も無いため。
+	let billing: {
+		status: string;
+		cancelAtPeriodEnd: boolean;
+		currentPeriodEnd: string | null;
+	} | null = null;
+
+	if (userRole === 'admin' && locals.supabaseAdmin) {
+		const { data: sub, error: subError } = await locals.supabaseAdmin
+			.from('subscriptions')
+			.select('status, cancel_at_period_end, current_period_end')
+			.eq('organization_id', organizationId)
+			.maybeSingle();
+
+		if (subError) {
+			// 課金状態が出せなくても組織ページ自体は表示する
+			logger.error('[Organization] サブスクリプション状態の取得に失敗:', subError);
+		} else if (sub) {
+			billing = {
+				status: sub.status,
+				cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+				currentPeriodEnd: sub.current_period_end ?? null
+			};
+		}
+	}
+
 	return {
 		user,
 		profile,
@@ -98,7 +128,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		userRole,
 		members: members || [],
 		invitations,
-		hasOrganization
+		hasOrganization,
+		billing
 	};
 };
 
