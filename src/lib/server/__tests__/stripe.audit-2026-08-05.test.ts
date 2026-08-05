@@ -281,6 +281,61 @@ describe('P0-B: customer.subscription.created の決済確定ゲート', () => {
 	});
 });
 
+describe('P2-F: 未知の price ID はリトライせず記録して止める', () => {
+	beforeEach(() => vi.clearAllMocks());
+
+	/**
+	 * ⚠️ 未知の price ID を RetryableError にすると、**永久に成功しないものを3日間叩き続ける**。
+	 * 失敗が続けば Stripe はエンドポイントを停止し、そのあと届くはずだった
+	 * 更新・解約・支払い失敗まで丸ごと受け取れなくなる（1件の設定ミスが課金記録全体を止める）。
+	 *
+	 * リトライしても DB の状態は変わらない（成功しないため）ので、
+	 * 待っても得るものが無い。即座に止めて dead-letter に残す方が、
+	 * ユーザーへの影響は同じままシステム全体のリスクだけが減る。
+	 */
+	it('未知の price ID は 200 で止め、price ID を dead-letter に残す', async () => {
+		mockEvent(
+			'customer.subscription.updated',
+			cloverSubscription({
+				status: 'active',
+				items: {
+					data: [
+						{
+							id: 'si_1',
+							current_period_start: PERIOD_START,
+							current_period_end: PERIOD_END,
+							price: { id: 'price_unmapped_xyz', recurring: { interval: 'month' } }
+						}
+					]
+				}
+			})
+		);
+		const db = createSupabaseMock({});
+
+		const res = await webhookPost(webhookRequest());
+
+		// 200 = Stripe に再送させない
+		expect(res.status).toBe(200);
+		expect((await res.json()).dropped).toBe(true);
+
+		// どの price ID で落ちたかが残る（これが唯一の手がかりになる）
+		const events = db.updateArgs('stripe_events');
+		const dropped = events.find((u: any) => u.status === 'dropped');
+		expect(dropped).toBeDefined();
+		expect(dropped.failure_reason).toContain('price_unmapped_xyz');
+	});
+
+	it('一時的な障害（DB エラー等）は従来どおり 500 で再送させる', async () => {
+		// 分類を変えたせいで、復旧するはずの障害まで捨てていないことを確認する
+		mockEvent('customer.subscription.updated', cloverSubscription({ status: 'active' }));
+		createSupabaseMock({
+			subscriptions: [{ data: null, error: { message: 'connection refused' } }]
+		});
+
+		await expect(webhookPost(webhookRequest())).rejects.toMatchObject({ status: 500 });
+	});
+});
+
 describe('P2-G: customer.subscription.created の順序ガード', () => {
 	beforeEach(() => vi.clearAllMocks());
 

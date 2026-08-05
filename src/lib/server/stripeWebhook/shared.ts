@@ -142,6 +142,23 @@ export function getInvoiceSubscriptionId(invoice: any): string | null {
 /**
  * Price IDからプランタイプを判定（T2: 未知IDは明示エラー化）
  * マッピングの実体は $lib/server/plans に一元化されている
+ *
+ * ⚠️ **未知の price ID は NonRetryable（＝200 を返して再送を止める）。**
+ *
+ * 以前は「環境変数のデプロイが遅れているだけかもしれない」という想定で Retryable にしていたが、
+ * 実際には**永久に成功しないものを3日間叩き続ける**ことになる。失敗が続くと Stripe は
+ * エンドポイントを停止し、そのあと届くはずだった更新・解約・支払い失敗まで丸ごと
+ * 受け取れなくなる。1件の設定ミスが課金記録全体を止める形になっていた。
+ *
+ * リトライしても DB は変わらない（成功しないため）ので、待っても得るものは無い。
+ * 即座に止めて dead-letter（stripe_events.status='dropped' / failure_reason に price ID）
+ * に残す方が、ユーザーへの影響は同じままシステム全体のリスクだけが減る。
+ *
+ * 影響範囲は「プランの対応付け」だけで、入金・支払い失敗・解約の処理はこの関数を通らないため
+ * 引き続き正常に動く（＝ユーザーがサービスを使えなくなることはない）。
+ *
+ * 復旧手順は docs/stripe/stripe-audit-2026-08-05.md を参照。
+ * ⚠️ 冪等化が dropped を「処理済み」とみなすため、**Stripe からの再送だけでは復旧しない**。
  */
 export function getPlanTypeFromPrice(priceId: string): 'free' | 'standard' | 'basic' | 'premium' {
 	const planType = findPlanTypeByPriceId(priceId);
@@ -150,7 +167,7 @@ export function getPlanTypeFromPrice(priceId: string): 'free' | 'standard' | 'ba
 		// T2: 未知のprice IDは明示的にエラーとして扱う（誤った plan_type 保存を防止）
 		const errMsg = `未知のprice ID: ${priceId}。正しいプランタイプを判定できません`;
 		logger.error('[Webhook]', errMsg);
-		throw new RetryableError(errMsg);
+		throw new NonRetryableError(errMsg);
 	}
 
 	return planType;

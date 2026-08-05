@@ -402,7 +402,7 @@ describe('Webhookエラー分類（P0-2）', () => {
 	// T11: customer.subscription.updated の未知Price ID防御
 	// ============================================================
 
-	it('customer.subscription.updatedで未知price IDの場合は500を返す（T11）', async () => {
+	it('customer.subscription.updatedで未知price IDは200で止め、再送させない（T11 / 監査 P2-F）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
 		const event = { request } as any;
 
@@ -434,13 +434,10 @@ describe('Webhookエラー分類（P0-2）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected RetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(500);
-			expect(err.body?.message).toContain('未知のprice ID');
-		}
+		// 監査 P2-F: 未知の price ID は 200 で止め、dead-letter に残す
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		expect((await response.json()).dropped).toBe(true);
 
 		// T11: Verify no database operations were performed
 		// getPlanTypeFromPrice throws before any DB calls
@@ -2784,7 +2781,7 @@ describe('Price ID防御（T2）', () => {
 		mockSupabaseClient.from.mockReset();
 	});
 
-	it('未知のprice IDの場合は500を返す（T2）', async () => {
+	it('未知のprice IDは200で止め、再送させない（T2 / 監査 P2-F）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2830,19 +2827,17 @@ describe('Price ID防御（T2）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected RetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(500);
-			expect(err.body?.message).toContain('price');
-		}
+		// 監査 P2-F: 未知の price ID は永久に成功しないため、200 を返して再送を止める
+		// （3日間のリトライでエンドポイントが停止すると、正常な課金イベントまで失う）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		expect((await response.json()).dropped).toBe(true);
 
 		// Verify no data was saved
 		expect(mockSupabaseClient.from).not.toHaveBeenCalled();
 	});
 
-	it('組織作成で未知のprice IDの場合は500を返す（T2）', async () => {
+	it('組織作成で未知のprice IDは200で止め、再送させない（T2 / 監査 P2-F）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2891,13 +2886,11 @@ describe('Price ID防御（T2）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected RetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(500);
-			expect(err.body?.message).toContain('price');
-		}
+		// 監査 P2-F: 未知の price ID は永久に成功しないため、200 を返して再送を止める
+		// （3日間のリトライでエンドポイントが停止すると、正常な課金イベントまで失う）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		expect((await response.json()).dropped).toBe(true);
 
 		// Verify no data was saved
 		expect(mockSupabaseClient.from).not.toHaveBeenCalled();
@@ -3666,7 +3659,7 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 		expect(mockSupabaseClient.from).toHaveBeenCalledTimes(1);
 	});
 
-	it('subscription.createdで未知price IDの場合は500を返す（T10拡張）', async () => {
+	it('subscription.createdで未知price IDは200で止め、再送させない（T10拡張 / 監査 P2-F）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
 		const event = { request } as any;
 
@@ -3713,13 +3706,10 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 			maybeSingle: mockSingle
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected RetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(500);
-			expect(err.body?.message).toContain('未知のprice ID');
-		}
+		// 監査 P2-F: 未知の price ID は 200 で止め、dead-letter に残す
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		expect((await response.json()).dropped).toBe(true);
 
 		// T10: Verify only select was called, no update
 		expect(mockSupabaseClient.from).toHaveBeenCalledTimes(1);

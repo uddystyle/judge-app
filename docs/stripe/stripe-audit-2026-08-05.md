@@ -3,7 +3,8 @@
 > **対応状況（2026-08-05）**: P0-A / P0-B / P1-C / P1-D および P2-E / P2-G / P2-H / P3-I / P3-J は修正済み。
 > 回帰テストは `src/lib/server/__tests__/stripe.audit-2026-08-05.test.ts`（9件）。
 > migration 1035 は dev / prod ともに適用済みで、本番実測で効果を確認した。
-> **P2-F のみ未対応**（判断が必要なため。末尾を参照）。
+> **P2-F も対応済み**（2026-08-05 追記）。未知 price ID は再送せず dead-letter に記録する。
+> 復旧手順は「P2-F の運用手順」を参照。
 
 前回監査（`stripe-audit-2026-08-04.md`）の修正適用後に、決済経路を改めて全件検証した記録。
 前回は「webhook の受信・冪等性・API バージョン差分」が中心だったが、今回は
@@ -181,7 +182,7 @@ organizations: premium（ドリフト）
 | ID | 内容 | 影響 |
 | --- | --- | --- |
 | P2-E | `handlePaymentSucceeded` が `status: 'active'` を固定で書く。`stripe.subscriptions.retrieve()` の実ステータスを取得済みなのに使っていない | 未払いが別に残っていても DB は active になる。past_due も権限ありなので実害は表示のみ |
-| P2-F | 未知の price ID が `RetryableError` → 3日間再送し続けエンドポイント自動無効化の恐れ。**Stripe ダッシュボードで手動作成したサブスクや、Portal でのマッピング外価格への変更**で踏む | 他の正当なイベントを巻き添えで失う |
+| P2-F | ~~未知の price ID が `RetryableError` → 3日間再送~~ → **対応済み**。`NonRetryableError` に分類し直し、200 を返して即座に止める | 対応前は他の正当なイベントを巻き添えで失う恐れがあった |
 | P2-G | `handleSubscriptionCreated` にリプレイ/順序ガードが無い（`updated` 側にはある） | 遅延再送が新しいプラン変更を巻き戻し得る |
 | P2-H | リプレイ防御が `period_end` の後退を「古いイベント」として一律スキップする。年額→月額は `anchor: 'now'` で period_end が前進しないため**必ずスキップされる** | webhook が保険にならず、サーバーアクションの DB 書き込み成功に全依存 |
 | P3-I | 個人プラン経路の `upsert(onConflict: 'user_id')` に対応する一意制約が本番に無い（`idx_subscriptions_user_id` は非 UNIQUE） | 到達したら 42P10 で 500 ループ。現状 `is_organization` は常に `'true'` のため到達不能 |
@@ -252,3 +253,82 @@ P1-D で増減判定は Stripe の price 由来にしたが、その手前の
 - 課金テーブルへの読み取り全21箇所が `organization_id` / `user_id` /
   `stripe_subscription_id` のいずれかで絞られており、無条件 `.single()` が無いこと
 - past_due の組織が 409 ガードで詰まないこと（唯一の復帰経路を塞がない）
+
+
+---
+
+## P2-F の対応と運用手順（2026-08-05）
+
+### 何を変えたか
+
+未知の price ID を `RetryableError` → **`NonRetryableError`** に分類し直した（`shared.ts`）。
+
+当初は「環境変数のデプロイが遅れているだけかもしれない」という想定で Retryable にしていたが、
+実際には**永久に成功しないものを3日間叩き続ける**ことになる。失敗が続くと Stripe は
+エンドポイントを停止し、そのあと届くはずだった更新・解約・支払い失敗まで丸ごと
+受け取れなくなる。**1件の設定ミスが課金記録全体を止める**形だった。
+
+リトライしても DB は変わらない（成功しないため）ので、待っても得るものは無い。
+
+### 検討して**採らなかった**案
+
+「N回失敗したら打ち切る」汎用のリトライ上限も検討したが、採らなかった。
+
+`releaseStripeEvent` を通るのは未知 price ID だけではなく、**DB 接続エラー・Stripe API 障害など
+20箇所以上**が同じ経路を通る。汎用の上限を入れると、たとえば Supabase が数時間落ちた場合に
+**その間の課金イベントを全部捨てる**ことになる。Stripe は3日間再送するので、本来なら
+復旧後に自動で回復するものを、こちらから捨てにいく形になり**現状より悪化する**。
+
+分類の誤りは分類で直すのが正しい。マイグレーションも不要になった。
+
+### ユーザーへの影響
+
+**課金は止まらない。** price のマッピングを使うのは「契約が生まれた/変わった」系だけで、
+お金の流れを扱うハンドラは通らない。
+
+| イベント | プラン判定を通るか | ドロップ後の動作 |
+| --- | --- | --- |
+| 入金（更新の請求） | 通らない | 正常に処理される。期限も更新される |
+| 支払い失敗 | 通らない | 正常に past_due が記録される |
+| 解約 | 通らない | 正常に free へ降格する |
+| 契約の作成・変更 | 通る | **ここだけ止まる** |
+
+止まるのは DB の `plan_type` / `billing_interval` / 期間の同期だけ。
+上位プランへの変更だった場合は「多く払っているのに上限が上がらない」状態になるため、
+下記の監視で早期に気づくこと。
+
+### 監視
+
+```sql
+select event_id, event_type, failure_reason, processed_at
+from stripe_events
+where status = 'dropped'
+order by processed_at desc;
+```
+
+`failure_reason` にどの price ID で落ちたかが入る。
+
+### 復旧手順
+
+⚠️ **冪等化が `dropped` を「処理済み」とみなすため、Stripe から再送するだけでは復旧しない。**
+`claimStripeEvent` が `completed` / `dropped` を永久スキップするため、記録を消す手順が必須。
+
+1. 原因を直す（price ID を環境変数へ追加してデプロイ、など）
+2. 冪等化の記録を消す — **この手順を飛ばすと 3 が何も起こさない**
+   ```sql
+   delete from stripe_events where event_id = 'evt_xxx';
+   ```
+3. Stripe ダッシュボード → Developers → Events → 該当イベント → **Resend**
+4. `stripe_events` に `status='completed'` で入ることを確認する
+
+### 残っている穴（既知・許容）
+
+ダッシュボードで**直接サブスクリプションを作成**した場合は、別の理由で3日間リトライする。
+`customer.subscription.created` が `subscriptions` 行を前提にしており、checkout を通らないと
+その行が永久に作られないため（`Customer ID: cus_xxx のsubscriptionが見つかりません`）。
+
+クーポン運用（アプリの申込画面＋プロモーションコード）を継続する限り踏まない。
+直接作成が必要になった時点で、以下とあわせて対応する。
+
+- 顧客IDから組織を解決して `subscriptions` 行を作る（`organizations.stripe_customer_id` は UNIQUE なので1対1で解決できる）
+- price ID ではなく**商品（product）**でプランを判定する（特別価格を作っても既存商品の下なら通る）
