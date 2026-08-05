@@ -70,12 +70,7 @@ describe('セキュリティ機能', () => {
 		});
 
 		it('本番環境で機密データを編集すべき', () => {
-			const SENSITIVE_PATTERNS = [
-				/user_id/i,
-				/email/i,
-				/password/i,
-				/token/i,
-			];
+			const SENSITIVE_PATTERNS = [/user_id/i, /email/i, /password/i, /token/i];
 
 			function redactSensitive(data: any): any {
 				const isProduction = process.env.NODE_ENV === 'production';
@@ -84,7 +79,7 @@ describe('セキュリティ機能', () => {
 					const redacted = { ...data };
 
 					for (const key in redacted) {
-						const isSensitive = SENSITIVE_PATTERNS.some(pattern => pattern.test(key));
+						const isSensitive = SENSITIVE_PATTERNS.some((pattern) => pattern.test(key));
 
 						if (isSensitive) {
 							redacted[key] = '[REDACTED]';
@@ -122,10 +117,7 @@ describe('セキュリティ機能', () => {
 		});
 
 		it('開発環境では機密データを編集しないべき', () => {
-			const SENSITIVE_PATTERNS = [
-				/user_id/i,
-				/email/i,
-			];
+			const SENSITIVE_PATTERNS = [/user_id/i, /email/i];
 
 			function redactSensitive(data: any): any {
 				const isProduction = process.env.NODE_ENV === 'production';
@@ -134,7 +126,7 @@ describe('セキュリティ機能', () => {
 					const redacted = { ...data };
 
 					for (const key in redacted) {
-						const isSensitive = SENSITIVE_PATTERNS.some(pattern => pattern.test(key));
+						const isSensitive = SENSITIVE_PATTERNS.some((pattern) => pattern.test(key));
 
 						if (isSensitive) {
 							redacted[key] = '[REDACTED]';

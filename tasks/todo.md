@@ -1,5 +1,101 @@
 # Current Tasks
 
+## Stripe 実装監査の指摘対応（2026-08-04）— ✅ 全項目完了（P0-1 / P0-2 / H-1〜H-4 / M-1〜M-6）
+
+### 🆕 監査項目外の追加対応（2026-08-04）— ✅ 完了
+
+- [x] **¥0請求で契約期間が更新されない**: 100%割引だと Stripe は `invoice.payment_succeeded` を送らず `invoice.paid` のみ（テストモードで実測）。`invoice.paid` を同じハンドラへ流すよう対応。有償時は両方届くがリプレイ防御が二重反映を防ぐ
+  - [ ] **Stripe ダッシュボードでエンドポイントの購読イベントに `invoice.paid` を追加**（コードだけでは届かない・ユーザー作業）
+- [x] **ユーザーが支払い状態を確認できない**: `status` を表示する画面が1つも無く、`past_due` でも「premium」としか見えなかった。猶予期間中に気づけず、切れた瞬間に締め出される。`BillingStatusBadge` を追加し `/organization/[id]` に表示（正常時は非表示・管理者のみ・Customer Portal へ誘導）
+
+### 🔁 コードレビュー対応（第2ラウンド・2026-08-04）— ✅ 完了
+
+初回修正へのレビューで5件の指摘。**うち2件は初回修正そのものが作り込んだ欠陥**だった。
+
+- [x] **M-2 の設計欠陥（🔴 イベント永久消失）**: 冪等化が本処理の**前**に処理済みを確定させており、catch を通らない終了（Vercel `maxDuration`=10s 超過／プロセス強制終了／デプロイ）で記録だけが残り、Stripe の再送が弾かれて**課金イベントが永久に失われる**状態だった。組織アップグレードは `list`+複数 `cancel` を伴い10秒に迫るため現実的な確率。migration `1031` で `status`(processing/completed/dropped) + `claimed_at` を追加し、**永久スキップは completed と dropped のみ**、processing はリース(60秒)切れで再取得可能に。リース奪取は条件付き UPDATE の影響行数で勝者決定（SELECT→UPDATE では同時配信で二重処理）。回帰テスト12件
+- [x] **H-4（🔴 新規発見）プラン変更で未決済のまま権限が上がる**: `payment_behavior` 未指定＝既定 `allow_incomplete` のため、**追加請求が失敗しても `update()` は成功して past_due を返す**（テストモードで実測：請求書 open ¥41,000 未払い）。`error_if_incomplete` を指定し、多層防御で戻り値 status も門番。ただし門番は**請求が発生する経路のみ**（滞納顧客の格下げは止めない）
+- [x] **テストの例外握り潰し**: `change-plan.action.test.ts` の2箇所を `expect.fail` + status/location の明示検証へ
+- [x] **200破棄の追跡可能性**: `failure_reason` を追加し `status='dropped'` を dead-letter レコード化。payload は持たないが `event_id` から `stripe.events.retrieve()` で再構築できる
+- [x] **Price ID 整合テストの自己参照**: `npm run verify:plan-consistency` を追加（plan_limits の行・`ORG_PLANS.maxMembers` 一致・price の実在/有効/定期課金）。**CHECK 制約そのものは PostgREST から読めない**ため `verify/1029` の担当と明記
+- [x] 補完: `rollbacks/1031_rollback.sql`（初回作成漏れ）／`verify/1031_verify_stripe_events.sql` を追加し、**1029・1031 の verify を prod/dev 両方で実行**（すべて通過・不適合0件）
+- [x] 教訓を `lessons.md` に2件追記（冪等化は「終えた」で記録する／課金APIは「成功」と「入金」を別物として扱う）
+
+
+監査レポート: [`../docs/stripe/stripe-audit-2026-08-04.md`](../docs/stripe/stripe-audit-2026-08-04.md)（根拠・再現結果・実DB照会結果はすべてそちら）
+
+**根本原因は 1 点**: `e96be7d`（8/2）で Stripe API バージョンを `2024-12-18.acacia` → `2025-10-29.clover` へ bump した際、依存コードの追随監査が行われなかった。
+
+### 🔴 P0-1: 期間フィールド書き込みが全滅（本番課金が壊れていた）— ✅ 完了
+
+`current_period_*` は `2025-03-31.basil` で Subscription トップレベルから削除済み。`retrieve()/update()` の戻り値でこれを読む全箇所が `undefined` → `new Date(NaN).toISOString()` → `RangeError` → 500。
+**決済は成立するのに組織・サブスクが一切保存されない**（再現済み: `DB upsert called: 0 time(s)`）。
+
+TDD で対応（clover 形状の失敗テストを先に書き、6件の RED を確認してから修正）。
+
+- [x] `stripeWebhook/checkout.ts` の3箇所を `requireSubscriptionPeriod()` 経由へ
+- [x] `stripeWebhook/invoice.ts` の3箇所を `requireSubscriptionPeriod()` 経由へ
+- [x] `organization/[id]/change-plan/+page.server.ts` を `getSubscriptionPeriod()` 経由へ（Stripe 側は変更済みなので、期間が読めない場合は握り潰さず `fail(500)`）
+- [x] **監査で見落としていた4箇所目**: `organization/[id]/delete/+page.server.ts`（2箇所）。`try/catch` がログのみで例外を握り潰すため、全件テストが緑でも壊れていた。症状は「解約期限が表示されない」
+- [x] `stripeTypes.ts` を書き換え: `withSubscriptionPeriods` / `SubscriptionWithPeriods` を**削除**し、両形状を実行時に読む `getSubscriptionPeriod()` の置き場に変更
+- [x] テストモック 12 箇所を clover 形状＝`items.data[].current_period_*` へ更新（**SDK 戻り値のモックのみ**。webhook のイベント payload は旧形状で届き得るので後方互換の担保として残す）
+- [x] **旧形状では通らない回帰テスト**を追加: `stripe.webhook.api-version.test.ts`（6件）+ `change-plan.action.test.ts`（1件）+ `delete/page.server.test.ts`（2件・新規）
+- [x] 誤ったコメントを是正: `stripeWebhook/shared.ts` / `organization/create/+page.server.ts`（後者は promotion code の形状説明も逆だったので実態に合わせた）
+- [x] 検証: 984 tests passed / svelte-check 0 errors / 変更ファイルは prettier・eslint クリーン
+
+**残（P0-1 の副作用として要確認）**
+
+- [x] `billing_mode` の副作用を **Stripe テストモードで実測**（2026-08-04）。既定が `clover=flexible` / `acacia=classic` に変わることは事実だったが、**`change-plan` のプロレーション制御に回帰は無かった**（4経路のうち3経路が両バージョンで一致）。作成したテストオブジェクトは全て片付け済み
+  - 残る留意点: `billing_mode` は**作成時**に決まるため 2026-08-02 以降の契約は `flexible`、それ以前は `classic` の**混在**。現状は挙動差なしだが、将来 `billing_cycle_anchor` を省略する実装に変えると差が出る（flexible は自動リセットしない）
+  - この実測の過程で **H-3（年額→月額が必ず失敗）** を新たに発見した（下記）
+
+### 🔴 P0-2: DB の CHECK 制約が Stripe のステータスを受け付けない — ✅ 完了（prod/dev 適用済み）
+
+prod は `incomplete` / `trialing` を、dev は `unpaid` を保存できない（実DB照会で確認）。両環境とも `incomplete_expired` / `paused` が未対応。`known-issues.md` にも登録済み。
+
+マイグレーション `1029_subscription_status_check_stripe_alignment.sql`（+ rollback + verify）を作成。
+
+- [x] `subscriptions.status` の CHECK を Stripe の全8ステータスへ拡張（`incomplete` / `incomplete_expired` / `trialing` / `active` / `past_due` / `canceled` / `unpaid` / `paused`）。webhook が Stripe の値を無変換で保存する設計を維持できる方を選んだ
+- [x] prod の `subscriptions_organization_active_unique`（`WHERE status IN ('active','trialing')`）と CHECK の矛盾を解消（`trialing` が CHECK に入ったため自然に解消）
+- [x] `plan_type` の `'pro'` を **`plans.ts` から廃止**（`PERSONAL_PRO_PRICES` 削除・戻り値型からも除去）。旧個人proの price ID は意図的に未マッピングにし、万一届いたら「未知のprice ID」として明示的に失敗させる
+  - `PERSONAL_STANDARD_PRICES` は**残した**。`standard` は DB が許可する正当な値でありバグではないため（最小影響の原則）。将来の掃除候補
+  - 回帰テスト `plans.priceMapping.test.ts`（新規4件）で「DBが受け付けない plan_type を返さない」を不変条件として固定
+- [x] dev に欠けていた `plan_type` / `billing_interval` の CHECK も prod 定義で追加（ドリフト解消）
+- [x] **dev・prod の両方へ適用・検証済み**（2026-08-04）: 一時テーブルで8ステータス全投入 OK / 既存データの不適合 0 件 / prod の部分一意索引 `subscriptions_organization_active_unique` との矛盾も解消。`APPLIED.md` 更新済み
+
+### 🟠 High
+
+- [x] **H-3（新規・2026-08-04 実測で発見）— ✅ 完了** `change-plan/+page.server.ts`: 年額→月額が `billing_cycle_anchor: 'unchanged'` で Stripe に 400 (`Changing plan intervals. There's no way to leave billing cycle unchanged.`) を返され、**必ず 500 で失敗する**。`isYearToMonth` は算出されるが分岐に使われていない。clover/acacia の**両方**で再現＝bump とは無関係の既存バグ。UI にトグルがあり到達可能で、しかも「次回の請求日まで追加の請求は発生しません」と説明している
+  - 採用: **即時変更＋未使用分をクレジット**（ユーザー判断）。分岐を `isUpgrade || isMonthToYear` → `isUpgrade || isBillingIntervalChange` に変更し、間隔変更は月↔年どちらも `always_invoice` + `anchor=now`
+  - UI 文言も実挙動に合わせて修正（同一間隔ダウングレードの文言は実挙動と一致するため据え置き）
+  - 回帰テスト2件追加（年額→月額が `always_invoice`+`now` / 同一間隔ダウングレードが `none`+`unchanged` のまま）
+  - **実 API（テストモード）で全5経路の成功を確認**: 年額→月額は ¥-79,200、年額→月額かつダウングレードは ¥-489,200 のクレジット。作成物は片付け済み
+- [x] **H-1** `stripeWebhook/subscription.ts:20-24`: `stripe_customer_id` に `.single()`。migration 053 が意図的に UNIQUE を外している（1 Customer が複数組織のサブスクを持てる）ため、2件目で恒久 500 ループ。`.limit(1).maybeSingle()` 等へ
+- [x] **H-2** `stripeWebhook/checkout.ts:205-213, 300-316`: `subscription.status` を見ずに `organizations.plan_type` を付与。SEC-1b（`:257`）は解約側しか守っていない。付与側にも同じ判定を適用
+
+### 🟡 Medium
+
+- [x] **M-1** `webhook/+server.ts:126-138`: Stripe は 2xx 以外を一律で最大3日再送するため 400 でも止まらない。処理不能イベントは 200 + アラートへ
+- [x] **M-2** `stripe_events(event_id pk, processed_at)` による冪等化（順序保証がなく、アップグレード経路は純粋冪等ではない）
+- [x] **M-3** `create-organization-checkout/+server.ts:113-121`: checkout 完了前に毎回 Customer 作成。孤児 + `organizations.stripe_customer_id` UNIQUE 衝突の余地（`upgrade-organization` 側は再利用できている）
+- [x] **M-4** `organization/create/+page.server.ts:53-79`: `?coupon=` ごとに Stripe API・**レート制限なし**（checkout 系は 10回/時）。プロモコード列挙オラクル
+- [x] **M-5** `max_members` の二重ソース（metadata `checkout.ts:113,126` vs `plan_limits` `subscription.ts:86-99`）を `plan_limits` 単一正へ
+- [x] **M-6** `webhook/+server.ts:47`: `sk_live_` 前置詞依存。制限付きキー（`rk_live_`）へ移行すると本番 webhook が全て 503。`/^(sk|rk)_live_/` へ
+
+### 追加の観測（要調査・監査項目としては未検証）
+
+- [ ] **本番の課金データが 2026-04 以降更新されていない**。本番唯一の有料契約（live オブジェクトであることを確認）は月額なのに `current_period_end` が 2026-04-02 で止まっている。P0-1 は 2026-08-02 開始なので**時期が合わず、より古い別原因の可能性**（live webhook エンドポイント未設定／署名シークレット不一致／契約自体の終了など）。確認には live キーか Stripe ダッシュボードが必要（MCP は test キーで live を読めない）。**ダッシュボードの Webhooks → live エンドポイントの直近配信結果を見るのが最短**
+
+### 追加の推奨（今回の不具合とは独立）
+
+- [ ] `sk_` → 制限付き API キー（`rk_`）へ移行（M-6 の修正が前提）
+- [ ] webhook エンドポイントへ Stripe IP 許可リストを適用
+- [ ] P0 解消後、最新 API バージョンへの計画的追随（**依存コード監査をセットで**）
+
+### 妥当だった点（デグレ防止のため記録）
+
+署名検証（`constructEventAsync` + 生ボディ）／**プラン判定を metadata でなく Stripe の price ID から導出**／オープンリダイレクト許可リスト／coupon ID を拒否し promotion code のみ受理／Stripe 呼び出し前の `isOrgAdmin`／CSP への Stripe ドメイン登録／`payment_method_types` 不使用／シークレットの環境変数管理／Service Role の使用範囲限定。
+
+
 ## 課金: 年額の表示価格が Stripe の実価格と乖離していたのを是正（2026-08-04）— ✅ 完了
 
 Stripe 実装の検証方法を検討する中で、`.env` の price ID を Stripe API に直接照会して発見。

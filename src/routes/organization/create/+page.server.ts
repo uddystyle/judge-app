@@ -1,9 +1,10 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
+import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { logger } from '$lib/server/logger';
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, request }) => {
 	// getUser() で JWT を Supabase Auth サーバー側で検証する
 	// getSession() はクッキーをパースするだけで検証を行わないため、認可判定には使わない
 	const {
@@ -50,7 +51,25 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	// Security: クーポンはpromotion code（顧客配布用コード）としてのみ解決する
 	// coupon IDの直接参照は行わない（内部用クーポンの悪用・列挙を防ぐ）
+	//
+	// M-4: この load は ?coupon= ごとに Stripe へ問い合わせ、有効/無効と割引率を返すため
+	// プロモコードの総当たり判定に使える（checkout 系エンドポイントは expensive で
+	// 保護されているのに、ここだけ無防備だった）。コード指定時のみレート制限をかける。
+	// 制限に掛かった場合はページ自体は表示し、クーポンだけ未適用にする（通常利用を壊さない）。
 	if (couponCode && /^[a-zA-Z0-9_-]{1,100}$/.test(couponCode)) {
+		const rateLimitResult = await checkRateLimit(request, rateLimiters?.expensive, user.id);
+		if (!rateLimitResult.success) {
+			logger.warn('[Organization Create] クーポン照会がレート制限に達しました:', user.id);
+			return {
+				user,
+				profile,
+				subscription,
+				coupon: null,
+				hasOrganization,
+				couponRateLimited: true
+			};
+		}
+
 		try {
 			const promotionCodes = await stripe.promotionCodes.list({
 				code: couponCode,
@@ -59,10 +78,10 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 			});
 			const promotionCode = promotionCodes.data[0];
 			if (promotionCode) {
-				// pin中のAPIバージョン（acacia）はトップレベル coupon、新形状は promotion.coupon。
-				// SDK型とAPIバージョンの不一致に備え両形状を防御的に読む（webhookのgetSubscriptionPeriodと同方針）
-				const rawCoupon =
-					(promotionCode as any).coupon ?? (promotionCode as any).promotion?.coupon;
+				// pin中のAPIバージョン（2025-10-29.clover）では promotion.coupon が正。
+				// トップレベル coupon は旧バージョンの形状で、SDK v19 の型にも存在しない。
+				// 旧形状で届いた場合も壊れないよう両形状を防御的に読む（stripeTypes と同方針）
+				const rawCoupon = (promotionCode as any).coupon ?? (promotionCode as any).promotion?.coupon;
 				const coupon = rawCoupon && typeof rawCoupon === 'object' ? rawCoupon : null;
 				validCoupon = {
 					// checkout側で再解決するため、入力コード（promotion code文字列）をそのまま返す

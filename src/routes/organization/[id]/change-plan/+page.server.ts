@@ -1,7 +1,7 @@
 import type { PageServerLoad, Actions } from './$types';
 import { redirect, error, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
-import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
+import { getSubscriptionPeriod, SUBSCRIPTION_PERIOD_MISSING } from '$lib/server/stripeTypes';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import {
 	STRIPE_PRICE_BASIC_MONTH,
@@ -327,17 +327,27 @@ export const actions: Actions = {
 
 			// プロレーション動作を決定
 			// - プランアップグレード: 即座に請求、プラン制限も即時適用
-			// - 月額→年額: 即座に請求（割引適用のため）、プラン制限も即時適用
-			// - 上記以外（ダウングレード、年額→月額）: 追加請求なし、プラン制限は即時適用
+			// - 請求間隔の変更（月↔年）: 日割りを即座に確定、プラン制限も即時適用
+			// - 同一間隔のダウングレード: 追加請求なし、プラン制限は即時適用
+			//
+			// ⚠️ 請求間隔を変える場合は `billing_cycle_anchor: 'unchanged'` を**渡せない**。
+			// Stripe が 400 を返す:
+			//   "Changing plan intervals. There's no way to leave billing cycle unchanged."
+			// 以前は年額→月額がこの組み合わせに落ちており、UI にトグルがあるのに必ず 500 で
+			// 失敗していた（clover/acacia 両方で再現＝APIバージョンとは無関係の不具合）。
+			// always_invoice + anchor=now にすると年額の未使用分がクレジットとして顧客に返り
+			// （テストモード実測: ¥88,000 の未使用分 → ¥-79,200 のクレジット）、
+			// 以後の月額請求に充当される。単に anchor を 'now' にするだけ（proration none）だと
+			// 前払い分が失効して顧客の不利益になるため、必ず日割りを伴わせること。
 			let prorationBehavior: 'always_invoice' | 'none';
 			let billingCycleAnchor: 'now' | 'unchanged';
 
-			if (isUpgrade || isMonthToYear) {
-				// アップグレードまたは月額→年額の場合は即座に請求
+			if (isUpgrade || isBillingIntervalChange) {
+				// アップグレード、または請求間隔の変更（月→年 / 年→月）
 				prorationBehavior = 'always_invoice';
 				billingCycleAnchor = 'now';
 			} else {
-				// ダウングレードまたは年額→月額の場合は追加請求なし（プラン制限は即時適用）
+				// 同一間隔のダウングレード: 追加請求なし（プラン制限は即時適用）
 				prorationBehavior = 'none';
 				billingCycleAnchor = 'unchanged';
 			}
@@ -353,9 +363,19 @@ export const actions: Actions = {
 				billingCycleAnchor
 			});
 
+			// 追加請求が発生する変更か（＝支払いの確定を待つ必要があるか）
+			const chargesImmediately = prorationBehavior === 'always_invoice';
+
 			// サブスクリプションを更新
-			const updatedSubscription = withSubscriptionPeriods(
-				await stripe.subscriptions.update(subscription.stripe_subscription_id, {
+			//
+			// ⚠️ `payment_behavior` の既定は `allow_incomplete` で、**追加請求が失敗しても
+			// update() は成功し past_due を返す**（テストモードで実測: status=past_due /
+			// 請求書は open のまま未払い）。既定のままだと未決済で上位プランが有効になる。
+			// `error_if_incomplete` にすると決済できない場合は API が 402 を投げ、
+			// 下の catch が fail(500) を返すのでプラン付与に進まない。
+			const updatedSubscription = await stripe.subscriptions.update(
+				subscription.stripe_subscription_id,
+				{
 					items: [
 						{
 							id: subscriptionItemId,
@@ -363,9 +383,34 @@ export const actions: Actions = {
 						}
 					],
 					proration_behavior: prorationBehavior,
-					billing_cycle_anchor: billingCycleAnchor
-				})
+					billing_cycle_anchor: billingCycleAnchor,
+					payment_behavior: 'error_if_incomplete'
+				}
 			);
+
+			// 多層防御: payment_behavior をすり抜けた場合（SCA 要求など）に備え、
+			// 戻り値のステータスでも門番する。
+			// 請求が発生しない経路（ダウングレード）は対象外にする。支払いが滞っている顧客の
+			// 「格下げ」を止めるのは不利益でしかなく、権限を上げるわけでもないため。
+			if (chargesImmediately && !['active', 'trialing'].includes(updatedSubscription.status)) {
+				logger.error('[Change Plan] 支払いが確定していないためプラン変更を中止:', {
+					subscriptionId: updatedSubscription.id,
+					status: updatedSubscription.status
+				});
+				return fail(500, {
+					error:
+						'お支払いを確認できなかったため、プラン変更を完了できませんでした。お支払い方法をご確認のうえ、再度お試しください。'
+				});
+			}
+
+			// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+			// Stripe 側は既に変更済みなので、ここで落とすとDBだけ追随しない状態になる。
+			// 期間が読めないのは構成不整合なので、握り潰さず明示的に失敗させる。
+			const period = getSubscriptionPeriod(updatedSubscription);
+			if (!period) {
+				logger.error('[Change Plan]', SUBSCRIPTION_PERIOD_MISSING, updatedSubscription.id);
+				return fail(500, { error: `プラン変更に失敗しました。${SUBSCRIPTION_PERIOD_MISSING}` });
+			}
 
 			logger.debug('[Change Plan] Stripeサブスクリプション更新完了:', {
 				subscriptionId: updatedSubscription.id,
@@ -403,10 +448,8 @@ export const actions: Actions = {
 					plan_type: newPlanType,
 					billing_interval: billingInterval,
 					status: updatedSubscription.status,
-					current_period_start: new Date(
-						updatedSubscription.current_period_start * 1000
-					).toISOString(),
-					current_period_end: new Date(updatedSubscription.current_period_end * 1000).toISOString()
+					current_period_start: new Date(period.start * 1000).toISOString(),
+					current_period_end: new Date(period.end * 1000).toISOString()
 				})
 				.eq('stripe_subscription_id', subscription.stripe_subscription_id);
 

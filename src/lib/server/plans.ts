@@ -31,14 +31,18 @@ export const MAX_MEMBERS: Record<string, number> = Object.fromEntries(
 );
 
 // 個人向けプラン（レガシー）のPrice ID。Stripeダッシュボード上の固定ID
+//
+// ⚠️ 'pro' は廃止した（2026-08-04）。prod/dev いずれの CHECK 制約も
+// plan_type に 'pro' を許可しておらず、plan_limits にも pro 行が無いため、
+// 'pro' を返した時点で webhook は CHECK 違反 → 500 → Stripe が3日間再送、
+// という復旧不能な状態に入る。旧個人proの契約が存在しないことは確認済み。
+// 旧個人 pro の price ID は意図的にマッピングから外してある:
+//   price_1SPHvrIsuW568CJsBsRymAvZ（月額）/ price_1SPHwCIsuW568CJsuuhrug0G（年額）
+// 万一これらのイベントが届いた場合は「未知のprice ID」として明示的に失敗する
+// （誤ったplan_typeを保存するより、気づける形で落とす方が安全）。
 const PERSONAL_STANDARD_PRICES = [
 	'price_1SPHtjIsuW568CJsdqnUsm9d', // 月額
 	'price_1SPHurIsuW568CJsFfJ6kwYV' // 年額
-];
-
-const PERSONAL_PRO_PRICES = [
-	'price_1SPHvrIsuW568CJsBsRymAvZ', // 月額
-	'price_1SPHwCIsuW568CJsuuhrug0G' // 年額
 ];
 
 /**
@@ -47,10 +51,11 @@ const PERSONAL_PRO_PRICES = [
  * 組織プラン（環境変数由来）を先に、個人プラン（固定ID）を後に照合する。
  * 未知のPrice IDは null を返す（エラー化するかは呼び出し側の責務。
  * webhook は T2 対応として RetryableError に変換する）。
+ *
+ * 戻り値は必ず DB の plan_type CHECK 制約（free/basic/standard/premium）の
+ * 部分集合であること。`plans.priceMapping.test.ts` がこの不変条件を守る。
  */
-export function findPlanTypeByPriceId(
-	priceId: string
-): 'standard' | 'pro' | 'basic' | 'premium' | null {
+export function findPlanTypeByPriceId(priceId: string): 'standard' | 'basic' | 'premium' | null {
 	const basicPrices = [ORG_PRICE_IDS.basic.month, ORG_PRICE_IDS.basic.year];
 	const orgStandardPrices = [ORG_PRICE_IDS.standard.month, ORG_PRICE_IDS.standard.year];
 	const premiumPrices = [ORG_PRICE_IDS.premium.month, ORG_PRICE_IDS.premium.year];
@@ -63,8 +68,6 @@ export function findPlanTypeByPriceId(
 		return 'premium';
 	} else if (PERSONAL_STANDARD_PRICES.includes(priceId)) {
 		return 'standard';
-	} else if (PERSONAL_PRO_PRICES.includes(priceId)) {
-		return 'pro';
 	}
 
 	return null;

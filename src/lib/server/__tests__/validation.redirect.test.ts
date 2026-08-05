@@ -107,10 +107,7 @@ describe('validateRedirectUrl', () => {
 
 	describe('Valid cases - Query parameters and hash fragments', () => {
 		test('preserves query parameters', () => {
-			const result = validateRedirectUrl(
-				'/dashboard?success=true',
-				ALLOWED_STRIPE_REDIRECT_PATHS
-			);
+			const result = validateRedirectUrl('/dashboard?success=true', ALLOWED_STRIPE_REDIRECT_PATHS);
 			expect(result.valid).toBe(true);
 			expect(result.sanitizedUrl).toBe('http://localhost:5173/dashboard?success=true');
 		});
@@ -219,7 +216,10 @@ describe('validateRedirectUrl', () => {
 		});
 
 		test('rejects data: protocol', () => {
-			const result = validateRedirectUrl('data:text/html,<script>alert(1)</script>', ALLOWED_STRIPE_REDIRECT_PATHS);
+			const result = validateRedirectUrl(
+				'data:text/html,<script>alert(1)</script>',
+				ALLOWED_STRIPE_REDIRECT_PATHS
+			);
 			expect(result.valid).toBe(false);
 			expect(result.error).toContain('Origin mismatch');
 		});
@@ -259,7 +259,10 @@ describe('validateRedirectUrl', () => {
 
 	describe('Invalid cases - Malformed URLs', () => {
 		test('rejects URL with spaces', () => {
-			const result = validateRedirectUrl('http://localhost:5173/dash board', ALLOWED_STRIPE_REDIRECT_PATHS);
+			const result = validateRedirectUrl(
+				'http://localhost:5173/dash board',
+				ALLOWED_STRIPE_REDIRECT_PATHS
+			);
 			expect(result.valid).toBe(false);
 			expect(result.error).toContain('Path not allowed');
 		});
@@ -279,7 +282,10 @@ describe('validateRedirectUrl', () => {
 		});
 
 		test('handles URL with encoded characters', () => {
-			const result = validateRedirectUrl('/dashboard?redirect=%2Faccount', ALLOWED_STRIPE_REDIRECT_PATHS);
+			const result = validateRedirectUrl(
+				'/dashboard?redirect=%2Faccount',
+				ALLOWED_STRIPE_REDIRECT_PATHS
+			);
 			expect(result.valid).toBe(true);
 			expect(result.sanitizedUrl).toContain('redirect=%2Faccount');
 		});

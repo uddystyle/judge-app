@@ -1,7 +1,14 @@
 import { stripe } from '$lib/server/stripe';
 import { logger } from '$lib/server/logger';
-import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
-import { supabaseAdmin, RetryableError, NonRetryableError, getPlanTypeFromPrice } from './shared';
+import {
+	supabaseAdmin,
+	RetryableError,
+	NonRetryableError,
+	getPlanTypeFromPrice,
+	requireSubscriptionPeriod,
+	isEntitledStatus,
+	getMaxMembersForPlan
+} from './shared';
 
 /**
  * checkout.session.completed
@@ -40,7 +47,7 @@ export async function handleCheckoutCompleted(session: any) {
 	// Stripe Subscriptionの詳細を取得（リトライ可能なエラー）
 	let subscription;
 	try {
-		subscription = withSubscriptionPeriods(await stripe.subscriptions.retrieve(subscriptionId));
+		subscription = await stripe.subscriptions.retrieve(subscriptionId);
 	} catch (err: any) {
 		logger.error('[Webhook] Stripe API エラー:', err.message);
 		logger.error('[Webhook] Subscription ID:', subscriptionId);
@@ -70,6 +77,9 @@ export async function handleCheckoutCompleted(session: any) {
 		const planType = getPlanTypeFromPrice(priceId);
 		const billingInterval = item.price.recurring?.interval || 'month';
 
+		// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+		const period = requireSubscriptionPeriod(subscription);
+
 		logger.debug(
 			'[Webhook] Price ID:',
 			priceId,
@@ -87,8 +97,8 @@ export async function handleCheckoutCompleted(session: any) {
 				plan_type: planType,
 				billing_interval: billingInterval,
 				status: subscription.status,
-				current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-				current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+				current_period_start: new Date(period.start * 1000).toISOString(),
+				current_period_end: new Date(period.end * 1000).toISOString(),
 				cancel_at_period_end: subscription.cancel_at_period_end
 			},
 			{ onConflict: 'user_id' }
@@ -110,7 +120,6 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	const userId = session.metadata?.user_id;
 	const organizationId = session.metadata?.organization_id;
 	const organizationName = session.metadata?.organization_name;
-	const maxMembersStr = session.metadata?.max_members || '10';
 	const customerId = session.customer;
 	const subscriptionId = subscription.id;
 	const isUpgradeStr = session.metadata?.is_upgrade;
@@ -122,13 +131,9 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 		throw new NonRetryableError(errMsg);
 	}
 
-	// max_members の検証（T1）
-	const maxMembers = parseInt(maxMembersStr);
-	if (isNaN(maxMembers) || maxMembers <= 0) {
-		const errMsg = 'max_membersは正の整数である必要があります';
-		logger.error('[Webhook]', errMsg, '値:', maxMembersStr);
-		throw new NonRetryableError(errMsg);
-	}
+	// M-5: max_members は metadata ではなく plan_limits を正とする。
+	// metadata の値は checkout 作成時点のスナップショットで、plan_limits を変更しても
+	// 古いまま残る（イベント種別によって上限が食い違う原因になっていた）。
 
 	// is_upgrade の検証（T1）
 	if (isUpgradeStr && isUpgradeStr !== 'true' && isUpgradeStr !== 'false') {
@@ -165,59 +170,86 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 	const planType = getPlanTypeFromPrice(priceId);
 	const billingInterval = item.price.recurring?.interval || 'month';
 
+	// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+	const period = requireSubscriptionPeriod(subscription);
+
+	// H-2: 決済が確定するまで有料プランの権限を与えない。
+	// 非同期決済や 3DS 失敗で checkout 完了時点の status が incomplete のことがある。
+	// ここで plan_type を上げてしまうと未決済のまま上位プランが使えてしまうため、
+	// 権限付与は entitled なステータスに限る（後続の customer.subscription.updated で昇格する）。
+	// M-5: 上限は plan_limits を正とする（metadata の max_members は使わない）。
+	// 実際に必要になる分岐でのみ引く（未確定パスでは不要な問い合わせと失敗点を作らない）。
+	const entitled = isEntitledStatus(subscription.status);
+
 	logger.debug(
 		'[Webhook] Price ID:',
 		priceId,
 		'→ プランタイプ:',
 		planType,
 		'課金間隔:',
-		billingInterval
+		billingInterval,
+		'entitled:',
+		entitled
 	);
 
 	try {
 		// アップグレードの場合
 		if (isUpgrade && organizationId) {
 			logger.debug('[Webhook] 組織アップグレード開始:', organizationId);
-			logger.debug('[Webhook] プランタイプ:', planType, '最大メンバー:', maxMembers);
 
-			// 1. 古いサブスクリプションのorganization_idをクリア（UNIQUE制約違反を回避）
-			// 新しいサブスクリプション以外のアクティブなサブスクリプションをクリア
-			const { error: oldSubClearError } = await supabaseAdmin
-				.from('subscriptions')
-				.update({
-					organization_id: null,
-					status: 'canceled'
-				})
-				.eq('organization_id', organizationId)
-				.in('status', ['active', 'trialing'])
-				.neq('stripe_subscription_id', subscriptionId);
-
-			if (oldSubClearError) {
-				logger.error('[Webhook] 古いサブスクリプションのクリアエラー:', oldSubClearError);
-				throw new RetryableError(
-					`古いサブスクリプションのクリアエラー: ${oldSubClearError.message}`
+			// H-2: 決済未確定（incomplete 等）の場合は旧サブスクの切り離しも組織の昇格も行わない。
+			// 組織は課金中の旧サブスクリプションのまま据え置き、新サブスクは記録だけしておく。
+			// 決済が確定すると customer.subscription.updated が届き、そこで昇格する。
+			if (!entitled) {
+				logger.error(
+					'[Webhook] H-2: 決済が未確定のため組織のプラン昇格を保留します:',
+					organizationId,
+					'status:',
+					subscription.status
 				);
+			} else {
+				const maxMembers = await getMaxMembersForPlan(planType);
+				logger.debug('[Webhook] プランタイプ:', planType, '最大メンバー:', maxMembers);
+
+				// 1. 古いサブスクリプションのorganization_idをクリア（UNIQUE制約違反を回避）
+				// 新しいサブスクリプション以外のアクティブなサブスクリプションをクリア
+				const { error: oldSubClearError } = await supabaseAdmin
+					.from('subscriptions')
+					.update({
+						organization_id: null,
+						status: 'canceled'
+					})
+					.eq('organization_id', organizationId)
+					.in('status', ['active', 'trialing'])
+					.neq('stripe_subscription_id', subscriptionId);
+
+				if (oldSubClearError) {
+					logger.error('[Webhook] 古いサブスクリプションのクリアエラー:', oldSubClearError);
+					throw new RetryableError(
+						`古いサブスクリプションのクリアエラー: ${oldSubClearError.message}`
+					);
+				}
+
+				logger.debug('[Webhook] 古いサブスクリプションをクリアしました');
+
+				// 2. 組織を更新
+				const { error: orgError } = await supabaseAdmin
+					.from('organizations')
+					.update({
+						plan_type: planType,
+						max_members: maxMembers,
+						stripe_subscription_id: subscriptionId,
+						stripe_customer_id: customerId
+					})
+					.eq('id', organizationId);
+
+				if (orgError) {
+					logger.error('[Webhook] 組織更新エラー:', orgError);
+					throw new RetryableError(`組織更新エラー: ${orgError.message}`);
+				}
+
+				logger.debug('[Webhook] 組織更新成功:', organizationId, 'plan_type:', planType);
 			}
-
-			logger.debug('[Webhook] 古いサブスクリプションをクリアしました');
-
-			// 2. 組織を更新
-			const { error: orgError } = await supabaseAdmin
-				.from('organizations')
-				.update({
-					plan_type: planType,
-					max_members: maxMembers,
-					stripe_subscription_id: subscriptionId,
-					stripe_customer_id: customerId
-				})
-				.eq('id', organizationId);
-
-			if (orgError) {
-				logger.error('[Webhook] 組織更新エラー:', orgError);
-				throw new RetryableError(`組織更新エラー: ${orgError.message}`);
-			}
-
-			logger.debug('[Webhook] 組織更新成功:', organizationId, 'plan_type:', planType);
 
 			// 3. 新しいサブスクリプションをUPSERT（UNIQUE制約違反なし）
 			const { error: subError } = await supabaseAdmin.from('subscriptions').upsert(
@@ -229,8 +261,8 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 					plan_type: planType,
 					billing_interval: billingInterval,
 					status: subscription.status,
-					current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-					current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+					current_period_start: new Date(period.start * 1000).toISOString(),
+					current_period_end: new Date(period.end * 1000).toISOString(),
 					cancel_at_period_end: subscription.cancel_at_period_end
 				},
 				{
@@ -297,13 +329,27 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 
 			// 1. 組織を作成または取得（べき等性確保のためUPSERT使用）
 			// stripe_subscription_idがユニーク制約のため、Webhook再送時は既存組織を取得
+			//
+			// H-2: 決済未確定なら free 相当で作る（組織自体は作らないと管理者が何も操作できない）。
+			// 決済確定時の customer.subscription.updated が正しいプランへ昇格させる。
+			const initialPlanType = entitled ? planType : 'free';
+			const initialMaxMembers = await getMaxMembersForPlan(initialPlanType);
+			if (!entitled) {
+				logger.error(
+					'[Webhook] H-2: 決済が未確定のため組織を free で作成します:',
+					organizationName,
+					'status:',
+					subscription.status
+				);
+			}
+
 			const { data: organization, error: orgError } = await supabaseAdmin
 				.from('organizations')
 				.upsert(
 					{
 						name: organizationName,
-						plan_type: planType,
-						max_members: maxMembers,
+						plan_type: initialPlanType,
+						max_members: initialMaxMembers,
 						stripe_customer_id: customerId,
 						stripe_subscription_id: subscriptionId
 					},
@@ -356,8 +402,8 @@ async function handleOrganizationCheckout(session: any, subscription: any) {
 					plan_type: planType,
 					billing_interval: billingInterval,
 					status: subscription.status,
-					current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-					current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+					current_period_start: new Date(period.start * 1000).toISOString(),
+					current_period_end: new Date(period.end * 1000).toISOString(),
 					cancel_at_period_end: subscription.cancel_at_period_end
 				},
 				{

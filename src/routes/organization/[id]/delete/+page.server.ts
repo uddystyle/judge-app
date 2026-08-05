@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { stripe } from '$lib/server/stripe';
-import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
+import { getSubscriptionPeriod } from '$lib/server/stripeTypes';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import { logger } from '$lib/server/logger';
 
@@ -54,12 +54,14 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 		// 組織テーブルのstripe_subscription_idを確認
 		if (organization?.stripe_subscription_id) {
 			try {
-				const subscription = withSubscriptionPeriods(
-					await stripe.subscriptions.retrieve(organization.stripe_subscription_id)
+				const subscription = await stripe.subscriptions.retrieve(
+					organization.stripe_subscription_id
 				);
 				if (['active', 'trialing', 'past_due'].includes(subscription.status)) {
 					hasActiveSubscription = true;
-					subscriptionEndDate = new Date(subscription.current_period_end * 1000).toISOString();
+					// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+					const period = getSubscriptionPeriod(subscription);
+					subscriptionEndDate = period ? new Date(period.end * 1000).toISOString() : null;
 				}
 			} catch (error) {
 				logger.error('[Load] stripe_subscription_id検証エラー:', error);
@@ -75,11 +77,12 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 					limit: 10
 				});
 
-				for (const rawSub of subscriptions.data) {
-					const sub = withSubscriptionPeriods(rawSub);
+				for (const sub of subscriptions.data) {
 					if (['active', 'trialing', 'past_due'].includes(sub.status)) {
 						hasActiveSubscription = true;
-						subscriptionEndDate = new Date(sub.current_period_end * 1000).toISOString();
+						// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+						const period = getSubscriptionPeriod(sub);
+						subscriptionEndDate = period ? new Date(period.end * 1000).toISOString() : null;
 						break;
 					}
 				}

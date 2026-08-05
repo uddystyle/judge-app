@@ -1,6 +1,6 @@
 # マイグレーション適用台帳 (APPLIED.md)
 
-> 最終更新: 2026-08-04 ／ 自動生成(ヘッダ抽出)＋手動オーバーレイ。`database/migrations/` の全 123 SQL を網羅。
+> 最終更新: 2026-08-04 ／ 自動生成(ヘッダ抽出)＋手動オーバーレイ。`database/migrations/` の全 129 SQL を網羅。
 
 ## 1. 前提・凡例
 
@@ -99,7 +99,7 @@
 | 55 | `055_add_create_organization_with_subscription_function.sql` | 組織作成のトランザクション関数を追加 | 2026-01-22 | ✓ |  | ⚠️要確認 | ⚠️要確認 | **アプリ先行** create_organization_with_subscription をCREATE OR REPLACEで定義。header:次工程で /api/organization/create を改修・デプロイ必要 |
 | 56 | `056_make_create_organization_idempotent.sql` | 組織作成関数を冪等化 | 2026-01-22 | ✓ | 055 | ⚠️要確認 | ⚠️要確認 | 055のcreate_organization_with_subscriptionをCREATE OR REPLACEで置換。重複/再試行(UNIQUE違反)に安全な冪等版 |
 
-### 3.2 ロックダウンera（1000–1028・28本）
+### 3.2 ロックダウンera（1000–1031・31本）
 
 > 注: 全ファイルが冪等・WHY/WHATヘッダ・DEV先行→prod の運用手順・ペアrollback付き。`1007`–`1024`＋`052` は dev+prod 適用確認済み。
 
@@ -134,6 +134,9 @@
 | 1026 | `1026_guest_resume_tokens.sql` | ゲスト復帰用の資格情報を guest_identifier から分離 | 2026-08-04 | ✓ | 1025 の残課題（?guest= 乗っ取り） | ✅(2026-08-04 RLS有効/ポリシー0/未発行0) | ✅(2026-08-04 RLS有効/ポリシー0/31件発行) | **DEV先行 DB先行** 適用順: 本SQLをアプリより先に適用（アプリが読む前にテーブルが要る。旧アプリは触らないのでDB先行が安全側）。guest_identifier は採点行の owner 列として**同席者全員に見える**ためベアラ資格情報にできず、`/session/[id]?guest=` の再採用が同席者による identity 乗っ取り＋本人ロックアウトを許していた。RLS 有効・**ポリシー無し=service role 専用**（1024 と同じパターン）。既存ゲスト行に token をバックフィル。検証: verify/1026_verify_guest_resume.sql。冪等 |
 | 1027 | `1027_correction_delete_and_anon_cleanup.sql` | 修正要求の DELETE ポリシー整備＋残る anon SELECT の撤去 | 2026-08-04 | ✓ | 1025/1026 の追加監査 | ✅(2026-08-04 anon0/results3/training_scores3) | ✅(2026-08-04 anon0/results3/training_scores3) | **DEV先行** ①training_sessions の TO anon SELECT（述語が caller を参照しない）を撤去 ②「修正を要求」は training_scores に authenticated の DELETE ポリシーが無く元々機能していなかったため、owner（認証/ゲスト）と主任の DELETE を results/training_scores に整備。`chief_judge_can_delete_results` は prod にのみ存在した**ドリフト**のため同じ定義で貼り直して両環境を揃えた。既存の「自分の行を UPDATE できる」権限より弱いので権限拡大にはならない。冪等 |
 | 1028 | `1028_setup_manager_write_and_participant_insert_scope.sql` | セットアップ書込みを作成者or主任に揃える＋participants INSERT を検定モード限定 | 2026-08-04 | ✓ | 1007 の participants INSERT / 034 の creator 限定 | ✅(2026-08-04) | ✅(2026-08-04) | **DB先行** ①アプリ（load/アクション）は作成者or主任を通すのに RLS は `is_session_creator` のみで、主任の操作が 0 行になっていた → `is_session_manager()` を追加し participants/training_events に manager 版 INSERT/UPDATE/DELETE を**追加**（既存 creator 版は残すので SELECT を持つ ALL ポリシーを壊さない）②`auth_participants_insert_by_participation` は検定モードの未登録ゼッケン自動作成（scoreSync の ensureParticipantExists がユーザークライアントで INSERT）を支える現役依存のため撤去はできない → **検定モードのセッションに限定**し、大会・研修の名簿差し込みを閉じた。冪等 |
+| 1029 | `1029_subscription_status_check_stripe_alignment.sql` | subscriptions の CHECK を Stripe の実ステータスへ揃える＋prod/dev ドリフト解消 | 2026-08-04 | ✓ | Stripe監査 P0-2（docs/stripe/stripe-audit-2026-08-04.md） | ✅(2026-08-04 8ステータス投入検証OK/不適合0) | ✅(2026-08-04 8ステータス投入検証OK/不適合0/索引矛盾解消) | **DEV先行 DB先行** webhook は Stripe の `subscription.status` を無変換で保存するのに CHECK が全値を網羅せず、しかも prod/dev で許可値が食い違っていた（prod: incomplete/trialing が入らない、dev: unpaid が入らない）。欠落値が来ると CHECK 違反→500→Stripe が3日間再送し、決済成立済みなのに保存されない。prod の部分一意索引 `subscriptions_organization_active_unique` が参照する `trialing` を CHECK が禁じている矛盾も解消。dev に欠けていた plan_type / billing_interval の CHECK も prod 定義で追加（plan_type に `pro` は含めない。旧個人proは契約ゼロを確認のうえアプリ側も廃止済み）。検証: verify/1029_verify_status_check.sql。冪等 |
+| 1030 | `1030_stripe_event_idempotency.sql` | Stripe Webhook の冪等化（処理済み event.id の記録） | 2026-08-04 | ✓ | Stripe監査 M-2 | ✅(2026-08-04 RLS有効/ポリシー0/索引2) | ✅(2026-08-04 RLS有効/ポリシー0/索引2) | **DB先行** Stripe は「少なくとも1回」配信・順序保証なし・2xx以外は最大3日再送のため同一 event.id が複数回届くのは通常運用。多くの経路は UPSERT で冪等だが組織アップグレードは Stripe 側 list→cancel を伴い純粋冪等ではない。`stripe_events` に event_id を主キーで記録し、INSERT の一意制約違反＝処理済みと判定して本処理前に弾く（チェックしてから書く方式と違い同時配信でも競合しない）。RLS 有効・**ポリシー無し=service role 専用**（1024/1026 と同じパターン）。テーブル未作成でも課金処理は止めず error ログで可視化する実装。冪等 |
+| 1031 | `1031_stripe_events_lease_and_deadletter.sql` | stripe_events に処理状態・リース期限・破棄理由を追加 | 2026-08-04 | ✓ | **1030 の設計欠陥を修正** | ✅(2026-08-04) | ✅(2026-08-04) | **DB先行** 1030 は本処理の**前**に INSERT し、その瞬間から処理済みと判定していた。失敗時は catch で削除する作りだったため、**catch を通らない終了**（Vercel maxDuration=10s 超過／プロセス強制終了／デプロイ）で記録だけが残り、Stripe の再送が「処理済み」と判定されて**イベントが永久消失**する。とくに組織アップグレードは list+複数 cancel を伴い 10 秒に迫りやすい。`status`(processing/completed/dropped) と `claimed_at` を追加し、**永久スキップは completed と dropped のみ**、processing はリース切れ(60s)で再取得可能にした。`failure_reason` は破棄イベントの dead-letter レコード（payload は持たないが event_id から `stripe.events.retrieve()` で再構築できる）。冪等 |
 
 ## 4. ロールバック対応表（20本）
 
@@ -162,6 +165,9 @@
 | `1023_rollback.sql` | `1023_contact_category_tournament_quote.sql` | ✓ | tournament_quote 行が存在すると失敗（先に category を UPDATE）。緊急時のみ。冪等 |
 | `1024_rollback.sql` | `1024_add_score_mutations.sql` | ✓ | 冪等性の処理済み記録が消える。同期APIも同時停止のこと（再送は同値上書きで実害は限定的）。緊急時のみ。冪等 |
 | `1028_rollback.sql` | `1028_setup_manager_write_and_participant_insert_scope.sql` | ✓ | 主任のセットアップ操作が RLS で 0 行になる（アプリは明示エラーを返す）。participants INSERT も全モードに戻り、参加者が公開 API から選手を差し込める状態に戻る。緊急時のみ。冪等 |
+| `1029_rollback.sql` | `1029_subscription_status_check_stripe_alignment.sql` | ✓ | ⚠️適用前の定義が prod/dev で**異なる**ため対象DBのブロックのみ実行する。かつ戻すと incomplete/trialing/unpaid の行が既にある場合 ADD CONSTRAINT が失敗する（webhook は Stripe の値をそのまま保存するので発生しやすい）。安易に戻さないこと。緊急時のみ |
+| `1030_rollback.sql` | `1030_stripe_event_idempotency.sql` | ✓ | 重複配信・再送に対する冪等判定が失われる（多くの経路は UPSERT で冪等なので致命的ではないが、組織アップグレードは再送時に余計な Stripe API 呼び出しが起き得る）。アプリ側の参照も同時に戻すこと。緊急時のみ |
+| `1031_rollback.sql` | `1031_stripe_events_lease_and_deadletter.sql` | ✓ | ⚠️**実行すると 1030 時点の設計欠陥（イベント永久消失）に戻る**。撤去前に `status='processing'` で残る行と `status='dropped'`（dead-letter）の控えを取ること。アプリ側の idempotency.ts も同時に戻す。緊急時のみ |
 | `1027_rollback.sql` | `1027_correction_delete_and_anon_cleanup.sql` | ✓ | 「修正を要求」が再び機能しなくなる（0行削除はアプリがエラー表示する）。training_sessions の anon SELECT も復活する。緊急時のみ。冪等 |
 | `1026_rollback.sql` | `1026_guest_resume_tokens.sql` | ✓ | 発行済みの復帰トークンが全て失われ、端末に控えられた token は無効になる（自動復帰不可＝参加コードから再参加。採点データは失われない）。アプリも同時に戻すこと。緊急時のみ。冪等 |
 | `1025_rollback.sql` | `1025_guest_identity_bind_to_uid.sql` | ✓ | ⚠️**撤回するとなりすまし穴が再び開く**（user_metadata は本人が書換可）。かつ anon_* を復元してもゲストは authenticated ロールのため発火せず、ゲストの採点保存はできないまま（1025以前の壊れた状態）。session_participants.user_id のバックフィルは戻さない（旧ポリシーは user_id を見ないので無害）。アプリも同時に戻すこと。緊急時のみ。冪等 |
@@ -178,6 +184,8 @@
 | `verify_migration.sql` | 検証SELECT | Tournament Mode 移行の検証 SELECT。列/テーブル/RLS/index/trigger/制約の存在を SELECT 確認。スキーマ変更なし |
 | `1022_verify_tournament_tickets.sql` | 検証SELECT | 大会チケットの検証（残0拒否・二重消費なし・authed大会化拒否）。スキーマ変更なし |
 | `1026_verify_guest_resume.sql` | 検証SELECT | 1026 の検証。テーブル存在+RLS有効／ポリシー0件（service role 専用）／token 未発行のゲスト行0件／token 重複なし。スキーマ変更なし |
+| `1029_verify_status_check.sql` | 検証SELECT | 1029 の検証。CHECK 定義／`subscriptions_organization_active_unique` との矛盾解消／一時テーブルで8ステータス全投入／既存データの不適合0件。本番テーブルには書き込まない。スキーマ変更なし |
+| `1031_verify_stripe_events.sql` | 検証SELECT | 1030/1031 の検証。RLS有効+ポリシー0件（service role 専用）／status の3値が通り不正値は拒否されること（一時テーブル）／dead-letter(dropped) とリース切れ processing の運用監視クエリ。本番テーブルには書き込まない |
 | `1025_verify_guest_identity.sql` | 検証SELECT | 1025 の検証。user_metadata 参照ポリシー0件／anon_*撤去／ゲスト owner ポリシー5本／ヘルパのSECURITY DEFINER+search_path／user_id束縛率／同一セッション内uid重複なし。スキーマ変更なし |
 | `archive/one-time/008_phase0_cleanup_existing_data.sql` | 💥破壊的データ削除 | 既存データを全TRUNCATEしクリーンアップ。ヘッダ「本番未稼働のため削除して再構築」。Phase0、009(Phase1)の前に実行。全テーブルTRUNCATE。**隔離済み** |
 | `archive/one-time/010_cleanup_existing_user_data.sql` | 💥破壊的データ削除 | 既存組織・セッションデータをTRUNCATE。日付なし。profiles/auth.usersは保持。末尾に確認SELECT。**隔離済み** |

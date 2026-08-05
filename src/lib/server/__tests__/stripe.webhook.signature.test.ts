@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Stripe from 'stripe';
 import type { RequestEvent } from '@sveltejs/kit';
 
+// M-2 の冪等化は専用テスト（stripe.webhook.hardening.test.ts）で検証する。
+// ここではディスパッチ・分岐の検証が目的なので、DB を触る冪等化層は差し替える。
+vi.mock('$lib/server/stripeWebhook/idempotency', () => ({
+	claimStripeEvent: vi.fn(async () => ({ alreadyProcessed: false })),
+	completeStripeEvent: vi.fn(async () => {}),
+	dropStripeEvent: vi.fn(async () => {}),
+	releaseStripeEvent: vi.fn(async () => {}),
+	LEASE_MS: 60_000
+}));
+
 /**
  * Webhook 署名検証の実物テスト
  *

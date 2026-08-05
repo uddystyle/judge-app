@@ -25,6 +25,7 @@ TENTO（SvelteKit + Supabase + Stripe・組織ベース採点アプリ）の技�
 
 | ドキュメント | 内容 |
 |---|---|
+| [stripe-audit-2026-08-04.md](./stripe/stripe-audit-2026-08-04.md) | **Stripe 実装監査（未修正の P0 2件を含む）** |
 | [STRIPE_SETUP.md](./stripe/STRIPE_SETUP.md) | Stripe 初期セットアップ |
 | [stripe-cli-setup.md](./stripe/stripe-cli-setup.md) | Stripe CLI セットアップ・E2E 手順 |
 | [stripe-products-setup.md](./stripe/stripe-products-setup.md) | 商品・価格の作成 |

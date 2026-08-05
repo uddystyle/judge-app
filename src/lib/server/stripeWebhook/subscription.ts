@@ -16,12 +16,21 @@ export async function handleSubscriptionCreated(subscription: any) {
 
 	const customerId = subscription.customer;
 
-	// Customer IDからuser_idとorganization_idを取得
+	// H-1: customer ではなく stripe_subscription_id で行を特定する。
+	//
+	// migration 053 は「1 Customer が複数組織のサブスクリプションを持てる」ようにするため
+	// stripe_customer_id の UNIQUE を意図的に外している。つまり customer で引くと
+	// 複数行が返るのが正常系で、それに対する .single() は PostgREST がエラーにする。
+	// 以前はここで customer + .single() を使っており、2件目の組織ができた時点から
+	// このイベントが恒久的に 500 を返し続ける状態だった。
+	//
+	// stripe_subscription_id は部分一意インデックスがあるため高々1行。
+	// 行が無い場合（イベント順序レース）は下の RetryableError で再送させる。
 	const { data: subData, error: fetchError } = await supabaseAdmin
 		.from('subscriptions')
 		.select('user_id, organization_id')
-		.eq('stripe_customer_id', customerId)
-		.single();
+		.eq('stripe_subscription_id', subscription.id)
+		.maybeSingle();
 
 	if (fetchError || !subData) {
 		// イベント順序レース対策: customer.subscription.created が checkout.session.completed より

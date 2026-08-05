@@ -102,30 +102,18 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			throw error(500, 'サービスの設定エラーが発生しました。管理者に連絡してください。');
 		}
 
-		// 4. ユーザー情報を取得
-		const { data: profile } = await supabase
-			.from('profiles')
-			.select('full_name')
-			.eq('id', user.id)
-			.single();
-
-		// 5. Stripe Customerを作成
-		const customer = await stripe.customers.create({
-			email: user.email || undefined,
-			name: profile?.full_name || undefined,
-			metadata: {
-				user_id: user.id,
-				organization_name: sanitizedOrgName,
-				is_organization: 'true'
-			}
-		});
-
-		logger.debug('[Organization Checkout API] 新しいCustomerを作成:', customer.id);
-
-		// 6. Stripe Checkout Sessionを作成
+		// 4. Stripe Checkout Sessionを作成
 		// payment_method_types は指定しない（動的支払い方法。Dashboard側で支払い方法を制御）
+		//
+		// M-3: Customer を事前作成しない。以前は毎リクエストで customers.create していたため、
+		// ユーザーが checkout を放棄するたびに孤児 Customer が残り、
+		// organizations.stripe_customer_id が UNIQUE なこともあって再試行時の衝突要因になっていた。
+		// subscription モードでは customer_email を渡せば Stripe が
+		// **セッション完了時にのみ** Customer を作る（テストモードで実測確認済み）。
+		// webhook が使う識別情報は session.metadata / subscription_data.metadata 側にあるため、
+		// Customer に metadata を持たせる必要はない。
 		const sessionParams: any = {
-			customer: customer.id,
+			customer_email: user.email || undefined,
 			mode: 'subscription',
 			line_items: [
 				{
@@ -190,7 +178,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		logger.debug('[Organization Checkout API] Checkout Session作成成功:', session.id);
 
-		// 7. Checkout URLを返す
+		// 5. Checkout URLを返す
 		return json({ url: session.url });
 	} catch (err: any) {
 		// SvelteKitのredirectやerrorは再throw（正常な制御フロー）

@@ -4,6 +4,12 @@ import { stripe } from '$lib/server/stripe';
 import { STRIPE_WEBHOOK_SECRET, STRIPE_SECRET_KEY } from '$env/static/private';
 import { logger } from '$lib/server/logger';
 import { RetryableError, NonRetryableError } from '$lib/server/stripeWebhook/shared';
+import {
+	claimStripeEvent,
+	completeStripeEvent,
+	dropStripeEvent,
+	releaseStripeEvent
+} from '$lib/server/stripeWebhook/idempotency';
 import { handleCheckoutCompleted } from '$lib/server/stripeWebhook/checkout';
 import {
 	handleSubscriptionCreated,
@@ -44,7 +50,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	// T14: livemode検証 - 環境とイベントのlivemode不一致を検出
 	// event.livemodeが明示的に存在する場合のみチェック（テストモック互換性のため）
 	if (event.livemode !== undefined) {
-		const expectedLivemode = STRIPE_SECRET_KEY.startsWith('sk_live_');
+		// M-6: 制限付きAPIキー（rk_）も本番キーになり得る。
+		// sk_ 前置詞だけを見ていると、Stripe 推奨の rk_live_ へ移行した瞬間に
+		// 本番イベントが「テスト鍵の環境に本番イベント」と誤判定され、
+		// 本番 webhook が全て 503 になる。
+		const expectedLivemode = /^(sk|rk)_live_/.test(STRIPE_SECRET_KEY);
 		const eventLivemode = event.livemode;
 
 		if (expectedLivemode !== eventLivemode) {
@@ -70,6 +80,14 @@ export const POST: RequestHandler = async ({ request }) => {
 			logger.warn('[Webhook] T14: 本番環境のテストイベントをスキップします');
 			return json({ received: true, skipped: true, reason: 'livemode_mismatch' });
 		}
+	}
+
+	// M-2: 冪等化。同一 event.id の再送・重複配信は本処理に入る前に弾く。
+	// Stripe は「少なくとも1回」配信で順序保証も無く、2xx以外は最大3日間再送されるため、
+	// 同一イベントが複数回届くのは通常運用。
+	const claim = await claimStripeEvent(event.id, event.type);
+	if (claim.alreadyProcessed) {
+		return json({ received: true, duplicate: true });
 	}
 
 	// 3. イベントタイプに応じて処理
@@ -102,7 +120,21 @@ export const POST: RequestHandler = async ({ request }) => {
 				break;
 			}
 
-			case 'invoice.payment_succeeded': {
+			// 請求成立。有償と無償（100%割引など）でイベント名が変わるため両方を受ける。
+			//
+			// ⚠️ 請求額が ¥0 だと Stripe は決済を行わないため `invoice.payment_succeeded` を
+			// **送らず**、`invoice.paid` だけを送る（テストモードで実測確認済み）。
+			// `invoice.payment_succeeded` しか購読していないと、クーポンで無償提供した
+			// アカウントの current_period_end が初回のまま永久に更新されない。
+			//
+			// 有償の場合は両方が届くが、event.id が違うので冪等化では弾けない。
+			// handlePaymentSucceeded 側のリプレイ防御（同一 period_end かつ同一内容なら
+			// DB 更新を省略）が二重反映を防ぐ。
+			//
+			// 注意: Stripe ダッシュボードのエンドポイント設定でも `invoice.paid` の
+			// 購読を有効にしないと、ここには届かない。
+			case 'invoice.payment_succeeded':
+			case 'invoice.paid': {
 				const invoice = event.data.object as any;
 				await handlePaymentSucceeded(invoice);
 				break;
@@ -118,16 +150,39 @@ export const POST: RequestHandler = async ({ request }) => {
 				logger.debug('[Webhook] 未処理のイベントタイプ:', event.type);
 		}
 
+		// M-2: ここまで到達して初めて「処理済み」として確定する。
+		// 開始時点で確定させると、途中でプロセスが死んだイベントが永久に失われる。
+		await completeStripeEvent(event.id);
+
 		return json({ received: true });
 	} catch (err: any) {
 		logger.error('[Webhook] イベント処理エラー:', err);
 
 		// エラーの種類に応じて適切なHTTPステータスコードを返す
 		if (err instanceof NonRetryableError) {
-			// 400番台: リトライ不要なエラー（データ不正、必須データなしなど）
-			logger.error('[Webhook] リトライ不要なエラー:', err.message);
-			throw error(400, `リトライ不要なエラー: ${err.message}`);
-		} else if (err instanceof RetryableError) {
+			// M-1: Stripe は 2xx 以外を一律で最大3日間再送する（4xx/5xx を区別しない）。
+			// 再送しても永久に成功しない種類のエラーで非2xxを返すと、リトライ嵐になり
+			// 最終的にエンドポイントが自動無効化されて「本当に処理すべきイベント」まで失う。
+			// よって 200 を返して再送を止め、代わりに error ログで可視化する。
+			// TODO: 監視アラート（Sentry等）を送信
+			logger.error(
+				'[Webhook] 処理不能なイベントを破棄しました（再送しても成功しないため200を返す）:',
+				`event.id=${event.id}`,
+				`type=${event.type}`,
+				err.message
+			);
+			// 破棄理由を dead-letter レコードとして残す。
+			// payload は保存しないが、event_id から stripe.events.retrieve() で再取得できる。
+			// 運用では `select * from stripe_events where status='dropped'` を監視すること。
+			await dropStripeEvent(event.id, err.message);
+			return json({ received: true, dropped: true, reason: err.message });
+		}
+
+		// M-2: 再送で処理し直す必要があるため、処理済み記録を取り消す。
+		// これを怠ると再送が「処理済み」と判定され、イベントが恒久的に失われる。
+		await releaseStripeEvent(event.id);
+
+		if (err instanceof RetryableError) {
 			// 500番台: リトライすべきエラー（DB障害、Stripe API障害など）
 			logger.error('[Webhook] リトライ可能なエラー:', err.message);
 			throw error(500, `リトライ可能なエラー: ${err.message}`);

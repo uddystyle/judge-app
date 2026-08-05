@@ -1,0 +1,38 @@
+-- ============================================================================
+-- Rollback 1029: subscriptions の CHECK 制約を適用前の状態へ戻す
+-- ============================================================================
+-- ⚠️ prod と dev で**適用前の定義が異なっていた**（それがこのマイグレーションの動機）。
+--    戻す場合は対象DBに応じて片方のブロックだけを実行すること。
+--
+-- ⚠️ さらに、ロールバックすると **incomplete / trialing / unpaid の行が既に存在する場合に
+--    ADD CONSTRAINT が失敗する**。先に下記で確認し、必要なら行を退避・修正すること:
+--
+--      select status, count(*) from subscriptions group by status;
+--
+--    webhook は Stripe の値をそのまま保存するので、適用後に該当ステータスの行が
+--    生まれている可能性が高い。安易に戻さないこと。
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- prod (scoring-system) へ戻す場合
+-- ----------------------------------------------------------------------------
+-- BEGIN;
+-- ALTER TABLE public.subscriptions DROP CONSTRAINT IF EXISTS subscriptions_status_check;
+-- ALTER TABLE public.subscriptions ADD CONSTRAINT subscriptions_status_check CHECK (
+--     status IN ('active', 'canceled', 'past_due', 'unpaid')
+-- );
+-- -- plan_type / billing_interval は prod では元から同一定義のため戻す必要なし
+-- COMMIT;
+
+-- ----------------------------------------------------------------------------
+-- dev (tento-development) へ戻す場合
+-- ----------------------------------------------------------------------------
+-- BEGIN;
+-- ALTER TABLE public.subscriptions DROP CONSTRAINT IF EXISTS subscriptions_status_check;
+-- ALTER TABLE public.subscriptions ADD CONSTRAINT subscriptions_status_check CHECK (
+--     status IN ('active', 'past_due', 'canceled', 'incomplete', 'trialing')
+-- );
+-- -- dev には元々 plan_type / billing_interval の CHECK が無かったので削除して戻す
+-- ALTER TABLE public.subscriptions DROP CONSTRAINT IF EXISTS subscriptions_plan_type_check;
+-- ALTER TABLE public.subscriptions DROP CONSTRAINT IF EXISTS subscriptions_billing_interval_check;
+-- COMMIT;

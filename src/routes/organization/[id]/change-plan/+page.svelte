@@ -10,7 +10,8 @@
 	export let form: ActionData;
 
 	let selectedPlan: 'basic' | 'standard' | 'premium' | null = null;
-	let billingInterval: 'month' | 'year' = (data.subscription?.billing_interval as 'month' | 'year') || 'month';
+	let billingInterval: 'month' | 'year' =
+		(data.subscription?.billing_interval as 'month' | 'year') || 'month';
 	let loading = false;
 	let cancelLoading = false;
 	let showCancelConfirm = false;
@@ -19,7 +20,8 @@
 	$: isFree = data.organization.plan_type === 'free';
 
 	// 現在のサブスクリプションの請求間隔（実際に決済した間隔）
-	const currentBillingInterval = (data.subscription?.billing_interval as 'month' | 'year') || 'month';
+	const currentBillingInterval =
+		(data.subscription?.billing_interval as 'month' | 'year') || 'month';
 
 	function getPrice(plan: 'basic' | 'standard' | 'premium') {
 		return getPlanPrice(plan, billingInterval);
@@ -34,7 +36,9 @@
 		return planHierarchy[newPlan] > planHierarchy[data.organization.plan_type];
 	}
 
-	function getChangeType(newPlan: 'basic' | 'standard' | 'premium'): 'upgrade' | 'downgrade' | 'same' {
+	function getChangeType(
+		newPlan: 'basic' | 'standard' | 'premium'
+	): 'upgrade' | 'downgrade' | 'same' {
 		if (newPlan === data.organization.plan_type) return 'same';
 		return isPlanUpgrade(newPlan) ? 'upgrade' : 'downgrade';
 	}
@@ -47,12 +51,18 @@
 	}
 
 	// 現在と同じプラン＆同じ請求間隔かどうか
-	$: isSamePlanAndInterval = selectedPlan === data.organization.plan_type && billingInterval === currentBillingInterval;
+	$: isSamePlanAndInterval =
+		selectedPlan === data.organization.plan_type && billingInterval === currentBillingInterval;
 
 	$: changeType = selectedPlan ? getChangeType(selectedPlan) : null;
 </script>
 
-<Header showAppName={true} pageUser={data.user} pageProfile={data.profile} hasOrganization={data.hasOrganization} />
+<Header
+	showAppName={true}
+	pageUser={data.user}
+	pageProfile={data.profile}
+	hasOrganization={data.hasOrganization}
+/>
 
 <div class="container">
 	<div class="page-header">
@@ -68,7 +78,8 @@
 				<p class="current-price">無料</p>
 			{:else}
 				{@const currentPlan = plans[data.organization.plan_type as keyof typeof plans]}
-				{@const currentPrice = currentBillingInterval === 'month' ? currentPlan.monthlyPrice : currentPlan.yearlyPrice}
+				{@const currentPrice =
+					currentBillingInterval === 'month' ? currentPlan.monthlyPrice : currentPlan.yearlyPrice}
 				<div class="plan-badge current">{currentPlan.name}</div>
 				<p class="current-price">
 					{formatPrice(currentPrice)} / {currentBillingInterval === 'month' ? '月' : '年'}
@@ -85,7 +96,9 @@
 
 	{#if $page.url.searchParams.get('cancelled') === 'true'}
 		<div class="success-container">
-			<p class="success-message">サブスクリプションのキャンセルが完了しました。現在の請求期間が終了するまで、引き続きサービスをご利用いただけます。</p>
+			<p class="success-message">
+				サブスクリプションのキャンセルが完了しました。現在の請求期間が終了するまで、引き続きサービスをご利用いただけます。
+			</p>
 		</div>
 	{/if}
 
@@ -123,14 +136,14 @@
 						{#if billingInterval === 'year'}
 							と月額から年額への変更です。既にお支払いいただいた金額との差額を日割り計算し、即座に請求いたします。年額プランでは最大50%の割引が適用されます。
 						{:else}
-							と年額から月額への変更です。プラン変更は即座に適用されます。次回の請求日まで追加の請求は発生しません。
+							と年額から月額への変更です。プラン変更は即座に適用されます。お支払い済みの年額のうち未使用分は日割りでクレジットされ、以後の月額のお支払いに充当されます。
 						{/if}
 					{:else}
 						プランのダウングレード
 						{#if billingInterval === 'year'}
 							と月額から年額への変更です。プラン変更は即座に適用され、即座に請求されます。年額プランでは最大50%の割引が適用されます。
 						{:else}
-							と年額から月額への変更です。プラン変更は即座に適用されます。次回の請求日まで追加の請求は発生しません。
+							と年額から月額への変更です。プラン変更は即座に適用されます。お支払い済みの年額のうち未使用分は日割りでクレジットされ、以後の月額のお支払いに充当されます。
 						{/if}
 					{/if}
 				</p>
@@ -144,7 +157,7 @@
 					{#if billingInterval === 'year'}
 						月額から年額への変更です。既にお支払いいただいた金額との差額を日割り計算し、即座に請求いたします。年額プランでは最大50%の割引が適用されます。
 					{:else}
-						年額から月額への変更です。変更は即座に適用されます。次回の請求日まで追加の請求は発生しません。
+						年額から月額への変更です。変更は即座に適用されます。お支払い済みの年額のうち未使用分は日割りでクレジットされ、以後の月額のお支払いに充当されます。
 					{/if}
 				</p>
 			</div>
@@ -171,21 +184,25 @@
 		</div>
 	{/if}
 
-	<form method="POST" action="?/changePlan" use:enhance={() => {
-		console.log('[Change Plan] フォーム送信開始', {
-			selectedPlan,
-			billingInterval,
-			currentPlan: data.organization.plan_type,
-			currentBillingInterval
-		});
-		loading = true;
-		return async ({ update, result }) => {
-			console.log('[Change Plan] レスポンス受信:', result);
-			// updateを呼び出すとリダイレクトが自動的に処理される
-			await update();
-			loading = false;
-		};
-	}}>
+	<form
+		method="POST"
+		action="?/changePlan"
+		use:enhance={() => {
+			console.log('[Change Plan] フォーム送信開始', {
+				selectedPlan,
+				billingInterval,
+				currentPlan: data.organization.plan_type,
+				currentBillingInterval
+			});
+			loading = true;
+			return async ({ update, result }) => {
+				console.log('[Change Plan] レスポンス受信:', result);
+				// updateを呼び出すとリダイレクトが自動的に処理される
+				await update();
+				loading = false;
+			};
+		}}
+	>
 		<input type="hidden" name="billingInterval" value={billingInterval} />
 		<input type="hidden" name="planType" value={selectedPlan || ''} />
 
@@ -218,10 +235,14 @@
 					class="plan-card"
 					class:selected={selectedPlan === planKey}
 					class:current={isSamePlanAndBilling}
-					on:click={() => !isSamePlanAndBilling && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
+					on:click={() =>
+						!isSamePlanAndBilling && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
 					role="button"
 					tabindex="0"
-					on:keypress={(e) => e.key === 'Enter' && !isSamePlanAndBilling && (selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
+					on:keypress={(e) =>
+						e.key === 'Enter' &&
+						!isSamePlanAndBilling &&
+						(selectedPlan = planKey as 'basic' | 'standard' | 'premium')}
 				>
 					{#if isSamePlanAndBilling}
 						<div class="plan-badge current">現在のプラン</div>
@@ -230,7 +251,9 @@
 					<p class="plan-price">{formatPrice(displayPrice)}</p>
 					<p class="plan-interval">/ {billingInterval === 'month' ? '月' : '年'}</p>
 					{#if billingInterval === 'year'}
-						<p class="plan-discount">{getDiscountRate(planKey as 'basic' | 'standard' | 'premium')}%オフ</p>
+						<p class="plan-discount">
+							{getDiscountRate(planKey as 'basic' | 'standard' | 'premium')}%オフ
+						</p>
 					{/if}
 					<ul class="plan-features">
 						{#each plan.features as feature}
@@ -266,14 +289,18 @@
 	{#if !isFree}
 		<div class="cancel-section">
 			{#if showCancelConfirm}
-				<form method="POST" action="?/cancelSubscription" use:enhance={() => {
-					cancelLoading = true;
-					return async ({ update }) => {
-						await update();
-						cancelLoading = false;
-						showCancelConfirm = false;
-					};
-				}}>
+				<form
+					method="POST"
+					action="?/cancelSubscription"
+					use:enhance={() => {
+						cancelLoading = true;
+						return async ({ update }) => {
+							await update();
+							cancelLoading = false;
+							showCancelConfirm = false;
+						};
+					}}
+				>
 					<div class="confirm-box">
 						<h3 class="confirm-title">サブスクリプションをキャンセル</h3>
 						<p class="confirm-description">
@@ -281,17 +308,13 @@
 						</p>
 						<p class="confirm-question">本当にサブスクリプションをキャンセルしますか？</p>
 						<div class="confirm-buttons">
-							<button
-								type="submit"
-								class="cancel-submit-btn"
-								disabled={cancelLoading}
-							>
+							<button type="submit" class="cancel-submit-btn" disabled={cancelLoading}>
 								{cancelLoading ? 'キャンセル中...' : 'はい、キャンセルします'}
 							</button>
 							<button
 								type="button"
 								class="cancel-back-btn"
-								on:click={() => showCancelConfirm = false}
+								on:click={() => (showCancelConfirm = false)}
 								disabled={cancelLoading}
 							>
 								戻る
@@ -300,11 +323,7 @@
 					</div>
 				</form>
 			{:else}
-				<button
-					type="button"
-					class="cancel-btn"
-					on:click={() => showCancelConfirm = true}
-				>
+				<button type="button" class="cancel-btn" on:click={() => (showCancelConfirm = true)}>
 					プランをキャンセルする
 				</button>
 			{/if}

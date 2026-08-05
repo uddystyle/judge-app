@@ -33,7 +33,12 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		// Security: Validate redirect URL to prevent Open Redirect attacks
 		const returnValidation = validateRedirectUrl(returnUrl, ALLOWED_STRIPE_REDIRECT_PATHS);
 		if (!returnValidation.valid) {
-			logger.error('[Customer Portal] Invalid returnUrl:', returnUrl, 'Error:', returnValidation.error);
+			logger.error(
+				'[Customer Portal] Invalid returnUrl:',
+				returnUrl,
+				'Error:',
+				returnValidation.error
+			);
 			throw error(400, `無効なreturnUrlです: ${returnValidation.error}`);
 		}
 
@@ -75,6 +80,9 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			throw err;
 		}
 		// T3: Stripe API障害時は error() で統一。クライアントには汎用的なメッセージのみ返す
-		throw error(500, 'Customer Portalセッションの作成に失敗しました。しばらくしてから再度お試しください。');
+		throw error(
+			500,
+			'Customer Portalセッションの作成に失敗しました。しばらくしてから再度お試しください。'
+		);
 	}
 };

@@ -1,11 +1,11 @@
 import { stripe } from '$lib/server/stripe';
 import { logger } from '$lib/server/logger';
-import { withSubscriptionPeriods } from '$lib/server/stripeTypes';
 import {
 	supabaseAdmin,
 	RetryableError,
 	NonRetryableError,
-	getInvoiceSubscriptionId
+	getInvoiceSubscriptionId,
+	requireSubscriptionPeriod
 } from './shared';
 
 /**
@@ -24,9 +24,9 @@ export async function handlePaymentSucceeded(invoice: any) {
 
 	try {
 		// Stripe Subscriptionの詳細を取得
-		const subscription = withSubscriptionPeriods(
-			await stripe.subscriptions.retrieve(subscriptionId)
-		);
+		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+		// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+		const period = requireSubscriptionPeriod(subscription);
 
 		// T13: リプレイ防御 - 現在のDBの状態を取得
 		const { data: currentSub, error: fetchError } = await supabaseAdmin
@@ -41,7 +41,7 @@ export async function handlePaymentSucceeded(invoice: any) {
 			throw new RetryableError(`subscription取得エラー: ${fetchError.message}`);
 		}
 
-		const eventPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+		const eventPeriodEnd = new Date(period.end * 1000).toISOString();
 
 		// T13: 既存レコードがあり、イベントの方が古い場合はスキップ
 		// 同一期間内の状態変化（past_due -> active など）は許可するため、< を使用
@@ -72,7 +72,7 @@ export async function handlePaymentSucceeded(invoice: any) {
 			.from('subscriptions')
 			.update({
 				status: 'active',
-				current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+				current_period_start: new Date(period.start * 1000).toISOString(),
 				current_period_end: eventPeriodEnd,
 				cancel_at_period_end: subscription.cancel_at_period_end
 			})
@@ -111,9 +111,9 @@ export async function handlePaymentFailed(invoice: any) {
 
 	try {
 		// T13: Stripe Subscriptionの詳細を取得（期間情報のため）
-		const subscription = withSubscriptionPeriods(
-			await stripe.subscriptions.retrieve(subscriptionId)
-		);
+		const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+		// 期間は API バージョン差分を吸収して取得（clover では items 側にのみ存在する）
+		const period = requireSubscriptionPeriod(subscription);
 
 		// T13: リプレイ防御 - 現在のDBの状態を取得
 		const { data: currentSub, error: fetchError } = await supabaseAdmin
@@ -127,7 +127,7 @@ export async function handlePaymentFailed(invoice: any) {
 			throw new RetryableError(`subscription取得エラー: ${fetchError.message}`);
 		}
 
-		const eventPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+		const eventPeriodEnd = new Date(period.end * 1000).toISOString();
 
 		// T13: 既存レコードがあり、イベントの方が古い場合はスキップ
 		if (currentSub?.current_period_end) {

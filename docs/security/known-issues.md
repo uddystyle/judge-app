@@ -13,6 +13,24 @@
 
 > 現在オープンな 🔴 課題はありません。
 
+## ✅ 解消済み（2026-08 追記）
+
+### `subscriptions.status` の CHECK 制約が Stripe の実ステータスを網羅していなかった（**1029 で prod/dev とも解消**）
+
+2026-08-04 の Stripe 実装監査で発見。詳細は [`../stripe/stripe-audit-2026-08-04.md`](../stripe/stripe-audit-2026-08-04.md#p0-2-dbの-check-制約が-stripe-のステータスを受け付けない)。
+
+| 環境 | 許可されている値 | 欠落 |
+|---|---|---|
+| **prod** | `active, canceled, past_due, unpaid` | `incomplete` / `trialing` / `incomplete_expired` / `paused` |
+| **dev** | `active, past_due, canceled, incomplete, trialing` | `unpaid` / `incomplete_expired` / `paused` |
+
+- webhook は `status: subscription.status` を**変換せずそのまま**書き込むため、欠落値が来ると CHECK 違反 → 500 → Stripe 再送ループ。
+- とくに `stripeWebhook/checkout.ts:257`（SEC-1b）は `incomplete` が来る前提の実装だが、**prod ではその値を保存できない**。
+- 制約どうしの矛盾: prod の部分一意インデックス `subscriptions_organization_active_unique` は `WHERE status IN ('active','trialing')` と `trialing` を参照するが、CHECK は `trialing` を禁止している（条件が原理的に成立しない）。
+- 併発: `plan_type` の CHECK は prod/dev とも `free, basic, standard, premium` のみだが、`src/lib/server/plans.ts:66` は旧個人プランに対し `'pro'` を返す。
+- 対応: `1029_subscription_status_check_stripe_alignment.sql` で CHECK を Stripe の全8ステータス（`incomplete`/`incomplete_expired`/`trialing`/`active`/`past_due`/`canceled`/`unpaid`/`paused`）へ拡張。**prod・dev とも 2026-08-04 適用・検証済み**（一時テーブルで8値投入OK／既存データの不適合0件／部分一意索引との矛盾も解消）。
+- 併せて `plan_type` の `pro` はアプリ側（`src/lib/server/plans.ts`）から廃止済み。dev に欠けていた `plan_type` / `billing_interval` の CHECK も 1029 で prod 定義に合わせた。
+
 > ~~`001_add_session_security` prod 未適用の疑い~~ → **2026-06-29 実測で否定済み**。dev・prod とも `sessions.failed_join_attempts` / `is_locked` の存在を確認（`001_add_session_security.sql` は両環境適用済み・参加コード join の500懸念は無し）。
 
 ## 🟡 ドリフト（環境差・慎重対応）

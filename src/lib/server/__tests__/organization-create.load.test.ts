@@ -19,9 +19,21 @@ import { stripe } from '$lib/server/stripe';
 const createChainMock = (result: any) => {
 	const chain: any = {};
 	const methods = [
-		'select', 'update', 'upsert', 'insert', 'delete',
-		'eq', 'neq', 'in', 'is', 'not', 'or',
-		'single', 'maybeSingle', 'order', 'limit'
+		'select',
+		'update',
+		'upsert',
+		'insert',
+		'delete',
+		'eq',
+		'neq',
+		'in',
+		'is',
+		'not',
+		'or',
+		'single',
+		'maybeSingle',
+		'order',
+		'limit'
 	];
 	for (const m of methods) {
 		chain[m] = vi.fn(() => chain);

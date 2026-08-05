@@ -66,12 +66,52 @@ vi.mock('$env/dynamic/private', () => ({
 }));
 
 // Import after mocks
+// M-2 の冪等化は専用テスト（stripe.webhook.hardening.test.ts）で検証する。
+// ここではディスパッチ・分岐の検証が目的なので、DB を触る冪等化層は差し替える。
+vi.mock('$lib/server/stripeWebhook/idempotency', () => ({
+	claimStripeEvent: vi.fn(async () => ({ alreadyProcessed: false })),
+	completeStripeEvent: vi.fn(async () => {}),
+	dropStripeEvent: vi.fn(async () => {}),
+	releaseStripeEvent: vi.fn(async () => {}),
+	LEASE_MS: 60_000
+}));
+
 import { POST } from '../../../routes/api/stripe/webhook/+server';
 import { stripe } from '$lib/server/stripe';
+
+/** prod / dev 双方の plan_limits 実測値（2026-08-04） */
+const PLAN_LIMITS_FIXTURE: Record<string, number> = {
+	free: 1,
+	basic: 10,
+	standard: 30,
+	premium: 100
+};
+
+/**
+ * M-5: 組織 checkout は max_members を metadata ではなく plan_limits から引くようになった。
+ * その1回分の応答を from() のキュー先頭に積む。
+ * `.eq('plan_type', X)` の X を見て実際の上限値を返すので、テスト側で値を指定する必要はない。
+ */
+function queuePlanLimits() {
+	let planType = 'standard';
+	const single = vi.fn(async () => ({
+		data: { max_organization_members: PLAN_LIMITS_FIXTURE[planType] ?? 10 },
+		error: null
+	}));
+	const eq = vi.fn((_col: string, value: string) => {
+		planType = value;
+		return { single };
+	});
+	const select = vi.fn().mockReturnValue({ eq });
+	mockSupabaseClient.from.mockReturnValueOnce({ select } as any);
+}
 
 describe('Webhook署名検証（P0-1）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string | null, body: string = '{}') => {
@@ -146,6 +186,9 @@ describe('Webhook署名検証（P0-1）', () => {
 describe('livemode検証（T14）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -229,6 +272,9 @@ describe('livemode検証（T14）', () => {
 describe('Webhookエラー分類（P0-2）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -273,7 +319,8 @@ describe('Webhookエラー分類（P0-2）', () => {
 		mockSupabaseClient.from.mockReturnValue({
 			select: mockSelect,
 			eq: mockEq,
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		try {
@@ -334,7 +381,8 @@ describe('Webhookエラー分類（P0-2）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq1,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -511,6 +559,9 @@ describe('Webhookエラー分類（P0-2）', () => {
 describe('checkout.session.completed分岐（P0-3）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -551,12 +602,12 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 			id: 'sub_test_123',
 			customer: 'cus_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1643673600,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1643673600,
 						price: {
 							id: 'price_basic_month',
 							recurring: {
@@ -622,12 +673,12 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 			id: 'sub_test_123',
 			customer: 'cus_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1643673600,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1643673600,
 						price: {
 							id: 'price_standard_month',
 							recurring: {
@@ -649,6 +700,7 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 		const mockUpsert2 = vi.fn().mockResolvedValue({ data: null, error: null });
 		const mockUpsert3 = vi.fn().mockResolvedValue({ data: null, error: null });
 
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				// organizations upsert
@@ -668,7 +720,8 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 		} as any);
 
 		mockSelect.mockReturnValue({
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		const response = await POST(event);
@@ -716,12 +769,12 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 			id: 'sub_new_123',
 			customer: 'cus_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1643673600,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1643673600,
 						price: {
 							id: 'price_premium_month',
 							recurring: {
@@ -744,6 +797,7 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 
 		const mockUpsert = vi.fn().mockResolvedValue({ data: null, error: null });
 
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				// Clear old subscriptions: update().eq().in().neq()
@@ -820,6 +874,9 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 describe('Webhookべき等性（P0-4）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -862,12 +919,12 @@ describe('Webhookべき等性（P0-4）', () => {
 			id: 'sub_test_123',
 			customer: 'cus_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1643673600,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1643673600,
 						price: {
 							id: 'price_basic_month',
 							recurring: {
@@ -944,12 +1001,12 @@ describe('Webhookべき等性（P0-4）', () => {
 			id: 'sub_org_test_123',
 			customer: 'cus_org_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1643673600,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1643673600,
 						price: {
 							id: 'price_standard_month',
 							recurring: {
@@ -971,7 +1028,8 @@ describe('Webhookべき等性（P0-4）', () => {
 		const mockUpsert2 = vi.fn().mockResolvedValue({ data: null, error: null });
 		const mockUpsert3 = vi.fn().mockResolvedValue({ data: null, error: null });
 
-		// First execution (3 from() calls)
+		// First execution (plan_limits + 3 from() calls)
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				upsert: mockUpsert1
@@ -981,8 +1039,11 @@ describe('Webhookべき等性（P0-4）', () => {
 			} as any)
 			.mockReturnValueOnce({
 				upsert: mockUpsert3
-			} as any)
-			// Second execution (3 from() calls)
+			} as any);
+
+		// Second execution (plan_limits + 3 from() calls)
+		queuePlanLimits();
+		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				upsert: mockUpsert1
 			} as any)
@@ -998,7 +1059,8 @@ describe('Webhookべき等性（P0-4）', () => {
 		} as any);
 
 		mockSelect.mockReturnValue({
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		// First execution
@@ -1103,6 +1165,9 @@ describe('Webhookべき等性（P0-4）', () => {
 describe('重複配送の強化（T5）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -1128,12 +1193,12 @@ describe('重複配送の強化（T5）', () => {
 			id: 'sub_same_123',
 			customer: 'cus_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1672531200,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1672531200,
 						price: {
 							id: 'price_basic_month',
 							recurring: {
@@ -1239,12 +1304,12 @@ describe('重複配送の強化（T5）', () => {
 			id: 'sub_org_same_123',
 			customer: 'cus_org_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1672531200,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1672531200,
 						price: {
 							id: 'price_standard_month',
 							recurring: {
@@ -1293,12 +1358,16 @@ describe('重複配送の強化（T5）', () => {
 			return Promise.resolve({ data: null, error: null });
 		});
 
+		// First event (plan_limits + 3 from() calls)
+		queuePlanLimits();
 		mockSupabaseClient.from
-			// First event (3 from() calls)
 			.mockReturnValueOnce({ upsert: mockUpsert1 } as any)
 			.mockReturnValueOnce({ upsert: mockUpsert2 } as any)
-			.mockReturnValueOnce({ upsert: mockUpsert3 } as any)
-			// Second event (3 from() calls)
+			.mockReturnValueOnce({ upsert: mockUpsert3 } as any);
+
+		// Second event (plan_limits + 3 from() calls)
+		queuePlanLimits();
+		mockSupabaseClient.from
 			.mockReturnValueOnce({ upsert: mockUpsert1 } as any)
 			.mockReturnValueOnce({ upsert: mockUpsert2 } as any)
 			.mockReturnValueOnce({ upsert: mockUpsert3 } as any);
@@ -1408,6 +1477,9 @@ describe('重複配送の強化（T5）', () => {
 describe('DB部分失敗後の再実行収束（T6）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -1453,12 +1525,12 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 			id: 'sub_org_test_123',
 			customer: 'cus_org_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1672531200,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1672531200,
 						price: {
 							id: 'price_standard_month',
 							recurring: {
@@ -1483,6 +1555,7 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 		});
 		const mockUpsert3 = vi.fn().mockResolvedValue({ data: null, error: null });
 
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				upsert: mockUpsert1
@@ -1499,7 +1572,8 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 		} as any);
 
 		mockSelect.mockReturnValue({
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		// First execution (organization_members fails but processing continues)
@@ -1511,6 +1585,7 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 		expect(mockUpsert3).toHaveBeenCalledTimes(1);
 
 		// Second attempt: organization_members succeeds
+		queuePlanLimits();
 		const mockUpsert2Success = vi.fn().mockResolvedValue({ data: null, error: null });
 
 		mockSupabaseClient.from
@@ -1572,12 +1647,12 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 			id: 'sub_org_test_123',
 			customer: 'cus_org_test_123',
 			status: 'active',
-			current_period_start: 1640995200,
-			current_period_end: 1672531200,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1640995200,
+						current_period_end: 1672531200,
 						price: {
 							id: 'price_standard_month',
 							recurring: {
@@ -1602,6 +1677,7 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 			error: { message: 'Database connection error', code: 'CONNECTION_ERROR' }
 		});
 
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				upsert: mockUpsert1
@@ -1618,7 +1694,8 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 		} as any);
 
 		mockSelect.mockReturnValue({
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		// First execution should fail with RetryableError (500)
@@ -1635,6 +1712,7 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 		expect(mockUpsert2).toHaveBeenCalledTimes(1);
 
 		// Second attempt: subscriptions upsert succeeds
+		queuePlanLimits();
 		const mockUpsert3Success = vi.fn().mockResolvedValue({ data: null, error: null });
 
 		mockSupabaseClient.from
@@ -1668,6 +1746,9 @@ describe('DB部分失敗後の再実行収束（T6）', () => {
 describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -1722,7 +1803,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq1,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -1784,7 +1866,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq1,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -1830,7 +1913,12 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 			const callCount = mockSupabaseClient.from.mock.calls.length;
 			// Odd calls (1, 3): select
 			if (callCount % 2 === 1) {
-				return { select: mockSelect, eq: mockEq1, single: mockSingle } as any;
+				return {
+					select: mockSelect,
+					eq: mockEq1,
+					single: mockSingle,
+					maybeSingle: mockSingle
+				} as any;
 			}
 			// Even calls (2, 4): update
 			return { update: mockUpdate, eq: mockEq2 } as any;
@@ -1919,7 +2007,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq1,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -1980,7 +2069,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq1,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -2006,6 +2096,9 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 describe('customer.subscription.deleted分岐（P1-4）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -2069,7 +2162,8 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 				// subscriptions select for organization_id
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				// subscriptions update
@@ -2080,13 +2174,15 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 				// organizations select for current stripe_subscription_id
 				select: mockSelect2,
 				eq: mockEq3,
-				single: mockSingle2
+				single: mockSingle2,
+				maybeSingle: mockSingle2
 			} as any)
 			.mockReturnValueOnce({
 				// plan_limits select
 				select: mockSelect3,
 				eq: mockEq4,
-				single: mockSingle3
+				single: mockSingle3,
+				maybeSingle: mockSingle3
 			} as any)
 			.mockReturnValueOnce({
 				// organizations update
@@ -2095,12 +2191,12 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 			} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 		mockUpdate1.mockReturnValue({ eq: mockEq2 } as any);
 		mockSelect2.mockReturnValue({ eq: mockEq3 } as any);
-		mockEq3.mockReturnValue({ single: mockSingle2 } as any);
+		mockEq3.mockReturnValue({ single: mockSingle2, maybeSingle: mockSingle2 } as any);
 		mockSelect3.mockReturnValue({ eq: mockEq4 } as any);
-		mockEq4.mockReturnValue({ single: mockSingle3 } as any);
+		mockEq4.mockReturnValue({ single: mockSingle3, maybeSingle: mockSingle3 } as any);
 		mockUpdate2.mockReturnValue({ eq: mockEq5 } as any);
 
 		const response = await POST(event);
@@ -2163,7 +2259,8 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 				// subscriptions select for organization_id
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				// subscriptions update
@@ -2174,14 +2271,15 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 				// organizations select for current stripe_subscription_id
 				select: mockSelect2,
 				eq: mockEq3,
-				single: mockSingle2
+				single: mockSingle2,
+				maybeSingle: mockSingle2
 			} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 		mockUpdate1.mockReturnValue({ eq: mockEq2 } as any);
 		mockSelect2.mockReturnValue({ eq: mockEq3 } as any);
-		mockEq3.mockReturnValue({ single: mockSingle2 } as any);
+		mockEq3.mockReturnValue({ single: mockSingle2, maybeSingle: mockSingle2 } as any);
 
 		const response = await POST(event);
 
@@ -2246,7 +2344,8 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -2255,12 +2354,14 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect2,
 				eq: mockEq3,
-				single: mockSingle2
+				single: mockSingle2,
+				maybeSingle: mockSingle2
 			} as any)
 			.mockReturnValueOnce({
 				select: mockSelect3,
 				eq: mockEq4,
-				single: mockSingle3
+				single: mockSingle3,
+				maybeSingle: mockSingle3
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate2,
@@ -2268,12 +2369,12 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 			} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 		mockUpdate1.mockReturnValue({ eq: mockEq2 } as any);
 		mockSelect2.mockReturnValue({ eq: mockEq3 } as any);
-		mockEq3.mockReturnValue({ single: mockSingle2 } as any);
+		mockEq3.mockReturnValue({ single: mockSingle2, maybeSingle: mockSingle2 } as any);
 		mockSelect3.mockReturnValue({ eq: mockEq4 } as any);
-		mockEq4.mockReturnValue({ single: mockSingle3 } as any);
+		mockEq4.mockReturnValue({ single: mockSingle3, maybeSingle: mockSingle3 } as any);
 		mockUpdate2.mockReturnValue({ eq: mockEq5 } as any);
 
 		const response1 = await POST(event);
@@ -2318,7 +2419,8 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect4,
 				eq: mockEq6,
-				single: mockSingle4
+				single: mockSingle4,
+				maybeSingle: mockSingle4
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate3,
@@ -2326,7 +2428,7 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 			} as any);
 
 		mockSelect4.mockReturnValue({ eq: mockEq6 } as any);
-		mockEq6.mockReturnValue({ single: mockSingle4 } as any);
+		mockEq6.mockReturnValue({ single: mockSingle4, maybeSingle: mockSingle4 } as any);
 		mockUpdate3.mockReturnValue({ eq: mockEq7 } as any);
 
 		const response2 = await POST(event);
@@ -2350,9 +2452,12 @@ describe('customer.subscription.deleted分岐（P1-4）', () => {
 describe('checkout.session.completed metadata検証（T1）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
-	it('is_organizationが欠落している場合は400を返す（T1）', async () => {
+	it('is_organizationが欠落している場合は200で破棄する（T1 / M-1）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2380,16 +2485,16 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 			}
 		});
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('is_organization');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// （Stripe は 2xx 以外を 4xx/5xx の区別なく最大3日間再送するため）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('is_organization');
 	});
 
-	it('is_organizationが不正値の場合は400を返す（T1）', async () => {
+	it('is_organizationが不正値の場合は200で破棄する（T1 / M-1）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2417,16 +2522,16 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 			}
 		});
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('is_organization');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// （Stripe は 2xx 以外を 4xx/5xx の区別なく最大3日間再送するため）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('is_organization');
 	});
 
-	it('subscriptionがnullの場合は400を返す（T15）', async () => {
+	it('subscriptionがnullの場合は200で破棄する（T15 / M-1）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2454,20 +2559,21 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 			}
 		});
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			// T15: subscription欠落時はNonRetryableErrorで400を返す
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('Subscription ID');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// T15: subscription欠落は再送しても成功しないので200で破棄
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('Subscription ID');
 
 		// T15: DB更新が呼ばれていないことを確認
 		expect(mockSupabaseClient.from).not.toHaveBeenCalled();
 	});
 
-	it('組織作成でmax_membersが数値変換不可の場合は400を返す（T1）', async () => {
+	// M-5: metadata の max_members は使わなくなったため、値が壊れていても処理は継続し、
+	// 上限は plan_limits から取得される（かつては 400 で弾いていた）。
+	it('組織作成でmax_membersが数値変換不可でも plan_limits の値で処理される（M-5）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2507,7 +2613,7 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 				data: [
 					{
 						price: {
-							id: 'price_test_standard_month',
+							id: 'price_standard_month',
 							recurring: { interval: 'month' }
 						}
 					}
@@ -2515,16 +2621,35 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('max_members');
-		}
+		// plan_limits 参照 → organizations / organization_members / subscriptions への書き込み
+		const mockOrgUpsert = vi.fn().mockReturnValue({
+			select: vi.fn().mockReturnValue({
+				single: vi.fn().mockResolvedValue({ data: { id: 'org_1' }, error: null })
+			})
+		});
+		queuePlanLimits();
+		mockSupabaseClient.from
+			.mockReturnValueOnce({ upsert: mockOrgUpsert } as any)
+			.mockReturnValueOnce({
+				upsert: vi.fn().mockResolvedValue({ data: null, error: null })
+			} as any)
+			.mockReturnValueOnce({
+				upsert: vi.fn().mockResolvedValue({ data: null, error: null })
+			} as any);
+
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		// metadata が壊れていても破棄されない（plan_limits を正とするため）
+		expect(body.dropped).toBeUndefined();
+		// 上限は metadata ではなく plan_limits の standard=30
+		expect(mockOrgUpsert).toHaveBeenCalledWith(
+			expect.objectContaining({ max_members: 30 }),
+			expect.any(Object)
+		);
 	});
 
-	it('組織作成でis_upgradeが不正値の場合は400を返す（T1）', async () => {
+	it('組織作成でis_upgradeが不正値の場合は200で破棄する（T1 / M-1）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2565,7 +2690,7 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 				data: [
 					{
 						price: {
-							id: 'price_test_standard_month',
+							id: 'price_standard_month',
 							recurring: { interval: 'month' }
 						}
 					}
@@ -2573,16 +2698,16 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('is_upgrade');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// （Stripe は 2xx 以外を 4xx/5xx の区別なく最大3日間再送するため）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('is_upgrade');
 	});
 
-	it('組織作成でorganization_nameが欠落している場合は400を返す（T1）', async () => {
+	it('組織作成でorganization_nameが欠落している場合は200で破棄する（T1 / M-1）', async () => {
 		const event = {
 			request: new Request('http://localhost/api/stripe/webhook', {
 				method: 'POST',
@@ -2623,7 +2748,7 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 				data: [
 					{
 						price: {
-							id: 'price_test_standard_month',
+							id: 'price_standard_month',
 							recurring: { interval: 'month' }
 						}
 					}
@@ -2631,19 +2756,22 @@ describe('checkout.session.completed metadata検証（T1）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('organization_name');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// （Stripe は 2xx 以外を 4xx/5xx の区別なく最大3日間再送するため）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('organization_name');
 	});
 });
 
 describe('Price ID防御（T2）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	it('未知のprice IDの場合は500を返す（T2）', async () => {
@@ -2769,6 +2897,9 @@ describe('Price ID防御（T2）', () => {
 describe('Webhook順序逆転時の最終整合性（T4）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	it('subscription.deleted → checkout.session.completed の逆順到着で最終状態が正しい（T4）', async () => {
@@ -2843,6 +2974,9 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 
 		// Step 2: customer.subscription.deleted (old subscription, arrives late)
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 
 		const mockSelect1 = vi.fn().mockReturnThis();
 		const mockEq1 = vi.fn().mockReturnThis();
@@ -2856,7 +2990,7 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 		} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 
 		(stripe.webhooks.constructEvent as any).mockReturnValue({
 			id: 'evt_deleted_123',
@@ -2900,6 +3034,7 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 		const mockUpsert2 = vi.fn().mockResolvedValue({ data: null, error: null });
 		const mockUpsert3 = vi.fn().mockResolvedValue({ data: null, error: null });
 
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({
 				upsert: mockUpsert1
@@ -2916,7 +3051,8 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 		} as any);
 
 		mockSelect.mockReturnValue({
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		(stripe.webhooks.constructEvent as any).mockReturnValue({
@@ -2985,6 +3121,9 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 
 		// Step 2: customer.subscription.deleted (old subscription, arrives late)
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 
 		const mockSelect1 = vi.fn().mockReturnThis();
 		const mockEq1 = vi.fn().mockReturnThis();
@@ -2998,7 +3137,7 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 		} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 
 		(stripe.webhooks.constructEvent as any).mockReturnValue({
 			id: 'evt_deleted_org_123',
@@ -3035,6 +3174,9 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 describe('is_upgrade=true + organization_id欠落防御（T9）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -3049,7 +3191,7 @@ describe('is_upgrade=true + organization_id欠落防御（T9）', () => {
 		} as unknown as Request;
 	};
 
-	it('is_upgrade=trueかつorganization_id欠落の場合は400を返す（T9）', async () => {
+	it('is_upgrade=trueかつorganization_id欠落の場合は200で破棄する（T9 / M-1）', async () => {
 		const event = {
 			request: createMockRequest('valid_signature', 'webhook_body'),
 			locals: { supabase: mockSupabaseClient }
@@ -3093,13 +3235,13 @@ describe('is_upgrade=true + organization_id欠落防御（T9）', () => {
 			}
 		} as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('organization_id');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// （Stripe は 2xx 以外を 4xx/5xx の区別なく最大3日間再送するため）
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('organization_id');
 
 		// T9: Verify no database operations were performed
 		expect(mockSupabaseClient.from).not.toHaveBeenCalled();
@@ -3159,13 +3301,14 @@ describe('is_upgrade=true + organization_id欠落防御（T9）', () => {
 		const mockUpsert2 = vi.fn().mockResolvedValue({ data: null, error: null });
 		const mockUpsert3 = vi.fn().mockResolvedValue({ data: null, error: null });
 
+		queuePlanLimits();
 		mockSupabaseClient.from
 			.mockReturnValueOnce({ upsert: mockUpsert1 } as any)
 			.mockReturnValueOnce({ upsert: mockUpsert2 } as any)
 			.mockReturnValueOnce({ upsert: mockUpsert3 } as any);
 
 		mockUpsert1.mockReturnValue({ select: mockSelect } as any);
-		mockSelect.mockReturnValue({ single: mockSingle } as any);
+		mockSelect.mockReturnValue({ single: mockSingle, maybeSingle: mockSingle } as any);
 
 		const response = await POST(event);
 
@@ -3176,7 +3319,8 @@ describe('is_upgrade=true + organization_id欠落防御（T9）', () => {
 			expect.objectContaining({
 				name: 'Test Org',
 				plan_type: 'standard',
-				max_members: 10
+				// M-5: metadata の 10 ではなく plan_limits（standard=30）が使われる
+				max_members: 30
 			}),
 			expect.any(Object)
 		);
@@ -3186,6 +3330,9 @@ describe('is_upgrade=true + organization_id欠落防御（T9）', () => {
 describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -3436,7 +3583,8 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 		mockSupabaseClient.from.mockReturnValue({
 			select: mockSelect,
 			eq: mockEq,
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		try {
@@ -3492,7 +3640,8 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 		mockSupabaseClient.from.mockReturnValue({
 			select: mockSelect,
 			eq: mockEq,
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		try {
@@ -3550,7 +3699,8 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 		mockSupabaseClient.from.mockReturnValue({
 			select: mockSelect,
 			eq: mockEq,
-			single: mockSingle
+			single: mockSingle,
+			maybeSingle: mockSingle
 		} as any);
 
 		try {
@@ -3573,6 +3723,9 @@ describe('Stripe Subscriptionレスポンス異常データ防御（T10）', () 
 describe('Webhookリプレイ耐性（T13）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -3627,7 +3780,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1a,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -3678,7 +3832,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		mockSupabaseClient.from.mockReturnValueOnce({
 			select: mockSelect2,
 			eq: mockEq2,
-			single: mockSingle2
+			single: mockSingle2,
+			maybeSingle: mockSingle2
 		} as any);
 
 		// Process second event (old payment_failed)
@@ -3717,7 +3872,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 						data: [
 							{
 								price: {
-									id: 'price_1SPHvrIsuW568CJsBsRymAvZ', // Pro plan
+									id: 'price_premium_month', // Premium plan
 									recurring: { interval: 'month' }
 								}
 							}
@@ -3745,7 +3900,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -3757,7 +3913,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		expect(response1.status).toBe(200);
 		expect(mockUpdate1).toHaveBeenCalledWith(
 			expect.objectContaining({
-				plan_type: 'pro',
+				plan_type: 'premium',
 				status: 'active',
 				current_period_end: '2023-02-01T00:00:00.000Z'
 			})
@@ -3803,7 +3959,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		mockSupabaseClient.from.mockReturnValueOnce({
 			select: mockSelect2,
 			eq: mockEq2,
-			single: mockSingle2
+			single: mockSingle2,
+			maybeSingle: mockSingle2
 		} as any);
 
 		// Process second event (old update) - should not override newer state
@@ -3866,7 +4023,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -3875,7 +4033,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect2,
 				eq: mockEq2,
-				single: mockSingle2
+				single: mockSingle2,
+				maybeSingle: mockSingle2
 			} as any);
 
 		const response = await POST(event);
@@ -3930,7 +4089,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -3979,7 +4139,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect2,
 				eq: mockEq2,
-				single: mockSingle2
+				single: mockSingle2,
+				maybeSingle: mockSingle2
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate2,
@@ -4021,7 +4182,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 						data: [
 							{
 								price: {
-									id: 'price_1SPHvrIsuW568CJsBsRymAvZ', // Pro plan
+									id: 'price_premium_month', // Premium plan
 									recurring: { interval: 'month' }
 								}
 							}
@@ -4050,7 +4211,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -4064,7 +4226,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		expect(mockSelect).toHaveBeenCalled();
 		expect(mockUpdate).toHaveBeenCalledWith(
 			expect.objectContaining({
-				plan_type: 'pro',
+				plan_type: 'premium',
 				status: 'active',
 				current_period_end: new Date(SAME_PERIOD_END * 1000).toISOString(),
 				cancel_at_period_end: true // Updated to true
@@ -4094,7 +4256,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 						data: [
 							{
 								price: {
-									id: 'price_1SPHvrIsuW568CJsBsRymAvZ', // Changed to Pro plan
+									id: 'price_premium_month', // Changed to Premium plan
 									recurring: { interval: 'month' }
 								}
 							}
@@ -4123,7 +4285,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -4137,7 +4300,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		expect(mockSelect).toHaveBeenCalled();
 		expect(mockUpdate).toHaveBeenCalledWith(
 			expect.objectContaining({
-				plan_type: 'pro', // Changed from standard to pro
+				plan_type: 'premium', // Changed from standard to premium
 				status: 'active',
 				current_period_end: new Date(SAME_PERIOD_END * 1000).toISOString()
 			})
@@ -4188,7 +4351,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -4233,7 +4397,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		mockSupabaseClient.from.mockReturnValueOnce({
 			select: mockSelect2,
 			eq: mockEq2,
-			single: mockSingle2
+			single: mockSingle2,
+			maybeSingle: mockSingle2
 		} as any);
 
 		const response2 = await POST(event);
@@ -4267,7 +4432,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 						data: [
 							{
 								price: {
-									id: 'price_1SPHvrIsuW568CJsBsRymAvZ', // Pro plan
+									id: 'price_premium_month', // Premium plan
 									recurring: { interval: 'month' }
 								}
 							}
@@ -4299,7 +4464,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -4326,7 +4492,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 						data: [
 							{
 								price: {
-									id: 'price_1SPHvrIsuW568CJsBsRymAvZ', // SAME Pro plan
+									id: 'price_premium_month', // SAME Premium plan
 									recurring: { interval: 'month' } // SAME
 								}
 							}
@@ -4345,7 +4511,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 				current_period_end: new Date(SAME_PERIOD_END * 1000).toISOString(), // SAME
 				status: 'active', // SAME
 				cancel_at_period_end: false, // SAME
-				plan_type: 'pro', // SAME as event (updated by first event)
+				plan_type: 'premium', // SAME as event (updated by first event)
 				billing_interval: 'month' // SAME
 			},
 			error: null
@@ -4354,7 +4520,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		mockSupabaseClient.from.mockReturnValueOnce({
 			select: mockSelect2,
 			eq: mockEq2,
-			single: mockSingle2
+			single: mockSingle2,
+			maybeSingle: mockSingle2
 		} as any);
 
 		const response2 = await POST(event);
@@ -4405,7 +4572,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -4449,7 +4617,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		mockSupabaseClient.from.mockReturnValueOnce({
 			select: mockSelect2,
 			eq: mockEq2,
-			single: mockSingle2
+			single: mockSingle2,
+			maybeSingle: mockSingle2
 		} as any);
 
 		const response2 = await POST(event);
@@ -4505,7 +4674,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect1,
 				eq: mockEq1,
-				single: mockSingle1
+				single: mockSingle1,
+				maybeSingle: mockSingle1
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate1,
@@ -4548,7 +4718,8 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		mockSupabaseClient.from.mockReturnValueOnce({
 			select: mockSelect2,
 			eq: mockEq2,
-			single: mockSingle2
+			single: mockSingle2,
+			maybeSingle: mockSingle2
 		} as any);
 
 		const response2 = await POST(event);
@@ -4564,6 +4735,9 @@ describe('Webhookリプレイ耐性（T13）', () => {
 describe('plan_limits欠落時のエラー処理（T17）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -4578,7 +4752,7 @@ describe('plan_limits欠落時のエラー処理（T17）', () => {
 		} as unknown as Request;
 	};
 
-	it('subscription.updated（組織プラン変更）時にplan_limitsが見つからない場合は400を返す（T17）', async () => {
+	it('subscription.updated（組織プラン変更）時にplan_limitsが見つからない場合は200で破棄する（T17 / M-1）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
 		const event = { request } as any;
 
@@ -4634,27 +4808,36 @@ describe('plan_limits欠落時のエラー処理（T17）', () => {
 		});
 
 		mockSupabaseClient.from
-			.mockReturnValueOnce({ select: mockSelect1, eq: mockEq1, single: mockSingle1 } as any)
+			.mockReturnValueOnce({
+				select: mockSelect1,
+				eq: mockEq1,
+				single: mockSingle1,
+				maybeSingle: mockSingle1
+			} as any)
 			.mockReturnValueOnce({ update: mockUpdate1, eq: mockEq2 } as any)
-			.mockReturnValueOnce({ select: mockSelect2, eq: mockEq3, single: mockSingle2 } as any);
+			.mockReturnValueOnce({
+				select: mockSelect2,
+				eq: mockEq3,
+				single: mockSingle2,
+				maybeSingle: mockSingle2
+			} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 		mockUpdate1.mockReturnValue({ eq: mockEq2 } as any);
 		mockSelect2.mockReturnValue({ eq: mockEq3 } as any);
-		mockEq3.mockReturnValue({ single: mockSingle2 } as any);
+		mockEq3.mockReturnValue({ single: mockSingle2, maybeSingle: mockSingle2 } as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			// T17: plan_limits欠落はNonRetryableError(400)
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('plan_limits');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// T17: plan_limits欠落は再送しても成功しないので200で破棄
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('plan_limits');
 	});
 
-	it('subscription.deleted（組織降格）時にplan_limitsが見つからない場合は400を返す（T17）', async () => {
+	it('subscription.deleted（組織降格）時にplan_limitsが見つからない場合は200で破棄する（T17 / M-1）', async () => {
 		const request = createMockRequest('valid_signature', 'webhook_body');
 		const event = { request } as any;
 
@@ -4695,33 +4878,50 @@ describe('plan_limits欠落時のエラー処理（T17）', () => {
 		});
 
 		mockSupabaseClient.from
-			.mockReturnValueOnce({ select: mockSelect1, eq: mockEq1, single: mockSingle1 } as any)
+			.mockReturnValueOnce({
+				select: mockSelect1,
+				eq: mockEq1,
+				single: mockSingle1,
+				maybeSingle: mockSingle1
+			} as any)
 			.mockReturnValueOnce({ update: mockUpdate1, eq: mockEq2 } as any)
-			.mockReturnValueOnce({ select: mockSelect2, eq: mockEq3, single: mockSingle2 } as any)
-			.mockReturnValueOnce({ select: mockSelect3, eq: mockEq4, single: mockSingle3 } as any);
+			.mockReturnValueOnce({
+				select: mockSelect2,
+				eq: mockEq3,
+				single: mockSingle2,
+				maybeSingle: mockSingle2
+			} as any)
+			.mockReturnValueOnce({
+				select: mockSelect3,
+				eq: mockEq4,
+				single: mockSingle3,
+				maybeSingle: mockSingle3
+			} as any);
 
 		mockSelect1.mockReturnValue({ eq: mockEq1 } as any);
-		mockEq1.mockReturnValue({ single: mockSingle1 } as any);
+		mockEq1.mockReturnValue({ single: mockSingle1, maybeSingle: mockSingle1 } as any);
 		mockUpdate1.mockReturnValue({ eq: mockEq2 } as any);
 		mockSelect2.mockReturnValue({ eq: mockEq3 } as any);
-		mockEq3.mockReturnValue({ single: mockSingle2 } as any);
+		mockEq3.mockReturnValue({ single: mockSingle2, maybeSingle: mockSingle2 } as any);
 		mockSelect3.mockReturnValue({ eq: mockEq4 } as any);
-		mockEq4.mockReturnValue({ single: mockSingle3 } as any);
+		mockEq4.mockReturnValue({ single: mockSingle3, maybeSingle: mockSingle3 } as any);
 
-		try {
-			await POST(event);
-			expect.fail('Expected NonRetryableError');
-		} catch (err: any) {
-			// T17: plan_limits欠落はNonRetryableError(400)
-			expect(err.status).toBe(400);
-			expect(err.body?.message).toContain('plan_limits');
-		}
+		// M-1: 再送しても永久に成功しないイベントは 200 で破棄する
+		// T17: plan_limits欠落は再送しても成功しないので200で破棄
+		const response = await POST(event);
+		expect(response.status).toBe(200);
+		const body = await response.json();
+		expect(body.dropped).toBe(true);
+		expect(body.reason).toContain('plan_limits');
 	});
 });
 
 describe('Stripe API一時障害後の再送回復（T18）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -4799,7 +4999,8 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 			.mockReturnValueOnce({
 				select: mockSelect,
 				eq: mockEq,
-				single: mockSingle
+				single: mockSingle,
+				maybeSingle: mockSingle
 			} as any)
 			.mockReturnValueOnce({
 				update: mockUpdate,
@@ -4807,7 +5008,7 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 			} as any);
 
 		mockSelect.mockReturnValue({ eq: mockEq } as any);
-		mockEq.mockReturnValue({ single: mockSingle } as any);
+		mockEq.mockReturnValue({ single: mockSingle, maybeSingle: mockSingle } as any);
 		mockUpdate.mockReturnValue({ eq: mockEq2 } as any);
 
 		const response = await POST(event);
@@ -4880,12 +5081,12 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 			id: 'sub_test_456',
 			customer: 'cus_test_456',
 			status: 'active',
-			current_period_start: 1672531200,
-			current_period_end: 1675209600,
 			cancel_at_period_end: false,
 			items: {
 				data: [
 					{
+						current_period_start: 1672531200,
+						current_period_end: 1675209600,
 						price: {
 							id: 'price_standard_month',
 							recurring: { interval: 'month' }
@@ -4926,6 +5127,9 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 describe('組織アップグレード時の旧サブスクリプション解約（SEC-1）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -4996,11 +5200,11 @@ describe('組織アップグレード時の旧サブスクリプション解約�
 			id: 'sub_new_1',
 			status: 'active',
 			cancel_at_period_end: false,
-			current_period_start: 1750000000,
-			current_period_end: 1752600000,
 			items: {
 				data: [
 					{
+						current_period_start: 1750000000,
+						current_period_end: 1752600000,
 						id: 'si_new_1',
 						price: {
 							id: 'price_standard_month',
@@ -5011,8 +5215,12 @@ describe('組織アップグレード時の旧サブスクリプション解約�
 			}
 		} as any);
 
-		// DB操作（旧サブスククリア→org更新→新サブスクupsert）はすべて成功
-		mockSupabaseClient.from.mockImplementation(() => createChainMock({ data: null, error: null }));
+		// DB操作（plan_limits参照→旧サブスククリア→org更新→新サブスクupsert）はすべて成功
+		mockSupabaseClient.from.mockImplementation((table: string) =>
+			table === 'plan_limits'
+				? createChainMock({ data: { max_organization_members: 30 }, error: null })
+				: createChainMock({ data: null, error: null })
+		);
 	};
 
 	it('アップグレード完了時、旧Stripeサブスクリプションのみを解約する', async () => {
@@ -5104,6 +5312,9 @@ describe('組織アップグレード時の旧サブスクリプション解約�
 describe('非同期決済ガード（SEC-1b: incomplete時は旧サブスクを解約しない）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		// mockReturnValueOnce のキューは clearAllMocks では消えない。
+		// 消さないと、あるテストが消費しなかった分が後続テストへ漏れて連鎖的に落ちる。
+		mockSupabaseClient.from.mockReset();
 	});
 
 	const createMockRequest = (signature: string, body: string = '{}') => {
@@ -5171,11 +5382,11 @@ describe('非同期決済ガード（SEC-1b: incomplete時は旧サブスクを�
 			id: 'sub_new_1',
 			status: 'incomplete',
 			cancel_at_period_end: false,
-			current_period_start: 1750000000,
-			current_period_end: 1752600000,
 			items: {
 				data: [
 					{
+						current_period_start: 1750000000,
+						current_period_end: 1752600000,
 						id: 'si_new_1',
 						price: { id: 'price_standard_month', recurring: { interval: 'month' } }
 					}
