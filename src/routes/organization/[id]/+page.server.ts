@@ -103,10 +103,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	} | null = null;
 
 	if (userRole === 'admin' && locals.supabaseAdmin) {
+		// ⚠️ 1組織 = 1行を前提にしないこと。再契約すると解約済みの履歴が残り複数行になる。
+		// PostgREST の maybeSingle() は複数行でもエラーになるため、前提を置くと
+		// 履歴が増えた瞬間にバッジが黙って消える（H-1 と同じ罠）。新しい1件に絞ってから取る。
 		const { data: sub, error: subError } = await locals.supabaseAdmin
 			.from('subscriptions')
 			.select('status, cancel_at_period_end, current_period_end')
 			.eq('organization_id', organizationId)
+			.order('created_at', { ascending: false })
+			.limit(1)
 			.maybeSingle();
 
 		if (subError) {

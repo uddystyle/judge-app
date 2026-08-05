@@ -1,0 +1,16 @@
+-- ============================================================================
+-- Rollback 1032: subscriptions.organization_id を NOT NULL に戻す
+-- ============================================================================
+-- ⚠️ **戻すと解約もアップグレードも本番で失敗する状態に逆戻りする**。
+--    handleSubscriptionDeleted / handleOrganizationCheckout は organization_id に
+--    null を書くため、NOT NULL 違反 → 500 → Stripe が3日間再送して全滅する。
+--    外部キーの ON DELETE SET NULL も働けなくなり、サブスクリプション行が残る組織は
+--    削除できなくなる。通常は戻さないこと。
+--
+-- ⚠️ 実行前に organization_id が NULL の行が無いことを確認する（あると失敗する）:
+--      select count(*) from subscriptions where organization_id is null;
+-- ============================================================================
+
+-- BEGIN;
+-- ALTER TABLE public.subscriptions ALTER COLUMN organization_id SET NOT NULL;
+-- COMMIT;

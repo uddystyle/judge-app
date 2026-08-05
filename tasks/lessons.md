@@ -1212,3 +1212,14 @@ if (guestIdentifier) {
 - 「API が成功した＝入金された」ではない。課金系は必ず戻り値の `status` を確認する。
 - ただし門番は**権限が上がる方向にだけ**掛ける。支払いが滞っている顧客の「格下げ」まで止めると、不利益なうえ売上回収にも逆行する。判定は「請求が発生する経路か」で分ける。
 - 検証はテストモードで実物を叩く。`tok_chargeCustomerFail` で「以後の請求が必ず失敗する顧客」を作れる。
+
+### ✅ DB制約とコードの前提のズレは、実DBに当てるまで検出できない
+**Rule**: null を書く／特定の値を書くコードがあるなら、その列の **NOT NULL・CHECK・FK の実定義**を実DBで確認する。Supabase をモックするユニットテストは**制約違反を一切検出しない**ため、テストが全部緑でも本番で落ちる。とくに「FK の ON DELETE 挙動」と「列の NULL 許容」は**同時に見る**（矛盾していることがある）。
+
+**Why**: `subscriptions.organization_id` が **NOT NULL** なのに、外部キーは **ON DELETE SET NULL** という自己矛盾した定義だった。そのうえ本番コードは紐付けを外すため2箇所で `organization_id: null` を書く（解約 `handleSubscriptionDeleted`、アップグレード時の旧サブスク切り離し `handleOrganizationCheckout`）。どちらも NOT NULL 違反 → RetryableError → 500 → Stripe が3日間再送して全滅し、**解約もアップグレードも DB に反映されない**。サブスクリプション行が残る組織は ON DELETE SET NULL が働けず削除もできなかった。1000本以上のユニットテストが緑のまま、この欠陥は残り続けていた。発覚したのは、無関係な一回限りのデータ修正 SQL を実行して NOT NULL 違反が出たときで、**偶然**である。
+
+**How to apply**:
+- 「コードが書く値」と「列の定義」を突き合わせる監査を、CHECK だけでなく **NOT NULL と FK** にも広げる。`grep -rn "column_name: null" src/` で null を書く箇所を洗い、その列の `is_nullable` を実DBで引く。
+- FK の `ON DELETE SET NULL` は「その列が NULL 許容であること」を要求する。片方だけ見ると矛盾を見逃す。`information_schema.columns` と `pg_constraint` は必ずセットで確認する。
+- モックしたテストで担保できるのは「アプリがどう振る舞うつもりか」だけ。「DBが受け付けるか」は別問題として、実DBに対する検証SQL（`verify/`）で押さえる。
+- 一回限りのデータ修正 SQL は**トランザクションで囲む**。今回は BEGIN/COMMIT で囲んでいたため、途中で失敗しても中途半端な状態が残らなかった。

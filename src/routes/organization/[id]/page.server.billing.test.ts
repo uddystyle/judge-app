@@ -129,3 +129,41 @@ describe('organization/[id] load の課金状態', () => {
 		expect(result.organization.plan_type).toBe('premium');
 	});
 });
+
+/**
+ * 組織に複数の subscriptions 行がある状況（過去の解約済み + 現在の契約）でも壊れないこと。
+ *
+ * ⚠️ H-1 と同じ罠。PostgREST の maybeSingle() は**複数行でもエラー**になるため、
+ * 「1組織 = 1行」を前提にすると、再契約して履歴が増えた瞬間にバッジが黙って消える。
+ */
+describe('subscriptions が複数行ある組織', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockGetActiveOrgRole.mockResolvedValue('admin');
+	});
+
+	it('複数行でも最新の1件を採用する（黙って消えない）', async () => {
+		// 新しい順に並べた1件だけが返る想定のモック
+		const admin = {
+			from: vi.fn(() =>
+				chain({
+					data: {
+						status: 'past_due',
+						cancel_at_period_end: false,
+						current_period_end: '2026-09-02T00:00:00Z'
+					},
+					error: null
+				})
+			)
+		};
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const result: any = await load(makeEvent(admin));
+
+		expect(result.billing).toMatchObject({ status: 'past_due' });
+		// 単一行を前提にせず、新しい順に絞り込んでから取得していること
+		const builder = admin.from.mock.results[0].value;
+		expect(builder.order).toHaveBeenCalled();
+		expect(builder.limit).toHaveBeenCalledWith(1);
+	});
+});
