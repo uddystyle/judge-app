@@ -61,6 +61,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			// メンバーシップとプロフィールを結合
 			members = membershipsData.map((membership: any) => ({
 				id: membership.id,
+				user_id: membership.user_id,
 				role: membership.role,
 				joined_at: membership.joined_at,
 				profiles: profilesData?.find((p: any) => p.id === membership.user_id) || null
@@ -69,16 +70,29 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	// 組織の有効な招待を取得（管理者のみ）
-	let invitations = [];
+	let invitations: Array<{
+		id: string;
+		role: string;
+		email: string | null;
+		expires_at: string;
+		max_uses: number | null;
+		used_count: number;
+		created_at: string;
+		revoked_at: string | null;
+	}> = [];
 	if (userRole === 'admin') {
 		const { data: invitationsData } = await locals.supabase
 			.from('invitations')
-			.select('*')
+			.select('id, role, email, expires_at, max_uses, used_count, created_at, revoked_at')
 			.eq('organization_id', organizationId)
+			.is('revoked_at', null)
 			.gt('expires_at', new Date().toISOString())
 			.order('created_at', { ascending: false });
 
-		invitations = invitationsData || [];
+		invitations = (invitationsData || []).filter(
+			(invitation: any) =>
+				invitation.max_uses === null || invitation.used_count < invitation.max_uses
+		);
 	}
 
 	// ユーザーのプロフィール情報を取得

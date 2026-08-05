@@ -87,6 +87,7 @@
 	let inviteUrl = '';
 	let copiedInvite = false;
 	let copiedInviteCode = false;
+	let revokingInvitationId: string | null = null;
 
 	// メンバー削除用の状態
 	let showDeleteConfirm = false;
@@ -159,6 +160,28 @@
 				alert('コピーに失敗しました');
 			}
 		);
+	}
+
+	async function revokeInvitation(invitationId: string) {
+		if (revokingInvitationId) return;
+		revokingInvitationId = invitationId;
+
+		try {
+			const response = await fetch(`/api/invitations/${invitationId}/revoke`, {
+				method: 'POST'
+			});
+			const result = await response.json();
+
+			if (!response.ok) {
+				throw new Error(result.error || '招待の失効に失敗しました');
+			}
+
+			location.reload();
+		} catch (err: any) {
+			alert(err.message || '招待の失効に失敗しました');
+		} finally {
+			revokingInvitationId = null;
+		}
 	}
 
 	function confirmDeleteMember(member: any) {
@@ -413,6 +436,36 @@
 							</button>
 						</div>
 						<p class="expire-text">有効期限: 48時間</p>
+					{/if}
+
+					{#if data.invitations.length > 0}
+						<div class="active-invitations">
+							<h3 class="active-invitations-title">有効な招待</h3>
+							<div class="active-invitations-list">
+								{#each data.invitations as invitation}
+									<div class="active-invitation-row">
+										<div class="active-invitation-info">
+											<span class="role-badge" class:admin={invitation.role === 'admin'}>
+												{roleNames[invitation.role]}
+											</span>
+											<span class="joined-date">
+												期限: {formatDate(invitation.expires_at)}
+											</span>
+											<span class="joined-date">
+												使用: {invitation.used_count}/{invitation.max_uses ?? '無制限'}
+											</span>
+										</div>
+										<button
+											class="revoke-invite-btn"
+											on:click={() => revokeInvitation(invitation.id)}
+											disabled={revokingInvitationId === invitation.id}
+										>
+											{revokingInvitationId === invitation.id ? '失効中...' : '失効'}
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
 					{/if}
 				</div>
 			{/if}
@@ -682,6 +735,53 @@
 		background: var(--bg-secondary);
 		border-radius: 12px;
 		border: 2px solid var(--border-light);
+	}
+	.active-invitations {
+		margin-top: 24px;
+		border-top: 1px solid var(--border-light);
+		padding-top: 20px;
+	}
+	.active-invitations-title {
+		margin: 0 0 12px;
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.active-invitations-list {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.active-invitation-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 10px 12px;
+		background: var(--bg-primary);
+		border: 1px solid var(--border-light);
+		border-radius: 8px;
+	}
+	.active-invitation-info {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+	.revoke-invite-btn {
+		padding: 6px 12px;
+		font-size: 13px;
+		font-weight: 700;
+		background: transparent;
+		color: var(--color-error);
+		border: 1px solid var(--color-error);
+		border-radius: 6px;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.revoke-invite-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 	.help-text {
 		font-size: 14px;

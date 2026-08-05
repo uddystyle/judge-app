@@ -290,11 +290,11 @@ describe('signup action', () => {
 			});
 		});
 
-		it('パスワードが6文字未満の場合は400を返す', async () => {
+		it('パスワードが8文字未満の場合は400を返す', async () => {
 			const request = createMockRequest({
 				fullName: 'Test User',
 				email: 'test@example.com',
-				password: '12345' // 5文字
+				password: '1234567' // 7文字
 			});
 
 			const event = {
@@ -307,7 +307,7 @@ describe('signup action', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: 'パスワードは6文字以上で入力してください。'
+					error: 'パスワードは8文字以上で入力してください。'
 				}
 			});
 		});

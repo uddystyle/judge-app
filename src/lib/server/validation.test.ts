@@ -210,24 +210,33 @@ describe('validateText', () => {
 describe('validatePassword', () => {
 	it('should accept valid passwords', () => {
 		expect(validatePassword('password123')).toEqual({ valid: true });
-		expect(validatePassword('abcdef')).toEqual({ valid: true });
+		expect(validatePassword('abcdefgh')).toEqual({ valid: true });
 		expect(validatePassword('P@ssw0rd!')).toEqual({ valid: true });
 	});
 
 	it('should reject empty or null passwords', () => {
-		expect(validatePassword('')).toMatchObject({ valid: false, error: 'パスワードを入力してください。' });
-		expect(validatePassword(null)).toMatchObject({ valid: false, error: 'パスワードを入力してください。' });
-		expect(validatePassword(undefined)).toMatchObject({ valid: false, error: 'パスワードを入力してください。' });
+		expect(validatePassword('')).toMatchObject({
+			valid: false,
+			error: 'パスワードを入力してください。'
+		});
+		expect(validatePassword(null)).toMatchObject({
+			valid: false,
+			error: 'パスワードを入力してください。'
+		});
+		expect(validatePassword(undefined)).toMatchObject({
+			valid: false,
+			error: 'パスワードを入力してください。'
+		});
 	});
 
-	it('should reject passwords shorter than 6 characters', () => {
-		expect(validatePassword('12345')).toMatchObject({
+	it('should reject passwords shorter than 8 characters', () => {
+		expect(validatePassword('1234567')).toMatchObject({
 			valid: false,
-			error: 'パスワードは6文字以上で入力してください。'
+			error: 'パスワードは8文字以上で入力してください。'
 		});
 		expect(validatePassword('abc')).toMatchObject({
 			valid: false,
-			error: 'パスワードは6文字以上で入力してください。'
+			error: 'パスワードは8文字以上で入力してください。'
 		});
 	});
 
@@ -239,8 +248,8 @@ describe('validatePassword', () => {
 		});
 	});
 
-	it('should accept passwords exactly 6 characters', () => {
-		expect(validatePassword('123456')).toEqual({ valid: true });
+	it('should accept passwords exactly 8 characters', () => {
+		expect(validatePassword('12345678')).toEqual({ valid: true });
 	});
 
 	it('should accept passwords exactly 72 characters', () => {

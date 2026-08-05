@@ -35,24 +35,25 @@
 					<Icon name="refresh" size={18} />
 					再度リセットを試す
 				</NavButton>
-				<NavButton on:click={() => goto('/login')}>
-					ログインページに戻る
-				</NavButton>
+				<NavButton on:click={() => goto('/login')}>ログインページに戻る</NavButton>
 			</div>
 		</div>
 	{:else}
 		<p class="description">
-			新しいパスワードを入力してください。<br/>
-			パスワードは6文字以上72文字以内で設定してください。
+			新しいパスワードを入力してください。<br />
+			パスワードは8文字以上72文字以内で設定してください。
 		</p>
 
-		<form method="POST" use:enhance={() => {
-			loading = true;
-			return async ({ update }) => {
-				await update();
-				loading = false;
-			};
-		}}>
+		<form
+			method="POST"
+			use:enhance={() => {
+				loading = true;
+				return async ({ update }) => {
+					await update();
+					loading = false;
+				};
+			}}
+		>
 			<div class="form-container">
 				<div class="password-field-wrapper">
 					<input
@@ -67,7 +68,7 @@
 					<button
 						type="button"
 						class="toggle-password"
-						on:click={() => showPassword = !showPassword}
+						on:click={() => (showPassword = !showPassword)}
 						aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
 					>
 						{#if showPassword}
@@ -91,7 +92,7 @@
 					<button
 						type="button"
 						class="toggle-password"
-						on:click={() => showConfirmPassword = !showConfirmPassword}
+						on:click={() => (showConfirmPassword = !showConfirmPassword)}
 						aria-label={showConfirmPassword ? 'パスワードを隠す' : 'パスワードを表示'}
 					>
 						{#if showConfirmPassword}

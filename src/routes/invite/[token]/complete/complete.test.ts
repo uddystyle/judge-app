@@ -28,13 +28,19 @@ vi.mock('$lib/server/organizationLimits', () => ({
 	checkCanAddMember: vi.fn(() => Promise.resolve({ allowed: true }))
 }));
 
+vi.mock('$lib/server/orgMembership', () => ({
+	joinOrRestoreMember: vi.fn(() => Promise.resolve({ ok: true, restored: false }))
+}));
+
 // モックセットアップ後にインポート
 const { load } = await import('./+page.server');
 const { checkCanAddMember } = await import('$lib/server/organizationLimits');
+const { joinOrRestoreMember } = await import('$lib/server/orgMembership');
 
 describe('invite/[token]/complete - race condition handling', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(joinOrRestoreMember).mockResolvedValue({ ok: true, restored: false });
 	});
 
 	const createMockLocals = () => ({
@@ -65,7 +71,7 @@ describe('invite/[token]/complete - race condition handling', () => {
 		}
 	};
 
-	it('組織メンバー追加時の一意制約違反（23505）を成功として扱う', async () => {
+	it('joinOrRestoreMember が既存メンバーを返した場合は組織ページへリダイレクトする', async () => {
 		const params = { token: 'test-token' };
 		const locals = createMockLocals();
 
@@ -79,6 +85,11 @@ describe('invite/[token]/complete - race condition handling', () => {
 		const invitationQuery = {
 			select: vi.fn().mockReturnThis(),
 			eq: vi.fn().mockReturnThis(),
+			// 使用権の確定（claimInvitationUse）は update().eq().eq().select() を await する。
+			// 1行返る＝使用権を得られた、を表す。
+			update: vi.fn().mockReturnThis(),
+			then: (resolve: any) =>
+				Promise.resolve({ data: [{ id: 'invite-123' }], error: null }).then(resolve),
 			single: vi.fn().mockResolvedValue({
 				data: mockInvitation,
 				error: null
@@ -106,16 +117,7 @@ describe('invite/[token]/complete - race condition handling', () => {
 			})
 		};
 
-		// メンバー追加（一意制約違反）
-		const memberInsertQuery = {
-			insert: vi.fn().mockResolvedValue({
-				data: null,
-				error: {
-					code: '23505',
-					message: 'duplicate key value violates unique constraint'
-				}
-			})
-		};
+		vi.mocked(joinOrRestoreMember).mockResolvedValueOnce({ ok: false, alreadyMember: true });
 
 		// from() のモック設定
 		mockSupabaseAdmin.from.mockImplementation((table: string) => {
@@ -123,7 +125,6 @@ describe('invite/[token]/complete - race condition handling', () => {
 			if (table === 'organization_members' && membershipQuery.select.mock.calls.length === 0) {
 				return membershipQuery;
 			}
-			if (table === 'organization_members') return memberInsertQuery;
 			if (table === 'profiles') return profileQuery;
 			return {};
 		});
@@ -132,7 +133,6 @@ describe('invite/[token]/complete - race condition handling', () => {
 			await load({ params, locals } as any);
 			expect.fail('Expected redirect to be thrown');
 		} catch (err: any) {
-			// 一意制約違反時は既に参加済みとして組織ページにリダイレクト
 			expect(err.status).toBe(303);
 			expect(err.location).toBe('/organization/org-123');
 		}
@@ -156,6 +156,11 @@ describe('invite/[token]/complete - race condition handling', () => {
 		const invitationQuery = {
 			select: vi.fn().mockReturnThis(),
 			eq: vi.fn().mockReturnThis(),
+			// 使用権の確定（claimInvitationUse）は update().eq().eq().select() を await する。
+			// 1行返る＝使用権を得られた、を表す。
+			update: vi.fn().mockReturnThis(),
+			then: (resolve: any) =>
+				Promise.resolve({ data: [{ id: 'invite-123' }], error: null }).then(resolve),
 			single: vi.fn().mockResolvedValue({ data: mockInvitation, error: null })
 		};
 		const membershipQuery = {
@@ -169,16 +174,11 @@ describe('invite/[token]/complete - race condition handling', () => {
 			eq: vi.fn().mockReturnThis(),
 			single: vi.fn().mockResolvedValue({ data: { id: mockUser.id }, error: null })
 		};
-		const memberInsertQuery = {
-			insert: vi.fn().mockResolvedValue({ data: null, error: null })
-		};
-
 		mockSupabaseAdmin.from.mockImplementation((table: string) => {
 			if (table === 'invitations') return invitationQuery;
 			if (table === 'organization_members' && membershipQuery.select.mock.calls.length === 0) {
 				return membershipQuery;
 			}
-			if (table === 'organization_members') return memberInsertQuery;
 			if (table === 'profiles') return profileQuery;
 			return {};
 		});
@@ -190,8 +190,8 @@ describe('invite/[token]/complete - race condition handling', () => {
 			expect(err.status).toBe(403);
 		}
 
-		// メンバー上限超過時はメンバー追加INSERTを行わない
-		expect(memberInsertQuery.insert).not.toHaveBeenCalled();
+		// メンバー上限超過時は参加・復帰処理を行わない
+		expect(joinOrRestoreMember).not.toHaveBeenCalled();
 	});
 
 	it('プロフィール作成時の一意制約違反（23505）を成功として扱う', async () => {
@@ -208,7 +208,7 @@ describe('invite/[token]/complete - race condition handling', () => {
 		mockSupabaseAdmin.from.mockImplementation((table: string) => {
 			calls.push(table);
 
-			if (table === 'invitations' && calls.filter(c => c === 'invitations').length === 1) {
+			if (table === 'invitations' && calls.filter((c) => c === 'invitations').length === 1) {
 				// 招待情報の取得
 				return {
 					select: vi.fn().mockReturnThis(),
@@ -220,7 +220,10 @@ describe('invite/[token]/complete - race condition handling', () => {
 				};
 			}
 
-			if (table === 'organization_members' && calls.filter(c => c === 'organization_members').length === 1) {
+			if (
+				table === 'organization_members' &&
+				calls.filter((c) => c === 'organization_members').length === 1
+			) {
 				// 既存メンバーシップチェック（存在しない）
 				return {
 					select: vi.fn().mockReturnThis(),
@@ -233,7 +236,7 @@ describe('invite/[token]/complete - race condition handling', () => {
 				};
 			}
 
-			if (table === 'profiles' && calls.filter(c => c === 'profiles').length === 1) {
+			if (table === 'profiles' && calls.filter((c) => c === 'profiles').length === 1) {
 				// 既存プロフィールチェック（存在しない）
 				return {
 					select: vi.fn().mockReturnThis(),
@@ -245,7 +248,7 @@ describe('invite/[token]/complete - race condition handling', () => {
 				};
 			}
 
-			if (table === 'profiles' && calls.filter(c => c === 'profiles').length === 2) {
+			if (table === 'profiles' && calls.filter((c) => c === 'profiles').length === 2) {
 				// プロフィール作成（一意制約違反）
 				return {
 					insert: vi.fn().mockResolvedValue({
@@ -258,22 +261,13 @@ describe('invite/[token]/complete - race condition handling', () => {
 				};
 			}
 
-			if (table === 'organization_members' && calls.filter(c => c === 'organization_members').length === 2) {
-				// メンバー追加（成功）
-				return {
-					insert: vi.fn().mockResolvedValue({
-						data: [{ id: 'member-123' }],
-						error: null
-					})
-				};
-			}
-
-			if (table === 'invitations' && calls.filter(c => c === 'invitations').length === 2) {
-				// 招待使用回数更新
+			if (table === 'invitations' && calls.filter((c) => c === 'invitations').length === 2) {
+				// 使用権の確定（claimInvitationUse）: update().eq().eq().select() を await する
 				return {
 					update: vi.fn().mockReturnThis(),
-					eq: vi.fn().mockResolvedValue({
-						data: {},
+					eq: vi.fn().mockReturnThis(),
+					select: vi.fn().mockResolvedValue({
+						data: [{ id: 'invite-123' }],
 						error: null
 					})
 				};
@@ -316,7 +310,7 @@ describe('invite/[token]/complete - race condition handling', () => {
 		mockSupabaseAdmin.from.mockImplementation((table: string) => {
 			calls.push(table);
 
-			if (table === 'invitations' && calls.filter(c => c === 'invitations').length === 1) {
+			if (table === 'invitations' && calls.filter((c) => c === 'invitations').length === 1) {
 				// 招待情報の取得
 				return {
 					select: vi.fn().mockReturnThis(),
@@ -328,7 +322,10 @@ describe('invite/[token]/complete - race condition handling', () => {
 				};
 			}
 
-			if (table === 'organization_members' && calls.filter(c => c === 'organization_members').length === 1) {
+			if (
+				table === 'organization_members' &&
+				calls.filter((c) => c === 'organization_members').length === 1
+			) {
 				// 既存メンバーシップチェック（存在しない）
 				return {
 					select: vi.fn().mockReturnThis(),
@@ -353,22 +350,13 @@ describe('invite/[token]/complete - race condition handling', () => {
 				};
 			}
 
-			if (table === 'organization_members' && calls.filter(c => c === 'organization_members').length === 2) {
-				// メンバー追加（成功）
-				return {
-					insert: vi.fn().mockResolvedValue({
-						data: [{ id: 'member-123' }],
-						error: null
-					})
-				};
-			}
-
-			if (table === 'invitations' && calls.filter(c => c === 'invitations').length === 2) {
-				// 招待使用回数更新
+			if (table === 'invitations' && calls.filter((c) => c === 'invitations').length === 2) {
+				// 使用権の確定（claimInvitationUse）: update().eq().eq().select() を await する
 				return {
 					update: vi.fn().mockReturnThis(),
-					eq: vi.fn().mockResolvedValue({
-						data: {},
+					eq: vi.fn().mockReturnThis(),
+					select: vi.fn().mockResolvedValue({
+						data: [{ id: 'invite-123' }],
 						error: null
 					})
 				};
@@ -413,6 +401,11 @@ describe('invite/[token]/complete - race condition handling', () => {
 		const invitationQuery = {
 			select: vi.fn().mockReturnThis(),
 			eq: vi.fn().mockReturnThis(),
+			// 使用権の確定（claimInvitationUse）は update().eq().eq().select() を await する。
+			// 1行返る＝使用権を得られた、を表す。
+			update: vi.fn().mockReturnThis(),
+			then: (resolve: any) =>
+				Promise.resolve({ data: [{ id: 'invite-123' }], error: null }).then(resolve),
 			single: vi.fn().mockResolvedValue({
 				data: mockInvitation,
 				error: null
@@ -440,23 +433,16 @@ describe('invite/[token]/complete - race condition handling', () => {
 			})
 		};
 
-		// メンバー追加（データベースエラー）
-		const memberInsertQuery = {
-			insert: vi.fn().mockResolvedValue({
-				data: null,
-				error: {
-					code: '42501', // insufficient_privilege
-					message: 'permission denied for table organization_members'
-				}
-			})
-		};
+		vi.mocked(joinOrRestoreMember).mockResolvedValueOnce({
+			ok: false,
+			error: 'permission denied for table organization_members'
+		});
 
 		mockSupabaseAdmin.from.mockImplementation((table: string) => {
 			if (table === 'invitations') return invitationQuery;
 			if (table === 'organization_members' && membershipQuery.select.mock.calls.length === 0) {
 				return membershipQuery;
 			}
-			if (table === 'organization_members') return memberInsertQuery;
 			if (table === 'profiles') return profileQuery;
 			return {};
 		});

@@ -94,7 +94,7 @@
 				: 'Please enter your current password.';
 			return;
 		}
-		if (newPassword.length < 6) {
+		if (newPassword.length < 8) {
 			passwordMessage = m.account_passwordTooShort();
 			return;
 		}

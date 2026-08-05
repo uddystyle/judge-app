@@ -84,8 +84,8 @@ export function validatePassword(password: string | null | undefined): {
 		return { valid: false, error: m.validation_passwordRequired() };
 	}
 
-	if (password.length < 6) {
-		return { valid: false, error: m.validation_passwordTooShort({ min: '6' }) };
+	if (password.length < 8) {
+		return { valid: false, error: m.validation_passwordTooShort({ min: '8' }) };
 	}
 
 	if (password.length > 72) {
@@ -158,13 +158,15 @@ export function validateSessionName(name: string | null | undefined): {
  * ゼッケン番号のバリデーション（採点フォーム用）
  * 文字列全体が正の整数であることを厳密にチェックする（部分パース防止）
  */
-export function validateBib(bibRaw: string | null | undefined): {
-	success: true;
-	value: number;
-} | {
-	success: false;
-	error: string;
-} {
+export function validateBib(bibRaw: string | null | undefined):
+	| {
+			success: true;
+			value: number;
+	  }
+	| {
+			success: false;
+			error: string;
+	  } {
 	if (!bibRaw || !/^\d+$/.test(bibRaw.trim())) {
 		return { success: false, error: m.validation_bibPositiveInteger() };
 	}
@@ -183,13 +185,15 @@ export function validateBib(bibRaw: string | null | undefined): {
  * 文字列全体が数値（整数または小数）であることを厳密にチェックする（部分パース防止）
  * NaN・Infinity・非整数をすべて拒否する
  */
-export function validateScoreInput(scoreRaw: string | null | undefined): {
-	success: true;
-	value: number;
-} | {
-	success: false;
-	error: string;
-} {
+export function validateScoreInput(scoreRaw: string | null | undefined):
+	| {
+			success: true;
+			value: number;
+	  }
+	| {
+			success: false;
+			error: string;
+	  } {
 	if (!scoreRaw || !/^-?\d+(\.\d+)?$/.test(scoreRaw.trim())) {
 		return { success: false, error: m.validation_scoreInputRequired() };
 	}
@@ -214,14 +218,23 @@ export function validateScoreInput(scoreRaw: string | null | undefined): {
 /**
  * 得点範囲チェック（採点フォーム用）
  */
-export function validateScoreRange(score: number, minScore: number, maxScore: number): {
-	success: true;
-} | {
-	success: false;
-	error: string;
-} {
+export function validateScoreRange(
+	score: number,
+	minScore: number,
+	maxScore: number
+):
+	| {
+			success: true;
+	  }
+	| {
+			success: false;
+			error: string;
+	  } {
 	if (score < minScore || score > maxScore) {
-		return { success: false, error: m.validation_scoreInputRange({ min: String(minScore), max: String(maxScore) }) };
+		return {
+			success: false,
+			error: m.validation_scoreInputRange({ min: String(minScore), max: String(maxScore) })
+		};
 	}
 
 	return { success: true };
@@ -238,8 +251,7 @@ export function validateUUID(uuid: string | null | undefined): {
 		return { valid: false, error: m.validation_idRequired() };
 	}
 
-	const uuidRegex =
-		/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+	const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 	if (!uuidRegex.test(uuid)) {
 		return { valid: false, error: m.validation_idInvalid() };

@@ -907,7 +907,7 @@ describe('invite/[token] - signup action', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: '無効な招待です'
+					error: '招待の有効期限が切れています'
 				}
 			});
 		});
@@ -960,8 +960,14 @@ describe('invite/[token] - join action', () => {
 					single: vi.fn().mockResolvedValue({ data: mockInvitation, error: null })
 				})
 			}),
+			// 使用権の確定（claimInvitationUse）は update().eq().eq().select() を await する。
+			// 1行返る＝使用権を得られた、を表す。
 			update: vi.fn().mockReturnValue({
-				eq: vi.fn().mockResolvedValue({ error: null })
+				eq: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						select: vi.fn().mockResolvedValue({ data: [{ id: 'invite-123' }], error: null })
+					})
+				})
 			})
 		};
 		const usesTable = { insert: vi.fn().mockResolvedValue({ error: null }) };

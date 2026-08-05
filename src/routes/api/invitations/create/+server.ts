@@ -8,6 +8,11 @@ import { checkCanAddMember } from '$lib/server/organizationLimits';
 import { rateLimiters, checkRateLimit } from '$lib/server/rateLimit';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import { logger } from '$lib/server/logger';
+import {
+	hashInvitationToken,
+	parseInvitationExpiresInHours,
+	parseInvitationMaxUses
+} from '$lib/server/invitations';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -28,7 +33,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 		if (userError || !user) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
-		const { organizationId, role = 'member', expiresInHours = 48 } = await request.json();
+		const { organizationId, role = 'member', expiresInHours, maxUses } = await request.json();
 
 		// バリデーション
 		if (!organizationId) {
@@ -37,6 +42,16 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		if (!['admin', 'member'].includes(role)) {
 			return json({ error: '無効な役割です' }, { status: 400 });
+		}
+
+		let parsedExpiresInHours: number;
+		// null = 無制限（既定）。1本のリンクを組織メンバー全員に配る運用を想定している。
+		let parsedMaxUses: number | null;
+		try {
+			parsedExpiresInHours = parseInvitationExpiresInHours(expiresInHours);
+			parsedMaxUses = parseInvitationMaxUses(maxUses);
+		} catch (validationError: any) {
+			return json({ error: validationError.message || '招待設定が無効です' }, { status: 400 });
 		}
 
 		// ユーザーがこの組織の管理者かチェック（orgAuth が退会済みメンバーを除外する）
@@ -58,24 +73,26 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 
 		// ユニークな招待トークンを生成
 		const token = randomBytes(32).toString('hex');
+		const tokenHash = hashInvitationToken(token);
 
 		// 有効期限を設定
 		const expiresAt = new Date();
-		expiresAt.setHours(expiresAt.getHours() + expiresInHours);
+		expiresAt.setHours(expiresAt.getHours() + parsedExpiresInHours);
 
 		// 招待を作成
 		const { data: invitation, error: inviteError } = await supabaseAdmin
 			.from('invitations')
 			.insert({
-				token,
+				token: null,
+				token_hash: tokenHash,
 				organization_id: organizationId,
 				created_by: user.id,
 				role,
 				expires_at: expiresAt.toISOString(),
-				max_uses: null, // 無制限
+				max_uses: parsedMaxUses,
 				used_count: 0
 			})
-			.select()
+			.select('id, expires_at')
 			.single();
 
 		if (inviteError) {
@@ -87,7 +104,7 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			success: true,
 			invitation: {
 				id: invitation.id,
-				token: invitation.token,
+				token,
 				expires_at: invitation.expires_at
 			}
 		});

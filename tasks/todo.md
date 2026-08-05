@@ -1,5 +1,14 @@
 # Current Tasks
 
+## 招待ユーザー実装の権限・トークン修正（2026-08-05）— ✅ 実装完了（DB適用は要実行）
+
+- [x] **RLS権限昇格を塞ぐ**: `1034_harden_organization_invitations.sql` で `organization_members` の自己 INSERT/UPDATE/DELETE ポリシーを撤去
+- [x] **招待の匿名列挙を塞ぐ**: `invitations` の public SELECT ポリシーを撤去し、アプリは service role + token hash 照合へ移行
+- [x] **招待トークンをハッシュ保管へ移行**: `token_hash` / `revoked_at` / `revoked_by` を追加し、既存 token は hash backfill 後に NULL 化
+- [x] **招待受諾の防御を揃える**: ログイン済み join に email 一致チェック、`complete` 経路に退会済み復帰処理、期限/使用回数/失効チェックを共通化
+- [x] **運用導線を追加する**: 招待失効 API/UI、期限上限（168h）、`max_uses=1` を実装
+- [x] **検証**: 招待関連 vitest と `svelte-check` 通過。残: `1034` を dev/prod に適用後、`verify/1034_verify_organization_invitations.sql` をSQL Editorで実行
+
 ## Stripe 実装監査の指摘対応（2026-08-04）— ✅ 全項目完了（P0-1 / P0-2 / H-1〜H-4 / M-1〜M-6）
 
 ### 🆕 監査項目外の追加対応（2026-08-04）— ✅ 完了
@@ -19,7 +28,6 @@
 - [x] **Price ID 整合テストの自己参照**: `npm run verify:plan-consistency` を追加（plan_limits の行・`ORG_PLANS.maxMembers` 一致・price の実在/有効/定期課金）。**CHECK 制約そのものは PostgREST から読めない**ため `verify/1029` の担当と明記
 - [x] 補完: `rollbacks/1031_rollback.sql`（初回作成漏れ）／`verify/1031_verify_stripe_events.sql` を追加し、**1029・1031 の verify を prod/dev 両方で実行**（すべて通過・不適合0件）
 - [x] 教訓を `lessons.md` に2件追記（冪等化は「終えた」で記録する／課金APIは「成功」と「入金」を別物として扱う）
-
 
 監査レポート: [`../docs/stripe/stripe-audit-2026-08-04.md`](../docs/stripe/stripe-audit-2026-08-04.md)（根拠・再現結果・実DB照会結果はすべてそちら）
 
@@ -95,7 +103,6 @@ prod は `incomplete` / `trialing` を、dev は `unpaid` を保存できない�
 
 署名検証（`constructEventAsync` + 生ボディ）／**プラン判定を metadata でなく Stripe の price ID から導出**／オープンリダイレクト許可リスト／coupon ID を拒否し promotion code のみ受理／Stripe 呼び出し前の `isOrgAdmin`／CSP への Stripe ドメイン登録／`payment_method_types` 不使用／シークレットの環境変数管理／Service Role の使用範囲限定。
 
-
 ## 課金: 年額の表示価格が Stripe の実価格と乖離していたのを是正（2026-08-04）— ✅ 完了
 
 Stripe 実装の検証方法を検討する中で、`.env` の price ID を Stripe API に直接照会して発見。
@@ -104,11 +111,11 @@ Stripe 実装の検証方法を検討する中で、`.env` の price ID を Stri
 
 課金額は Stripe の Price ID（`$lib/server/plans.ts`）で決まる一方、画面表示は `src/lib/plans.ts` の `yearlyPrice` という**別ソース**の数値。両者が同期しておらず、**年額プランは表示より 18,000〜198,000 円高く請求される**状態だった（月額は3プランとも一致）。
 
-| プラン | Stripe 実価格 | 旧表示 | 月換算 |
-|---|---|---|---|
-| Basic 年額 | ¥88,000 | ¥70,000 | Stripe=10.00ヶ月 / 旧表示=7.95ヶ月 |
-| Standard 年額 | ¥248,000 | ¥180,000 | Stripe=10.00ヶ月 / 旧表示=7.26ヶ月 |
-| Premium 年額 | ¥498,000 | ¥300,000 | Stripe=10.00ヶ月 / 旧表示=6.02ヶ月 |
+| プラン        | Stripe 実価格 | 旧表示   | 月換算                             |
+| ------------- | ------------- | -------- | ---------------------------------- |
+| Basic 年額    | ¥88,000       | ¥70,000  | Stripe=10.00ヶ月 / 旧表示=7.95ヶ月 |
+| Standard 年額 | ¥248,000      | ¥180,000 | Stripe=10.00ヶ月 / 旧表示=7.26ヶ月 |
+| Premium 年額  | ¥498,000      | ¥300,000 | Stripe=10.00ヶ月 / 旧表示=6.02ヶ月 |
 
 Stripe 側は3プランとも**ぴったり月額×10（2ヶ月分無料・16.7%引き）**という単一ルール。旧表示は割引率が 33.7%→39.5%→49.8% とバラバラで、上位プランほど深い逆進構造だった。**Stripe 側を正**と判断（ユーザー確認済み）。
 
@@ -134,7 +141,6 @@ Stripe 側は3プランとも**ぴったり月額×10（2ヶ月分無料・16.7%
 ### 残作業（要ユーザー確認）
 
 - [ ] **誤表示の期間に年額で契約した顧客がいないか**の確認。表示 ¥70,000 に対して実請求 ¥88,000（Standard は ¥180,000→¥248,000、Premium は ¥300,000→¥498,000）だったため、該当者がいれば個別対応の要否を判断する。Stripe ダッシュボードの Subscriptions で `interval=year` の契約を確認するのが早い
-
 
 ## レビュー指摘の検証と対応（2026-08-04）— ✅ 完了
 
@@ -176,7 +182,7 @@ Stripe 側は3プランとも**ぴったり月額×10（2ヶ月分無料・16.7%
 
 - [x] **🟡 setPrompt の 403 回避**: `[event]/+page.server.ts` が認可判定に生の `?guest=` を使っていた（一般検定員が `?guest=x` を足すだけで多審制のゼッケン確定ゲートを回避できた）→ `authResult.guestParticipant` に差し替え
 - [x] **🟡 appointChief の認可欠落**: 作成者チェックが無く、実効範囲が sessions の UPDATE RLS 任せ（UI 想定より広い）。さらに参加者行が無い任意 UUID も「ゲストではない」と解釈されて主任になれた → 作成者チェック追加 + `maybeSingle()` で非参加者を明示的に 400
-- [x] **🟢 training_sessions の anon SELECT**（1027）: 述語が caller を参照しない `TO anon` ポリシー。1025 で撤去した anon_* と同じクラス
+- [x] **🟢 training_sessions の anon SELECT**（1027）: 述語が caller を参照しない `TO anon` ポリシー。1025 で撤去した anon\_\* と同じクラス
 - [x] **🟡 修正要求の owner 認可とサイレント成功**: 削除対象 owner を form 値だけで決めていた → `resolveCorrectionOwner()` を新設し「主任は指定 owner／それ以外は自分の owner のみ」に。0 行削除で success を返さないよう `count: 'exact'` で検知
 - [x] **🟡 setup/settings/events の認可欠落**: `sessionSetup.ts` の7アクションがログイン確認のみ（importCSV は名簿を全 delete → insert する）→ `requireSetupManager()` を新設し、load と同じ「作成者 または 主任」を各アクションでも確認
 
@@ -1936,3 +1942,82 @@ prod の sessions に残る public ロール own 重複2本（DELETE/UPDATE・au
 - [x] `1021_sessions_dedupe_own_policies.sql`＋rollback。drop policy のみ・冪等（dev は対象無し no-op）。
 - [ ] DEV→prod 適用。own の DELETE/UPDATE が authed 版で維持されること。
 - 注: INSERT/SELECT の重複は dev で load-bearing（prod の Allow.../participants 系を dev が持たない）ため本バッチ非対象。完全整合は別途 dev 整合タスク（任意）。
+
+---
+
+## Stripe 再監査の修正バッチ（2026-08-05）
+
+監査結果: `docs/stripe/stripe-audit-2026-08-05.md`
+本番の課金中顧客は 0 件。**最初の有料契約が入る前**に閉じるのが目的。
+
+### P0-A: 契約者以外の管理者が重複契約を作れる（二重課金）
+
+`subscriptions` の SELECT ポリシーが `auth.uid() = user_id` の1本だけで、組織スコープが無い。
+契約者以外の管理者からは契約が「無いように見える」ため、upgrade ページの重複ガードが素通りする。
+
+- [x] migration 1035: `subscriptions` に組織管理者向け SELECT ポリシーを追加
+- [x] `/api/stripe/upgrade-organization` にサーバー側の重複契約ガード（409）
+- [x] `change-plan` / `upgrade` ページの subscriptions 読み取りを service role に寄せる
+
+### P0-B: `customer.subscription.created` が決済確定ゲートを迂回する
+
+- [x] `handleSubscriptionCreated` に `isEntitledStatus()` の門番を追加
+
+### P1-C: 組織削除の subscriptions 書き込みが黙って失敗する
+
+- [x] delete アクションで `locals.supabaseAdmin` を使う（SEC-3 と同じ方針）
+
+### P1-D: 増減判定が `organizations.plan_type` 由来でドリフトに弱い
+
+- [x] 現行プランを Stripe の price から導出する
+
+### P2/P3（今回まとめて対応）
+
+- [x] P2-E: `handlePaymentSucceeded` が status を 'active' 固定で書いている
+- [x] P2-G: `handleSubscriptionCreated` に順序ガードが無い
+- [x] P2-H: リプレイ防御が period_end の後退を一律スキップ（年額→月額が必ず落ちる）
+- [x] P3-I: 個人経路の `onConflict: 'user_id'` に対応する一意制約が無い
+- [x] P3-J: `upgrade-organization` の customer 書き込みが user client かつエラー未確認
+
+### 見送り（判断が必要なため据え置き）
+
+- P2-F: 未知 price ID の 3 日間リトライ嵐。「課金イベントを捨てる」判断を伴うため要相談
+
+### 検証
+
+- [x] 各修正に先に落ちるテストを書く
+- [x] `npx vitest run` / `npm run check` / `npm run build`
+- [x] migration を dev → prod の順に適用し verify SQL で確認
+
+### レビュー（2026-08-05 実施）
+
+すべて「先に落ちるテスト」を書いてから実装した。回帰テストは
+`src/lib/server/__tests__/stripe.audit-2026-08-05.test.ts`（9件）。
+
+- P0-A: migration 1035 を dev/prod に適用。適用後、本番で実測し
+  「契約者以外の管理者 = 0行 → 1行」「非メンバー = 0行のまま」「書き込みは 0行のまま」を確認。
+  API 側の重複契約ガード（409）は RLS に依存せず service role で判定する。
+- P0-B: `handleSubscriptionCreated` に `isEntitledStatus()` を追加。
+  これが無いと checkout 側の H-2 ゲートが無効化されていた。
+- P1-C: delete アクションを `supabaseAdmin` に移行。読み取りも admin に寄せた
+  （契約者以外の管理者が削除すると解約対象を取りこぼすため）。
+- P1-D: 現行プランを `findPlanTypeByPriceId(price.id)` から導出。ドリフト時は error ログを出す。
+- P2-E/G/H, P3-I/J も同バッチで対応。
+
+既存テストの更新（挙動変更に伴うもの）:
+- `stripe.webhook.test.ts`: retrieve モックに `status` を追加（実 Stripe には必ずある）。
+  `onConflict` の期待値を実在する一意インデックス `stripe_subscription_id` に修正。
+- `change-plan.action.test.ts`: 契約情報の読み取りが admin 経由になったため、
+  応答キューを user/admin で共有する形に変更。
+- `stripe.checkout-api.test.ts`: upgrade-organization に `supabaseAdmin` を注入。
+
+検証: 1085 tests passed / svelte-check 0 errors / build 成功。
+
+⚠️ 検証中に本番の `organization_members` を1行書き換えてコミットしてしまった
+（`do $$` ブロックを begin/rollback で囲んでいなかった）。直後に revert し、
+件数が変更前と一致することを確認済み。再発防止は `tasks/lessons.md` に記録した。
+
+### 残（ユーザー判断待ち）
+
+- P2-F: 未知 price ID の 3 日間リトライ嵐。Stripe ダッシュボードでの手動サブスク作成や
+  Portal でのマッピング外価格への変更で踏む。「課金イベントを捨てる」判断を伴うため未対応。

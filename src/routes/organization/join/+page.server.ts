@@ -119,7 +119,7 @@ export const actions: Actions = {
 		// 組織にメンバーとして追加（退会済みなら復帰）。
 		// UNIQUE (organization_id, user_id) があるため単純な INSERT では
 		// 再参加が一意制約違反になる。復帰時の role は 'member' に戻す。
-		const joinResult = await joinOrRestoreMember(supabase, {
+		const joinResult = await joinOrRestoreMember(supabaseAdmin, {
 			organizationId: organizationData.id,
 			userId: user.id,
 			role: 'member'

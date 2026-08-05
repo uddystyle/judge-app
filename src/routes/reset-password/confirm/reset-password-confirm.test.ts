@@ -128,7 +128,7 @@ describe('/reset-password/confirm', () => {
 			});
 		});
 
-		it('should reject password shorter than 6 characters', async () => {
+		it('should reject password shorter than 8 characters', async () => {
 			const formData = new FormData();
 			formData.append('password', '12345');
 			formData.append('confirmPassword', '12345');
@@ -147,7 +147,7 @@ describe('/reset-password/confirm', () => {
 			expect(result).toMatchObject({
 				status: 400,
 				data: {
-					error: expect.stringContaining('6文字以上')
+					error: expect.stringContaining('8文字以上')
 				}
 			});
 		});

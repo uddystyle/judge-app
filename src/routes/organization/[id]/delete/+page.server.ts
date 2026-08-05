@@ -276,23 +276,23 @@ export const actions: Actions = {
 
 		logger.debug('[Organization Delete] subscriptionsレコードを削除');
 
-		// 組織メンバーを削除（自分自身）
-		const { error: memberDeleteError } = await supabase
-			.from('organization_members')
-			.delete()
-			.eq('organization_id', organizationId)
-			.eq('user_id', user.id);
-
-		if (memberDeleteError) {
-			logger.error('Failed to delete organization member:', memberDeleteError);
-			return fail(500, { error: 'メンバーの削除に失敗しました。' });
-		}
-
 		// 組織を削除
-		const { error: orgDeleteError } = await supabase
+		//
+		// ⚠️ **自分のメンバー行を先に消してはいけない。**
+		// organizations の DELETE ポリシーは `is_organization_admin(id)` で、
+		// 判定材料は organization_members の自分の行そのもの。先に消すと
+		// 「もう管理者ではない」と評価され、**0行・エラー無し**で返る。
+		// PostgREST は権限で弾かれた削除をエラーにしないため、アプリは成功と報告し、
+		// 組織は残ったまま実行者だけが権限を失って二度と操作できなくなる。
+		// （本番で実測: メンバー行 1 行削除 → 組織 0 行削除・エラー無し）
+		//
+		// organization_members.organization_id は ON DELETE CASCADE なので、
+		// 組織を消せばメンバー行も一緒に消える。明示削除は不要。
+		const { data: deletedOrgs, error: orgDeleteError } = await supabase
 			.from('organizations')
 			.delete()
-			.eq('id', organizationId);
+			.eq('id', organizationId)
+			.select('id');
 
 		if (orgDeleteError) {
 			// 大会チケット（請求監査データ）を持つ組織は FK restrict で削除不可（migration 1022）
@@ -304,6 +304,15 @@ export const actions: Actions = {
 			}
 			logger.error('Failed to delete organization:', orgDeleteError);
 			return fail(500, { error: '組織の削除に失敗しました。' });
+		}
+
+		// ⚠️ 件数を必ず確認する。RLS で弾かれた削除は**エラーではなく0行**で返るため、
+		// error だけを見ていると「消えていないのに成功」と報告してしまう。
+		if (!deletedOrgs || deletedOrgs.length === 0) {
+			logger.error('[Organization Delete] 削除が0行でした（RLSで弾かれた可能性）:', organizationId);
+			return fail(500, {
+				error: '組織の削除に失敗しました。権限をご確認のうえ、サポートにお問い合わせください。'
+			});
 		}
 
 		// ダッシュボードへリダイレクト

@@ -7,37 +7,26 @@ import { validateEmail, validateName, validatePassword } from '$lib/server/valid
 import { checkCanAddMember } from '$lib/server/organizationLimits';
 import { logger } from '$lib/server/logger';
 import { joinOrRestoreMember } from '$lib/server/orgMembership';
+import {
+	getInvitationByToken,
+	getInvitationInvalidReason,
+	isInvitationEmailAllowed,
+	normalizeEmail,
+	claimInvitationUse,
+	releaseInvitationUse
+} from '$lib/server/invitations';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-/**
- * メールアドレスを正規化（小文字化 + トリム）
- * 大文字小文字の違いや前後の空白を吸収し、比較の一貫性を保つ
- */
-function normalizeEmail(email: string): string {
-	return email.trim().toLowerCase();
-}
 
 export const load: PageServerLoad = async ({ params, locals }) => {
 	const token = params.token!;
 
-	logger.debug('[Invite Page] Loading invitation with token:', token);
+	// ⚠️ token はそのまま組織参加に使える資格情報。ログに出さない
+	// （DB から平文を消した意味が無くなる）。追跡は招待IDで行う。
+	logger.debug('[Invite Page] Loading invitation');
 
 	// 招待情報を取得（RLSをバイパスするためsupabaseAdminを使用）
-	const { data: invitation, error: inviteError } = await supabaseAdmin
-		.from('invitations')
-		.select(
-			`
-			*,
-			organizations!organization_id (
-				id,
-				name,
-				plan_type
-			)
-		`
-		)
-		.eq('token', token)
-		.single();
+	const { invitation, error: inviteError } = await getInvitationByToken(supabaseAdmin, token);
 
 	if (inviteError) {
 		logger.error('[Invite Page] Error fetching invitation:', inviteError);
@@ -45,20 +34,19 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	}
 
 	if (!invitation) {
-		logger.error('[Invite Page] No invitation found for token:', token);
+		logger.error('[Invite Page] No invitation found for the presented token');
 		throw error(404, '招待が見つかりません');
 	}
 
-	logger.debug('[Invite Page] Invitation found:', invitation);
+	logger.debug('[Invite Page] Invitation found:', {
+		invitationId: invitation.id,
+		organizationId: invitation.organization_id,
+		role: invitation.role
+	});
 
-	// 有効期限チェック
-	if (new Date(invitation.expires_at) < new Date()) {
-		throw error(410, '招待の有効期限が切れています');
-	}
-
-	// 使用制限チェック
-	if (invitation.max_uses !== null && invitation.used_count >= invitation.max_uses) {
-		throw error(410, '招待の使用回数が上限に達しています');
+	const invalidReason = getInvitationInvalidReason(invitation);
+	if (invalidReason) {
+		throw error(410, invalidReason);
 	}
 
 	// すでにログイン済みかチェック
@@ -144,14 +132,11 @@ export const actions: Actions = {
 		const sanitizedEmail = emailValidation.sanitized!;
 
 		// 招待情報を取得
-		const { data: invitation } = await supabaseAdmin
-			.from('invitations')
-			.select('*, organizations(*)')
-			.eq('token', token)
-			.single();
+		const { invitation } = await getInvitationByToken(supabaseAdmin, token);
 
-		if (!invitation || new Date(invitation.expires_at) < new Date()) {
-			return fail(400, { error: '無効な招待です' });
+		const invalidReason = getInvitationInvalidReason(invitation);
+		if (invalidReason) {
+			return fail(400, { error: invalidReason });
 		}
 
 		// メールアドレスを正規化（大文字小文字、空白を統一）
@@ -168,7 +153,7 @@ export const actions: Actions = {
 				sanitizedEmail,
 				normalizedInvitation: normalizeEmail(invitation.email),
 				normalizedInput: normalizedEmail,
-				token
+				invitationId: invitation.id
 			});
 			return fail(403, {
 				error: 'この招待は別のメールアドレス宛です。招待されたメールアドレスを使用してください。'
@@ -180,7 +165,7 @@ export const actions: Actions = {
 			originalEmail: email,
 			sanitizedEmail,
 			normalizedEmail,
-			token
+			invitationId: invitation.id
 		});
 
 		try {
@@ -310,14 +295,23 @@ export const actions: Actions = {
 		}
 
 		// 招待情報を取得
-		const { data: invitation } = await supabaseAdmin
-			.from('invitations')
-			.select('*')
-			.eq('token', token)
-			.single();
+		const { invitation } = await getInvitationByToken(supabaseAdmin, token);
 
-		if (!invitation || new Date(invitation.expires_at) < new Date()) {
-			return fail(400, { error: '無効な招待です' });
+		const invalidReason = getInvitationInvalidReason(invitation);
+		if (invalidReason) {
+			return fail(400, { error: invalidReason });
+		}
+
+		if (!isInvitationEmailAllowed(invitation, user.email)) {
+			logger.warn('[Invite Join] Email mismatch detected:', {
+				hasInvitationEmail: !!invitation.email,
+				userId: user.id,
+				invitationId: invitation.id
+			});
+			return fail(403, {
+				error:
+					'この招待は別のメールアドレス宛です。招待されたメールアドレスでログインしてください。'
+			});
 		}
 
 		// 在籍中のみ弾く。退会済みは下の joinOrRestoreMember が復帰として扱う
@@ -351,6 +345,13 @@ export const actions: Actions = {
 			// ⚠️ 復帰時の role は退会前の値を復活させない。招待の role をそのまま使う。
 			// 復活させると、退会前に admin だった人が招待リンク経由で admin として戻り、
 			// 招待した側が意図しない権限を与えてしまう。
+			// 使用権はメンバー追加より**先**に確定する。後から数えると、
+			// 上限を超えた参加が成立したあとで気づくことになる。
+			const claim = await claimInvitationUse(supabaseAdmin, invitation);
+			if (!claim.claimed) {
+				return fail(400, { error: '招待の使用回数が上限に達しています' });
+			}
+
 			const memberResult = await joinOrRestoreMember(supabaseAdmin, {
 				organizationId: invitation.organization_id,
 				userId: user.id,
@@ -358,14 +359,9 @@ export const actions: Actions = {
 			});
 
 			if (!memberResult.ok && !memberResult.alreadyMember) {
+				await releaseInvitationUse(supabaseAdmin, invitation);
 				return fail(500, { error: '組織への追加に失敗しました' });
 			}
-
-			// 招待の使用回数を更新
-			await supabaseAdmin
-				.from('invitations')
-				.update({ used_count: invitation.used_count + 1 })
-				.eq('id', invitation.id);
 
 			// 招待使用履歴を記録
 			await supabaseAdmin.from('invitation_uses').insert({
