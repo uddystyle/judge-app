@@ -147,6 +147,7 @@ export const load: PageServerLoad = async ({
 				.select('id')
 				.eq('organization_id', sessionDetails.organization_id)
 				.eq('user_id', user.id)
+				.is('removed_at', null)
 				.maybeSingle(),
 			supabase
 				.from('session_participants')

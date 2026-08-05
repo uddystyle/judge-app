@@ -36,7 +36,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 			)
 		`
 		)
-		.eq('user_id', user.id);
+		.eq('user_id', user.id)
+		.is('removed_at', null);
 
 	// 組織に1つも所属していない場合は組織作成画面へリダイレクト
 	if (!memberships || memberships.length === 0) {
@@ -147,6 +148,7 @@ export const actions: Actions = {
 			.select('organization_id')
 			.eq('user_id', user.id)
 			.eq('organization_id', organizationId)
+			.is('removed_at', null)
 			.maybeSingle();
 
 		if (!membership) {

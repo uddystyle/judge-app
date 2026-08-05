@@ -6,6 +6,7 @@ import { PUBLIC_SUPABASE_URL, PUBLIC_SITE_URL } from '$env/static/public';
 import { validateEmail, validateName, validatePassword } from '$lib/server/validation';
 import { checkCanAddMember } from '$lib/server/organizationLimits';
 import { logger } from '$lib/server/logger';
+import { joinOrRestoreMember } from '$lib/server/orgMembership';
 
 const supabaseAdmin = createClient(PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -76,12 +77,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 		profile = profileData;
 
 		// ログイン済みの場合、すでに組織のメンバーかチェック
+		// 在籍中のみリダイレクト。退会済みは招待から再参加できるようにする
+		// （removed_at で絞らないと、一度退会した人が招待を受諾できない）
 		const { data: existingMembership } = await supabaseAdmin
 			.from('organization_members')
 			.select('id')
 			.eq('organization_id', invitation.organizations.id)
 			.eq('user_id', user.id)
-			.single();
+			.is('removed_at', null)
+			.maybeSingle();
 
 		if (existingMembership) {
 			throw redirect(303, `/organization/${invitation.organizations.id}`);
@@ -316,13 +320,14 @@ export const actions: Actions = {
 			return fail(400, { error: '無効な招待です' });
 		}
 
-		// すでにメンバーかチェック
+		// 在籍中のみ弾く。退会済みは下の joinOrRestoreMember が復帰として扱う
 		const { data: existingMembership } = await supabaseAdmin
 			.from('organization_members')
 			.select('id')
 			.eq('organization_id', invitation.organization_id)
 			.eq('user_id', user.id)
-			.single();
+			.is('removed_at', null)
+			.maybeSingle();
 
 		if (existingMembership) {
 			throw redirect(303, `/organization/${invitation.organization_id}`);
@@ -339,15 +344,20 @@ export const actions: Actions = {
 		}
 
 		try {
-			// 組織メンバーとして追加
-			const { error: memberError } = await supabaseAdmin.from('organization_members').insert({
-				organization_id: invitation.organization_id,
-				user_id: user.id,
-				role: invitation.role
+			// 組織メンバーとして追加（退会済みなら復帰）。
+			// UNIQUE (organization_id, user_id) があるため単純な INSERT では
+			// 再参加が一意制約違反になる。
+			//
+			// ⚠️ 復帰時の role は退会前の値を復活させない。招待の role をそのまま使う。
+			// 復活させると、退会前に admin だった人が招待リンク経由で admin として戻り、
+			// 招待した側が意図しない権限を与えてしまう。
+			const memberResult = await joinOrRestoreMember(supabaseAdmin, {
+				organizationId: invitation.organization_id,
+				userId: user.id,
+				role: invitation.role === 'admin' ? 'admin' : 'member'
 			});
 
-			if (memberError) {
-				logger.error('Error adding member:', memberError);
+			if (!memberResult.ok && !memberResult.alreadyMember) {
 				return fail(500, { error: '組織への追加に失敗しました' });
 			}
 

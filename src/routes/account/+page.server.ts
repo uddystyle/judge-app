@@ -46,7 +46,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		};
 	}
 
-	// ユーザーが所属するすべての組織を取得（複数組織対応）
+	// ユーザーが現在所属している組織を取得（複数組織対応）
 	const { data: memberships } = await supabase
 		.from('organization_members')
 		.select(
@@ -61,7 +61,8 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 			)
 		`
 		)
-		.eq('user_id', user.id);
+		.eq('user_id', user.id)
+		.is('removed_at', null);
 
 	// 組織に所属していない場合
 	if (!memberships || memberships.length === 0) {
@@ -104,6 +105,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 					.from('organization_members')
 					.select('*', { count: 'exact', head: true })
 					.eq('organization_id', org.id)
+					.is('removed_at', null)
 			]);
 
 			return {

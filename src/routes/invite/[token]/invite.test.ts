@@ -74,12 +74,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -135,12 +142,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -193,12 +207,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -254,12 +275,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -330,12 +358,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -382,12 +417,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -456,12 +498,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -530,12 +579,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -604,12 +660,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -678,12 +741,19 @@ describe('invite/[token] - signup action', () => {
 				}
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -814,12 +884,19 @@ describe('invite/[token] - signup action', () => {
 				used_count: 0
 			};
 
+			// 実装は在籍中メンバーの判定に .is('removed_at', null) を挟む
+			// （退会済みは招待から再参加できるようにするため）
 			mockSupabaseAdmin.from.mockReturnValue({
 				select: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
 						single: vi.fn().mockResolvedValue({
 							data: mockInvitation,
 							error: null
+						}),
+						eq: vi.fn().mockReturnValue({
+							is: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+							})
 						})
 					})
 				})
@@ -862,11 +939,20 @@ describe('invite/[token] - join action', () => {
 			select: vi.fn().mockReturnValue({
 				eq: vi.fn().mockReturnValue({
 					eq: vi.fn().mockReturnValue({
-						single: vi.fn().mockResolvedValue({ data: null, error: null })
+						single: vi.fn().mockResolvedValue({ data: null, error: null }),
+						// 実装は在籍中判定と既存行の確認に .is('removed_at', null) / maybeSingle を使う
+						// （退会済みは招待から再参加できるようにするため）
+						is: vi.fn().mockReturnValue({
+							maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+						}),
+						maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
 					})
 				})
 			}),
-			insert: vi.fn().mockResolvedValue({ error: null })
+			insert: vi.fn().mockResolvedValue({ error: null }),
+			update: vi.fn().mockReturnValue({
+				eq: vi.fn().mockResolvedValue({ error: null })
+			})
 		};
 		const invitationsTable = {
 			select: vi.fn().mockReturnValue({

@@ -27,7 +27,8 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 				)
 			`
 			)
-			.eq('user_id', user.id);
+			.eq('user_id', user.id)
+			.is('removed_at', null);
 
 		// 組織に所属している場合、指定された組織または最初の組織のプランを使用
 		if (memberships && memberships.length > 0) {
@@ -36,7 +37,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 			// URLパラメータで指定された組織があれば、その組織のプランを使用
 			let targetMembership = memberships[0];
 			if (orgIdParam) {
-				const specifiedOrg = memberships.find(m => m.organization_id === orgIdParam);
+				const specifiedOrg = memberships.find((m) => m.organization_id === orgIdParam);
 				if (specifiedOrg) {
 					targetMembership = specifiedOrg;
 				}
@@ -55,7 +56,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 					.maybeSingle();
 
 				const interval = orgSubscription?.billing_interval;
-				currentBillingInterval = (interval === 'month' || interval === 'year') ? interval : null;
+				currentBillingInterval = interval === 'month' || interval === 'year' ? interval : null;
 			}
 		} else {
 			// 組織に所属していない場合、個人サブスクリプションを確認
@@ -68,7 +69,7 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 
 			currentPlan = subscription?.plan_type || 'free';
 			const interval = subscription?.billing_interval;
-			currentBillingInterval = (interval === 'month' || interval === 'year') ? interval : null;
+			currentBillingInterval = interval === 'month' || interval === 'year' ? interval : null;
 		}
 
 		// ユーザーのプロフィール情報を取得

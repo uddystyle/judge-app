@@ -121,7 +121,8 @@ export const actions: Actions = {
 		const { count: sessionCount } = await supabase
 			.from('sessions')
 			.select('*', { count: 'exact', head: true })
-			.eq('organization_id', organizationId);
+			.eq('organization_id', organizationId)
+			.is('removed_at', null);
 
 		if (sessionCount && sessionCount > 0) {
 			return fail(400, {
@@ -129,11 +130,12 @@ export const actions: Actions = {
 			});
 		}
 
-		// 組織のメンバー数を確認
+		// 組織のメンバー数を確認（退会済みは数えない）
 		const { count: memberCount } = await supabase
 			.from('organization_members')
 			.select('*', { count: 'exact', head: true })
-			.eq('organization_id', organizationId);
+			.eq('organization_id', organizationId)
+			.is('removed_at', null);
 
 		if (memberCount && memberCount > 1) {
 			return fail(400, {

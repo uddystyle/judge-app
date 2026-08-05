@@ -27,6 +27,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		`
 			)
 			.eq('user_id', user.id)
+			.is('removed_at', null)
 	]);
 
 	const profile = profileResult.data;
@@ -37,7 +38,7 @@ export const load: PageServerLoad = async ({ locals: { supabase } }) => {
 		? memberships.map((m: any) => ({
 				...m.organizations,
 				userRole: m.role
-		  }))
+			}))
 		: [];
 
 	// 組織所属チェック（軽量 - カウントのみ）
