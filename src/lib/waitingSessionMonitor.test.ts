@@ -38,6 +38,8 @@ function createSupabase(responses: ResponseMap) {
 			const query = {} as MockQuery;
 			Object.assign(query, {
 				select: vi.fn(() => query),
+				// 実装は期限切れ・画面離脱でクエリを中断できるよう abortSignal を通す
+				abortSignal: vi.fn(() => query),
 				eq: vi.fn(() => query),
 				single: vi.fn(async () => responses[table]?.single ?? { data: null, error: null }),
 				maybeSingle: vi.fn(async () => responses[table]?.maybeSingle ?? { data: null, error: null })

@@ -170,13 +170,17 @@ export function createWaitingSessionMonitor(
 		onNavigate(`/session/${sessionId}`);
 	}
 
-	async function pollSession() {
+	async function pollSession(signal?: AbortSignal) {
 		if (!isMonitorActive()) return;
 
+		// 期限切れ・画面離脱でクエリを中断できるよう signal を渡す。
+		// これが無いと、呼び出し側が期限で錠を解放しても実クエリは走り続け、
+		// 「常に1件だけ実行する」という直列化の契約が崩れる。
 		const { data: session, error } = await supabase
 			.from('sessions')
 			.select('active_prompt_id, status')
 			.eq('id', sessionId)
+			.abortSignal(signal!)
 			.single();
 
 		if (!isMonitorActive() || error || !session) return;

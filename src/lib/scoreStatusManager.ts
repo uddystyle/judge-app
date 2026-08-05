@@ -45,6 +45,9 @@ export interface ScoreStatusManagerHandle {
 	getAthleteId(): string | null;
 }
 
+/** 採点状況の1回の取得に許す上限。超えたら錠を解放し、クエリを abort する */
+const STATUS_FETCH_TIMEOUT_MS = 15000;
+
 export function createScoreStatusManager(
 	config: ScoreStatusManagerConfig
 ): ScoreStatusManagerHandle {
@@ -135,7 +138,7 @@ export function createScoreStatusManager(
 		onStatusChange(status);
 	}
 
-	async function fetchStatusImpl(): Promise<void> {
+	async function fetchStatusImpl(signal?: AbortSignal): Promise<void> {
 		if (!bib) {
 			console.error('❌ Bib number is missing');
 			return;
@@ -149,6 +152,7 @@ export function createScoreStatusManager(
 				.select('id')
 				.eq('session_id', sessionId)
 				.eq('bib_number', parseInt(bib))
+				.abortSignal(signal!)
 				.maybeSingle();
 
 			if (!participant) {
@@ -164,6 +168,7 @@ export function createScoreStatusManager(
 			const { count: participantCount } = await supabase
 				.from('session_participants')
 				.select('*', { count: 'exact', head: true })
+				.abortSignal(signal!)
 				.eq('session_id', sessionId);
 			const liveRequired = participantCount || totalJudges || 1;
 
@@ -171,6 +176,7 @@ export function createScoreStatusManager(
 				.from('training_scores')
 				.select('id, score, judge_id, guest_identifier')
 				.eq('event_id', eventId)
+				.abortSignal(signal!)
 				.eq('athlete_id', participant.id);
 
 			console.log('[scoreStatusManager] training_scores取得:', { trainingScores, scoresError });
@@ -187,6 +193,7 @@ export function createScoreStatusManager(
 					const { data: profiles } = await supabase
 						.from('profiles')
 						.select('id, full_name')
+						.abortSignal(signal!)
 						.in('id', judgeIds);
 
 					if (profiles) {
@@ -206,6 +213,7 @@ export function createScoreStatusManager(
 					const { data: guests } = await supabase
 						.from('session_participants')
 						.select('guest_identifier, guest_name')
+						.abortSignal(signal!)
 						.in('guest_identifier', guestIdentifiers);
 
 					if (guests) {
@@ -243,7 +251,7 @@ export function createScoreStatusManager(
 		} else {
 			const url = `/api/score-status/${sessionId}/${bib}?discipline=${encodeURIComponent(eventInfo.discipline)}&level=${encodeURIComponent(eventInfo.level)}&event=${encodeURIComponent(eventInfo.event_name)}`;
 
-			const response = await fetch(url);
+			const response = await fetch(url, { signal });
 
 			if (response.ok) {
 				const result = await response.json();
@@ -306,19 +314,15 @@ export function createScoreStatusManager(
 				})
 			});
 		} else if (payload.eventType === 'DELETE') {
-			// Match by guest_identifier if present, otherwise by judge_id
-			// Using && would incorrectly remove unrelated entries when one
-			// of the identifiers is undefined/null on both sides
-			updateStatus({
-				...currentStatus,
-				scores: currentStatus.scores.filter((s) => {
-					if (payload.old.guest_identifier) {
-						return s.guest_identifier !== payload.old.guest_identifier;
-					} else {
-						return s.judge_id !== payload.old.judge_id;
-					}
-				})
-			});
+			// ⚠️ DELETE の payload.old は当てにできない。Supabase 公式ドキュメント:
+			//   "RLS policies are not applied to DELETE statements... When RLS is enabled and
+			//    replica identity is set to full on a table, the old record contains only the
+			//    primary key(s)."
+			// RLS 有効なテーブルでは REPLICA IDENTITY FULL にしても主キーしか届かないため、
+			// guest_identifier / judge_id での絞り込みは成立しない（以前はここで絞っており、
+			// 採点削除が即時反映されずヘルスポーリング頼みになっていた）。
+			// payload に頼らず正規状態を取り直す。削除は稀なのでコストも問題にならない。
+			fetchStatus();
 		}
 	}
 
@@ -337,11 +341,11 @@ export function createScoreStatusManager(
 				shouldUpdate = true;
 			}
 		} else if (payload.eventType === 'DELETE') {
-			if (
-				payload.old?.discipline === discipline &&
-				payload.old?.level === level &&
-				payload.old?.event_name === eventName
-			) {
+			// ⚠️ DELETE の payload.old には主キーしか入らない（RLS 有効時の Supabase 仕様）。
+			// discipline / level / event_name での判定は常に false になるため、
+			// 絞り込まずに再取得する。チャンネルは session_id + bib で購読済みなので、
+			// 無関係なイベントで無駄な再取得が多発することはない。
+			{
 				shouldUpdate = true;
 			}
 		}
@@ -353,12 +357,24 @@ export function createScoreStatusManager(
 
 	// --- 排他制御 ---
 
-	serializedFetch = createSerializedAsync(fetchStatusImpl, { pendingDelayMs: 100 });
+	// ⚠️ 期限はここ（実クエリを実行する側）に置く。
+	// 外側の realtime ポーリングだけに期限を置いても、pollingFn が投げっぱなしだと
+	// 即座に解決する Promise を監視するだけで実クエリを見張れない。
+	serializedFetch = createSerializedAsync(fetchStatusImpl, {
+		pendingDelayMs: 100,
+		timeoutMs: STATUS_FETCH_TIMEOUT_MS
+	});
 
-	// Fire-and-forget fetch (for pollingFn / realtime payload handlers)
+	// Fire-and-forget fetch (realtime payload ハンドラ用。応答を待つ必要がない経路)
 	function fetchStatus(): Promise<void> {
 		serializedFetch!.run();
 		return Promise.resolve();
+	}
+
+	// ポーリング用。**実際の取得完了を待つ**ことで、呼び出し側（realtime の期限）が
+	// 実クエリを監視できるようにする。投げっぱなしにすると期限が意味を成さない。
+	function pollStatus(): Promise<void> {
+		return serializedFetch!.runAsync();
 	}
 
 	// Awaitable fetch that respects serialization (for manualRefresh)
@@ -374,7 +390,7 @@ export function createScoreStatusManager(
 				channelName: `training-scores-${eventId}-${bib}`,
 				table: 'training_scores',
 				filter: `event_id=eq.${eventId}`,
-				pollingFn: fetchStatus,
+				pollingFn: pollStatus,
 				// 現場では「点が入ったか」をこの画面で見る。Realtime に繋がらないときは
 				// 再購読の上限（5回・約31秒のバックオフ＋接続タイムアウト）を待たず、
 				// すぐポーリングへ切り替える。待機画面・スコアボードと同じ扱い。
@@ -390,7 +406,7 @@ export function createScoreStatusManager(
 				channelName: `results-${sessionId}-${bib}`,
 				table: 'results',
 				filter: `session_id=eq.${sessionId},bib=eq.${parseInt(bib || '0')}`,
-				pollingFn: fetchStatus,
+				pollingFn: pollStatus,
 				// 現場では「点が入ったか」をこの画面で見る。Realtime に繋がらないときは
 				// 再購読の上限（5回・約31秒のバックオフ＋接続タイムアウト）を待たず、
 				// すぐポーリングへ切り替える。待機画面・スコアボードと同じ扱い。

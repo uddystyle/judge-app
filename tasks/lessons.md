@@ -1244,3 +1244,34 @@ if (guestIdentifier) {
 - `grep -rn "^ALTER \|^DROP \|^CREATE \|^INSERT \|^UPDATE \|^DELETE " database/diagnostics/` が 0 件であることを定期的に確認する。
 - 適用したい設定は冪等なマイグレーションに落とし、診断側からはそれを参照させる。
 - 判定ロジックも疑う。`COUNT(*) > 0` は「3つのうち1つでもあれば合格」になりがちで、**対象単位で見ていないチェックは通っても意味がない**（実際 `check-realtime-setup.sql` がこれで、3テーブル中1つにポリシーがあるだけで合格していた）。
+
+### ✅ 「期限を入れた」と言う前に、期限が実処理を監視しているか確かめる
+**Rule**: タイムアウトを追加したら、**その期限が本当に実処理（実クエリ・実通信）を見張っているか**を確認する。間に「投げっぱなしにして即 resolve する関数」が挟まっていると、期限は**即座に解決する Promise を監視しているだけ**になり、保護しているつもりで何も守っていない。あわせて、期限で錠を解放するなら `AbortSignal` を**実処理まで届ける**こと。届いていないと元の処理は走り続け、「常に1件だけ実行する」という直列化の契約が崩れて二重実行になる。
+
+**Why**: `createSerializedAsync` に `timeoutMs` を入れ、realtime のポーリングに15秒の期限を適用して「ハングで永久停止する問題を直した」と報告した。しかし採点状況画面の `pollingFn` は実体が
+
+```ts
+function fetchStatus(): Promise<void> {
+	serializedFetch!.run();   // 投げっぱなし
+	return Promise.resolve(); // 即 resolve
+}
+```
+
+で、外側の期限は実クエリを一切見張っていなかった。内側の `serializedFetch` には期限が無く、Supabase クエリがハングすれば**修正前と同じく錠が永久に残る**。さらに `.abortSignal()` をどのクエリにも渡していなかったため、期限が働く経路でも実通信は止まらなかった。レビューで指摘されるまで気づけなかった。
+
+**How to apply**:
+- 期限は「実処理を実行する層」に置く。ラッパー側だけに置いても意味がないことが多い。
+- 追加したら「その期限が監視している Promise は何か」を1つずつ辿る。`Promise.resolve()` を返す関数が間にあれば、その時点で無効。
+- テストで「実処理が終わるまで pollingFn が解決しないこと」を固定する。これが無いと投げっぱなしに戻っても気づけない。
+- `AbortSignal` の到達も個別に検証する。supabase-js は `.abortSignal(signal)`、fetch は `signal` を受ける。モックにも `abortSignal` を生やさないと、実装が呼んだ瞬間に落ちる（＝実装漏れを検出できる利点でもある）。
+
+### ✅ Realtime の DELETE payload は主キーしか来ない（RLS 有効時）
+**Rule**: RLS が有効なテーブルの Postgres Changes では、`REPLICA IDENTITY FULL` にしても **DELETE の `old` には主キーしか入らない**。DELETE 受信時は payload の非主キー列で対象を絞らず、**正規状態を取り直す**。
+
+**Why**: Supabase 公式ドキュメントの記述: *"RLS policies are not applied to DELETE statements, because there is no way for Postgres to verify that a user has access to a deleted record. When RLS is enabled and replica identity is set to full on a table, the old record contains only the primary key(s)."*
+本アプリの DELETE ハンドラは `payload.old.guest_identifier` / `judge_id` / `discipline` / `level` / `event_name` で対象を絞っており、これらが `undefined` になるため**採点削除が即時反映されていなかった**（ヘルスポーリングでの後追い補正に頼っていた）。`REPLICA IDENTITY FULL` を入れる migration のコメントにも「DELETE の old のために必要」と誤って書いていた。
+
+**How to apply**:
+- `FULL` が効くのは **UPDATE の old**。DELETE には期待しない。
+- DELETE は稀なので、payload を捨てて再取得する方が単純で確実。購読フィルタ（session_id + bib 等）が効いていれば再取得の頻度も問題にならない。
+- 「DELETE にはフィルターも適用されない」ことも併せて意識する。想定外のイベントが届く前提で書く。

@@ -466,12 +466,13 @@ export function createSessionMonitorWithPolling(
 	let pollingInterval: ReturnType<typeof setInterval> | null = null;
 	let disposed = false;
 	const pollingRunner = createSerializedAsync(
-		async () => {
+		async (signal) => {
 			if (disposed) return;
 			const { data, error } = await supabase
 				.from('sessions')
 				.select('is_active, active_prompt_id')
 				.eq('id', config.sessionId)
+				.abortSignal(signal!)
 				.single();
 
 			if (!disposed && !error && data) {
@@ -480,6 +481,7 @@ export function createSessionMonitorWithPolling(
 		},
 		{
 			pendingDelayMs: 0,
+			timeoutMs: DEFAULT_POLLING_TIMEOUT_MS,
 			onError: (error) => {
 				console.error(`[realtime/${channelName}] polling failed:`, error);
 			}

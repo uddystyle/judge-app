@@ -15,9 +15,16 @@
 --  Realtime が無言で無配信になる**。しかも購読自体は成功するため、
 --  「繋がっているのにイベントが来ない」という気づきにくい壊れ方をする。
 --
---  REPLICA IDENTITY FULL は DELETE payload に必要列を載せるためにも要る。
---  Postgres Changes の DELETE はフィルターが効かないため、old データが取れないと
---  「どの行が消えたか」をクライアントが判定できない。
+--  ⚠️ REPLICA IDENTITY FULL の効果を **DELETE に期待してはいけない**。
+--  Supabase 公式ドキュメントの記述:
+--    "RLS policies are not applied to DELETE statements, because there is no way for
+--     Postgres to verify that a user has access to a deleted record. When RLS is enabled
+--     and replica identity is set to full on a table, the old record contains only the
+--     primary key(s)."
+--  つまり RLS 有効なテーブルでは、FULL にしても DELETE の old には**主キーしか入らない**。
+--  DELETE の payload に依存した差分更新は成立しないため、アプリ側は DELETE 受信時に
+--  正規状態を再取得する方式にしてある（scoreStatusManager）。
+--  FULL が実際に効くのは **UPDATE の old** で、こちらは全列が入る。
 --
 -- WHAT:
 --  publication への追加と REPLICA IDENTITY FULL を冪等に適用する。
@@ -33,10 +40,12 @@ DECLARE
 	t text;
 BEGIN
 	FOREACH t IN ARRAY ARRAY['training_scores', 'results', 'sessions'] LOOP
-		-- テーブルが存在しない環境（部分構築中など）では黙って飛ばす
+		-- ⚠️ 存在しないテーブルを黙って飛ばしてはいけない。
+		-- 「適用済み」として記録されるのに何も設定されていない環境が生まれ、
+		-- 後からテーブルを作っても publication は自動で付かない。
+		-- 復旧環境で前提条件を保証するのが目的なので、欠けていたら失敗させる。
 		IF to_regclass('public.' || t) IS NULL THEN
-			RAISE NOTICE 'skip %: table does not exist', t;
-			CONTINUE;
+			RAISE EXCEPTION 'テーブル public.% が存在しません。先にテーブルを作成してから 1033 を適用すること', t;
 		END IF;
 
 		-- (1) publication に追加（未収録のときだけ）

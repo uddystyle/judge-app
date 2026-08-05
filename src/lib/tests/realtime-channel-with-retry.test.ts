@@ -374,6 +374,8 @@ function createSessionMonitorSupabase() {
 		from: vi.fn(() => ({
 			select: vi.fn().mockReturnThis(),
 			eq: vi.fn().mockReturnThis(),
+			// 実装は期限切れ・cleanup でクエリを中断できるよう abortSignal を通す
+			abortSignal: vi.fn().mockReturnThis(),
 			single: vi
 				.fn()
 				.mockResolvedValue({ data: { is_active: true, active_prompt_id: null }, error: null })
