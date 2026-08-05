@@ -101,6 +101,35 @@ export function requireSubscriptionPeriod(subscription: any): { start: number; e
 }
 
 /**
+ * 遅延して届いた「古いイベント」かどうかを判定する（リプレイ防御）。
+ *
+ * ⚠️ **period_end の後退だけで判定してはいけない。**
+ * 以前は `event.end < db.end` を満たすものを一律で古いイベントとして捨てていたが、
+ * 年額→月額の変更は `billing_cycle_anchor: 'now'` で期間を貼り直すため、
+ * period_end は必ず前倒しになる（例: 2023-01-01 → 2022-07-01）。
+ * つまり**正当な請求間隔の変更が必ずスキップされ**、webhook が保険として機能しなかった。
+ *
+ * 本物の再送は「期間そのものが過去のもの」なので period_start も後退している。
+ * 一方アンカーの貼り直しは period_start が**前進**する。ここで両者を切り分ける。
+ */
+export function isStaleSubscriptionEvent(
+	current: { current_period_start?: string | null; current_period_end?: string | null } | null,
+	event: { start: number; end: number }
+): boolean {
+	if (!current?.current_period_end) return false;
+
+	const dbEnd = new Date(current.current_period_end).getTime();
+	const eventEnd = event.end * 1000;
+	if (eventEnd >= dbEnd) return false;
+
+	// period_start が無い旧データは、従来どおり period_end のみで判定する
+	if (!current.current_period_start) return true;
+
+	const dbStart = new Date(current.current_period_start).getTime();
+	return event.start * 1000 <= dbStart;
+}
+
+/**
  * Stripe Basil（API 2025-03-31 以降）では Invoice.subscription が削除され
  * invoice.parent.subscription_details.subscription へ移動した。両形状を防御的に読む。
  */

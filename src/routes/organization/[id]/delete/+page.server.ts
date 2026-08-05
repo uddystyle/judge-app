@@ -100,7 +100,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 };
 
 export const actions: Actions = {
-	delete: async ({ params, locals: { supabase } }) => {
+	delete: async ({ params, locals: { supabase, supabaseAdmin } }) => {
 		const {
 			data: { user },
 			error: userError
@@ -115,6 +115,20 @@ export const actions: Actions = {
 		// ユーザーがこの組織の管理者かチェック
 		if (!(await isOrgAdmin(supabase, organizationId, user.id))) {
 			return fail(403, { error: '組織を削除する権限がありません。' });
+		}
+
+		// P1-C: subscriptions への書き込みは service role で行う（SEC-3 と同じ方針）。
+		//
+		// ⚠️ subscriptions は RLS 有効で **UPDATE / DELETE ポリシーが1本も無い**。
+		// user client で書くと PostgREST は権限で弾かれた更新を
+		// **エラーではなく「0行」として返す**ため、`error` は null のままになり、
+		// コードは成功したと判断して先へ進む（＝Stripe は解約済みなのに DB に
+		// status='active' の孤児行が残る）。2026-03-10 に change-plan で起きた障害と
+		// まったく同じ失敗の形で、その時は change-plan だけを直したため
+		// この削除経路が取り残されていた。
+		if (!supabaseAdmin) {
+			logger.error('[Organization Delete] supabaseAdminが未設定です');
+			return fail(500, { error: 'サーバー設定エラーが発生しました。管理者に連絡してください。' });
 		}
 
 		// 組織に紐づくセッションの数を確認
@@ -154,7 +168,9 @@ export const actions: Actions = {
 		const subscriptionsToCancel: string[] = [];
 
 		// 1. データベースのsubscriptionsテーブルから検索
-		const { data: dbSubscriptions } = await supabase
+		//    読み取りも service role で行う（SELECT ポリシーが契約者本人限定のため、
+		//    契約者以外の管理者が削除すると解約対象を取りこぼす）
+		const { data: dbSubscriptions } = await supabaseAdmin
 			.from('subscriptions')
 			.select('id, stripe_subscription_id, status')
 			.eq('organization_id', organizationId)
@@ -215,7 +231,7 @@ export const actions: Actions = {
 					);
 
 					// データベースのステータスを更新（存在する場合）
-					await supabase
+					await supabaseAdmin
 						.from('subscriptions')
 						.update({
 							status: 'canceled',
@@ -242,8 +258,8 @@ export const actions: Actions = {
 			}
 		}
 
-		// subscriptionsテーブルのレコードを削除
-		const { error: subscriptionDeleteError } = await supabase
+		// subscriptionsテーブルのレコードを削除（service role: 上のコメント参照）
+		const { error: subscriptionDeleteError } = await supabaseAdmin
 			.from('subscriptions')
 			.delete()
 			.eq('organization_id', organizationId);

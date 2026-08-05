@@ -640,7 +640,7 @@ describe('checkout.session.completed分岐（P0-3）', () => {
 				current_period_end: expect.any(String),
 				cancel_at_period_end: false
 			},
-			{ onConflict: 'user_id' }
+			{ onConflict: 'stripe_subscription_id' }
 		);
 	});
 
@@ -958,7 +958,7 @@ describe('Webhookべき等性（P0-4）', () => {
 				user_id: 'user_123',
 				stripe_subscription_id: 'sub_test_123'
 			}),
-			{ onConflict: 'user_id' }
+			{ onConflict: 'stripe_subscription_id' }
 		);
 		expect(mockUpsert).toHaveBeenNthCalledWith(
 			2,
@@ -966,7 +966,7 @@ describe('Webhookべき等性（P0-4）', () => {
 				user_id: 'user_123',
 				stripe_subscription_id: 'sub_test_123'
 			}),
-			{ onConflict: 'user_id' }
+			{ onConflict: 'stripe_subscription_id' }
 		);
 	});
 
@@ -1289,8 +1289,8 @@ describe('重複配送の強化（T5）', () => {
 		expect(call2[0].user_id).toBe('user_123');
 		expect(call1[0].stripe_subscription_id).toBe('sub_same_123');
 		expect(call2[0].stripe_subscription_id).toBe('sub_same_123');
-		expect(call1[1].onConflict).toBe('user_id');
-		expect(call2[1].onConflict).toBe('user_id');
+		expect(call1[1].onConflict).toBe('stripe_subscription_id');
+		expect(call2[1].onConflict).toBe('stripe_subscription_id');
 	});
 
 	it('異なるevent.idで同一subscription.idの組織課金が二重反映されない（T5）', async () => {
@@ -1782,6 +1782,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 		// Mock stripe.subscriptions.retrieve with cancel_at_period_end
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
 			id: 'sub_test_123',
+			// 実 Stripe の Subscription には必ず status がある（webhook はこれを DB に書く）
+			status: 'active',
 			current_period_start: 1640995200, // 2022-01-01 00:00:00 UTC
 			current_period_end: 1672531200, // 2023-01-01 00:00:00 UTC
 			cancel_at_period_end: false
@@ -1845,6 +1847,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 		// T13: Mock stripe.subscriptions.retrieve (needed for period check)
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
 			id: 'sub_test_123',
+			// 実 Stripe の Subscription には必ず status がある（webhook はこれを DB に書く）
+			status: 'active',
 			current_period_start: 1640995200,
 			current_period_end: 1672531200,
 			cancel_at_period_end: false
@@ -1892,6 +1896,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 		// Mock stripe.subscriptions.retrieve
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
 			id: 'sub_test_123',
+			// 実 Stripe の Subscription には必ず status がある（webhook はこれを DB に書く）
+			status: 'active',
 			current_period_start: 1640995200, // 2022-01-01
 			current_period_end: 1672531200, // 2023-01-01
 			cancel_at_period_end: false
@@ -1987,6 +1993,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 		// Mock stripe.subscriptions.retrieve with cancel_at_period_end=true
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
 			id: 'sub_test_123',
+			// 実 Stripe の Subscription には必ず status がある（webhook はこれを DB に書く）
+			status: 'active',
 			current_period_start: 1640995200,
 			current_period_end: 1672531200,
 			cancel_at_period_end: true
@@ -2049,6 +2057,8 @@ describe('請求イベントの状態遷移（P1-2, P1-3）', () => {
 		// Mock stripe.subscriptions.retrieve with cancel_at_period_end=false
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
 			id: 'sub_test_123',
+			// 実 Stripe の Subscription には必ず status がある（webhook はこれを DB に書く）
+			status: 'active',
 			current_period_start: 1640995200,
 			current_period_end: 1672531200,
 			cancel_at_period_end: false
@@ -2969,7 +2979,7 @@ describe('Webhook順序逆転時の最終整合性（T4）', () => {
 				plan_type: 'standard',
 				status: 'active'
 			}),
-			{ onConflict: 'user_id' }
+			{ onConflict: 'stripe_subscription_id' }
 		);
 
 		// Step 2: customer.subscription.deleted (old subscription, arrives late)
@@ -3758,6 +3768,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 
 		// Mock stripe.subscriptions.retrieve for newer period
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200, // 2023-01-01 (newer)
 			current_period_end: 1675209600, // 2023-02-01 (newer)
@@ -4330,6 +4341,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		} as any);
 
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200,
 			current_period_end: SAME_PERIOD_END,
@@ -4376,6 +4388,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		} as any);
 
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200, // SAME
 			current_period_end: SAME_PERIOD_END, // SAME
@@ -4552,6 +4565,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		} as any);
 
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200,
 			current_period_end: SAME_PERIOD_END,
@@ -4597,6 +4611,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		} as any);
 
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200, // SAME
 			current_period_end: SAME_PERIOD_END, // SAME
@@ -4651,6 +4666,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		} as any);
 
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200,
 			current_period_end: SAME_PERIOD_END
@@ -4699,6 +4715,7 @@ describe('Webhookリプレイ耐性（T13）', () => {
 		} as any);
 
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200, // SAME
 			current_period_end: SAME_PERIOD_END // SAME
@@ -4978,6 +4995,7 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 
 		// T18: Stripe API回復
 		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValueOnce({
+			status: 'active',
 			id: 'sub_test_123',
 			current_period_start: 1672531200,
 			current_period_end: 1675209600,
@@ -5115,7 +5133,7 @@ describe('Stripe API一時障害後の再送回復（T18）', () => {
 				plan_type: 'standard',
 				status: 'active'
 			}),
-			{ onConflict: 'user_id' }
+			{ onConflict: 'stripe_subscription_id' }
 		);
 	});
 });

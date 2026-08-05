@@ -89,6 +89,13 @@ export async function handleCheckoutCompleted(session: any) {
 			billingInterval
 		);
 
+		// P3-I: 競合キーは stripe_subscription_id。
+		// ⚠️ 以前は `onConflict: 'user_id'` だったが、subscriptions に user_id の一意制約は
+		// **存在しない**（idx_subscriptions_user_id は非 UNIQUE）。1ユーザーが複数組織の
+		// サブスクリプションを持てる設計なので今後も付かない。到達すると PostgreSQL が
+		// 42P10 を返し、RetryableError → 3日間の再送ループになる。
+		// 現在このパス（is_organization='false'）はアプリから生成されないが、
+		// 旧セッションの再送で踏み得るため、実在する一意インデックスに合わせておく。
 		const { error: upsertError } = await supabaseAdmin.from('subscriptions').upsert(
 			{
 				user_id: userId,
@@ -101,7 +108,7 @@ export async function handleCheckoutCompleted(session: any) {
 				current_period_end: new Date(period.end * 1000).toISOString(),
 				cancel_at_period_end: subscription.cancel_at_period_end
 			},
-			{ onConflict: 'user_id' }
+			{ onConflict: 'stripe_subscription_id' }
 		);
 
 		if (upsertError) {

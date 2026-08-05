@@ -7,7 +7,7 @@ import { ORG_PRICE_IDS as PRICE_IDS, MAX_MEMBERS } from '$lib/server/plans';
 import { validateRedirectUrl, ALLOWED_STRIPE_REDIRECT_PATHS } from '$lib/server/validation';
 import { logger } from '$lib/server/logger';
 
-export const POST: RequestHandler = async ({ request, locals: { supabase } }) => {
+export const POST: RequestHandler = async ({ request, locals: { supabase, supabaseAdmin } }) => {
 	// レート制限チェックを最初に実行
 	const rateLimitResult = await checkRateLimit(request, rateLimiters?.expensive);
 	if (!rateLimitResult.success) {
@@ -91,6 +91,44 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			throw error(403, '組織の管理者権限が必要です。');
 		}
 
+		// 4b. P0-A: 既にアクティブな契約がある組織で2本目を作らせない（二重課金の防止）。
+		//
+		// ⚠️ 確認は**必ず service role で**行うこと。subscriptions の SELECT ポリシーは
+		// `auth.uid() = user_id`（＝checkout を開始した本人）だけなので、user client で引くと
+		// **契約者以外の管理者からは契約が「無い」ように見える**。
+		// 以前はこの確認をページの load 側だけで行っており、契約者と別の管理者が操作すると
+		// ガードが素通りして2本目のサブスクリプションが作れた。完了すると webhook が
+		// 旧サブスクを日割り返金なしで即時解約するため、前払い分がそのまま失効する。
+		// 古いタブからの直接 POST でも同じことが起きるので、判定はここ（API）に置く。
+		if (!supabaseAdmin) {
+			logger.error('[Organization Upgrade API] supabaseAdminが未設定です');
+			throw error(500, 'サーバー設定エラーが発生しました。管理者に連絡してください。');
+		}
+
+		const { data: existingSubscription, error: existingSubError } = await supabaseAdmin
+			.from('subscriptions')
+			.select('id, stripe_subscription_id')
+			.eq('organization_id', organizationId)
+			.in('status', ['active', 'trialing'])
+			.maybeSingle();
+
+		if (existingSubError) {
+			logger.error('[Organization Upgrade API] 既存契約の確認エラー:', existingSubError);
+			throw error(500, '契約状況の確認に失敗しました。しばらくしてから再度お試しください。');
+		}
+
+		if (existingSubscription) {
+			logger.error(
+				'[Organization Upgrade API] P0-A: 既にアクティブな契約があるため中止:',
+				organizationId,
+				existingSubscription.stripe_subscription_id
+			);
+			throw error(
+				409,
+				'この組織には既に有効なご契約があります。プランの変更はプラン変更ページからお願いします。'
+			);
+		}
+
 		// 5. Price IDを取得
 		const priceId = PRICE_IDS[validatedPlanType][validatedBillingInterval];
 
@@ -133,11 +171,19 @@ export const POST: RequestHandler = async ({ request, locals: { supabase } }) =>
 			customerId = customer.id;
 			logger.debug('[Organization Upgrade API] 新しいCustomerを作成:', customerId);
 
-			// Customerをorganizationsテーブルに保存
-			await supabase
+			// P3-J: Customer の保存は service role で行い、結果を必ず確認する。
+			// user client だと RLS で弾かれた場合に PostgREST が「0行・エラーなし」を返すため、
+			// 保存できていないのに成功したように見え、次回また新しい Customer を作って
+			// Stripe 上に孤児が増える（3月の障害と同じ失敗の形）。
+			const { error: customerSaveError } = await supabaseAdmin
 				.from('organizations')
 				.update({ stripe_customer_id: customerId })
 				.eq('id', organizationId);
+
+			if (customerSaveError) {
+				logger.error('[Organization Upgrade API] Customer保存エラー:', customerSaveError);
+				throw error(500, '顧客情報の保存に失敗しました。しばらくしてから再度お試しください。');
+			}
 		}
 
 		// 8. Stripe Checkout Sessionを作成

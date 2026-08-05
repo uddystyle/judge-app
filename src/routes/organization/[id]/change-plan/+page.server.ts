@@ -3,6 +3,7 @@ import { redirect, error, fail, isRedirect, isHttpError } from '@sveltejs/kit';
 import { stripe } from '$lib/server/stripe';
 import { getSubscriptionPeriod, SUBSCRIPTION_PERIOD_MISSING } from '$lib/server/stripeTypes';
 import { isOrgAdmin } from '$lib/server/orgAuth';
+import { findPlanTypeByPriceId } from '$lib/server/plans';
 import {
 	STRIPE_PRICE_BASIC_MONTH,
 	STRIPE_PRICE_BASIC_YEAR,
@@ -13,7 +14,23 @@ import {
 } from '$env/static/private';
 import { logger } from '$lib/server/logger';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase }, url }) => {
+/**
+ * 契約情報の読み取りクライアントを選ぶ。
+ *
+ * ⚠️ `subscriptions` の SELECT ポリシーは `auth.uid() = user_id`（＝checkout を開始した本人）
+ * の1本だけなので、**契約者以外の管理者が user client で引くと0行**になり、
+ * 「アクティブなサブスクリプションが見つかりません」でプラン変更も解約もできなくなる。
+ * 認可はこのファイル側で isOrgAdmin により済ませているため、読み取りは service role で行う。
+ */
+function billingReader<T>(supabase: T, supabaseAdmin: T | undefined | null): T {
+	return supabaseAdmin ?? supabase;
+}
+
+export const load: PageServerLoad = async ({
+	params,
+	locals: { supabase, supabaseAdmin },
+	url
+}) => {
 	// 1. ユーザー認証確認
 	const {
 		data: { user },
@@ -40,8 +57,8 @@ export const load: PageServerLoad = async ({ params, locals: { supabase }, url }
 		throw error(403, '組織の管理者権限が必要です。');
 	}
 
-	// 4. アクティブなサブスクリプション情報を取得
-	const { data: subscription, error: subError } = await supabase
+	// 4. アクティブなサブスクリプション情報を取得（契約者以外の管理者からも見えるようにする）
+	const { data: subscription, error: subError } = await billingReader(supabase, supabaseAdmin)
 		.from('subscriptions')
 		.select('id, status, plan_type, billing_interval, stripe_subscription_id')
 		.eq('organization_id', params.id)
@@ -111,8 +128,8 @@ export const actions: Actions = {
 			return fail(400, { error: '既にフリープランです。' });
 		}
 
-		// サブスクリプション情報を取得
-		const { data: subscription, error: subError } = await supabase
+		// サブスクリプション情報を取得（契約者以外の管理者からも見えるようにする）
+		const { data: subscription, error: subError } = await billingReader(supabase, supabaseAdmin)
 			.from('subscriptions')
 			.select('stripe_subscription_id, plan_type, billing_interval, status')
 			.eq('organization_id', params.id)
@@ -234,8 +251,8 @@ export const actions: Actions = {
 			throw redirect(303, `/organization/${params.id}/upgrade?plan=${newPlanType}`);
 		}
 
-		// サブスクリプション情報を取得（請求間隔も含む）
-		const { data: subscription, error: subError } = await supabase
+		// サブスクリプション情報を取得（契約者以外の管理者からも見えるようにする）
+		const { data: subscription, error: subError } = await billingReader(supabase, supabaseAdmin)
 			.from('subscriptions')
 			.select('stripe_subscription_id, plan_type, billing_interval, status')
 			.eq('organization_id', params.id)
@@ -258,7 +275,7 @@ export const actions: Actions = {
 
 		if (!subscription || !subscription.stripe_subscription_id) {
 			// より詳細なエラーメッセージ
-			const { data: allSubs } = await supabase
+			const { data: allSubs } = await billingReader(supabase, supabaseAdmin)
 				.from('subscriptions')
 				.select('status, stripe_subscription_id')
 				.eq('organization_id', params.id);
@@ -297,17 +314,6 @@ export const actions: Actions = {
 				return fail(400, { error: 'プランの価格情報が見つかりません。' });
 			}
 
-			// アップグレードかダウングレードかを判定
-			const isUpgrade = isPlanUpgrade(organization.plan_type, newPlanType);
-
-			logger.debug('[Change Plan] プラン変更開始:', {
-				organizationId: organization.id,
-				currentPlan: organization.plan_type,
-				newPlan: newPlanType,
-				isUpgrade,
-				billingInterval
-			});
-
 			// Stripeサブスクリプションを取得
 			const stripeSubscription = await stripe.subscriptions.retrieve(
 				subscription.stripe_subscription_id
@@ -317,8 +323,40 @@ export const actions: Actions = {
 			const subscriptionItemId = stripeSubscription.items.data[0].id;
 
 			// 現在の請求間隔を取得
-			const currentBillingInterval =
-				stripeSubscription.items.data[0].price.recurring?.interval || 'month';
+			const currentPrice = stripeSubscription.items.data[0].price;
+			const currentBillingInterval = currentPrice.recurring?.interval || 'month';
+
+			// P1-D: 現行プランは **Stripe の price を正** とする。
+			//
+			// ⚠️ `organizations.plan_type` はアプリ側のキャッシュで、実際に過去ドリフトした列。
+			// ドリフトしたまま増減を判定すると、実質アップグレードなのに
+			// `proration_behavior: 'none'` に落ち、**差額を請求せずに上位プランが即時有効**になる。
+			// （例: Stripe の実体は basic なのに organizations が premium → standard への変更が
+			//   「ダウングレード」と判定される）。請求が発生しないので payment_behavior の
+			//   決済確認も効かず、H-4 の多層防御をすり抜ける。
+			// price ID が未知の場合のみ、従来どおり organizations の値にフォールバックする。
+			const currentPlanType =
+				findPlanTypeByPriceId(currentPrice.id) ?? (organization.plan_type as string);
+
+			if (currentPlanType !== organization.plan_type) {
+				logger.error('[Change Plan] organizations.plan_type と Stripe の実体が食い違っています:', {
+					organizationId: organization.id,
+					organizationsPlanType: organization.plan_type,
+					stripePlanType: currentPlanType,
+					priceId: currentPrice.id
+				});
+			}
+
+			// アップグレードかダウングレードかを判定（Stripe の実体で判定する）
+			const isUpgrade = isPlanUpgrade(currentPlanType, newPlanType);
+
+			logger.debug('[Change Plan] プラン変更開始:', {
+				organizationId: organization.id,
+				currentPlan: currentPlanType,
+				newPlan: newPlanType,
+				isUpgrade,
+				billingInterval
+			});
 
 			// 請求間隔の変更を検出
 			const isBillingIntervalChange = currentBillingInterval !== billingInterval;

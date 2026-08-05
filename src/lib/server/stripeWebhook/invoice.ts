@@ -5,7 +5,8 @@ import {
 	RetryableError,
 	NonRetryableError,
 	getInvoiceSubscriptionId,
-	requireSubscriptionPeriod
+	requireSubscriptionPeriod,
+	isStaleSubscriptionEvent
 } from './shared';
 
 /**
@@ -31,7 +32,7 @@ export async function handlePaymentSucceeded(invoice: any) {
 		// T13: リプレイ防御 - 現在のDBの状態を取得
 		const { data: currentSub, error: fetchError } = await supabaseAdmin
 			.from('subscriptions')
-			.select('current_period_end, status, cancel_at_period_end')
+			.select('current_period_start, current_period_end, status, cancel_at_period_end')
 			.eq('stripe_subscription_id', subscriptionId)
 			.single();
 
@@ -43,23 +44,31 @@ export async function handlePaymentSucceeded(invoice: any) {
 
 		const eventPeriodEnd = new Date(period.end * 1000).toISOString();
 
+		// P2-E: status は Stripe の実体を書く。
+		// ⚠️ 以前は 'active' を固定で書いていたが、請求書が1通支払われても
+		// 別の請求書が未払いならサブスクリプションは past_due のままになる。
+		// 直前で retrieve 済みの本物のステータスがあるのに、それを捨てて
+		// 「支払われた＝active」と決めつけると DB と Stripe が食い違う。
+		const effectiveStatus = subscription.status;
+
 		// T13: 既存レコードがあり、イベントの方が古い場合はスキップ
-		// 同一期間内の状態変化（past_due -> active など）は許可するため、< を使用
+		// P2-H: period_end の後退だけで判定しない（判定根拠は shared.ts を参照）
+		if (isStaleSubscriptionEvent(currentSub, period)) {
+			logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
+			logger.debug('[Webhook] 現在のcurrent_period_end:', currentSub?.current_period_end);
+			logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+			return;
+		}
+
 		if (currentSub?.current_period_end) {
 			const currentPeriodEnd = new Date(currentSub.current_period_end).getTime();
 			const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
 
-			if (eventPeriodEndTime < currentPeriodEnd) {
-				logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
-				logger.debug('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
-				logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
-				return; // T13: 古いイベントはスキップ
-			}
-
 			// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
+			// （invoice.paid と invoice.payment_succeeded の二重受信はここで吸収される）
 			if (
 				eventPeriodEndTime === currentPeriodEnd &&
-				currentSub.status === 'active' &&
+				currentSub.status === effectiveStatus &&
 				currentSub.cancel_at_period_end === subscription.cancel_at_period_end
 			) {
 				logger.debug('[Webhook] 同一内容の重複イベントを検出 - DB更新を省略');
@@ -71,7 +80,7 @@ export async function handlePaymentSucceeded(invoice: any) {
 		const { error: updateError } = await supabaseAdmin
 			.from('subscriptions')
 			.update({
-				status: 'active',
+				status: effectiveStatus,
 				current_period_start: new Date(period.start * 1000).toISOString(),
 				current_period_end: eventPeriodEnd,
 				cancel_at_period_end: subscription.cancel_at_period_end
@@ -118,7 +127,7 @@ export async function handlePaymentFailed(invoice: any) {
 		// T13: リプレイ防御 - 現在のDBの状態を取得
 		const { data: currentSub, error: fetchError } = await supabaseAdmin
 			.from('subscriptions')
-			.select('current_period_end, status')
+			.select('current_period_start, current_period_end, status')
 			.eq('stripe_subscription_id', subscriptionId)
 			.single();
 
@@ -130,16 +139,17 @@ export async function handlePaymentFailed(invoice: any) {
 		const eventPeriodEnd = new Date(period.end * 1000).toISOString();
 
 		// T13: 既存レコードがあり、イベントの方が古い場合はスキップ
+		// P2-H: period_end の後退だけで判定しない（判定根拠は shared.ts を参照）
+		if (isStaleSubscriptionEvent(currentSub, period)) {
+			logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
+			logger.debug('[Webhook] 現在のcurrent_period_end:', currentSub?.current_period_end);
+			logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+			return;
+		}
+
 		if (currentSub?.current_period_end) {
 			const currentPeriodEnd = new Date(currentSub.current_period_end).getTime();
 			const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
-
-			if (eventPeriodEndTime < currentPeriodEnd) {
-				logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
-				logger.debug('[Webhook] 現在のcurrent_period_end:', currentSub.current_period_end);
-				logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
-				return; // T13: 古いイベントはスキップ
-			}
 
 			// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
 			if (eventPeriodEndTime === currentPeriodEnd && currentSub.status === 'past_due') {

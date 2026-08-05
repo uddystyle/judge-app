@@ -4,7 +4,9 @@ import {
 	RetryableError,
 	NonRetryableError,
 	getPlanTypeFromPrice,
-	getSubscriptionPeriod
+	getSubscriptionPeriod,
+	isEntitledStatus,
+	isStaleSubscriptionEvent
 } from './shared';
 
 /**
@@ -28,7 +30,7 @@ export async function handleSubscriptionCreated(subscription: any) {
 	// 行が無い場合（イベント順序レース）は下の RetryableError で再送させる。
 	const { data: subData, error: fetchError } = await supabaseAdmin
 		.from('subscriptions')
-		.select('user_id, organization_id')
+		.select('user_id, organization_id, current_period_start, current_period_end')
 		.eq('stripe_subscription_id', subscription.id)
 		.maybeSingle();
 
@@ -68,6 +70,14 @@ export async function handleSubscriptionCreated(subscription: any) {
 		);
 	}
 
+	// P2-G: 順序ガード。このイベントは subscriptions 行が無い間 RetryableError で再送されるため、
+	// 最大3日遅れて届き得る。その間にプラン変更が入っていると、遅延分が新しい状態を巻き戻す。
+	// updated 側と同じ基準で「DB の方が新しい」なら何もしない。
+	if (isStaleSubscriptionEvent(subData, period)) {
+		logger.debug('[Webhook] created が DB より古いため更新をスキップ:', subscription.id);
+		return;
+	}
+
 	// 1. subscriptionsテーブルを更新
 	const { error: updateError } = await supabaseAdmin
 		.from('subscriptions')
@@ -91,15 +101,33 @@ export async function handleSubscriptionCreated(subscription: any) {
 
 	// 2. organizationIdが存在する場合のみorganizationsテーブルを更新
 	if (subData.organization_id) {
-		// plan_limitsから新しいプランのmax_membersを取得
+		// P0-B: 決済が確定するまで有料プランの権限を与えない。
+		//
+		// ⚠️ ここに門番が無いと checkout 側の H-2 ゲートが**無効化される**。
+		// このイベントは通常 checkout.session.completed より先に届き、その時点では
+		// subscriptions 行が無いため RetryableError で再送される。再送が届く頃には
+		// checkout が「決済未確定なので free で作る」処理を終えており、
+		// ここで status を見ずに昇格させると未決済のまま上位プランが有効になる。
+		// organizations.plan_type は getOrganizationPlanLimits() が参照する権限の実体。
+		const effectivePlanType = isEntitledStatus(subscription.status) ? planType : 'free';
+		if (effectivePlanType !== planType) {
+			logger.error(
+				'[Webhook] P0-B: 決済が未確定のため組織のプラン昇格を保留します:',
+				subData.organization_id,
+				'status:',
+				subscription.status
+			);
+		}
+
+		// plan_limitsから有効プランのmax_membersを取得
 		const { data: planLimits, error: planLimitsError } = await supabaseAdmin
 			.from('plan_limits')
 			.select('max_organization_members')
-			.eq('plan_type', planType)
+			.eq('plan_type', effectivePlanType)
 			.single();
 
 		if (planLimitsError) {
-			const errMsg = `プランタイプ: ${planType} のplan_limitsが見つかりません`;
+			const errMsg = `プランタイプ: ${effectivePlanType} のplan_limitsが見つかりません`;
 			logger.error('[Webhook] plan_limits取得エラー:', planLimitsError);
 			logger.error('[Webhook]', errMsg);
 			throw new NonRetryableError(errMsg);
@@ -107,11 +135,11 @@ export async function handleSubscriptionCreated(subscription: any) {
 
 		const maxMembers = planLimits.max_organization_members;
 
-		// organizationsテーブルを更新
+		// organizationsテーブルを更新（決済未確定時は free に据え置き）
 		const { error: orgUpdateError } = await supabaseAdmin
 			.from('organizations')
 			.update({
-				plan_type: planType,
+				plan_type: effectivePlanType,
 				max_members: maxMembers,
 				stripe_subscription_id: subscription.id
 			})
@@ -127,7 +155,7 @@ export async function handleSubscriptionCreated(subscription: any) {
 			'[Webhook] organizations更新成功:',
 			subData.organization_id,
 			'plan_type:',
-			planType,
+			effectivePlanType,
 			'max_members:',
 			maxMembers
 		);
@@ -175,7 +203,7 @@ export async function handleSubscriptionUpdated(subscription: any) {
 	const { data: subscriptionData, error: fetchError } = await supabaseAdmin
 		.from('subscriptions')
 		.select(
-			'organization_id, current_period_end, status, cancel_at_period_end, plan_type, billing_interval'
+			'organization_id, current_period_start, current_period_end, status, cancel_at_period_end, plan_type, billing_interval'
 		)
 		.eq('stripe_subscription_id', subscription.id)
 		.single();
@@ -193,18 +221,19 @@ export async function handleSubscriptionUpdated(subscription: any) {
 	const organizationId = subscriptionData.organization_id;
 
 	// T13: リプレイ防御 - イベントの方が古い場合はスキップ
-	// 同一期間内の状態変化（プラン変更、status変化など）は許可するため、< を使用
+	// P2-H: period_end の後退だけでは判定しない（年額→月額は必ず前倒しになるため）。
+	// 判定の根拠は isStaleSubscriptionEvent 側のコメントを参照。
 	const eventPeriodEnd = new Date(period.end * 1000).toISOString();
+	if (isStaleSubscriptionEvent(subscriptionData, period)) {
+		logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
+		logger.debug('[Webhook] 現在のcurrent_period_end:', subscriptionData.current_period_end);
+		logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
+		return;
+	}
+
 	if (subscriptionData.current_period_end) {
 		const currentPeriodEnd = new Date(subscriptionData.current_period_end).getTime();
 		const eventPeriodEndTime = new Date(eventPeriodEnd).getTime();
-
-		if (eventPeriodEndTime < currentPeriodEnd) {
-			logger.debug('[Webhook] 古いイベントを検出 - 更新をスキップ');
-			logger.debug('[Webhook] 現在のcurrent_period_end:', subscriptionData.current_period_end);
-			logger.debug('[Webhook] イベントのcurrent_period_end:', eventPeriodEnd);
-			return; // T13: 古いイベントはスキップ
-		}
 
 		// T13最適化: 同一period_endかつ同一内容の場合はDB更新を省略
 		if (
@@ -244,8 +273,8 @@ export async function handleSubscriptionUpdated(subscription: any) {
 		// 支払い停止（unpaid / canceled 等の非課金ステータス）の場合は free 制限に降格する。
 		// past_due は Stripe のリトライ猶予期間として現プランを維持（active / trialing も維持）。
 		// これにより past_due/unpaid のまま上位プランの上限を保持し続ける問題を防ぐ。
-		const ENTITLED_STATUSES = ['active', 'trialing', 'past_due'];
-		const effectivePlanType = ENTITLED_STATUSES.includes(subscription.status) ? planType : 'free';
+		// 判定は shared.ts の ENTITLED_STATUSES に一本化する（created 側と必ず同じ基準にする）。
+		const effectivePlanType = isEntitledStatus(subscription.status) ? planType : 'free';
 
 		// plan_limitsから有効プランのmax_membersを取得
 		const { data: planLimits, error: planLimitsError } = await supabaseAdmin

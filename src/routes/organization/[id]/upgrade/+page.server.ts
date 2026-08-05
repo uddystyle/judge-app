@@ -3,7 +3,7 @@ import { redirect, error } from '@sveltejs/kit';
 import { isOrgAdmin } from '$lib/server/orgAuth';
 import { logger } from '$lib/server/logger';
 
-export const load: PageServerLoad = async ({ params, locals: { supabase } }) => {
+export const load: PageServerLoad = async ({ params, locals: { supabase, supabaseAdmin } }) => {
 	// 1. ユーザー認証確認
 	const {
 		data: { user },
@@ -39,16 +39,25 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	}
 
 	// 4. 既に有料プランに登録済みかどうか確認
-	// サブスクリプション情報を取得
-	const { data: subscription } = await supabase
+	//
+	// ⚠️ 読み取りは service role で行う。subscriptions の SELECT ポリシーは
+	// `auth.uid() = user_id`（＝checkout を開始した本人）だけなので、user client だと
+	// **契約者以外の管理者には契約が「無い」ように見え、このガードが素通りする**。
+	// 素通りすると2本目のサブスクリプションが作られ、webhook が旧サブスクを
+	// 日割り返金なしで解約するため前払い分が失効する。
+	// 本命の防御は API 側（/api/stripe/upgrade-organization）にあるが、
+	// 画面の表示もそれと食い違わないようにする。
+	const { data: subscription } = await (supabaseAdmin ?? supabase)
 		.from('subscriptions')
 		.select('id, status')
 		.eq('organization_id', params.id)
 		.in('status', ['active', 'trialing'])
-		.single();
+		.maybeSingle();
 
 	if (subscription) {
-		logger.debug('[Upgrade Page Load] 既にアクティブなサブスクリプションがあります。/accountにリダイレクト');
+		logger.debug(
+			'[Upgrade Page Load] 既にアクティブなサブスクリプションがあります。/accountにリダイレクト'
+		);
 		throw redirect(303, '/account');
 	}
 
@@ -62,8 +71,7 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	return {
 		user,
 		profile,
-		organization
-	,
+		organization,
 		hasOrganization: true
 	};
 };

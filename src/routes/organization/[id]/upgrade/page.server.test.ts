@@ -9,6 +9,8 @@ function makeChain(result: unknown = { data: null, error: null }) {
 		c[m] = vi.fn(() => c);
 	}
 	c.single = vi.fn(async () => result);
+	// 契約の有無は maybeSingle で引く（0行を「該当なし」として扱い、エラーにしないため）
+	c.maybeSingle = vi.fn(async () => result);
 	return c;
 }
 

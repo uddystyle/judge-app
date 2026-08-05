@@ -54,13 +54,25 @@ const createChainMock = (result: any) => {
 };
 
 /**
+ * user client と admin client で共有する「呼び出し順の応答キュー」。
+ *
+ * 契約情報（subscriptions）の**読み取りは service role 側**に移した。
+ * `subscriptions` の SELECT ポリシーは `auth.uid() = user_id`（＝契約者本人）だけで、
+ * 契約者以外の管理者が user client で引くと 0 行になり、プラン変更も解約もできなくなるため
+ * （監査 P0-A）。どちらのクライアントが引くかはテストの関心事ではないので、
+ * 応答は「from() が呼ばれた順」で払い出す。尽きたら空の結果を返す。
+ */
+let sharedFromResults: any[] = [];
+const nextFromResult = () => sharedFromResults.shift() ?? { data: null, error: null };
+
+/**
  * 書き込み先テーブルとチェーンを記録するadminクライアントモック
  */
 const createAdminClientMock = () => {
 	const calls: { table: string; chain: any }[] = [];
 	const client = {
 		from: vi.fn((table: string) => {
-			const chain = createChainMock({ data: null, error: null });
+			const chain = createChainMock(nextFromResult());
 			calls.push({ table, chain });
 			return chain;
 		})
@@ -69,6 +81,7 @@ const createAdminClientMock = () => {
 };
 
 const createUserClient = (fromResults: any[]) => {
+	sharedFromResults = [...fromResults];
 	const client: any = {
 		auth: {
 			getUser: vi.fn().mockResolvedValue({
@@ -76,13 +89,18 @@ const createUserClient = (fromResults: any[]) => {
 				error: null
 			})
 		},
-		from: vi.fn()
+		from: vi.fn(() => createChainMock(nextFromResult()))
 	};
-	for (const result of fromResults) {
-		client.from.mockReturnValueOnce(createChainMock(result));
-	}
 	return client;
 };
+
+/**
+ * admin クライアントの「書き込みを行った」呼び出しを取り出す。
+ * subscriptions は読み取りも admin 経由になったため、テーブル名だけで引くと
+ * 先頭の読み取り用チェーンに当たってしまう。
+ */
+const findWrite = (calls: { table: string; chain: any }[], table: string) =>
+	calls.find((c) => c.table === table && c.chain.update.mock.calls.length > 0);
 
 const createFormRequest = (fields: Record<string, string>) => {
 	const formData = {
@@ -146,8 +164,8 @@ describe('change-planアクションのDB書き込みクライアント（SEC-3�
 		}
 
 		// 書き込みはadminクライアント経由（RLSに依存しない）
-		const orgWrite = adminCalls.find((c) => c.table === 'organizations');
-		const subWrite = adminCalls.find((c) => c.table === 'subscriptions');
+		const orgWrite = findWrite(adminCalls, 'organizations');
+		const subWrite = findWrite(adminCalls, 'subscriptions');
 		expect(orgWrite).toBeDefined();
 		expect(orgWrite!.chain.update).toHaveBeenCalledWith(
 			expect.objectContaining({ plan_type: 'premium', max_members: 100 })
@@ -197,7 +215,7 @@ describe('change-planアクションのDB書き込みクライアント（SEC-3�
 			expect(err.location).toBe('/organization/org_1/change-plan?cancelled=true');
 		}
 
-		const subWrite = adminCalls.find((c) => c.table === 'subscriptions');
+		const subWrite = findWrite(adminCalls, 'subscriptions');
 		expect(subWrite).toBeDefined();
 		expect(subWrite!.chain.update).toHaveBeenCalledWith(
 			expect.objectContaining({ cancel_at_period_end: true })
@@ -410,7 +428,7 @@ describe('change-planアクションのDB書き込みクライアント（SEC-3�
 			expect(err.status).toBe(303);
 		}
 
-		const subWrite = adminCalls.find((c) => c.table === 'subscriptions');
+		const subWrite = findWrite(adminCalls, 'subscriptions');
 		expect(subWrite).toBeDefined();
 		expect(subWrite!.chain.update).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -506,7 +524,9 @@ describe('プラン変更時の支払い確定（未決済で権限を上げな�
 
 		expect(result.status).toBe(500);
 		// organizations への書き込み自体が起きない（＝プランは上がらない）
-		const orgWrites = adminCalls.filter((c) => c.table === 'organizations');
+		const orgWrites = adminCalls.filter(
+			(c) => c.table === 'organizations' && c.chain.update.mock.calls.length > 0
+		);
 		expect(orgWrites).toHaveLength(0);
 	});
 
@@ -525,7 +545,9 @@ describe('プラン変更時の支払い確定（未決済で権限を上げな�
 
 		expect(result.status).toBe(500);
 		// organizations への書き込み自体が起きない（＝プランは上がらない）
-		const orgWrites = adminCalls.filter((c) => c.table === 'organizations');
+		const orgWrites = adminCalls.filter(
+			(c) => c.table === 'organizations' && c.chain.update.mock.calls.length > 0
+		);
 		expect(orgWrites).toHaveLength(0);
 	});
 
@@ -573,7 +595,7 @@ describe('プラン変更時の支払い確定（未決済で権限を上げな�
 			expect(err.status).toBe(303);
 		}
 
-		const orgWrite = adminCalls.find((c) => c.table === 'organizations');
+		const orgWrite = findWrite(adminCalls, 'organizations');
 		expect(orgWrite!.chain.update).toHaveBeenCalledWith(
 			expect.objectContaining({ plan_type: 'basic' })
 		);

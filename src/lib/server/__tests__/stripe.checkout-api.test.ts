@@ -53,6 +53,26 @@ import { POST as upgradeOrganization } from '../../../routes/api/stripe/upgrade-
 import { POST as customerPortal } from '../../../routes/api/stripe/customer-portal/+server';
 import { stripe } from '$lib/server/stripe';
 
+/**
+ * service role クライアントのモック。
+ * upgrade-organization は「既にアクティブな契約が無いか」を **service role で**確認する
+ * （subscriptions の SELECT ポリシーは契約者本人限定で、user client だと
+ *  契約者以外の管理者から契約が見えず重複契約を作れてしまうため。監査 P0-A）。
+ * 既定は「契約なし」＝ checkout に進める状態。
+ */
+const createAdminClientMock = (result: any = { data: null, error: null }) => ({
+	from: vi.fn(() => {
+		const chain: any = {};
+		for (const m of ['select', 'eq', 'in', 'is', 'neq', 'order', 'limit', 'update', 'delete']) {
+			chain[m] = vi.fn(() => chain);
+		}
+		chain.single = vi.fn(async () => result);
+		chain.maybeSingle = vi.fn(async () => result);
+		chain.then = (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject);
+		return chain;
+	})
+});
+
 describe('Checkout API認証・認可（P0-5）', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -75,7 +95,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -102,7 +122,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -129,7 +149,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -156,7 +176,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -185,7 +205,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -212,7 +232,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -294,7 +314,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -321,7 +341,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -348,7 +368,7 @@ describe('Checkout API認証・認可（P0-5）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -386,7 +406,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -410,7 +430,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -434,7 +454,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -472,7 +492,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -526,7 +546,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -580,7 +600,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -643,7 +663,7 @@ describe('Customer Portal API（P2-1）', () => {
 			});
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			mockSupabaseClient.auth.getUser.mockResolvedValue({
@@ -758,7 +778,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 						returnUrl: 'http://localhost/account'
 					})
 				}),
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			// T3: customer-portalはerror(500)をthrowする（統一された応答形式）
@@ -843,7 +863,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 						returnUrl: 'http://localhost/account'
 					})
 				}),
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			try {
@@ -873,7 +893,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 						returnUrl: 'http://localhost/account'
 					})
 				}),
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			try {
@@ -904,7 +924,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 						returnUrl: 'http://localhost/account'
 					})
 				}),
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			try {
@@ -934,7 +954,7 @@ describe('Stripe API障害時の応答統一（T3）', () => {
 						returnUrl: 'http://localhost/account'
 					})
 				}),
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			try {
@@ -1029,7 +1049,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest({ ...baseBody, couponCode: 'SPRING2026' });
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			const response = await createOrganizationCheckout(event);
@@ -1054,7 +1074,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest({ ...baseBody, couponCode: 'internal_coupon_id' });
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			try {
@@ -1075,7 +1095,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest(baseBody);
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			const response = await createOrganizationCheckout(event);
@@ -1092,7 +1112,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest(baseBody);
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			const response = await createOrganizationCheckout(event);
@@ -1152,7 +1172,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest({ ...baseBody, couponCode: 'UPGRADE10' });
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			const response = await upgradeOrganization(event);
@@ -1170,7 +1190,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest({ ...baseBody, couponCode: 'internal_coupon_id' });
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			try {
@@ -1190,7 +1210,7 @@ describe('クーポンのpromotion code解決（SEC-2）', () => {
 			const request = createMockRequest(baseBody);
 			const event = {
 				request,
-				locals: { supabase: mockSupabaseClient }
+				locals: { supabase: mockSupabaseClient, supabaseAdmin: createAdminClientMock() }
 			} as any;
 
 			const response = await upgradeOrganization(event);
