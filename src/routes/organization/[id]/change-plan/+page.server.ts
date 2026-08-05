@@ -291,13 +291,9 @@ export const actions: Actions = {
 			});
 		}
 
-		// プランタイプと請求間隔の両方が同じ場合はエラー
-		if (
-			organization.plan_type === newPlanType &&
-			subscription.billing_interval === billingInterval
-		) {
-			return fail(400, { error: '既に同じプラン・請求間隔を利用中です。' });
-		}
+		// 「既に同じプラン・請求間隔か」の判定は Stripe の実体を取得してから行う（下の P1-D 参照）。
+		// organizations.plan_type で判定すると、ドリフト時に**正当なアップグレードを
+		// 「既に同じプラン」として弾いてしまう**（払う意思のある顧客を止める）。
 
 		// SEC-3: DB書き込みはRLSに依存せずservice roleクライアントで行う。
 		// Stripe側だけ変更されDBが未反映になる事故を防ぐため、Stripe呼び出し前に確認する。
@@ -345,6 +341,11 @@ export const actions: Actions = {
 					stripePlanType: currentPlanType,
 					priceId: currentPrice.id
 				});
+			}
+
+			// 変更後が現状と同じなら何もしない（判定は Stripe の実体で行う）
+			if (currentPlanType === newPlanType && currentBillingInterval === billingInterval) {
+				return fail(400, { error: '既に同じプラン・請求間隔を利用中です。' });
 			}
 
 			// アップグレードかダウングレードかを判定（Stripe の実体で判定する）

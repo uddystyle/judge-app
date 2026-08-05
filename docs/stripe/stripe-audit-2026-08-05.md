@@ -197,3 +197,58 @@ organizations: premium（ドリフト）
 - リダイレクト URL 検証、クーポンの promotion code 限定、レート制限
 - 価格 ID の単一ソース化（`$lib/server/plans`）と `plan_limits` 参照の一本化
 - `subscriptions_organization_active_unique`（部分一意）による「1 組織 1 アクティブ契約」のDB保証
+
+---
+
+## 実装後の再検証（2026-08-05）
+
+修正をコミットしたあと、**入れた修正自体を敵対的に見直した**。3件の追加問題が出た。
+いずれも先に落ちるテストで再現してから直している。
+
+### R-1（自分が入れた退行）決済未確定を `free` と書くと、支払っている組織が降格する
+
+`handleSubscriptionCreated` の P0-B 対応で `isEntitledStatus(...) ? planType : 'free'` としたが、
+これは**未確定を「free 相当」と解釈**してしまっている。このイベントは
+「新しい契約が生まれた」ことしか意味せず、組織が今どの契約で権限を得ているかは別問題。
+
+再現条件: 猶予期間中（past_due）の契約を持つ組織に2本目の未確定契約が生まれる。
+`free` を書いた瞬間に**支払っている組織が free に降格**する。
+（P0-A の重複契約ガードは active/trialing のみを弾くため、past_due の組織はこの経路に入れる。
+　past_due を弾かないのは意図的で、change-plan も active/trialing しか拾わないため
+　弾くと復帰手段が無くなる。）
+
+→ 未確定なら昇格も降格もせず、`organizations` に触らないようにした。
+　 決済が確定すれば `customer.subscription.updated` が正しい状態へ持っていく。
+
+### R-2 ドリフト時に、正当なアップグレードを「既に同じプラン」で弾いていた
+
+P1-D で増減判定は Stripe の price 由来にしたが、その手前の
+「プランタイプと請求間隔の両方が同じならエラー」は `organizations.plan_type` のままだった。
+実体が basic・organizations が premium の組織で premium を選ぶのは正当なアップグレードなのに、
+「既に同じプラン・請求間隔を利用中です」で弾かれる（＝払う意思のある顧客を止める）。
+
+→ 判定を Stripe の実体取得後に移し、`currentPlanType` / `currentBillingInterval` と比較する。
+
+### R-3 migration 1035 が、複数行を前提にしていない読み取りを露出させた
+
+`organizations.plan_type` の可視範囲が広がった副作用。再契約すると解約済みの行が
+`organization_id` を保持したまま残るため、1組織が複数行を持ち得る。
+これまでは「契約者本人の行しか見えない」ことが偶然の防御になっていたが、
+組織管理者が全行を読めるようになって消えた。PostgREST の `maybeSingle()` / `single()` は
+**複数行でもエラー**になるので、前提を置いた箇所は黙って既定値に戻る。
+
+- `pricing/+page.server.ts`: 請求間隔の表示が既定へ戻る
+- `organization/[id]/delete/+page.server.ts` (load): 「解約されます」の警告が消え、
+  管理者が課金の存在に気づかないまま組織を削除し得る
+
+→ 既に `organization/[id]/+page.server.ts` が同じ罠を記録して
+　 `.order(created_at desc).limit(1)` で回避していたので、同じ形に揃えた。
+
+### 再検証で問題なしを確認した項目
+
+- `isStaleSubscriptionEvent` の各経路（更新・請求成功・請求失敗・created）
+- P2-E で書く status が `subscriptions_status_check` の8値に必ず収まること
+  （Stripe のサブスクリプションステータスは同じ8種）
+- 課金テーブルへの読み取り全21箇所が `organization_id` / `user_id` /
+  `stripe_subscription_id` のいずれかで絞られており、無条件 `.single()` が無いこと
+- past_due の組織が 409 ガードで詰まないこと（唯一の復帰経路を塞がない）

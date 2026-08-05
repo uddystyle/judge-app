@@ -107,27 +107,34 @@ export async function handleSubscriptionCreated(subscription: any) {
 		// このイベントは通常 checkout.session.completed より先に届き、その時点では
 		// subscriptions 行が無いため RetryableError で再送される。再送が届く頃には
 		// checkout が「決済未確定なので free で作る」処理を終えており、
-		// ここで status を見ずに昇格させると未決済のまま上位プランが有効になる。
+		// status を見ずに昇格させると未決済のまま上位プランが有効になる。
 		// organizations.plan_type は getOrganizationPlanLimits() が参照する権限の実体。
-		const effectivePlanType = isEntitledStatus(subscription.status) ? planType : 'free';
-		if (effectivePlanType !== planType) {
+		//
+		// ⚠️ ただし**未確定を free として書いてはいけない**。このイベントは
+		// 「新しい契約が生まれた」だけを意味し、組織が今どの契約で権限を得ているかは別問題。
+		// 猶予期間中（past_due）の契約を持つ組織に2本目の未確定契約が生まれると、
+		// free を書いた瞬間に**支払っている組織が free に降格**する。
+		// 未確定なら昇格も降格もせず、organizations には触らない。
+		// 決済が確定すれば customer.subscription.updated が正しい状態へ持っていく。
+		if (!isEntitledStatus(subscription.status)) {
 			logger.error(
-				'[Webhook] P0-B: 決済が未確定のため組織のプラン昇格を保留します:',
+				'[Webhook] P0-B: 決済が未確定のため organizations は更新しません:',
 				subData.organization_id,
 				'status:',
 				subscription.status
 			);
+			return;
 		}
 
-		// plan_limitsから有効プランのmax_membersを取得
+		// plan_limitsから新しいプランのmax_membersを取得
 		const { data: planLimits, error: planLimitsError } = await supabaseAdmin
 			.from('plan_limits')
 			.select('max_organization_members')
-			.eq('plan_type', effectivePlanType)
+			.eq('plan_type', planType)
 			.single();
 
 		if (planLimitsError) {
-			const errMsg = `プランタイプ: ${effectivePlanType} のplan_limitsが見つかりません`;
+			const errMsg = `プランタイプ: ${planType} のplan_limitsが見つかりません`;
 			logger.error('[Webhook] plan_limits取得エラー:', planLimitsError);
 			logger.error('[Webhook]', errMsg);
 			throw new NonRetryableError(errMsg);
@@ -135,11 +142,11 @@ export async function handleSubscriptionCreated(subscription: any) {
 
 		const maxMembers = planLimits.max_organization_members;
 
-		// organizationsテーブルを更新（決済未確定時は free に据え置き）
+		// organizationsテーブルを更新
 		const { error: orgUpdateError } = await supabaseAdmin
 			.from('organizations')
 			.update({
-				plan_type: effectivePlanType,
+				plan_type: planType,
 				max_members: maxMembers,
 				stripe_subscription_id: subscription.id
 			})
@@ -155,7 +162,7 @@ export async function handleSubscriptionCreated(subscription: any) {
 			'[Webhook] organizations更新成功:',
 			subData.organization_id,
 			'plan_type:',
-			effectivePlanType,
+			planType,
 			'max_members:',
 			maxMembers
 		);

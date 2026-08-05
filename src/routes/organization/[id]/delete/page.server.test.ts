@@ -17,6 +17,8 @@ function makeChain(result: unknown = { data: null, error: null }) {
 		c[m] = vi.fn(() => c);
 	}
 	c.single = vi.fn(async () => result);
+	// 契約は「最新の1件」に絞って maybeSingle で取る（複数行でも落ちないようにするため）
+	c.maybeSingle = vi.fn(async () => result);
 	return c;
 }
 

@@ -37,12 +37,17 @@ export const load: PageServerLoad = async ({ params, locals: { supabase } }) => 
 	let subscriptionEndDate: string | null = null;
 
 	// 1. データベースのsubscriptionsテーブルから確認
+	// ⚠️ 1組織 = 1行を前提にしないこと。past_due の旧契約と新契約が並ぶことがあり、
+	// single() は複数行でもエラーになる。前提を置くと「解約されます」の警告が
+	// 黙って消え、管理者が課金の存在に気づかないまま組織を削除してしまう。
 	const { data: dbSubscription } = await supabase
 		.from('subscriptions')
 		.select('id, status, current_period_end')
 		.eq('organization_id', organizationId)
 		.in('status', ['active', 'trialing', 'past_due'])
-		.single();
+		.order('created_at', { ascending: false })
+		.limit(1)
+		.maybeSingle();
 
 	if (dbSubscription) {
 		hasActiveSubscription = true;

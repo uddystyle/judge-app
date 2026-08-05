@@ -242,6 +242,26 @@ describe('P0-B: customer.subscription.created の決済確定ゲート', () => {
 		expect(orgUpdates.some((u: any) => u.plan_type === 'premium')).toBe(false);
 	});
 
+	it('決済未確定では organizations を一切触らない（課金中の組織を free に落とさない）', async () => {
+		// past_due（＝猶予期間中で権限あり）の契約を持つ組織に、2本目の未確定契約が生まれた状況。
+		// 「未確定なら free」と書いてしまうと、**支払っている組織が free に降格**する。
+		// 未確定時は昇格も降格もせず、organizations には触らないのが正しい。
+		mockEvent('customer.subscription.created', cloverSubscription({ status: 'incomplete' }));
+		const db = createSupabaseMock({
+			subscriptions: [
+				{
+					data: { user_id: 'user_1', organization_id: 'org_1', current_period_end: null },
+					error: null
+				}
+			],
+			plan_limits: [{ data: { max_organization_members: 1 }, error: null }]
+		});
+
+		await webhookPost(webhookRequest());
+
+		expect(db.updateArgs('organizations')).toHaveLength(0);
+	});
+
 	it('active なら従来どおり昇格する', async () => {
 		mockEvent('customer.subscription.created', cloverSubscription({ status: 'active' }));
 		const db = createSupabaseMock({
@@ -484,6 +504,89 @@ describe('P1-D: 増減判定は Stripe の price を正とする', () => {
 
 		const args = vi.mocked(stripe.subscriptions.update).mock.calls[0]?.[1] as any;
 		expect(args.proration_behavior).toBe('always_invoice');
+	});
+
+	it('organizations がドリフトしていても、実体と違うプランへの変更は「同じプラン」と誤判定しない', async () => {
+		// Stripe の実体は basic、organizations は premium。ユーザーが premium を選ぶのは
+		// **正当なアップグレード**。「既に同じプラン」で弾くと、払う意思のある顧客を止めてしまう。
+		const { client: userClient } = createUserClient([
+			{
+				data: { id: 'org_1', name: 'Org', plan_type: 'premium', stripe_subscription_id: 'sub_1' },
+				error: null
+			},
+			{ data: { role: 'admin' }, error: null }
+		]);
+		const { client: adminClient } = createAdminClientMock({
+			subscriptions: {
+				data: {
+					stripe_subscription_id: 'sub_1',
+					plan_type: 'basic',
+					billing_interval: 'month',
+					status: 'active'
+				},
+				error: null
+			},
+			plan_limits: { data: { max_organization_members: 100 }, error: null }
+		});
+
+		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
+			id: 'sub_1',
+			items: {
+				data: [{ id: 'si_1', price: { id: 'price_basic_month', recurring: { interval: 'month' } } }]
+			}
+		} as any);
+		vi.mocked(stripe.subscriptions.update).mockResolvedValue(
+			cloverSubscription({ id: 'sub_1', status: 'active' }) as any
+		);
+
+		await Promise.resolve(
+			changePlanActions.changePlan({
+				request: formRequest({ planType: 'premium', billingInterval: 'month' }),
+				params: { id: 'org_1' },
+				locals: { supabase: userClient, supabaseAdmin: adminClient }
+			} as any)
+		).catch(() => undefined);
+
+		expect(vi.mocked(stripe.subscriptions.update)).toHaveBeenCalled();
+		const args = vi.mocked(stripe.subscriptions.update).mock.calls[0]?.[1] as any;
+		expect(args.proration_behavior).toBe('always_invoice');
+	});
+
+	it('実体と同じプラン・同じ間隔なら従来どおり弾く', async () => {
+		const { client: userClient } = createUserClient([
+			{
+				data: { id: 'org_1', name: 'Org', plan_type: 'premium', stripe_subscription_id: 'sub_1' },
+				error: null
+			},
+			{ data: { role: 'admin' }, error: null }
+		]);
+		const { client: adminClient } = createAdminClientMock({
+			subscriptions: {
+				data: {
+					stripe_subscription_id: 'sub_1',
+					plan_type: 'basic',
+					billing_interval: 'month',
+					status: 'active'
+				},
+				error: null
+			}
+		});
+
+		vi.mocked(stripe.subscriptions.retrieve).mockResolvedValue({
+			id: 'sub_1',
+			items: {
+				data: [{ id: 'si_1', price: { id: 'price_basic_month', recurring: { interval: 'month' } } }]
+			}
+		} as any);
+
+		const result: any = await changePlanActions.changePlan({
+			request: formRequest({ planType: 'basic', billingInterval: 'month' }),
+			params: { id: 'org_1' },
+			locals: { supabase: userClient, supabaseAdmin: adminClient }
+		} as any);
+
+		expect(result.status).toBe(400);
+		expect(vi.mocked(stripe.subscriptions.update)).not.toHaveBeenCalled();
 	});
 });
 

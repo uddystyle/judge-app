@@ -49,10 +49,19 @@ export const load: PageServerLoad = async ({ locals: { supabase }, url }) => {
 
 			// 組織のサブスクリプション情報を取得して請求間隔を確認
 			if (orgId) {
+				// ⚠️ 1組織 = 1行を前提にしないこと。再契約すると解約済みの履歴が
+				// organization_id を保持したまま残り、複数行になる。
+				// PostgREST の maybeSingle() は複数行でもエラーになるため、前提を置くと
+				// 履歴が増えた瞬間に請求間隔の表示が黙って既定へ戻る
+				// （organization/[id]/+page.server.ts に同じ罠の記録あり）。
+				// migration 1035 で組織管理者が組織の全契約行を読めるようになったため、
+				// 「契約者本人の行しか見えないので実質1行」という以前の偶然の防御は消えている。
 				const { data: orgSubscription } = await supabase
 					.from('subscriptions')
 					.select('billing_interval')
 					.eq('organization_id', orgId)
+					.order('created_at', { ascending: false })
+					.limit(1)
 					.maybeSingle();
 
 				const interval = orgSubscription?.billing_interval;
