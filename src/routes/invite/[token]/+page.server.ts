@@ -358,9 +358,15 @@ export const actions: Actions = {
 				role: invitation.role === 'admin' ? 'admin' : 'member'
 			});
 
-			if (!memberResult.ok && !memberResult.alreadyMember) {
+			if (!memberResult.ok) {
+				// 使用権は追加より先に確定しているので、追加が成立しなかったら必ず戻す。
+				// 「既に在籍中」もメンバーが増えていない以上は同じで、戻さないと
+				// 残り回数だけが減る（complete 経路は戻しているので挙動を揃える）。
 				await releaseInvitationUse(supabaseAdmin, invitation);
-				return fail(500, { error: '組織への追加に失敗しました' });
+
+				if (!memberResult.alreadyMember) {
+					return fail(500, { error: '組織への追加に失敗しました' });
+				}
 			}
 
 			// 招待使用履歴を記録

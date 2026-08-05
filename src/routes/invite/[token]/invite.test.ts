@@ -1006,6 +1006,34 @@ describe('invite/[token] - join action', () => {
 		expect(membersTable.insert).not.toHaveBeenCalled();
 	});
 
+	it('既に在籍中だった場合は使用権を戻す（招待の残り回数を無駄に減らさない）', async () => {
+		// claim はメンバー追加より先に行うため、追加が「既に在籍」で終わったら
+		// 参加者は増えていない。使用権を戻さないと残り回数だけが減る。
+		// complete 経路は戻しているので、join 経路も揃える。
+		const { membersTable, invitationsTable } = setupJoinMocks();
+		vi.mocked(checkCanAddMember).mockResolvedValue({ allowed: true });
+		// 在籍中の行が既にある状態にする（joinOrRestoreMember が alreadyMember を返す）
+		membersTable.select.mockReturnValue({
+			eq: vi.fn().mockReturnValue({
+				eq: vi.fn().mockReturnValue({
+					is: vi.fn().mockReturnValue({
+						maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+					}),
+					maybeSingle: vi.fn().mockResolvedValue({
+						data: { id: 'm-1', role: 'member', removed_at: null },
+						error: null
+					})
+				})
+			})
+		});
+
+		await Promise.resolve(actions.join(createJoinEvent())).catch(() => undefined);
+
+		const payloads = invitationsTable.update.mock.calls.map((c: any) => c[0]);
+		// 1回目 = 使用権の確定（0 → 1）、2回目 = 返却（1 → 0）
+		expect(payloads).toEqual([{ used_count: 1 }, { used_count: 0 }]);
+	});
+
 	it('上限内の場合、メンバー追加して組織ページへリダイレクトする', async () => {
 		const { membersTable } = setupJoinMocks();
 		vi.mocked(checkCanAddMember).mockResolvedValue({ allowed: true });
