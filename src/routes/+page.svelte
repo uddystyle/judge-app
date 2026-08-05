@@ -24,7 +24,17 @@
 	<div class="hero">
 		<div class="hero-inner">
 			<div class="hero-content">
-				<h1 class="title">{m.landing_title()}</h1>
+				<h1 class="title">
+					<!-- 見出しとしての意味は h1 に残し、表示だけロゴに置き換える。
+					     alt に landing_title を入れることで、読み上げ・画像不可時も「TENTO」になる -->
+					<img
+						class="title-logo"
+						src="/brand/tento-logo-horizontal.svg"
+						alt={m.landing_title()}
+						width="362"
+						height="100"
+					/>
+				</h1>
 				<p class="subtitle">
 					<span class="subtitle-line1">{m.landing_subtitleLine1()}</span><span
 						class="subtitle-line2">{m.landing_subtitleLine2()}</span
@@ -266,20 +276,29 @@
 	}
 
 	.title {
-		font-family:
-			'M PLUS Rounded 1c',
-			-apple-system,
-			BlinkMacSystemFont,
-			'Hiragino Sans',
-			'Hiragino Kaku Gothic ProN',
-			'Yu Gothic',
-			Meiryo,
-			sans-serif;
-		font-size: 56px;
-		font-weight: 800;
 		margin-bottom: 20px;
-		letter-spacing: 0.05em;
-		color: var(--text-primary);
+		/* 中身が画像1枚なので、行ボックス由来の余白を出さない */
+		line-height: 0;
+	}
+
+	/**
+	 * ロゴの大きさは、置き換え前の文字（56px / PCは72px）の**字面の高さ**に合わせてある。
+	 *
+	 * ロゴは viewBox 362x100 のうち、ワードマークの高さが 40.5（＝全体の 40.5%）。
+	 * 文字のキャップハイトは font-size のおよそ 72% なので、
+	 *   56px * 0.72 / 0.405 ≒ 100px（幅 362px）
+	 *   72px * 0.72 / 0.405 ≒ 128px（幅 463px）
+	 * が「同じ大きさに見える」ロゴの寸法になる。ロゴマークが左に付く分、全体は横に広い。
+	 *
+	 * ⚠️ 高さではなく幅で指定すること。狭い画面では max-width: 100% で縮める必要があり、
+	 * 高さ固定のままだと縦横比が崩れる（height: auto と併用して初めて正しく縮む）。
+	 */
+	.title-logo {
+		display: block;
+		margin: 0 auto;
+		width: 362px;
+		max-width: 100%;
+		height: auto;
 	}
 
 	.subtitle {
@@ -640,8 +659,12 @@
 			justify-content: flex-start;
 		}
 
-		.title {
-			font-size: 72px;
+		.title-logo {
+			/* 置き換え前の 72px 相当（上の計算を参照） */
+			width: 463px;
+			/* ≥768px は hero が text-align: left になるので、ロゴも左端に揃える
+			   （margin: 0 auto のままだと見出しだけ中央に浮く） */
+			margin-left: 0;
 		}
 
 		.subtitle {
