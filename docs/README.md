@@ -37,6 +37,7 @@ TENTO（SvelteKit + Supabase + Stripe・組織ベース採点アプリ）の技�
 
 | ドキュメント | 内容 |
 |---|---|
+| [polling-constraints.md](./architecture/polling-constraints.md) | **ポーリング/Realtime の設計上の制約**（期限・AbortSignal・DELETE の扱い） |
 | [SESSION_MODES_ANALYSIS.md](./architecture/SESSION_MODES_ANALYSIS.md) | 3 つのセッションモード完全分析（最新・最広） |
 | [COMPETITION_MODE_ANALYSIS.md](./architecture/COMPETITION_MODE_ANALYSIS.md) | 大会モードの分析 |
 | [TRAINING_MODE_IMPLEMENTATION_GUIDE.md](./architecture/TRAINING_MODE_IMPLEMENTATION_GUIDE.md) | 研修モード実装ガイド |

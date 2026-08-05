@@ -19,6 +19,8 @@ interface CapturedMonitorConfig {
 interface MockQuery {
 	select: ReturnType<typeof vi.fn>;
 	eq: ReturnType<typeof vi.fn>;
+	/** 実装はポーリング経路のクエリを abort 可能にするため abortSignal を通す */
+	abortSignal: ReturnType<typeof vi.fn>;
 	maybeSingle: ReturnType<typeof vi.fn>;
 }
 
@@ -38,6 +40,7 @@ function createSupabase() {
 			const query = {} as MockQuery;
 			query.select = vi.fn(() => query);
 			query.eq = vi.fn(() => query);
+			query.abortSignal = vi.fn(() => query);
 			query.maybeSingle = vi.fn(async () => {
 				if (table === 'scoring_prompts') {
 					return { data: { bib_number: 22 }, error: null };

@@ -42,12 +42,14 @@ export function createSessionNavigationMonitor(
 	}
 
 	// 次の滑走者プロンプトへ遷移する共通処理（realtime/polling 双方から呼ぶ）。
-	async function navigateToPrompt(activePromptId: string) {
+	async function navigateToPrompt(activePromptId: string, signal?: AbortSignal) {
 		const version = ++navigationVersion;
+		// ポーリング経路から呼ばれるため signal を通す（realtime の錠の中で await される）
 		const { data: promptData, error: promptError } = await supabase
 			.from('scoring_prompts')
 			.select('*')
 			.eq('id', activePromptId)
+			.abortSignal(signal!)
 			.maybeSingle();
 
 		if (disposed || transitionInProgress || version !== navigationVersion) return;
@@ -58,6 +60,7 @@ export function createSessionNavigationMonitor(
 				.select('id')
 				.eq('session_id', sessionId)
 				.eq('bib_number', promptData.bib_number)
+				.abortSignal(signal!)
 				.maybeSingle();
 			if (disposed || transitionInProgress || version !== navigationVersion) return;
 
@@ -116,7 +119,7 @@ export function createSessionNavigationMonitor(
 			}
 		},
 		// realtime 瞬断時の保険。realtime が落ちている間に起きた active_prompt 変化を拾う。
-		onPollingData: async ({ is_active, active_prompt_id }) => {
+		onPollingData: async ({ is_active, active_prompt_id }, signal) => {
 			if (disposed || transitionInProgress) return;
 			// 初回ポーリングは現在値をシードするだけ（誤遷移を防ぐ）。
 			if (lastActivePromptId === undefined) {
@@ -132,7 +135,7 @@ export function createSessionNavigationMonitor(
 
 			if (active_prompt_id && active_prompt_id !== lastActivePromptId) {
 				lastActivePromptId = active_prompt_id;
-				await navigateToPrompt(active_prompt_id);
+				await navigateToPrompt(active_prompt_id, signal);
 				return;
 			}
 

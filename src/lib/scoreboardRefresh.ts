@@ -18,8 +18,16 @@ export function createScoreboardDataRefresher(
 	// （SvelteKit の invalidateAll）がハングすると内側の錠が永久に残り、以後スコアボードが
 	// 更新されなくなる。**外側の realtime の期限では内側の錠は解放されない**。
 	//
-	// なお invalidateAll は AbortSignal を受け付けないため、期限切れでも実際の再読込は
-	// 中断できない（錠の解放＝以後の更新が再開できることの担保に留まる）。
+	// ⚠️ **この経路は「常に1件だけ実行」を保証しない。** 保証するのは「停止しないこと」だけ。
+	//
+	// invalidateAll は AbortSignal を受け付けないため、期限切れでも実際の再読込は中断できない。
+	// 結果として、期限切れ後に新しい更新が始まり、古い再読込と**重複したサーバーリクエスト**が
+	// 走り得る。表示は次回の更新で自己修復する前提で運用する。
+	//
+	// これを厳密に1件へ抑えるには、invalidateAll をやめて signal 付き fetch に置き換える必要が
+	// あるが、スコアボードの load は公開ページ（service role）と認証ページ（RLS）で認可モデルが
+	// 異なるため、API を2本用意して認可を二重管理することになる。重複リクエスト1本を避ける対価
+	// としては割に合わないと判断した（判断の経緯は docs/architecture/polling-constraints.md）。
 	return createSerializedAsync(invalidate, {
 		pendingDelayMs: 0,
 		timeoutMs: DEFAULT_POLL_TIMEOUT_MS,

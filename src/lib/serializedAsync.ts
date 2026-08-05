@@ -54,6 +54,12 @@ export function createSerializedAsync(
 		 * fn 側が signal を尊重すれば実際の通信も止まる（supabase-js は
 		 * `.abortSignal()`、fetch は `signal` を受ける）。
 		 * 未指定なら期限なし（従来の挙動）。
+		 *
+		 * ⚠️ **`timeoutMs` を付けた時点で「常に1件だけ実行」は無条件には成り立たない。**
+		 * 期限で錠を解放しても、fn が signal を尊重しなければ元の処理は走り続けるため、
+		 * 次の実行と重複する。「直列化されている」前提で新しい処理を載せる前に、
+		 * その fn が signal を末端まで通しているかを必ず確認すること
+		 * （abort できない API を使う例: SvelteKit の invalidateAll → scoreboardRefresh.ts）。
 		 */
 		timeoutMs?: number;
 	}

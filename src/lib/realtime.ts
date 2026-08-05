@@ -452,10 +452,18 @@ export function createSessionMonitorWithPolling(
 		maxRetryCount?: number;
 		pollingIntervalMs?: number;
 		onRealtimePayload: (payload: any) => void | Promise<void>;
-		onPollingData: (data: {
-			is_active: boolean;
-			active_prompt_id: string | null;
-		}) => void | Promise<void>;
+		/**
+		 * ⚠️ これは直列化の錠の**中で await される**。ここから発行するクエリは
+		 * ポーリング経路なので、渡された signal を必ず下位へ通すこと。
+		 * 通っていないと、期限で錠が解放された後も元のクエリが走り続ける。
+		 */
+		onPollingData: (
+			data: {
+				is_active: boolean;
+				active_prompt_id: string | null;
+			},
+			signal?: AbortSignal
+		) => void | Promise<void>;
 		onError?: () => void;
 	}
 ): RealtimeChannelHandle {
@@ -476,7 +484,7 @@ export function createSessionMonitorWithPolling(
 				.single();
 
 			if (!disposed && !error && data) {
-				await config.onPollingData(data as any);
+				await config.onPollingData(data as any, signal);
 			}
 		},
 		{
