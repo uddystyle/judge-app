@@ -60,11 +60,16 @@ export function createWaitingSessionMonitor(
 		return !disposed && isPageActive();
 	}
 
-	async function hasExistingScore(prompt: PromptData, participantId: string | number) {
+	async function hasExistingScore(
+		prompt: PromptData,
+		participantId: string | number,
+		signal?: AbortSignal
+	) {
 		const mode = prompt.discipline;
 		let scoreQuery = supabase
 			.from(mode === 'training' ? 'training_scores' : 'results')
-			.select('id');
+			.select('id')
+			.abortSignal(signal!);
 
 		if (mode === 'training') {
 			scoreQuery = scoreQuery.eq('event_id', prompt.level).eq('athlete_id', participantId);
@@ -84,7 +89,11 @@ export function createWaitingSessionMonitor(
 		return Boolean(data);
 	}
 
-	async function navigateToPrompt(promptId: string, checkExistingScore: boolean) {
+	async function navigateToPrompt(
+		promptId: string,
+		checkExistingScore: boolean,
+		signal?: AbortSignal
+	) {
 		const requestVersion = ++promptRequestVersion;
 		latestPromptId = promptId;
 		const isCurrentRequest = () =>
@@ -95,9 +104,12 @@ export function createWaitingSessionMonitor(
 			}
 		};
 
+		// ポーリング経路から呼ばれるため signal を通す。届いていないと、呼び出し側が
+		// 期限で錠を解放しても実クエリは走り続け、直列化の契約が崩れる。
 		const { data, error } = await supabase
 			.from('scoring_prompts')
 			.select('*')
+			.abortSignal(signal!)
 			.eq('id', promptId)
 			.single();
 		const prompt = data as PromptData | null;
@@ -124,6 +136,7 @@ export function createWaitingSessionMonitor(
 			.select('id')
 			.eq('session_id', sessionId)
 			.eq('bib_number', prompt.bib_number)
+			.abortSignal(signal!)
 			.maybeSingle();
 
 		if (!isCurrentRequest()) return;
@@ -132,7 +145,7 @@ export function createWaitingSessionMonitor(
 			return;
 		}
 		if (checkExistingScore) {
-			const alreadyScored = await hasExistingScore(prompt, participant.id);
+			const alreadyScored = await hasExistingScore(prompt, participant.id, signal);
 			if (!isCurrentRequest()) return;
 			if (alreadyScored === null) {
 				allowRetry();
@@ -200,7 +213,7 @@ export function createWaitingSessionMonitor(
 			!shouldShowJoinUI;
 		hasCheckedCurrentPrompt = true;
 		if (shouldProcessPrompt) {
-			await navigateToPrompt(newPromptId, true);
+			await navigateToPrompt(newPromptId, true, signal);
 		}
 	}
 

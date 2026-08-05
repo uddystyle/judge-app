@@ -89,10 +89,13 @@
 		if (ap && ap !== lastActivePromptId) {
 			lastActivePromptId = ap;
 			const version = ++navigationVersion;
+			// ⚠️ こちらにも signal が要る。1本目だけ通しても、この2本目がハングすれば
+			// 期限で錠が解放された後も元のクエリが走り続け、直列化の契約が崩れる。
 			const { data: prompt } = await supabase
 				.from('scoring_prompts')
 				.select('*')
 				.eq('id', ap)
+				.abortSignal(signal!)
 				.maybeSingle();
 			if (pageActive && !navigationInProgress && version === navigationVersion && prompt) {
 				currentBib.set(prompt.bib_number);
