@@ -164,6 +164,9 @@ Webhook Secretは次のセクションで取得後に設定します。
      - `customer.subscription.updated`
      - `customer.subscription.deleted`
      - `invoice.payment_succeeded`
+     - `invoice.paid` ← **必須**。100%割引などで請求額が ¥0 のとき、Stripe は決済を
+       行わないため `invoice.payment_succeeded` を**送らない**（テストモードで実測）。
+       これが無いと無償提供アカウントの契約期間が初回のまま更新されない
      - `invoice.payment_failed`
 
 5. **Add endpoint** をクリック

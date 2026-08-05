@@ -165,6 +165,9 @@ stripe login
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `invoice.payment_succeeded`
+   - `invoice.paid` ← **必須**。請求額が ¥0（100%割引など）のとき Stripe は
+     `invoice.payment_succeeded` を送らず `invoice.paid` のみを送る（実測）。
+     これが無いと無償提供アカウントの契約期間が更新されない
    - `invoice.payment_failed`
 5. **Signing Secret** をコピーし、Vercelの環境変数に設定
 
