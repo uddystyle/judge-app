@@ -28,7 +28,13 @@ export async function exportSessionResults(
 		// 2. Excel シート用にデータを整形
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const exportData = jsonData.results.map((item: any) => ({
-			[m.details_exportDateTime()]: new Date(item.created_at).toLocaleString(getLocale()),
+			// ⚠️ migration 1036 より前の採点は created_at が NULL。
+			// `new Date(null)` は Invalid Date ではなく**エポック（1970/1/1 9:00）**になるため、
+			// そのまま整形すると「1970年に採点された」ように見える本物らしい嘘が並ぶ。
+			// 記録が無いことは空欄で表す。
+			[m.details_exportDateTime()]: item.created_at
+				? new Date(item.created_at).toLocaleString(getLocale())
+				: '',
 			[m.details_exportBib()]: item.bib,
 			[m.details_exportScore()]: item.score,
 			[m.details_exportDiscipline()]: item.discipline,

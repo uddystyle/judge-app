@@ -188,9 +188,13 @@ export const GET: RequestHandler = async ({ params, request, locals: { supabase 
 		logger.debug('[Export API] 検定/大会モードの結果を取得中...');
 		const { data, error: resultsError } = await supabase
 			.from('results')
-			.select('created_at, bib, score, discipline, level, event_name, judge_name')
+			.select('id, created_at, bib, score, discipline, level, event_name, judge_name')
 			.eq('session_id', sessionIdNum)
-			.order('created_at', { ascending: true });
+			// ⚠️ created_at だけだと並び順が保証されない。
+			// migration 1036 より前の行は全件 NULL なので、この列だけでは順序が定まらない。
+			// 挿入順に相当する id を第2キーにして、いつ実行しても同じ並びになるようにする。
+			.order('created_at', { ascending: true, nullsFirst: true })
+			.order('id', { ascending: true });
 
 		logger.debug('[Export API] 検定/大会モード結果:', { count: data?.length, error: resultsError });
 

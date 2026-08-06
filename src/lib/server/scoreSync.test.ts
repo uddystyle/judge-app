@@ -429,6 +429,51 @@ describe('processScoreMutation - 検定モード（複数検定員の prompt 所
 		expect(result).toEqual({ accepted: false, reason: 'no_matching_prompt' });
 	});
 
+	/**
+	 * オフライン採点は後から同期されるため、DB のデフォルト（now()）だと
+	 * **同期した時刻**が入り、検定の実態を表さない。
+	 * 端末が記録した採点時刻（created_at_local）をそのまま results へ渡す。
+	 */
+	it('オフラインの採点時刻（created_at_local）を results.created_at に記録する', async () => {
+		vi.mocked(getMultiJudgeMode).mockResolvedValue(false);
+		const logCheck = makeChain({ data: null, error: null });
+		const logInsert = makeChain({ error: null });
+		const resultInsert = makeChain({ data: null, error: null });
+		const admin = makeSupabase({ score_mutations: [logCheck, logInsert] });
+		const supabase = makeSupabase({
+			sessions: [makeChain(certSession)],
+			participants: [makeChain({ data: { id: 'p1' }, error: null })],
+			results: [makeChain({ data: null, error: null }), resultInsert]
+		});
+
+		await processScoreMutation(supabase, admin, {
+			...certMutation,
+			created_at_local: '2026-03-15T02:30:00.000Z'
+		});
+
+		expect(resultInsert.insert).toHaveBeenCalledWith(
+			expect.objectContaining({ created_at: '2026-03-15T02:30:00.000Z' })
+		);
+	});
+
+	it('created_at_local が無い場合は created_at を渡さない（DB のデフォルトに任せる）', async () => {
+		vi.mocked(getMultiJudgeMode).mockResolvedValue(false);
+		const logCheck = makeChain({ data: null, error: null });
+		const logInsert = makeChain({ error: null });
+		const resultInsert = makeChain({ data: null, error: null });
+		const admin = makeSupabase({ score_mutations: [logCheck, logInsert] });
+		const supabase = makeSupabase({
+			sessions: [makeChain(certSession)],
+			participants: [makeChain({ data: { id: 'p1' }, error: null })],
+			results: [makeChain({ data: null, error: null }), resultInsert]
+		});
+
+		await processScoreMutation(supabase, admin, { ...certMutation, created_at_local: undefined });
+
+		const payload = resultInsert.insert.mock.calls[0][0];
+		expect(payload).not.toHaveProperty('created_at');
+	});
+
 	it('単独検定員: prompt チェック無しで results に保存される', async () => {
 		vi.mocked(getMultiJudgeMode).mockResolvedValue(false);
 		const logCheck = makeChain({ data: null, error: null });

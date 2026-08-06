@@ -76,6 +76,23 @@ describe('exportSessionResults', () => {
 		);
 	});
 
+	/**
+	 * migration 1036 より前に記録された採点は created_at が NULL。
+	 * `new Date(null)` は Invalid Date になり、Excel に "Invalid Date" が並ぶ。
+	 * 記録が無いことは空欄で表す。
+	 */
+	it('created_at が無い行は Invalid Date を出さず空欄にする', async () => {
+		mockFetchResponse({ results: [{ ...row, created_at: null }] });
+
+		const result = await exportSessionResults(1, 'テスト検定');
+
+		expect(result).toEqual({ ok: true });
+		const sheetRows = mockXlsx.utils.json_to_sheet.mock.calls[0]![0];
+		const values = Object.values(sheetRows[0]);
+		expect(values).not.toContain('Invalid Date');
+		expect(values).toContain('');
+	});
+
 	it('fetch が例外を投げたら error を返す', async () => {
 		vi.stubGlobal(
 			'fetch',

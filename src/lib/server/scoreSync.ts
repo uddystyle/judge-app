@@ -379,6 +379,7 @@ export async function processScoreMutation(
 					sessionIdNum,
 					bibNumber,
 					score,
+					createdAtLocal: record.created_at_local,
 					maxScore: 100, // 大会モードは 0-100（input アクションと同じ）
 					user,
 					guestParticipant,
@@ -444,6 +445,7 @@ export async function processScoreMutation(
 				sessionIdNum,
 				bibNumber,
 				score,
+				createdAtLocal: record.created_at_local,
 				maxScore: 99, // 検定モードは 0-99 固定（kentei アクションと同じ）
 				user,
 				guestParticipant,
@@ -659,6 +661,8 @@ async function applyResultScore(
 		user: any;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		guestParticipant: any;
+		/** 端末が採点時に記録した時刻。オフライン分の created_at をここから取る */
+		createdAtLocal?: string | null;
 		resolveEvent: () => Promise<{ discipline: string; level: string; event_name: string } | null>;
 	}
 ): Promise<ScoreMutationOutcome> {
@@ -707,6 +711,14 @@ async function applyResultScore(
 		event_name: eventData.event_name
 	};
 	resultData[ownerColumn] = ownerValue;
+
+	// ⚠️ オフライン採点は後から同期されるため、DB のデフォルト（now()）に任せると
+	// **同期した時刻**が入ってしまい、検定の実態を表さない。
+	// 端末が採点時に記録した時刻（created_at_local）があればそれを正とする。
+	// 無い場合は列を渡さず、DB のデフォルトに任せる（オンライン採点はこちら）。
+	if (opts.createdAtLocal) {
+		resultData.created_at = opts.createdAtLocal;
+	}
 
 	const { error: insErr } = await supabase.from('results').insert(resultData);
 	if (insErr && insErr.code === '23505') {
